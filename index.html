@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>MAVLink Glareshield</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  </head>
+  <body class="bg-background text-foreground antialiased min-h-screen selection:bg-primary/20">
+    <div id="root">
+      <div id="initial-loader" style="position: fixed; top: 0; left: 0; right: 0; height: 53px; border-bottom: 1px solid #27272a; background: rgba(9, 9, 11, 0.9); display: flex; align-items: center; padding: 0 1rem; gap: 0.625rem; font-family: ui-sans-serif, system-ui, sans-serif;">
+        <div style="width: 32px; height: 32px; border-radius: 0.5rem; border: 1px solid rgba(56, 189, 248, 0.25); background: #18181b; display: flex; align-items: center; justify-content: center; padding: 2px;">
+          <img src="/logo-64.png" alt="Glareshield Logo" style="width: 100%; height: 100%; object-fit: contain;" />
+        </div>
+        <div>
+          <span style="font-weight: bold; font-size: 0.95rem; color: #f4f4f5; letter-spacing: -0.025em;">GLARESHIELD</span>
+          <span style="display: block; font-size: 10px; color: #a1a1aa; font-family: monospace; line-height: 1;">ArduPilot MAVLink</span>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
