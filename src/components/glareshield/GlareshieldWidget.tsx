@@ -280,11 +280,11 @@ export const GlareshieldWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={triggerRTL}
-                  className="flex-1 border-amber-600/40 text-amber-300 hover:bg-amber-950/30 gap-1.5 font-bold h-11"
+                  onClick={triggerTakeoff}
+                  className="flex-1 border-sky-600/40 text-sky-300 hover:bg-sky-950/30 gap-1.5 font-bold h-11"
                 >
-                  <Navigation className="h-4 w-4" />
-                  RTL (Home)
+                  <PlaneTakeoff className="h-4 w-4 text-sky-400" />
+                  Takeoff
                 </Button>
 
                 <Button
@@ -300,21 +300,21 @@ export const GlareshieldWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={triggerLand}
+                  onClick={triggerRTL}
                   className="flex-1 border-amber-600/40 text-amber-300 hover:bg-amber-950/30 gap-1.5 font-bold h-11"
                 >
-                  <PlaneLanding className="h-4 w-4" />
-                  Land
+                  <Navigation className="h-4 w-4" />
+                  RTL (Home)
                 </Button>
 
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={triggerTakeoff}
-                  className="flex-1 border-sky-600/40 text-sky-300 hover:bg-sky-950/30 gap-1.5 font-bold h-11"
+                  onClick={triggerLand}
+                  className="flex-1 border-amber-600/40 text-amber-300 hover:bg-amber-950/30 gap-1.5 font-bold h-11"
                 >
-                  <PlaneTakeoff className="h-4 w-4 text-sky-400" />
-                  Takeoff
+                  <PlaneLanding className="h-4 w-4" />
+                  Land
                 </Button>
               </>
             )}
