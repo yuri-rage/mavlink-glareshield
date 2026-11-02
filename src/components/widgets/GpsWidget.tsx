@@ -35,6 +35,29 @@ export const GpsWidget: React.FC = () => {
   const rawAlt = altitudeMode === 'msl' ? position.alt : position.relativeAlt;
   const altFormatted = formatAltitude(rawAlt);
 
+  const hasAnyYaw = Boolean(gps.hasYaw || gps2?.hasYaw);
+
+  const getYawDisplay = () => {
+    if (gps.hasYaw && gps2?.hasYaw) {
+      const y1 = gps.yaw !== undefined ? `${gps.yaw.toFixed(0)}°` : '--';
+      const y2 = gps2.yaw !== undefined ? `${gps2.yaw.toFixed(0)}°` : '--';
+      return `${y1} | ${y2}`;
+    }
+    if (gps2?.hasYaw) {
+      return gps2.yaw !== undefined ? `${gps2.yaw.toFixed(1)}°` : '--';
+    }
+    if (gps.hasYaw) {
+      return gps.yaw !== undefined ? `${gps.yaw.toFixed(1)}°` : '--';
+    }
+    return '--';
+  };
+
+  const getYawLabel = () => {
+    if (gps.hasYaw && gps2?.hasYaw) return 'G1 | G2 Yaw';
+    if (gps2?.hasYaw) return 'GPS2 Yaw';
+    return 'GPS Yaw';
+  };
+
   return (
     <Card className="h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
@@ -64,7 +87,7 @@ export const GpsWidget: React.FC = () => {
       <CardContent className="p-3 space-y-2.5 flex-1 flex flex-col justify-between">
 
         {/* Metric stats grid */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className={`grid gap-2 ${hasAnyYaw ? 'grid-cols-4' : 'grid-cols-3'}`}>
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2 text-center min-w-0">
             <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">Satellites</span>
             <div className="text-lg sm:text-xl font-mono font-bold text-zinc-100 mt-0.5 truncate">
@@ -86,6 +109,20 @@ export const GpsWidget: React.FC = () => {
               <span className="text-[10px] text-zinc-400 font-normal">{spdFormatted.unit}</span>
             </div>
           </div>
+
+          {hasAnyYaw && (
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2 text-center min-w-0">
+              <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">
+                {getYawLabel()}
+              </span>
+              <div
+                className="text-lg sm:text-xl font-mono font-bold text-sky-400 mt-0.5 truncate"
+                title={getYawDisplay()}
+              >
+                {getYawDisplay()}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Position coordinates readout */}
@@ -102,22 +139,6 @@ export const GpsWidget: React.FC = () => {
             <span className="text-zinc-500">Alt ({altitudeMode.toUpperCase()}):</span>
             <span className="font-bold text-emerald-400 truncate">{altFormatted.full}</span>
           </div>
-          {gps.hasYaw && (
-            <div className="flex justify-between items-center text-zinc-300">
-              <span className="text-zinc-500">{gps2 ? 'GPS1 Yaw:' : 'GPS Yaw:'}</span>
-              <span className="font-bold text-sky-400 truncate">
-                {gps.yaw !== undefined ? `${gps.yaw.toFixed(1)}°` : '--'}
-              </span>
-            </div>
-          )}
-          {gps2?.hasYaw && (
-            <div className="flex justify-between items-center text-zinc-300">
-              <span className="text-zinc-500">GPS2 Yaw:</span>
-              <span className="font-bold text-sky-400 truncate">
-                {gps2.yaw !== undefined ? `${gps2.yaw.toFixed(1)}°` : '--'}
-              </span>
-            </div>
-          )}
         </div>
       </CardContent>
     </Card>
