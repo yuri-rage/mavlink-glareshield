@@ -48,7 +48,7 @@ export const NtripWidget: React.FC = () => {
 
   // Vehicle GPS Status from store
   const gps = useTelemetryStore((s) => s.gps);
-  const position = useTelemetryStore((s) => s.position);
+  const baseStationPosition = useTelemetryStore((s) => s.baseStationPosition);
 
   useEffect(() => {
     return rtcmInjector.onStateChange((st) => {
@@ -363,12 +363,12 @@ export const NtripWidget: React.FC = () => {
         <div>
           {isConnected || isConnecting ? (
             <Button
-              variant="destructive"
+              variant="outline"
               size="sm"
               onClick={handleDisconnect}
-              className="w-full gap-2 font-bold text-xs h-9 bg-red-600 hover:bg-red-700 text-white"
+              className="w-full gap-2 font-medium text-xs h-9 border-zinc-700 bg-zinc-900/90 text-zinc-300 hover:bg-zinc-800 hover:text-red-400 hover:border-red-900/60 transition-colors"
             >
-              <Square className="h-3.5 w-3.5 fill-current" />
+              <Square className="h-3.5 w-3.5 fill-current text-zinc-400" />
               Disconnect RTCM Stream
             </Button>
           ) : (
@@ -429,18 +429,19 @@ export const NtripWidget: React.FC = () => {
             </div>
           </div>
 
-          {/* Vehicle Satellite & GNSS Info */}
-          <div className="pt-1 border-t border-zinc-800/60 flex items-center justify-between text-[11px] font-mono text-zinc-400">
-            <span>
-              Satellites: <b className="text-zinc-200">{gps.satellites ?? '--'}</b>
-            </span>
-            <span>
-              HDOP: <b className="text-zinc-200">{gps.hdop ? gps.hdop.toFixed(2) : '--'}</b>
-            </span>
-            <span>
-              Drone Pos: <b className="text-zinc-200">{position.lat ? `${position.lat.toFixed(4)}, ${position.lon.toFixed(4)}` : '--'}</b>
-            </span>
-          </div>
+          {/* Base Station ARP Location if received from stream */}
+          {baseStationPosition && (
+            <div className="pt-1.5 border-t border-zinc-800/60 flex items-center justify-between text-[11px] font-mono text-zinc-400">
+              <span className="flex items-center gap-1.5 text-blue-400 font-semibold">
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white font-bold text-[10px]">B</span>
+                Base Station ARP
+              </span>
+              <span className="text-zinc-200">
+                {baseStationPosition.lat.toFixed(6)}°, {baseStationPosition.lon.toFixed(6)}°
+                {baseStationPosition.alt !== undefined ? ` (${baseStationPosition.alt.toFixed(1)}m)` : ''}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Detected RTCM3 Message Types */}
@@ -454,21 +455,25 @@ export const NtripWidget: React.FC = () => {
               No RTCM3 messages received yet. Connect to a stream to inspect frames.
             </div>
           ) : (
-            <div className="flex flex-wrap gap-1.5 pt-0.5">
-              {Object.values(injectorState.detectedTypes).map((t) => (
-                <Badge
-                  key={t.type}
-                  variant="outline"
-                  className="bg-zinc-950 border-zinc-700/80 text-zinc-300 font-mono text-[10px] px-1.5 py-0.5 flex items-center gap-1.5"
-                  title={`${t.name} (type ${t.type}) - ${t.count} messages received`}
-                >
-                  <span className="text-sky-400 font-bold">{t.type}</span>
-                  <span className="text-zinc-400 font-sans">{t.name}</span>
-                  <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1 rounded font-mono">
-                    {t.count}
-                  </span>
-                </Badge>
-              ))}
+            <div className="overflow-hidden rounded border border-zinc-800/70 bg-zinc-950/70">
+              <table className="w-full text-left text-[11px] font-mono">
+                <thead>
+                  <tr className="border-b border-zinc-800/80 bg-zinc-900/50 text-[10px] text-zinc-400 uppercase tracking-wider">
+                    <th className="py-1 px-2.5 w-16">Type</th>
+                    <th className="py-1 px-2.5 font-sans font-medium text-zinc-400">Description</th>
+                    <th className="py-1 px-2.5 text-right w-20">Count</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/40">
+                  {Object.values(injectorState.detectedTypes).map((t) => (
+                    <tr key={t.type} className="hover:bg-zinc-900/40 transition-colors">
+                      <td className="py-1 px-2.5 font-bold text-sky-400">{t.type}</td>
+                      <td className="py-1 px-2.5 font-sans text-zinc-300 truncate max-w-[160px]">{t.name}</td>
+                      <td className="py-1 px-2.5 text-right text-zinc-400 font-mono">{t.count.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

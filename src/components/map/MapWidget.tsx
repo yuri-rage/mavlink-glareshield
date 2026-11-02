@@ -86,6 +86,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const rallyPoints = useTelemetryStore((s) => s.rallyPoints);
   const flightTrace = useTelemetryStore((s) => s.flightTrace);
   const clearTrace = useTelemetryStore((s) => s.clearTrace);
+  const baseStationPosition = useTelemetryStore((s) => s.baseStationPosition);
 
   const isFullWidth = colSpan === 12;
   const [aspectRatio, setAspectRatio] = useState<'4:3' | '16:9'>(() => {
@@ -117,6 +118,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const missionMarkersRef = useRef<L.Marker[]>([]);
   const fenceLayersRef = useRef<L.Layer[]>([]);
   const rallyMarkersRef = useRef<L.Marker[]>([]);
+  const baseMarkerRef = useRef<L.Marker | null>(null);
 
   // GPS fixes buffer for linear interpolation (played back 1 fix-interval late)
   const fixesRef = useRef<GpsFix[]>([]);
@@ -231,6 +233,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     rallyPoints.forEach((r) => {
       if (r.lat !== 0 || r.lon !== 0) points.push([r.lat, r.lon]);
     });
+    if (baseStationPosition && (baseStationPosition.lat !== 0 || baseStationPosition.lon !== 0)) {
+      points.push([baseStationPosition.lat, baseStationPosition.lon]);
+    }
 
     if (points.length > 0) {
       setFollowVehicle(false);
@@ -718,6 +723,60 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       rallyMarkersRef.current.push(m);
     });
   }, [rallyPoints]);
+
+  // Update RTK base station marker rendering - blue needle pin with bold "B"
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+
+    if (baseMarkerRef.current) {
+      baseMarkerRef.current.remove();
+      baseMarkerRef.current = null;
+    }
+
+    if (!baseStationPosition || (baseStationPosition.lat === 0 && baseStationPosition.lon === 0)) {
+      return;
+    }
+
+    const baseIcon = L.divIcon({
+      className: 'base-station-marker',
+      html: `
+        <div style="filter: drop-shadow(0 3px 6px rgba(0,0,0,0.85)); width: 26px; height: 36px; display: flex; align-items: center; justify-content: center;">
+          <svg width="26" height="36" viewBox="0 0 26 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Sharply Tapered Needle Pin Shape pointing directly downward at bottom tip -->
+            <path d="M 13 35 L 4.2 14.5 A 9.5 9.5 0 1 1 21.8 14.5 Z" fill="#2563eb" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
+            <!-- High-contrast White Inner Badge -->
+            <circle cx="13" cy="11.5" r="7.5" fill="#ffffff" />
+            <!-- Base Station Label 'B' -->
+            <text x="13" y="15" font-size="10.5" font-weight="900" font-family="ui-monospace, monospace, sans-serif" text-anchor="middle" fill="#1d4ed8">B</text>
+          </svg>
+        </div>
+      `,
+      iconSize: [26, 36],
+      iconAnchor: [13, 35],
+      popupAnchor: [0, -33],
+    });
+
+    const marker = L.marker([baseStationPosition.lat, baseStationPosition.lon], {
+      icon: baseIcon,
+      pane: 'missionMarkersPane',
+      zIndexOffset: 150,
+    })
+      .bindPopup(
+        `<b>RTK Base Station (ARP)</b><br/>Lat: ${baseStationPosition.lat.toFixed(6)}<br/>Lon: ${baseStationPosition.lon.toFixed(
+          6
+        )}${baseStationPosition.alt !== undefined ? `<br/>Alt: ${baseStationPosition.alt.toFixed(1)}m` : ''}`
+      )
+      .addTo(mapInstanceRef.current);
+
+    baseMarkerRef.current = marker;
+
+    return () => {
+      if (baseMarkerRef.current) {
+        baseMarkerRef.current.remove();
+        baseMarkerRef.current = null;
+      }
+    };
+  }, [baseStationPosition]);
 
   const aspectClass = isFullWidth
     ? (aspectRatio === '4:3'

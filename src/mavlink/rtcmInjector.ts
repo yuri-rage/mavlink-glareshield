@@ -111,6 +111,102 @@ export function generateNmeaGga(lat: number, lon: number, alt = 0): string {
 }
 
 /**
+ * Converts ECEF (Earth-Centered Earth-Fixed) X, Y, Z coordinates in meters to WGS-84
+ * latitude, longitude (in degrees), and ellipsoidal height (in meters) via Bowring's method.
+ */
+export function ecefToWgs84(x: number, y: number, z: number): { lat: number; lon: number; alt: number } {
+  const a = 6378137.0; // WGS-84 semi-major axis (meters)
+  const f = 1.0 / 298.257223563;
+  const b = a * (1.0 - f); // semi-minor axis
+  const e2 = 2 * f - f * f; // first eccentricity squared
+  const ep2 = (a * a - b * b) / (b * b); // second eccentricity squared
+
+  const p = Math.hypot(x, y);
+  if (p < 1e-6) {
+    // Exactly or very near the geographic poles
+    const lat = z >= 0 ? 90 : -90;
+    const lon = 0;
+    const alt = Math.abs(z) - b;
+    return { lat, lon, alt };
+  }
+
+  const theta = Math.atan2(z * a, p * b);
+  const sinTheta = Math.sin(theta);
+  const cosTheta = Math.cos(theta);
+
+  const lat = Math.atan2(
+    z + ep2 * b * sinTheta * sinTheta * sinTheta,
+    p - e2 * a * cosTheta * cosTheta * cosTheta
+  );
+  const lon = Math.atan2(y, x);
+
+  const sinLat = Math.sin(lat);
+  const N = a / Math.sqrt(1.0 - e2 * sinLat * sinLat);
+  const alt = p / Math.cos(lat) - N;
+
+  return {
+    lat: (lat * 180) / Math.PI,
+    lon: (lon * 180) / Math.PI,
+    alt,
+  };
+}
+
+/**
+ * Reads an arbitrary signed bit-field from a byte buffer.
+ */
+export function getSignedBitsFromBuffer(data: Uint8Array, bitOffset: number, bitLength: number): bigint {
+  let val = 0n;
+  for (let i = 0; i < bitLength; i++) {
+    const totalBit = bitOffset + i;
+    const byteIdx = totalBit >> 3;
+    if (byteIdx >= data.length) break;
+    const bitInByte = 7 - (totalBit & 7);
+    const bit = BigInt((data[byteIdx] >> bitInByte) & 1);
+    val = (val << 1n) | bit;
+  }
+  const signBit = 1n << BigInt(bitLength - 1);
+  if ((val & signBit) !== 0n) {
+    val = val - (1n << BigInt(bitLength));
+  }
+  return val;
+}
+
+/**
+ * Extracts Antenna Reference Point (ARP) base station coordinates from an RTCM 1005 or 1006 frame.
+ * Returns WGS-84 coordinates { lat, lon, alt } or null if invalid or unparseable.
+ */
+export function extractRtcm1005Arp(frame: Uint8Array): { lat: number; lon: number; alt: number } | null {
+  if (frame.length < 25) return null;
+  if (frame[0] !== 0xd3) return null;
+
+  const payloadLen = ((frame[1] & 0x03) << 8) | frame[2];
+  if (payloadLen < 19 || frame.length < 3 + payloadLen + 3) return null;
+
+  const payload = frame.subarray(3, 3 + payloadLen);
+  const msgType = (payload[0] << 4) | (payload[1] >> 4);
+  if (msgType !== 1005 && msgType !== 1006) return null;
+
+  // DF025: ARP ECEF-X (int38, bits 34..71, scale 0.0001m)
+  const xRaw = getSignedBitsFromBuffer(payload, 34, 38);
+  // DF026: ARP ECEF-Y (int38, bits 74..111, scale 0.0001m)
+  const yRaw = getSignedBitsFromBuffer(payload, 74, 38);
+  // DF027: ARP ECEF-Z (int38, bits 114..151, scale 0.0001m)
+  const zRaw = getSignedBitsFromBuffer(payload, 114, 38);
+
+  if (xRaw === 0n && yRaw === 0n && zRaw === 0n) return null;
+
+  const x = Number(xRaw) * 0.0001;
+  const y = Number(yRaw) * 0.0001;
+  const z = Number(zRaw) * 0.0001;
+
+  const wgs = ecefToWgs84(x, y, z);
+  if (isNaN(wgs.lat) || isNaN(wgs.lon) || Math.abs(wgs.lat) > 90 || Math.abs(wgs.lon) > 180) {
+    return null;
+  }
+  return wgs;
+}
+
+/**
  * RTCM 3.x Streaming Frame Parser
  */
 export class RtcmFrameParser {
@@ -278,6 +374,14 @@ export class RtcmInjector {
       count: (existing?.count ?? 0) + 1,
       lastSeen: now,
     };
+
+    // If base station ARP message (1005 or 1006), update store with base station coordinates
+    if (msgType === 1005 || msgType === 1006) {
+      const basePos = extractRtcm1005Arp(frame);
+      if (basePos) {
+        useTelemetryStore.getState().setBaseStationPosition(basePos);
+      }
+    }
 
     if (frameLen <= 180) {
       // Unfragmented packet (bit 0 = 0)
@@ -650,6 +754,7 @@ export class RtcmInjector {
     }
 
     this.parser.reset();
+    useTelemetryStore.getState().setBaseStationPosition(null);
     this.updateState({
       status: 'disconnected',
       source: 'none',

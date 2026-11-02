@@ -1690,6 +1690,8 @@ import {
   generateNmeaGga,
   RtcmFrameParser,
   rtcmInjector,
+  ecefToWgs84,
+  extractRtcm1005Arp,
 } from '../src/mavlink/rtcmInjector.ts';
 
 // 28a. Test CRC24Q and Frame Assembly
@@ -1735,7 +1737,60 @@ if (!ggaSentence.startsWith('$GPGGA,') || !ggaSentence.includes(',3746.4940,N,12
 }
 console.log('generateNmeaGga VRS NMEA sentence PASSED!');
 
-// 28c. Test RTCM Frame Fragmentation in rtcmInjector
+// 28c. Test RTCM 1005 Antenna Reference Point (ARP) Base Station Extraction
+// Build realistic RTCM 1005 frame for coordinates (37.7749 N, -122.4194 W, 25.0 m MSL)
+function writeBitsToBuffer(buf: Uint8Array, bitOffset: number, bitLength: number, val: bigint) {
+  let uval = val;
+  if (uval < 0n) {
+    uval = (1n << BigInt(bitLength)) + uval;
+  }
+  for (let i = 0; i < bitLength; i++) {
+    const bit = Number((uval >> BigInt(bitLength - 1 - i)) & 1n);
+    const totalBit = bitOffset + i;
+    const byteIdx = totalBit >> 3;
+    const bitInByte = 7 - (totalBit & 7);
+    buf[byteIdx] |= bit << bitInByte;
+  }
+}
+
+const arpFramePayload = new Uint8Array(19);
+// Msg Type 1005
+arpFramePayload[0] = 0x3e;
+arpFramePayload[1] = 0xd0;
+// ECEF coordinates scaled to 0.0001 m (37.7749 N, -122.4194 W, 25.0 m MSL)
+writeBitsToBuffer(arpFramePayload, 34, 38, -27061854405n); // X
+writeBitsToBuffer(arpFramePayload, 74, 38, -42610761701n); // Y
+writeBitsToBuffer(arpFramePayload, 114, 38, 38857408040n);  // Z
+
+const rawArpFrameNoCrc = new Uint8Array(3 + 19);
+rawArpFrameNoCrc[0] = 0xd3;
+rawArpFrameNoCrc[1] = (19 >> 8) & 0x03;
+rawArpFrameNoCrc[2] = 19 & 0xff;
+rawArpFrameNoCrc.set(arpFramePayload, 3);
+
+const arpCrc = calculateCrc24q(rawArpFrameNoCrc, rawArpFrameNoCrc.length);
+const validArpFrame = new Uint8Array(3 + 19 + 3);
+validArpFrame.set(rawArpFrameNoCrc, 0);
+validArpFrame[22] = (arpCrc >> 16) & 0xff;
+validArpFrame[23] = (arpCrc >> 8) & 0xff;
+validArpFrame[24] = arpCrc & 0xff;
+
+const extractedArp = extractRtcm1005Arp(validArpFrame);
+if (!extractedArp || Math.abs(extractedArp.lat - 37.7749) > 0.0001 || Math.abs(extractedArp.lon - -122.4194) > 0.0001) {
+  console.error('extractRtcm1005Arp failed to extract correct coordinates:', extractedArp);
+  process.exit(1);
+}
+
+// Inject frame and verify telemetry store baseStationPosition is updated
+rtcmInjector.injectRtcmFrame(validArpFrame, 1005);
+const storeBasePos = useTelemetryStore.getState().baseStationPosition;
+if (!storeBasePos || Math.abs(storeBasePos.lat - 37.7749) > 0.0001 || Math.abs(storeBasePos.lon - -122.4194) > 0.0001) {
+  console.error('Telemetry store baseStationPosition not updated on RTCM 1005 injection:', storeBasePos);
+  process.exit(1);
+}
+console.log('RTCM 1005 ARP coordinate extraction and telemetryStore integration PASSED!');
+
+// 28d. Test RTCM Frame Fragmentation in rtcmInjector
 const sentMavlinkPackets: Uint8Array[] = [];
 const origSend = mavlinkConnection.send.bind(mavlinkConnection);
 (mavlinkConnection as any).send = (data: Uint8Array) => {

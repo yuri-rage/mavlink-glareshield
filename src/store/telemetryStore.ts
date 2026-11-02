@@ -225,6 +225,12 @@ export interface CommandAckInfo {
   time: number;
 }
 
+export interface BaseStationPosition {
+  lat: number;
+  lon: number;
+  alt?: number;
+}
+
 interface TelemetryState {
   heartbeat: VehicleHeartbeat;
   attitude: VehicleAttitude;
@@ -257,12 +263,14 @@ interface TelemetryState {
   flightTrace: [number, number][];
   history: TelemetryHistoryPoint[];
   lastCommandAck?: CommandAckInfo;
+  baseStationPosition: BaseStationPosition | null;
 
   // Actions
   processPacket: (packet: MavlinkPacket) => void;
   clearMessages: () => void;
   addTracePoint: (lat: number, lon: number) => void;
   clearTrace: () => void;
+  setBaseStationPosition: (pos: BaseStationPosition | null) => void;
 }
 
 const COMMAND_ACK_RESULTS: Record<number, string> = {
@@ -554,8 +562,10 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   rallyPoints: initialNav.rallyPoints ?? [],
   flightTrace: [],
   history: [],
+  baseStationPosition: null,
 
   clearMessages: () => set({ statusMessages: [] }),
+  setBaseStationPosition: (pos: BaseStationPosition | null) => set({ baseStationPosition: pos }),
 
   addTracePoint: (lat: number, lon: number) => {
     if (lat === 0 && lon === 0) return;
