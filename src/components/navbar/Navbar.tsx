@@ -123,7 +123,7 @@ export const Navbar: React.FC = () => {
         return (
           <Badge
             variant="success"
-            className="h-7 px-2 sm:px-2.5 text-xs font-mono font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center hover:bg-emerald-950/80 transition-colors shadow-sm"
+            className="h-7 px-2 sm:px-2.5 text-[13px] font-sans font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center hover:bg-emerald-950/80 transition-colors shadow-sm"
             onClick={openConnectModal}
             title={`Connected: ${url} (click for Link & Page Configuration)`}
           >
@@ -135,7 +135,7 @@ export const Navbar: React.FC = () => {
         return (
           <Badge
             variant="warning"
-            className="h-7 px-2 sm:px-2.5 text-xs font-mono font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center shadow-sm"
+            className="h-7 px-2 sm:px-2.5 text-[13px] font-sans font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center shadow-sm"
             onClick={openConnectModal}
             title="Connecting to MAVLink endpoint (click for Link & Page Configuration)..."
           >
@@ -147,7 +147,7 @@ export const Navbar: React.FC = () => {
         return (
           <Badge
             variant="destructive"
-            className="h-7 px-2 sm:px-2.5 text-xs font-mono font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center shadow-sm"
+            className="h-7 px-2 sm:px-2.5 text-[13px] font-sans font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center shadow-sm"
             onClick={openConnectModal}
             title="Connection error (click for Link & Page Configuration)"
           >
@@ -161,7 +161,7 @@ export const Navbar: React.FC = () => {
             variant="default"
             size="sm"
             onClick={openConnectModal}
-            className="h-7 px-2 sm:px-2.5 text-xs font-mono font-semibold bg-sky-500 hover:bg-sky-600 text-white gap-1.5 rounded-lg flex items-center shadow-sm"
+            className="h-7 px-2 sm:px-2.5 text-[13px] font-sans font-semibold bg-sky-500 hover:bg-sky-600 text-white gap-1.5 rounded-lg flex items-center shadow-sm"
             title="Connect to MAVLink endpoint & open Page Configuration"
           >
             <WifiOff className="h-3.5 w-3.5 shrink-0" />
@@ -188,7 +188,7 @@ export const Navbar: React.FC = () => {
               <span className="font-bold text-sm sm:text-base tracking-tight text-zinc-100 hidden sm:inline">
                 GLARESHIELD
               </span>
-              <div className="text-xs sm:text-[13px] text-sky-300 flex items-center gap-1 sm:gap-1.5 font-mono font-medium leading-tight">
+              <div className="text-xs sm:text-[13px] text-sky-300 flex items-center gap-1 sm:gap-1.5 font-sans font-medium leading-tight">
                 {status === 'connected' ? (
                   <>
                     {getVehicleIcon('h-3.5 w-3.5 sm:h-4 sm:w-4')}
@@ -216,7 +216,7 @@ export const Navbar: React.FC = () => {
             <div className="relative shrink-0" ref={armMenuRef}>
               <Badge
                 variant={heartbeat.isArmed ? 'destructive' : 'secondary'}
-                className={`h-7 px-2 sm:px-2.5 text-xs font-mono font-semibold gap-1 sm:gap-1.5 cursor-pointer select-none transition-all shadow-sm rounded-lg flex items-center ${
+                className={`h-7 px-2 sm:px-2.5 text-[13px] font-sans font-bold gap-1 sm:gap-1.5 cursor-pointer select-none transition-all shadow-sm rounded-lg flex items-center ${
                   isArmMenuOpen ? 'ring-2 ring-sky-400 bg-zinc-800' : 'hover:brightness-110'
                 }`}
                 onClick={() => {
@@ -339,7 +339,7 @@ export const Navbar: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setArmConfirmAction('force_disarm')}
-                            className="w-full text-center text-[10px] text-red-400/80 hover:text-red-300 font-mono underline pt-1 block"
+                            className="w-full text-center text-[10px] text-red-400/80 hover:text-red-300 font-sans font-medium underline pt-1 block"
                           >
                             Emergency Force Disarm
                           </button>
@@ -358,7 +358,7 @@ export const Navbar: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => setArmConfirmAction('force_arm')}
-                            className="w-full text-center text-[10px] text-zinc-500 hover:text-amber-400 font-mono underline pt-1 block"
+                            className="w-full text-center text-[10px] text-zinc-500 hover:text-amber-400 font-sans font-medium underline pt-1 block"
                           >
                             Force Arm (Bypass Checks)
                           </button>
@@ -392,7 +392,7 @@ export const Navbar: React.FC = () => {
               {/* Flight Mode Selector Flyout */}
               {isModeMenuOpen && (
                 <div className="absolute left-0 sm:left-auto mt-2 w-52 rounded-xl bg-zinc-900/95 border border-zinc-700/80 shadow-2xl backdrop-blur-md p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono flex items-center justify-between border-b border-zinc-800/80 pb-1.5 mb-1.5">
+                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-sans flex items-center justify-between border-b border-zinc-800/80 pb-1.5 mb-1.5">
                     <span>Flight Modes</span>
                     <span className="text-zinc-500 lowercase font-normal">{vehicleCategoryLabel}</span>
                   </div>
@@ -504,7 +504,7 @@ export const Navbar: React.FC = () => {
                   }`}
                   title={desc}
                 >
-                  <div className="font-mono font-bold text-xs">{label}</div>
+                  <div className="font-sans font-bold text-xs">{label}</div>
                   <div className="text-[9px] text-zinc-500 mt-0.5 truncate">
                     {id === 'ms' || id === 'kmh' ? 'Metric' : id === 'mph' ? 'Statute' : 'Nautical'}
                   </div>
@@ -517,8 +517,8 @@ export const Navbar: React.FC = () => {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-medium text-zinc-300">Altitude Reference</label>
-              <span className="text-[10px] text-zinc-500 font-mono">
-                Currently: {altitudeMode.toUpperCase()}
+              <span className="text-[10px] text-zinc-500 font-sans">
+                Currently: <span className="font-mono">{altitudeMode.toUpperCase()}</span>
               </span>
             </div>
             <div className="grid grid-cols-2 gap-2">

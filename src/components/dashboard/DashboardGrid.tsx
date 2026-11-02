@@ -320,7 +320,7 @@ export const DashboardGrid: React.FC = () => {
                 {/* Edit Overlay Toolbar when in Edit Mode */}
                 {isEditing && (
                   <div className="mb-1.5 flex items-center justify-between bg-zinc-900 border border-zinc-700/80 rounded-lg px-2.5 py-1 text-xs text-zinc-300 shadow-md">
-                    <span className="font-mono text-[10px] text-sky-400 font-bold truncate max-w-[140px] sm:max-w-[200px]" title={getWidgetTitle(widget.widgetId)}>
+                    <span className="font-sans text-[11px] text-sky-400 font-bold truncate max-w-[140px] sm:max-w-[200px]" title={getWidgetTitle(widget.widgetId)}>
                       {getWidgetTitle(widget.widgetId)}
                     </span>
 
@@ -328,7 +328,7 @@ export const DashboardGrid: React.FC = () => {
                       {/* Width toggles */}
                       <button
                         onClick={() => updateWidgetColSpan(widget.instanceId, 4)}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold ${
                           colSpan === 4 ? 'bg-sky-500 text-white font-bold' : 'hover:bg-zinc-800'
                         }`}
                         title="1/3 Width"
@@ -337,7 +337,7 @@ export const DashboardGrid: React.FC = () => {
                       </button>
                       <button
                         onClick={() => updateWidgetColSpan(widget.instanceId, 6)}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold ${
                           colSpan === 6 ? 'bg-sky-500 text-white font-bold' : 'hover:bg-zinc-800'
                         }`}
                         title="Half Width"
@@ -346,7 +346,7 @@ export const DashboardGrid: React.FC = () => {
                       </button>
                       <button
                         onClick={() => updateWidgetColSpan(widget.instanceId, 12)}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold ${
                           colSpan === 12 ? 'bg-sky-500 text-white font-bold' : 'hover:bg-zinc-800'
                         }`}
                         title="Full Width"

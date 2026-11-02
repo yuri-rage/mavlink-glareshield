@@ -705,7 +705,7 @@ export const MapWidget: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 ml-auto">
             {/* Map Imagery Selector (Satellite / Streets) */}
-            <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-[10px] font-mono font-medium">
+            <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-[10px] font-sans font-medium">
               <button
                 onClick={() => setMapLayer('satellite')}
                 className={`px-1.5 py-0.5 rounded transition-colors ${

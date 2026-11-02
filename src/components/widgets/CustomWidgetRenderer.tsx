@@ -155,7 +155,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
             <Zap className="h-3.5 w-3.5 text-sky-400" />
             {definition.name}
           </CardTitle>
-          <Badge variant="secondary" className="text-[9px] font-mono capitalize">
+          <Badge variant="secondary" className="text-[9px] font-sans font-semibold capitalize">
             {definition.category}
           </Badge>
         </div>

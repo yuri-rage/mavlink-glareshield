@@ -60,7 +60,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
         <div className="flex items-center gap-1.5 mb-2 overflow-x-auto pb-1 text-xs">
           <button
             onClick={() => setFilterSeverity(null)}
-            className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
+            className={`px-2 py-0.5 rounded text-[11px] font-sans font-semibold transition-colors ${
               filterSeverity === null ? 'bg-zinc-700 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -68,7 +68,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
           </button>
           <button
             onClick={() => setFilterSeverity(4)}
-            className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
+            className={`px-2 py-0.5 rounded text-[11px] font-sans font-semibold transition-colors ${
               filterSeverity === 4 ? 'bg-amber-900 text-amber-200 font-bold' : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -76,7 +76,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
           </button>
           <button
             onClick={() => setFilterSeverity(2)}
-            className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
+            className={`px-2 py-0.5 rounded text-[11px] font-sans font-semibold transition-colors ${
               filterSeverity === 2 ? 'bg-red-900 text-red-200 font-bold' : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >

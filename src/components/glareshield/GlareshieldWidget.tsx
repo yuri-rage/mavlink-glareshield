@@ -161,7 +161,7 @@ export const GlareshieldWidget: React.FC = () => {
                 )}
                 Safety Master: {heartbeat.isArmed ? 'ARMED (Motors Live)' : 'DISARMED'}
               </span>
-              <span className="text-[10px] text-zinc-500 font-mono">Slide to switch</span>
+              <span className="text-[10px] text-zinc-500 font-sans">Slide to switch</span>
             </div>
 
             <div className="relative flex items-center">
@@ -390,12 +390,12 @@ export const GlareshieldWidget: React.FC = () => {
 
               {/* Speed Preset Quick Chips */}
               <div className="flex items-center gap-1.5 pt-1 border-t border-zinc-800/40">
-                <span className="text-[10px] text-zinc-500 font-mono">Presets:</span>
+                <span className="text-[10px] text-zinc-500 font-sans">Presets:</span>
                 {[0.5, 1.0, 2.0, 3.0, 5.0].map((spd) => (
                   <button
                     key={spd}
                     onClick={() => handleSetSpeed(spd)}
-                    className={`px-2 py-0.5 rounded text-[11px] font-mono font-medium transition-colors border ${
+                    className={`px-2 py-0.5 rounded text-[11px] font-sans font-semibold transition-colors border ${
                       targetSpeed === spd
                         ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300'
                         : 'bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:text-zinc-200'
