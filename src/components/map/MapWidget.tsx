@@ -96,7 +96,7 @@ export const MapWidget: React.FC = () => {
   // GPS fixes buffer for linear interpolation (played back 1 fix-interval late)
   const fixesRef = useRef<GpsFix[]>([]);
   const displayPosRef = useRef<{ lat: number; lon: number; yaw: number } | null>(null);
-  const remainderRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const yawRef = useRef<number>(attitude.yawDeg);
   const followVehicleRef = useRef<boolean>(true);
   const isInteractingRef = useRef<boolean>(false);
   const isFlyingToRef = useRef<boolean>(false);
@@ -325,7 +325,12 @@ export const MapWidget: React.FC = () => {
     followVehicleRef.current = followVehicle;
   }, [followVehicle]);
 
-  // Buffer incoming GPS fixes for linear interpolation
+  // Sync live vehicle heading without triggering GPS fix buffer pushes
+  useEffect(() => {
+    yawRef.current = attitude.yawDeg;
+  }, [attitude.yawDeg]);
+
+  // Buffer incoming GPS fixes for linear interpolation (only on coordinate changes)
   useEffect(() => {
     if (position.lat === 0 && position.lon === 0) return;
 
@@ -338,12 +343,15 @@ export const MapWidget: React.FC = () => {
     };
 
     const fixes = fixesRef.current;
-    if (fixes.length > 0 && fixes[fixes.length - 1].t === now) {
-      fixes[fixes.length - 1] = fix;
-    } else {
-      fixes.push(fix);
-      if (fixes.length > 4) fixes.shift();
+    if (fixes.length > 0) {
+      const prev = fixes[fixes.length - 1];
+      if (prev.lat === position.lat && prev.lon === position.lon) {
+        return;
+      }
     }
+
+    fixes.push(fix);
+    if (fixes.length > 4) fixes.shift();
 
     // Instant initialization on first received point
     if (!displayPosRef.current) {
@@ -356,7 +364,7 @@ export const MapWidget: React.FC = () => {
         vehicleMarkerRef.current.setLatLng([position.lat, position.lon]);
       }
     }
-  }, [position.lat, position.lon, attitude.yawDeg]);
+  }, [position.lat, position.lon]);
 
   // Linear interpolation played back one fix-interval late, camera locked to marker
   useEffect(() => {
@@ -374,7 +382,7 @@ export const MapWidget: React.FC = () => {
 
       let curLat = fixes[fixes.length - 1].lat;
       let curLon = fixes[fixes.length - 1].lon;
-      let curYaw = fixes[fixes.length - 1].yaw;
+      const targetYaw = yawRef.current;
 
       if (fixes.length >= 2) {
         const p0 = fixes[fixes.length - 2];
@@ -385,21 +393,20 @@ export const MapWidget: React.FC = () => {
           const u = Math.min(Math.max((now - p1.t) / fixDt, 0.0), 1.0);
           curLat = p0.lat + (p1.lat - p0.lat) * u;
           curLon = p0.lon + (p1.lon - p0.lon) * u;
-          curYaw = lerpAngle(p0.yaw, p1.yaw, u);
         }
       }
 
-      displayPosRef.current = { lat: curLat, lon: curLon, yaw: curYaw };
+      displayPosRef.current = { lat: curLat, lon: curLon, yaw: targetYaw };
 
       const latLng: [number, number] = [curLat, curLon];
       marker.setLatLng(latLng);
 
       const iconEl = marker.getElement()?.querySelector('.vehicle-icon-rotator') as HTMLElement | null;
       if (iconEl) {
-        iconEl.style.transform = `rotate(${curYaw.toFixed(1)}deg)`;
+        iconEl.style.transform = `rotate(${targetYaw.toFixed(1)}deg)`;
       }
 
-      // Camera locked to marker with fractional remainder accumulation
+      // Camera locked to marker with integer pixel panBy only on non-zero steps
       if (followVehicleRef.current && !isInteractingRef.current) {
         const centerPoint = map.getSize().divideBy(2);
         const vehiclePoint = map.latLngToContainerPoint(latLng);
@@ -412,18 +419,13 @@ export const MapWidget: React.FC = () => {
           map.panTo(latLng, { animate: true, duration: 0.4 });
           map.once('moveend', () => {
             isFlyingToRef.current = false;
-            remainderRef.current = { x: 0, y: 0 };
           });
         } else if (!isFlyingToRef.current) {
-          remainderRef.current.x += dx;
-          remainderRef.current.y += dy;
-          const stepX = Math.round(remainderRef.current.x);
-          const stepY = Math.round(remainderRef.current.y);
+          const stepX = Math.round(dx);
+          const stepY = Math.round(dy);
 
           // Only call panBy on non-zero steps to avoid 60fps tile recalculation
           if (stepX !== 0 || stepY !== 0) {
-            remainderRef.current.x -= stepX;
-            remainderRef.current.y -= stepY;
             map.panBy([stepX, stepY], { animate: false });
           }
         }
