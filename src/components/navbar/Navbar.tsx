@@ -173,10 +173,10 @@ export const Navbar: React.FC = () => {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-y-2 gap-x-3">
+      <header className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md px-2.5 sm:px-6 py-2 flex items-center justify-between gap-y-2 gap-x-2 sm:gap-x-3 max-w-full overflow-hidden">
         {/* Left: Brand & Flight Status */}
-        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
             <div className="h-8 w-8 rounded-lg border border-sky-500/25 bg-zinc-900/90 shadow-sm flex items-center justify-center p-0.5 shrink-0">
               <img
                 src="/logo-64.png"
@@ -188,11 +188,11 @@ export const Navbar: React.FC = () => {
               <span className="font-bold text-sm sm:text-base tracking-tight text-zinc-100 hidden sm:inline">
                 GLARESHIELD
               </span>
-              <div className="text-xs sm:text-[13px] text-sky-300 flex items-center gap-1.5 flex-wrap sm:flex-nowrap font-mono font-medium leading-tight">
+              <div className="text-xs sm:text-[13px] text-sky-300 flex items-center gap-1 sm:gap-1.5 font-mono font-medium leading-tight">
                 {status === 'connected' ? (
                   <>
-                    {getVehicleIcon('h-4 w-4')}
-                    <span className="tracking-tight">{vehicleCategoryLabel}</span>
+                    {getVehicleIcon('h-3.5 w-3.5 sm:h-4 sm:w-4')}
+                    <span className="tracking-tight max-w-[55px] sm:max-w-none truncate">{vehicleCategoryLabel}</span>
                     {firmwareVersion && (
                       <span
                         className="text-[10px] sm:text-[11px] text-zinc-400 font-mono font-normal tracking-tight hidden md:inline"
@@ -213,10 +213,10 @@ export const Navbar: React.FC = () => {
 
           {/* Arm Status Pill (Left of Mode) with Dropdown Flyout */}
           {status === 'connected' && (
-            <div className="relative" ref={armMenuRef}>
+            <div className="relative shrink-0" ref={armMenuRef}>
               <Badge
                 variant={heartbeat.isArmed ? 'destructive' : 'secondary'}
-                className={`h-7 px-2.5 text-xs font-mono font-semibold gap-1.5 cursor-pointer select-none transition-all shadow-sm rounded-lg flex items-center ${
+                className={`h-7 px-2 sm:px-2.5 text-xs font-mono font-semibold gap-1 sm:gap-1.5 cursor-pointer select-none transition-all shadow-sm rounded-lg flex items-center ${
                   isArmMenuOpen ? 'ring-2 ring-sky-400 bg-zinc-800' : 'hover:brightness-110'
                 }`}
                 onClick={() => {
@@ -234,7 +234,8 @@ export const Navbar: React.FC = () => {
                 ) : (
                   <>
                     <Shield className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-                    <span>DISARMED</span>
+                    <span className="hidden sm:inline">DISARMED</span>
+                    <span className="sm:hidden">DISARM</span>
                   </>
                 )}
                 <ChevronDown className="h-3.5 w-3.5 opacity-60 ml-0.5 shrink-0" />
@@ -372,10 +373,10 @@ export const Navbar: React.FC = () => {
 
           {/* Mode Badge (Right of Arm) with Dropdown Flyout */}
           {status === 'connected' && (
-            <div className="relative" ref={modeMenuRef}>
+            <div className="relative shrink-0" ref={modeMenuRef}>
               <Badge
                 variant="info"
-                className={`h-7 px-2.5 text-xs font-mono font-semibold gap-1.5 cursor-pointer select-none transition-all shadow-sm rounded-lg flex items-center ${
+                className={`h-7 px-2 sm:px-2.5 text-xs font-mono font-semibold gap-1 sm:gap-1.5 cursor-pointer select-none transition-all shadow-sm rounded-lg flex items-center ${
                   isModeMenuOpen ? 'ring-2 ring-sky-400 bg-sky-950/80' : 'hover:brightness-110'
                 }`}
                 onClick={() => {
@@ -384,7 +385,7 @@ export const Navbar: React.FC = () => {
                 }}
                 title="Click to switch flight mode"
               >
-                <span>{heartbeat.modeName}</span>
+                <span className="truncate max-w-[65px] xs:max-w-[100px] sm:max-w-none">{heartbeat.modeName}</span>
                 <ChevronDown className="h-3.5 w-3.5 opacity-60 ml-0.5 shrink-0" />
               </Badge>
 
