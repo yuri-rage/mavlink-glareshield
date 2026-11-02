@@ -6,7 +6,7 @@ export class MavlinkEncoder {
   private systemId: number;
   private componentId: number;
 
-  constructor(systemId = 255, componentId = 190) { // GCS default IDs
+  constructor(systemId = 254, componentId = 190) { // GCS default IDs (254 avoids collision with Mission Planner on 255)
     this.systemId = systemId;
     this.componentId = componentId;
   }
@@ -82,6 +82,52 @@ export class MavlinkEncoder {
     return this.packV2(MAVLINK_MSG_ID.COMMAND_LONG, payload);
   }
 
+  // Generate COMMAND_INT (Used for location-sensitive commands like DO_REPOSITION, NAV_WAYPOINT, etc.)
+  public createCommandInt(
+    targetSystem: number,
+    targetComponent: number,
+    command: number,
+    frame = 3, // MAV_FRAME_GLOBAL_RELATIVE_ALT
+    params: [number, number, number, number, number, number, number] = [0, 0, 0, 0, 0, 0, 0]
+  ): Uint8Array {
+    const payload = new Uint8Array(35);
+    const view = new DataView(payload.buffer);
+
+    view.setFloat32(0, params[0], true);
+    view.setFloat32(4, params[1], true);
+    view.setFloat32(8, params[2], true);
+    view.setFloat32(12, params[3], true);
+    view.setInt32(16, Math.round(params[4]), true); // x: lat * 1e7
+    view.setInt32(20, Math.round(params[5]), true); // y: lon * 1e7
+    view.setFloat32(24, params[6], true); // z: alt (m)
+    view.setUint16(28, command, true);
+    view.setUint8(30, targetSystem);
+    view.setUint8(31, targetComponent);
+    view.setUint8(32, frame);
+    view.setUint8(33, 0); // current
+    view.setUint8(34, 0); // autocontinue
+
+    return this.packV2(MAVLINK_MSG_ID.COMMAND_INT, payload);
+  }
+
+  // DO_REPOSITION with explicit coordinate frame and target position
+  public createDoReposition(
+    targetSystem = 1,
+    targetComponent = 1,
+    latDeg: number,
+    lonDeg: number,
+    altM: number,
+    frame = 3 // MAV_FRAME_GLOBAL_RELATIVE_ALT
+  ): Uint8Array {
+    return this.createCommandInt(
+      targetSystem,
+      targetComponent,
+      MAV_CMD.DO_REPOSITION,
+      frame,
+      [-1, 1, 0, 0, latDeg * 1e7, lonDeg * 1e7, altM]
+    );
+  }
+
   // Arm / Disarm vehicle
   public createArmDisarm(targetSystem = 1, targetComponent = 1, arm: boolean, force = false): Uint8Array {
     return this.createCommandLong(
@@ -125,6 +171,24 @@ export class MavlinkEncoder {
       MAV_CMD.REQUEST_AUTOPILOT_CAPABILITIES,
       [1, 0, 0, 0, 0, 0, 0]
     );
+  }
+
+  // Request single parameter by index or ID
+  public createParamRequestRead(
+    targetSystem = 1,
+    targetComponent = 1,
+    paramIndex = -1,
+    paramId = ''
+  ): Uint8Array {
+    const payload = new Uint8Array(20);
+    const view = new DataView(payload.buffer);
+    view.setInt16(0, paramIndex, true);
+    payload[2] = targetSystem;
+    payload[3] = targetComponent;
+    for (let i = 0; i < 16; i++) {
+      payload[4 + i] = i < paramId.length ? paramId.charCodeAt(i) : 0;
+    }
+    return this.packV2(MAVLINK_MSG_ID.PARAM_REQUEST_READ, payload);
   }
 
   // Request Parameter List

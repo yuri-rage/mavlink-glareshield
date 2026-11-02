@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { MAVLINK_MSG_ID, getVehicleModeName, extractFirmwareVersion } from '../mavlink/messages';
+import { MAVLINK_MSG_ID, getVehicleModeName, extractFirmwareVersion, isVehicleAutopilotHeartbeat } from '../mavlink/messages';
 import { decodePayload, MavlinkPacket } from '../mavlink/parser';
 import { mavlinkConnection } from '../mavlink/connection';
 import { messageRateManager } from '../mavlink/rateManager';
@@ -122,6 +122,13 @@ export interface TelemetryHistoryPoint {
   climb: number;
 }
 
+export interface CommandAckInfo {
+  command: number;
+  result: number;
+  resultText: string;
+  time: number;
+}
+
 interface TelemetryState {
   heartbeat: VehicleHeartbeat;
   attitude: VehicleAttitude;
@@ -140,6 +147,7 @@ interface TelemetryState {
   rallyPoints: RallyPoint[];
   flightTrace: [number, number][];
   history: TelemetryHistoryPoint[];
+  lastCommandAck?: CommandAckInfo;
 
   // Actions
   processPacket: (packet: MavlinkPacket) => void;
@@ -147,6 +155,39 @@ interface TelemetryState {
   addTracePoint: (lat: number, lon: number) => void;
   clearTrace: () => void;
 }
+
+const COMMAND_ACK_RESULTS: Record<number, string> = {
+  0: 'ACCEPTED',
+  1: 'TEMPORARILY_REJECTED',
+  2: 'DENIED',
+  3: 'UNSUPPORTED',
+  4: 'FAILED',
+  5: 'IN_PROGRESS',
+  6: 'CANCELLED',
+  7: 'COMMAND_LONG_ONLY',
+  8: 'COMMAND_INT_ONLY',
+  9: 'COMMAND_UNSUPPORTED_MAV_FRAME',
+};
+
+const HANDLED_MESSAGE_IDS = new Set<number>([
+  MAVLINK_MSG_ID.HEARTBEAT,
+  MAVLINK_MSG_ID.ATTITUDE,
+  MAVLINK_MSG_ID.RAW_IMU,
+  MAVLINK_MSG_ID.SCALED_IMU,
+  MAVLINK_MSG_ID.HIGHRES_IMU,
+  MAVLINK_MSG_ID.GLOBAL_POSITION_INT,
+  MAVLINK_MSG_ID.GPS_RAW_INT,
+  MAVLINK_MSG_ID.SYS_STATUS,
+  MAVLINK_MSG_ID.BATTERY_STATUS,
+  MAVLINK_MSG_ID.VFR_HUD,
+  MAVLINK_MSG_ID.AUTOPILOT_VERSION,
+  MAVLINK_MSG_ID.STATUSTEXT,
+  MAVLINK_MSG_ID.PARAM_VALUE,
+  MAVLINK_MSG_ID.MISSION_ITEM,
+  MAVLINK_MSG_ID.MISSION_ITEM_INT,
+  MAVLINK_MSG_ID.MISSION_CURRENT,
+  MAVLINK_MSG_ID.COMMAND_ACK,
+]);
 
 const SEVERITY_LABELS: Record<number, string> = {
   0: 'EMERGENCY',
@@ -306,31 +347,55 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   clearTrace: () => set({ flightTrace: [] }),
 
   processPacket: (packet: MavlinkPacket) => {
+    // Early filter: skip unhandled packets to avoid unnecessary subscriber notifications
+    if (!HANDLED_MESSAGE_IDS.has(packet.messageId)) {
+      return;
+    }
+
     const data = decodePayload(packet.messageId, packet.payload);
 
     set((state) => {
       const now = Date.now();
 
-      switch (packet.messageId) {
-        case MAVLINK_MSG_ID.HEARTBEAT: {
-          const isArmed = (data.base_mode & 0x80) !== 0;
-          const modeName = resolveModeName(data.type, data.custom_mode);
-          messageRateManager.setTarget(packet.systemId, packet.componentId);
-          return {
-            heartbeat: {
-              type: data.type,
-              autopilot: data.autopilot,
-              baseMode: data.base_mode,
-              customMode: data.custom_mode,
-              modeName,
-              isArmed,
-              systemStatus: data.system_status,
-              lastHeartbeatTime: now,
-              systemId: packet.systemId,
-              componentId: packet.componentId,
-            },
-          };
+      // Autopilot lock-on and multi-system filtering
+      if (packet.messageId === MAVLINK_MSG_ID.HEARTBEAT) {
+        // Only accept heartbeats from true vehicle autopilots (reject GCS, tracker, gimbal, companion)
+        if (!isVehicleAutopilotHeartbeat(data.type, data.autopilot, packet.componentId)) {
+          return state;
         }
+
+        // If locked to a vehicle and it was heard from recently (< 10s), reject other vehicles
+        if (state.heartbeat.lastHeartbeatTime > 0 && state.heartbeat.systemId !== packet.systemId) {
+          if (now - state.heartbeat.lastHeartbeatTime < 10000) {
+            return state;
+          }
+        }
+
+        const isArmed = (data.base_mode & 0x80) !== 0;
+        const modeName = resolveModeName(data.type, data.custom_mode);
+        messageRateManager.setTarget(packet.systemId, packet.componentId);
+        return {
+          heartbeat: {
+            type: data.type,
+            autopilot: data.autopilot,
+            baseMode: data.base_mode,
+            customMode: data.custom_mode,
+            modeName,
+            isArmed,
+            systemStatus: data.system_status,
+            lastHeartbeatTime: now,
+            systemId: packet.systemId,
+            componentId: packet.componentId,
+          },
+        };
+      }
+
+      // For all other messages, if we are locked to a vehicle, reject packets from other systems
+      if (state.heartbeat.lastHeartbeatTime > 0 && packet.systemId !== state.heartbeat.systemId) {
+        return state;
+      }
+
+      switch (packet.messageId) {
 
         case MAVLINK_MSG_ID.ATTITUDE: {
           const rollDeg = (data.roll * 180) / Math.PI;
@@ -569,8 +634,30 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           };
         }
 
+        case MAVLINK_MSG_ID.COMMAND_ACK: {
+          const resultText = COMMAND_ACK_RESULTS[data.result] ?? `CODE_${data.result}`;
+          const isError = data.result !== 0 && data.result !== 5; // not ACCEPTED or IN_PROGRESS
+          const ackMsg: StatusMessage | null = isError ? {
+            id: `${now}-${Math.random()}`,
+            time: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+            severity: data.result === 1 ? 4 : 3, // WARNING or ERROR
+            severityLabel: data.result === 1 ? 'WARNING' : 'ERROR',
+            text: `CMD ${data.command} ${resultText}${data.result_param2 ? ` (${data.result_param2})` : ''}`,
+          } : null;
+
+          return {
+            lastCommandAck: {
+              command: data.command,
+              result: data.result,
+              resultText,
+              time: now,
+            },
+            ...(ackMsg ? { statusMessages: [ackMsg, ...state.statusMessages.slice(0, 99)] } : {}),
+          };
+        }
+
         default:
-          return {};
+          return state;
       }
     });
   },
@@ -582,16 +669,22 @@ mavlinkConnection.onPacket((packet) => {
 });
 
 // Auto-persist waypoints, fences, and rally points across page reloads
-let lastNavSavedJson = '';
+let lastWps: MissionWaypoint[] | null = null;
+let lastFp: FencePoint[] | null = null;
+let lastRp: RallyPoint[] | null = null;
+
 useTelemetryStore.subscribe((state) => {
+  if (state.missionWaypoints === lastWps && state.fencePoints === lastFp && state.rallyPoints === lastRp) {
+    return;
+  }
+  lastWps = state.missionWaypoints;
+  lastFp = state.fencePoints;
+  lastRp = state.rallyPoints;
+
   const currentNav = {
     missionWaypoints: state.missionWaypoints,
     fencePoints: state.fencePoints,
     rallyPoints: state.rallyPoints,
   };
-  const json = JSON.stringify(currentNav);
-  if (json !== lastNavSavedJson) {
-    lastNavSavedJson = json;
-    saveNavCache(currentNav);
-  }
+  saveNavCache(currentNav);
 });

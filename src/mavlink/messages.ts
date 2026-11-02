@@ -3,6 +3,7 @@ export const MAVLINK_MSG_ID = {
   HEARTBEAT: 0,
   SYS_STATUS: 1,
   SYSTEM_TIME: 2,
+  PARAM_REQUEST_READ: 20,
   PARAM_REQUEST_LIST: 21,
   PARAM_VALUE: 22,
   PARAM_SET: 23,
@@ -23,6 +24,7 @@ export const MAVLINK_MSG_ID = {
   MISSION_ACK: 47,
   MISSION_REQUEST_INT: 51,
   MISSION_ITEM_INT: 73,
+  COMMAND_INT: 75,
   COMMAND_LONG: 76,
   COMMAND_ACK: 77,
   NAV_CONTROLLER_OUTPUT: 62,
@@ -39,6 +41,7 @@ export const MAVLINK_MESSAGE_CRC_EXTRA: Record<number, number> = {
   [MAVLINK_MSG_ID.HEARTBEAT]: 50,
   [MAVLINK_MSG_ID.SYS_STATUS]: 124,
   [MAVLINK_MSG_ID.SYSTEM_TIME]: 137,
+  [MAVLINK_MSG_ID.PARAM_REQUEST_READ]: 214,
   [MAVLINK_MSG_ID.PARAM_REQUEST_LIST]: 159,
   [MAVLINK_MSG_ID.PARAM_VALUE]: 220,
   [MAVLINK_MSG_ID.PARAM_SET]: 168,
@@ -59,6 +62,7 @@ export const MAVLINK_MESSAGE_CRC_EXTRA: Record<number, number> = {
   [MAVLINK_MSG_ID.MISSION_ACK]: 153,
   [MAVLINK_MSG_ID.MISSION_REQUEST_INT]: 196,
   [MAVLINK_MSG_ID.MISSION_ITEM_INT]: 38,
+  [MAVLINK_MSG_ID.COMMAND_INT]: 158,
   [MAVLINK_MSG_ID.COMMAND_LONG]: 152,
   [MAVLINK_MSG_ID.COMMAND_ACK]: 143,
   [MAVLINK_MSG_ID.NAV_CONTROLLER_OUTPUT]: 183,
@@ -79,6 +83,7 @@ export const MAV_CMD = {
   DO_SET_MODE: 176,
   DO_JUMP: 177,
   DO_CHANGE_SPEED: 178,
+  DO_REPOSITION: 192,
   DO_SET_SERVO: 183,
   DO_SET_RELAY: 181,
   COMPONENT_ARM_DISARM: 400,
@@ -86,6 +91,35 @@ export const MAV_CMD = {
   REQUEST_MESSAGE: 512,
   REQUEST_AUTOPILOT_CAPABILITIES: 520,
 } as const;
+
+// ArduPilot Autopilot Types (MAV_AUTOPILOT)
+export const MAV_AUTOPILOT = {
+  GENERIC: 0,
+  RESERVED: 1,
+  SLUGS: 2,
+  ARDUPILOTMEGA: 3,
+  OPENPILOT: 4,
+  GENERIC_WAYPOINTS_ONLY: 5,
+  GENERIC_WAYPOINTS_AND_SIMPLE_NAVIGATION_ONLY: 6,
+  GENERIC_MISSION_FULL: 7,
+  INVALID: 8,
+  PPZ: 9,
+  UDB: 10,
+  FP: 11,
+  PX4: 12,
+} as const;
+
+// Helper to determine if a heartbeat is from a true vehicle autopilot (and not a gimbal, companion computer, or GCS)
+export function isVehicleAutopilotHeartbeat(type: number, autopilot: number, compId: number): boolean {
+  // Reject GCS (type 6) and antenna trackers (type 5)
+  if (type === MAV_TYPE.GCS || type === MAV_TYPE.ANTENNA_TRACKER) return false;
+  // Reject MAV_AUTOPILOT_INVALID (8)
+  if (autopilot === MAV_AUTOPILOT.INVALID) return false;
+  // Component 154 = gimbal, 190 = GCS, 191 = companion computer, 156 = ADSB
+  if (compId === 154 || compId === 190 || compId === 191 || compId === 156) return false;
+  // Primary autopilot component is compId 1 (MAV_COMP_ID_AUTOPILOT1)
+  return compId === 1 || (compId < 10 && autopilot !== 0);
+}
 
 // ArduPilot Vehicle Types (MAV_TYPE)
 export const MAV_TYPE = {
