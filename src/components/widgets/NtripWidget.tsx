@@ -20,7 +20,6 @@ const STORAGE_KEY = 'mavlink_ntrip_config';
 export const NtripWidget: React.FC = () => {
   const [injectorState, setInjectorState] = useState<RtcmInjectorState>(() => (rtcmInjector as any).state);
   const [sourceMode, setSourceMode] = useState<'ntrip' | 'serial'>('ntrip');
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [manualFormExpanded, setManualFormExpanded] = useState<boolean | null>(null);
 
   // Settings
@@ -120,7 +119,7 @@ export const NtripWidget: React.FC = () => {
         <div className="flex items-center justify-between gap-1.5 flex-wrap">
           <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5 shrink-0">
             <Radio className="h-3.5 w-3.5 text-sky-400" />
-            RTCM Injection
+            RTCM3 Injection
           </CardTitle>
 
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -285,57 +284,44 @@ export const NtripWidget: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Toggle Advanced Auth & VRS GGA */}
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors"
-                  >
-                    {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                    {showAdvanced ? 'Hide Authentication & VRS Settings' : 'Show Authentication & VRS Settings'}
-                  </button>
+                {/* Authentication & VRS GGA Feedback */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-zinc-800/60">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-zinc-400 uppercase font-bold">Username</label>
+                    <input
+                      type="text"
+                      disabled={isConnected || isConnecting}
+                      value={ntripConfig.username || ''}
+                      onChange={(e) => saveConfig({ ...ntripConfig, username: e.target.value })}
+                      placeholder="Optional"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
 
-                  {showAdvanced && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-zinc-800">
-                      <div className="space-y-1">
-                        <label className="text-[10px] text-zinc-400 uppercase font-bold">Username</label>
-                        <input
-                          type="text"
-                          disabled={isConnected || isConnecting}
-                          value={ntripConfig.username || ''}
-                          onChange={(e) => saveConfig({ ...ntripConfig, username: e.target.value })}
-                          placeholder="Optional"
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
-                        />
-                      </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-zinc-400 uppercase font-bold">Password</label>
+                    <input
+                      type="password"
+                      disabled={isConnected || isConnecting}
+                      value={ntripConfig.password || ''}
+                      onChange={(e) => saveConfig({ ...ntripConfig, password: e.target.value })}
+                      placeholder="Optional"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[10px] text-zinc-400 uppercase font-bold">Password</label>
-                        <input
-                          type="password"
-                          disabled={isConnected || isConnecting}
-                          value={ntripConfig.password || ''}
-                          onChange={(e) => saveConfig({ ...ntripConfig, password: e.target.value })}
-                          placeholder="Optional"
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
-                        />
-                      </div>
-
-                      <div className="sm:col-span-2 flex items-center justify-between pt-1">
-                        <span className="text-[11px] text-zinc-300">
-                          Send NMEA GGA VRS Feedback (Every 10s)
-                        </span>
-                        <input
-                          type="checkbox"
-                          disabled={isConnected || isConnecting}
-                          checked={ntripConfig.sendGga !== false}
-                          onChange={(e) => saveConfig({ ...ntripConfig, sendGga: e.target.checked })}
-                          className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 text-sky-500 focus:ring-0"
-                        />
-                      </div>
-                    </div>
-                  )}
+                  <div className="sm:col-span-2 flex items-center justify-between pt-0.5">
+                    <span className="text-[11px] text-zinc-300">
+                      Send NMEA GGA VRS Feedback (Every 10s)
+                    </span>
+                    <input
+                      type="checkbox"
+                      disabled={isConnected || isConnecting}
+                      checked={ntripConfig.sendGga !== false}
+                      onChange={(e) => saveConfig({ ...ntripConfig, sendGga: e.target.checked })}
+                      className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 text-sky-500 focus:ring-0"
+                    />
+                  </div>
                 </div>
               </div>
             ) : (
