@@ -4,6 +4,16 @@ A widget-based web application for bidirectional ArduPilot control and telemetry
 
 Designed to remove the "glare" from more fully featured GCS applications and focus on core display elements with a high degree of flexibility and user customization options.
 
+> [!WARNING]
+> **USE AT YOUR OWN RISK**
+>
+> Glareshield is experimental software and is **NOT certified for safety-critical or primary flight control operations**.
+>
+> This software directly issues commands to vehicle flight controllers and physical actuators. Network latency, browser performance, disconnection, software defects, or sensor inaccuracies can result in loss of control, flyaways, collisions, or catastrophic crashes.
+>
+> - **Always maintain an independent physical manual override (e.g., dedicated RC transmitter) powered and within reach.**
+> - **The operator / pilot-in-command assumes all risk and sole responsibility for vehicle safety, operation, and regulatory compliance at all times.**
+
 ---
 
 ## Features
