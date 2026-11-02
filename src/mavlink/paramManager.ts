@@ -21,7 +21,10 @@ export class ParamManager {
   private listeners: Set<(status: ParamManagerStatus) => void> = new Set();
   private legacyTimer: any = null;
   private legacyExpected = 0;
-  private legacyReceived = 0;
+  private legacyIndices = new Set<number>();
+  private legacyTargetSys = 1;
+  private legacyTargetComp = 1;
+  private legacyRetries = 0;
   private isCancelled = false;
 
   constructor() {
@@ -41,37 +44,87 @@ export class ParamManager {
     this.listeners.forEach((l) => l(this.status));
   }
 
+  private requestMissingLegacyParams() {
+    if (this.legacyExpected <= 0 || this.isCancelled) return;
+    const missing: number[] = [];
+    for (let i = 0; i < this.legacyExpected; i++) {
+      if (!this.legacyIndices.has(i)) {
+        missing.push(i);
+      }
+    }
+
+    if (missing.length === 0) {
+      if (this.legacyTimer) clearTimeout(this.legacyTimer);
+      this.setStatus({
+        isFetching: false,
+        method: 'idle',
+        message: `Loaded all ${this.legacyExpected} params via stream`,
+      });
+      return;
+    }
+
+    if (this.legacyRetries >= 3) {
+      console.warn(`[ParamManager] Gave up requesting missing params after 3 retries (${missing.length} missing).`);
+      this.setStatus({
+        isFetching: false,
+        method: 'idle',
+        message: `Loaded ${this.legacyIndices.size} / ${this.legacyExpected} params (${missing.length} missed)`,
+      });
+      return;
+    }
+
+    this.legacyRetries++;
+    console.log(`[ParamManager] Re-requesting ${missing.length} missing params via PARAM_REQUEST_READ (attempt ${this.legacyRetries})...`);
+    this.setStatus({
+      message: `Filling gaps: requesting ${missing.length} missing params...`,
+    });
+
+    const encoder = mavlinkConnection.getEncoder();
+    for (const idx of missing) {
+      const req = encoder.createParamRequestRead(this.legacyTargetSys, this.legacyTargetComp, idx);
+      mavlinkConnection.send(req);
+    }
+
+    if (this.legacyTimer) clearTimeout(this.legacyTimer);
+    this.legacyTimer = setTimeout(() => {
+      this.requestMissingLegacyParams();
+    }, 2500);
+  }
+
   private handlePacket(packet: MavlinkPacket) {
     if (!this.status.isFetching || this.status.method !== 'legacy') return;
 
     if (packet.messageId === MAVLINK_MSG_ID.PARAM_VALUE) {
       const data = decodePayload(packet.messageId, packet.payload);
-      this.legacyReceived++;
+      this.legacyIndices.add(data.param_index);
       this.legacyExpected = data.param_count || this.legacyExpected;
 
-      const pct = this.legacyExpected > 0 ? Math.round(((data.param_index + 1) / this.legacyExpected) * 100) : 0;
+      const pct = this.legacyExpected > 0 ? Math.round((this.legacyIndices.size / this.legacyExpected) * 100) : 0;
       this.setStatus({
-        paramCount: this.legacyReceived,
-        message: `Streaming params: ${data.param_index + 1} / ${this.legacyExpected} (${pct}%)`,
+        paramCount: this.legacyIndices.size,
+        message: `Streaming params: ${this.legacyIndices.size} / ${this.legacyExpected} (${pct}%)`,
       });
 
       if (this.legacyTimer) clearTimeout(this.legacyTimer);
-      this.legacyTimer = setTimeout(() => {
-        this.setStatus({
-          isFetching: false,
-          method: 'idle',
-          message: `Loaded ${this.legacyReceived} params via stream`,
-        });
-      }, 2500);
 
-      if (this.legacyExpected > 0 && data.param_index + 1 >= this.legacyExpected) {
-        if (this.legacyTimer) clearTimeout(this.legacyTimer);
+      if (this.legacyExpected > 0 && this.legacyIndices.size >= this.legacyExpected) {
         this.setStatus({
           isFetching: false,
           method: 'idle',
           message: `Loaded all ${this.legacyExpected} params via stream`,
         });
+        return;
       }
+
+      // If last index packet arrived or activity paused, check for gaps
+      if (this.legacyExpected > 0 && data.param_index + 1 >= this.legacyExpected) {
+        this.requestMissingLegacyParams();
+        return;
+      }
+
+      this.legacyTimer = setTimeout(() => {
+        this.requestMissingLegacyParams();
+      }, 2500);
     }
   }
 
@@ -179,8 +232,11 @@ export class ParamManager {
   }
 
   private fallbackToLegacy(targetSys: number, targetComp: number) {
+    this.legacyTargetSys = targetSys;
+    this.legacyTargetComp = targetComp;
     this.legacyExpected = 0;
-    this.legacyReceived = 0;
+    this.legacyIndices.clear();
+    this.legacyRetries = 0;
     this.setStatus({
       isFetching: true,
       method: 'legacy',
@@ -193,12 +249,8 @@ export class ParamManager {
 
     if (this.legacyTimer) clearTimeout(this.legacyTimer);
     this.legacyTimer = setTimeout(() => {
-      this.setStatus({
-        isFetching: false,
-        method: 'idle',
-        message: 'Parameter streaming timeout.',
-      });
-    }, 8000);
+      this.requestMissingLegacyParams();
+    }, 4000);
   }
 
   /**
