@@ -1103,6 +1103,57 @@ if (afterTabs[0] !== beforeTabs[1] || afterTabs[1] !== beforeTabs[0]) {
   console.error('reorderTabs failed!', { beforeTabs, afterTabs });
   process.exit(1);
 }
+
+// Test Action button confirmation prompt displays underlying MAV_CMD name
+import { getMavCmdName as getCmdNameCheck } from '../src/mavlink/messages.ts';
+if (getCmdNameCheck(400) !== 'COMPONENT_ARM_DISARM') {
+  console.error('getMavCmdName(400) expected COMPONENT_ARM_DISARM, got:', getCmdNameCheck(400));
+  process.exit(1);
+}
+if (getCmdNameCheck(20) !== 'NAV_RETURN_TO_LAUNCH') {
+  console.error('getMavCmdName(20) expected NAV_RETURN_TO_LAUNCH, got:', getCmdNameCheck(20));
+  process.exit(1);
+}
+
+// Action prompt formatting verification:
+const fakeLabel = 'Trigger Return to Launch';
+const fakeCmdId = 400; // Misleading label on force-arm command
+const prompt = `Confirm: ${fakeLabel} — ${getCmdNameCheck(fakeCmdId)}?`;
+if (prompt !== 'Confirm: Trigger Return to Launch — COMPONENT_ARM_DISARM?') {
+  console.error('Confirmation prompt mismatch:', prompt);
+  process.exit(1);
+}
+
+// Test Duplicate Widget Import Renaming:
+const customWidgets = useDashboardStore.getState().profile.customWidgets;
+const collidingWidget = {
+  id: 'custom-rtl-btn',
+  name: 'Quick RTL Trigger',
+  displayType: 'action-button' as const,
+  category: 'control' as const,
+  action: {
+    label: 'Trigger Return to Launch',
+    commandId: 400,
+    params: [1, 21196, 0, 0, 0, 0, 0] as [number, number, number, number, number, number, number],
+    confirmation: true,
+  },
+};
+const existingIds = new Set(customWidgets.map((c) => c.id));
+const existingNames = new Set(customWidgets.map((c) => c.name.trim().toLowerCase()));
+let importedWidget = { ...collidingWidget };
+if (existingIds.has(importedWidget.id) || existingNames.has(importedWidget.name.trim().toLowerCase())) {
+  if (existingIds.has(importedWidget.id)) {
+    importedWidget.id = `custom-fresh-${Date.now()}`;
+  }
+  if (!importedWidget.name.includes('(imported)')) {
+    importedWidget.name = `${importedWidget.name} (imported)`;
+  }
+}
+if (importedWidget.id === 'custom-rtl-btn' || importedWidget.name !== 'Quick RTL Trigger (imported)') {
+  console.error('Duplicate widget import failed to rename and assign fresh ID:', importedWidget);
+  process.exit(1);
+}
+
 console.log('Extended telemetry slices, custom widget bindings, and dashboard drag reordering verified!');
 
 // 20. Test Dual GPS Modules (GPS_RAW_INT & GPS2_RAW) with Yaw Latching

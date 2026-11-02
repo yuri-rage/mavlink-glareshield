@@ -3,7 +3,7 @@ import { CustomWidgetDefinition, MultiBarGroupType } from '../../types/widget';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { messageRateManager } from '../../mavlink/rateManager';
-import { MAVLINK_MSG_ID } from '../../mavlink/messages';
+import { MAVLINK_MSG_ID, getMavCmdName } from '../../mavlink/messages';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -1053,8 +1053,11 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                   className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs h-7 gap-1"
                   onClick={() => executeSliderAction(sliderVal)}
                 >
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  Apply: {sliderVal} {unit}
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    Apply: {sliderVal} {unit}
+                    {definition.action ? ` — ${getMavCmdName(definition.action.commandId)}` : ''}
+                  </span>
                 </Button>
                 <Button
                   size="sm"
@@ -1097,11 +1100,14 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
               <div className="space-y-1.5">
                 <Button
                   variant="destructive"
-                  className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold gap-2 animate-pulse"
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold gap-2 text-xs"
                   onClick={handleTriggerAction}
                 >
-                  <AlertTriangle className="h-4 w-4" />
-                  Confirm: {definition.action?.label || 'Execute'}?
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span className="truncate">
+                    Confirm: {definition.action?.label || 'Execute'}
+                    {definition.action ? ` — ${getMavCmdName(definition.action.commandId)}` : ''}?
+                  </span>
                 </Button>
                 <Button
                   variant="outline"
@@ -1152,8 +1158,11 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
             {isConfirmingToggle && (
               <div className="p-2 bg-amber-950/40 border border-amber-600/40 rounded space-y-1.5 text-xs">
                 <div className="font-bold text-amber-300 flex items-center gap-1.5">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  Confirm toggle to {pendingToggleVal ? 'ENGAGED' : 'DISENGAGED'}?
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    Confirm toggle to {pendingToggleVal ? 'ENGAGED' : 'DISENGAGED'}
+                    {definition.action ? ` — ${getMavCmdName(definition.action.commandId)}` : ''}?
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button

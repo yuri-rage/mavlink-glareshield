@@ -175,14 +175,22 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
           }
 
           // Check if ID collides with built-in or existing custom widgets
+          const existingWidgets = useDashboardStore.getState().profile.customWidgets;
           const existingIds = new Set([
             ...BUILT_IN_CATALOG.map((b) => b.id),
-            ...useDashboardStore.getState().profile.customWidgets.map((c) => c.id),
+            ...existingWidgets.map((c) => c.id),
           ]);
-          if (existingIds.has(parsed.id)) {
+          const isDuplicateId = existingIds.has(parsed.id);
+          const isDuplicateName = existingWidgets.some((c) => c.name.trim().toLowerCase() === parsed.name.trim().toLowerCase());
+
+          if (isDuplicateId) {
             const freshId = `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
             console.warn(`[Widget Import] ID "${parsed.id}" collides with existing widget. Reassigned to fresh ID "${freshId}".`);
             parsed.id = freshId;
+          }
+
+          if ((isDuplicateId || isDuplicateName) && !parsed.name.includes('(imported)')) {
+            parsed.name = `${parsed.name} (imported)`;
           }
 
           // If the widget defines an action or paramControl, enforce confirmation for flight safety
