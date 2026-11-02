@@ -12,26 +12,71 @@ interface ModalProps {
 
 export function Modal({ isOpen, onClose, title, description, children }: ModalProps) {
   const dialogRef = React.useRef<HTMLDivElement | null>(null);
+  const previousActiveElementRef = React.useRef<HTMLElement | null>(null);
 
-  // Close on Escape key press
+  // Focus trap and keyboard handling (Escape closes, Tab/Shift+Tab cycles within modal)
   React.useEffect(() => {
     if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
 
-  // Focus trap / initial focus on open
-  React.useEffect(() => {
-    if (isOpen && dialogRef.current) {
-      dialogRef.current.focus();
+    // Remember element focused before modal opened
+    previousActiveElementRef.current = document.activeElement as HTMLElement | null;
+
+    const dialog = dialogRef.current;
+    if (dialog) {
+      const getFocusableElements = () => {
+        const selector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+        return Array.from(dialog.querySelectorAll<HTMLElement>(selector)).filter(
+          (el) => !el.hasAttribute('disabled') && el.offsetParent !== null
+        );
+      };
+
+      const focusable = getFocusableElements();
+      if (focusable.length > 0) {
+        focusable[0].focus();
+      } else {
+        dialog.focus();
+      }
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onClose();
+          return;
+        }
+
+        if (e.key === 'Tab') {
+          const elements = getFocusableElements();
+          if (elements.length === 0) {
+            e.preventDefault();
+            return;
+          }
+
+          const first = elements[0];
+          const last = elements[elements.length - 1];
+
+          if (e.shiftKey) {
+            if (document.activeElement === first || document.activeElement === dialog) {
+              e.preventDefault();
+              last.focus();
+            }
+          } else {
+            if (document.activeElement === last) {
+              e.preventDefault();
+              first.focus();
+            }
+          }
+        }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        if (previousActiveElementRef.current && typeof previousActiveElementRef.current.focus === 'function') {
+          previousActiveElementRef.current.focus();
+        }
+      };
     }
-  }, [isOpen]);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
