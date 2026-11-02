@@ -1244,4 +1244,67 @@ if (!uninitGps2State || !uninitGps2State.hasYaw || uninitGps2State.yaw !== undef
 
 console.log('Dual GPS modules (GPS_RAW_INT & GPS2_RAW) and yaw latching verified successfully!');
 
+// 21. Test Consecutive Identical STATUSTEXT Message Grouping & Counter Badging
+useTelemetryStore.getState().clearMessages();
+
+function makeStatusPacket(text: string, severity: number, seq: number) {
+  const payload = new Uint8Array(51);
+  payload[0] = severity;
+  for (let i = 0; i < text.length && i < 50; i++) {
+    payload[1 + i] = text.charCodeAt(i);
+  }
+  return {
+    version: 2 as const,
+    sequence: seq,
+    systemId: 1,
+    componentId: 1,
+    messageId: MAVLINK_MSG_ID.STATUSTEXT,
+    payload,
+    crc: 0,
+    raw: new Uint8Array(0),
+  };
+}
+
+// Message 1
+useTelemetryStore.getState().processPacket(makeStatusPacket('PreArm: Compass not calibrated', 4, 30));
+let msgs = useTelemetryStore.getState().statusMessages;
+if (msgs.length !== 1 || msgs[0].count !== 1 || msgs[0].text !== 'PreArm: Compass not calibrated') {
+  console.error('STATUSTEXT grouping: initial message failed!', msgs);
+  process.exit(1);
+}
+
+// Message 2 (identical & consecutive)
+useTelemetryStore.getState().processPacket(makeStatusPacket('PreArm: Compass not calibrated', 4, 31));
+msgs = useTelemetryStore.getState().statusMessages;
+if (msgs.length !== 1 || msgs[0].count !== 2) {
+  console.error('STATUSTEXT grouping: duplicate message was not grouped into count=2!', msgs);
+  process.exit(1);
+}
+
+// Message 3 (identical & consecutive)
+useTelemetryStore.getState().processPacket(makeStatusPacket('PreArm: Compass not calibrated', 4, 32));
+msgs = useTelemetryStore.getState().statusMessages;
+if (msgs.length !== 1 || msgs[0].count !== 3) {
+  console.error('STATUSTEXT grouping: duplicate message was not grouped into count=3!', msgs);
+  process.exit(1);
+}
+
+// Message 4 (different message)
+useTelemetryStore.getState().processPacket(makeStatusPacket('EKF3 IMU0 initialised', 6, 33));
+msgs = useTelemetryStore.getState().statusMessages;
+if (msgs.length !== 2 || msgs[0].text !== 'EKF3 IMU0 initialised' || msgs[0].count !== 1 || msgs[1].count !== 3) {
+  console.error('STATUSTEXT grouping: distinct message handling failed!', msgs);
+  process.exit(1);
+}
+
+// Message 5 (same text as msg 1-3, but non-consecutive)
+useTelemetryStore.getState().processPacket(makeStatusPacket('PreArm: Compass not calibrated', 4, 34));
+msgs = useTelemetryStore.getState().statusMessages;
+if (msgs.length !== 3 || msgs[0].count !== 1 || msgs[2].count !== 3) {
+  console.error('STATUSTEXT grouping: non-consecutive message created false grouping!', msgs);
+  process.exit(1);
+}
+
+console.log('Consecutive identical STATUSTEXT message grouping and counter verification PASSED!');
+
 console.log('All MAVLink protocol unit tests PASSED!');

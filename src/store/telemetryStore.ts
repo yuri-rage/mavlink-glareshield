@@ -173,6 +173,7 @@ export interface StatusMessage {
   severity: number;
   severityLabel: string;
   text: string;
+  count?: number;
 }
 
 export interface MissionWaypoint {
@@ -320,6 +321,32 @@ const SEVERITY_LABELS: Record<number, string> = {
   6: 'INFO',
   7: 'DEBUG',
 };
+
+export function appendStatusMessage(
+  existing: StatusMessage[],
+  msg: { severity: number; severityLabel: string; text: string },
+  now: number
+): StatusMessage[] {
+  const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
+  const first = existing[0];
+  if (first && first.text === msg.text && first.severity === msg.severity) {
+    const updated: StatusMessage = {
+      ...first,
+      time,
+      count: (first.count ?? 1) + 1,
+    };
+    return [updated, ...existing.slice(1)];
+  }
+  const newMsg: StatusMessage = {
+    id: `${now}-${Math.random()}`,
+    time,
+    severity: msg.severity,
+    severityLabel: msg.severityLabel,
+    text: msg.text,
+    count: 1,
+  };
+  return [newMsg, ...existing.slice(0, 99)];
+}
 
 const GPS_FIX_LABELS: Record<number, string> = {
   0: 'No GPS',
@@ -931,16 +958,17 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         }
 
         case MAVLINK_MSG_ID.STATUSTEXT: {
-          const msg: StatusMessage = {
-            id: `${now}-${Math.random()}`,
-            time: new Date().toLocaleTimeString('en-GB', { hour12: false }),
-            severity: data.severity,
-            severityLabel: SEVERITY_LABELS[data.severity] ?? `SEV_${data.severity}`,
-            text: data.text,
-          };
           const version = extractFirmwareVersion(data.text);
           return {
-            statusMessages: [msg, ...state.statusMessages.slice(0, 99)],
+            statusMessages: appendStatusMessage(
+              state.statusMessages,
+              {
+                severity: data.severity,
+                severityLabel: SEVERITY_LABELS[data.severity] ?? `SEV_${data.severity}`,
+                text: data.text,
+              },
+              now
+            ),
             ...(version ? { firmwareVersion: version, firmwareRaw: data.text } : {}),
           };
         }
@@ -1054,9 +1082,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           const cmdName = getMavCmdName(data.command);
           const resultText = COMMAND_ACK_RESULTS[data.result] ?? `CODE_${data.result}`;
           const isError = data.result !== 0 && data.result !== 5; // not ACCEPTED or IN_PROGRESS
-          const ackMsg: StatusMessage | null = isError ? {
-            id: `${now}-${Math.random()}`,
-            time: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          const ackMsg = isError ? {
             severity: data.result === 1 ? 4 : 3, // WARNING or ERROR
             severityLabel: data.result === 1 ? 'WARNING' : 'ERROR',
             text: `CMD ${cmdName}: ${resultText}${data.result_param2 ? ` (${data.result_param2})` : ''}`,
@@ -1069,7 +1095,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
               resultText,
               time: now,
             },
-            ...(ackMsg ? { statusMessages: [ackMsg, ...state.statusMessages.slice(0, 99)] } : {}),
+            ...(ackMsg ? { statusMessages: appendStatusMessage(state.statusMessages, ackMsg, now) } : {}),
           };
         }
 
@@ -1136,9 +1162,7 @@ mavlinkConnection.onSend((data) => {
           cmdId === MAV_CMD.SET_MESSAGE_INTERVAL ||
           cmdId === MAV_CMD.REQUEST_MESSAGE ||
           cmdId === MAV_CMD.REQUEST_AUTOPILOT_CAPABILITIES;
-        const timeoutMsg: StatusMessage = {
-          id: `${now}-${Math.random()}`,
-          time: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+        const timeoutMsg = {
           severity: isHousekeeping ? 6 : 4, // INFO for background housekeeping, WARNING for user commands
           severityLabel: isHousekeeping ? 'INFO' : 'WARNING',
           text: `CMD ${cmdName}: NO ACK (TIMEOUT)`,
@@ -1150,7 +1174,7 @@ mavlinkConnection.onSend((data) => {
             resultText: 'TIMEOUT',
             time: now,
           },
-          statusMessages: [timeoutMsg, ...s.statusMessages.slice(0, 99)],
+          statusMessages: appendStatusMessage(s.statusMessages, timeoutMsg, now),
         }));
       }, 5000);
 

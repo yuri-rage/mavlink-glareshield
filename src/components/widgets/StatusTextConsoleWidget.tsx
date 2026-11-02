@@ -237,6 +237,15 @@ export const StatusTextConsoleWidget: React.FC = () => {
                 <Badge variant={getSeverityBadgeVariant(msg.severity)} className="text-[8.5px] px-1 py-0 h-3.5 leading-none">
                   {msg.severityLabel}
                 </Badge>
+                {msg.count !== undefined && msg.count > 1 && (
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] font-mono px-1 py-0 h-3.5 leading-none bg-sky-950/70 border-sky-600/40 text-sky-300 font-bold shrink-0 shadow-sm"
+                    title={`${msg.count} consecutive identical messages`}
+                  >
+                    ×{msg.count}
+                  </Badge>
+                )}
                 <span className={`flex-1 break-all ${msg.severity <= 3 ? 'text-red-300 font-bold' : msg.severity === 4 ? 'text-amber-300' : 'text-zinc-200'}`}>
                   {msg.text}
                 </span>
