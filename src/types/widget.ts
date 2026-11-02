@@ -6,7 +6,21 @@ export type WidgetDisplayType =
   | 'toggle-switch'
   | 'action-button'
   | 'slider-control'
-  | 'text-display';
+  | 'text-display'
+  | 'multi-bar'
+  | 'param-control'
+  | 'compass-rose'
+  | 'sparkline';
+
+export type MultiBarGroupType =
+  | 'rc-8'
+  | 'servo-8'
+  | 'esc-rpm'
+  | 'esc-temp'
+  | 'esc-current'
+  | 'vibration-xyz'
+  | 'ekf-variances'
+  | 'battery-cells';
 
 export interface WidgetDataBinding {
   messageName: string; // e.g. "ATTITUDE", "BATTERY_STATUS", "VFR_HUD"
@@ -16,6 +30,9 @@ export interface WidgetDataBinding {
   decimals?: number; // number of decimal places
   min?: number;
   max?: number;
+  warnThreshold?: number;
+  critThreshold?: number;
+  thresholdInvert?: boolean; // true if lower values trigger warning/critical (e.g., voltage, battery_remaining)
 }
 
 export interface WidgetAction {
@@ -23,6 +40,20 @@ export interface WidgetAction {
   commandId: number; // MAV_CMD
   params: [number, number, number, number, number, number, number];
   confirmation?: boolean;
+}
+
+export interface WidgetParamControl {
+  paramId: string; // e.g. "WPNAV_SPEED", "RTL_ALT", "PILOT_SPEED_UP"
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  options?: { label: string; value: number }[];
+  confirmation?: boolean;
+}
+
+export interface WidgetMultiBarConfig {
+  group: MultiBarGroupType;
 }
 
 export interface CustomWidgetDefinition {
@@ -33,6 +64,8 @@ export interface CustomWidgetDefinition {
   displayType: WidgetDisplayType;
   binding?: WidgetDataBinding;
   action?: WidgetAction;
+  paramControl?: WidgetParamControl;
+  multiBarConfig?: WidgetMultiBarConfig;
   colorScheme?: 'default' | 'green' | 'amber' | 'blue' | 'red';
   minWidth?: number;
   minHeight?: number;
