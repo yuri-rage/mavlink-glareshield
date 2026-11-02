@@ -60,7 +60,7 @@ export const DashboardGrid: React.FC = () => {
       'built-in-battery-card': 'Battery',
       'built-in-gps-card': 'GPS / GNSS',
       'built-in-vfr-hud': 'VFR Data',
-      'built-in-statustext': 'Console',
+      'built-in-statustext': 'Messages',
       'built-in-parameters': 'Parameters',
       'built-in-charts': 'Telemetry Graphs',
     };

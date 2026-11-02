@@ -117,7 +117,7 @@ export const ParametersWidget: React.FC = () => {
           <div className="flex items-center gap-2">
             <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
               <Sliders className="h-4 w-4 text-sky-400" />
-              ARDUPILOT PARAMETER MANAGER ({paramKeys.length})
+              PARAMETERS ({paramKeys.length})
             </CardTitle>
             {paramStatus.method === 'ftp' && (
               <Badge variant="info" className="text-[9px] font-mono gap-0.5">

@@ -28,7 +28,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
         <div className="flex items-center justify-between">
           <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
             <Terminal className="h-4 w-4 text-sky-400" />
-            MAVLINK STATUSTEXT CONSOLE
+            MESSAGES
           </CardTitle>
 
           <div className="flex items-center gap-2">
