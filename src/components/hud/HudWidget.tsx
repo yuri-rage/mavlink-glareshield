@@ -16,6 +16,7 @@ export const HudWidget: React.FC = () => {
   const imu = useTelemetryStore((state) => state.imu);
   const { formatSpeed, formatAltitude, formatClimb, system: unitSystem, altitudeMode } = useUnitsStore();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fpmPosRef = useRef<{ x: number; y: number; initialized: boolean }>({ x: 0, y: 0, initialized: false });
 
   // Register subscription for high-frequency attitude, VFR, and IMU
   useEffect(() => {
@@ -173,95 +174,6 @@ export const HudWidget: React.FC = () => {
       }
     }
     ctx.setLineDash([]);
-
-    // =========================================================
-    // 1b. Flight Path Marker (FPM) / Velocity Vector (The "Bird")
-    // Indicates the aircraft's actual 3D trajectory (climb/descent
-    // and lateral wind drift) relative to the artificial horizon.
-    // =========================================================
-    const gs = vfr.groundspeed > 0 ? vfr.groundspeed : Math.hypot(position.vx, position.vy);
-    const climb = Math.abs(vfr.climb) > 0.02 ? vfr.climb : -position.vz;
-
-    if (gs >= 0.8) {
-      // Flight Path Angle (gamma): angle of the velocity vector above the horizon
-      const fpaRad = Math.atan2(climb, Math.max(gs, 0.1));
-      const fpaDeg = (fpaRad * 180) / Math.PI;
-
-      // Track / Course Over Ground (COG)
-      let trackDeg: number;
-      if (Math.hypot(position.vx, position.vy) >= 0.5) {
-        trackDeg = (Math.atan2(position.vy, position.vx) * 180) / Math.PI;
-        if (trackDeg < 0) trackDeg += 360;
-      } else if (gps.cog > 0) {
-        trackDeg = gps.cog;
-      } else {
-        trackDeg = vfr.heading;
-      }
-
-      // Drift angle: Track - Heading (normalized to [-180, 180])
-      let driftDeg = trackDeg - vfr.heading;
-      while (driftDeg > 180) driftDeg -= 360;
-      while (driftDeg < -180) driftDeg += 360;
-
-      // In the horizon frame (y=0 is horizon line, x=0 is vehicle heading):
-      // y is negative upward (PITCH_SCALE px per degree)
-      // x is positive to the right
-      const rawFpmX = driftDeg * PITCH_SCALE;
-      const rawFpmY = -fpaDeg * PITCH_SCALE;
-
-      // Keep marker bounded within central HUD corridor to prevent masking speed/alt ladders
-      const maxFpmX = width * 0.34;
-      const maxFpmY = height * 0.38;
-      const fpmX = Math.max(-maxFpmX, Math.min(maxFpmX, rawFpmX));
-      const fpmY = Math.max(-maxFpmY, Math.min(maxFpmY, rawFpmY));
-      const isCaged = Math.abs(rawFpmX) > maxFpmX || Math.abs(rawFpmY) > maxFpmY;
-
-      // Smooth opacity fade between 0.8 m/s and 1.5 m/s
-      const fpmAlpha = Math.min(1.0, Math.max(0.0, (gs - 0.8) / 0.7));
-
-      ctx.save();
-      ctx.globalAlpha = fpmAlpha;
-      ctx.strokeStyle = HUD_HIGHLIGHT;
-      ctx.fillStyle = HUD_HIGHLIGHT;
-      ctx.lineWidth = 1.8;
-      if (isCaged) {
-        ctx.setLineDash([3, 2]); // Caged velocity vector indicator
-      } else {
-        ctx.setLineDash([]);
-      }
-
-      // MIL-STD-1787 / Mission Planner Velocity Vector Symbol:
-      // Center circle (5px radius)
-      ctx.beginPath();
-      ctx.arc(fpmX, fpmY, 5, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Left wing (10px wide)
-      ctx.beginPath();
-      ctx.moveTo(fpmX - 5, fpmY);
-      ctx.lineTo(fpmX - 15, fpmY);
-      ctx.stroke();
-
-      // Right wing (10px wide)
-      ctx.beginPath();
-      ctx.moveTo(fpmX + 5, fpmY);
-      ctx.lineTo(fpmX + 15, fpmY);
-      ctx.stroke();
-
-      // Top vertical fin (6px tall)
-      ctx.beginPath();
-      ctx.moveTo(fpmX, fpmY - 5);
-      ctx.lineTo(fpmX, fpmY - 11);
-      ctx.stroke();
-
-      // Center precision pip
-      ctx.beginPath();
-      ctx.arc(fpmX, fpmY, 1.2, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.restore();
-    }
-
     ctx.restore();
 
     // =========================================================
@@ -289,6 +201,130 @@ export const HudWidget: React.FC = () => {
     ctx.beginPath();
     ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
     ctx.fill();
+
+    // =========================================================
+    // 3. Flight Path Marker (FPM) / Velocity Vector (The "Bird")
+    // Always visible. Uses full 3D body vector transformation
+    // (Euler DCM rotation from NED Earth velocity to body frame)
+    // so high-frequency attitude maneuvers (roll, pitch pull)
+    // never suffer from asynchronous telemetry lag or rubber-banding.
+    // =========================================================
+    let vn = position.vx;
+    let ve = position.vy;
+    let vd = position.vz;
+
+    // Fallback if GLOBAL_POSITION_INT vx/vy are zero but VFR_HUD is active
+    if (Math.hypot(vn, ve) < 0.1 && vfr.groundspeed > 0.1) {
+      const hdgRad = (vfr.heading * Math.PI) / 180;
+      vn = vfr.groundspeed * Math.cos(hdgRad);
+      ve = vfr.groundspeed * Math.sin(hdgRad);
+      vd = -vfr.climb;
+    }
+
+    const totalSpeed = Math.hypot(vn, ve, vd);
+
+    // Aircraft attitude in radians
+    const roll = attitude.roll;
+    const pitch = attitude.pitch;
+    const yaw = (attitude.yawDeg * Math.PI) / 180;
+
+    let targetX = cx;
+    let targetY = cy;
+    let isCaged = false;
+
+    if (totalSpeed >= 0.5) {
+      // 3D Direction Cosine Matrix (DCM) rotation: Earth (NED) -> Body (XYZ)
+      // Step A: Rotate by yaw (around Z)
+      const cosYaw = Math.cos(yaw);
+      const sinYaw = Math.sin(yaw);
+      const v1 = cosYaw * vn + sinYaw * ve;
+      const v2 = -sinYaw * vn + cosYaw * ve;
+      const v3 = vd;
+
+      // Step B: Rotate by pitch (around Y)
+      const cosPitch = Math.cos(pitch);
+      const sinPitch = Math.sin(pitch);
+      const vxb = cosPitch * v1 - sinPitch * v3;
+      const vyb = v2;
+      const vzb = sinPitch * v1 + cosPitch * v3;
+
+      // Step C: Rotate by roll (around X)
+      const cosRoll = Math.cos(roll);
+      const sinRoll = Math.sin(roll);
+      const u = vxb;                               // Forward out nose
+      const v = cosRoll * vyb + sinRoll * vzb;     // Right out wing
+      const w = -sinRoll * vyb + cosRoll * vzb;    // Down out belly
+
+      // Angles relative to aircraft nose / waterline (in degrees)
+      const forwardSpeed = Math.max(0.1, u);
+      const fpmBodyXDeg = (Math.atan2(v, forwardSpeed) * 180) / Math.PI;
+      const fpmBodyYDeg = (Math.atan2(w, forwardSpeed) * 180) / Math.PI;
+
+      // Screen offsets from waterline center (cx, cy)
+      const rawOffsetX = fpmBodyXDeg * PITCH_SCALE;
+      const rawOffsetY = fpmBodyYDeg * PITCH_SCALE;
+
+      // Bounded within central corridor so it never overlaps speed/alt ladders
+      const maxFpmX = width * 0.34;
+      const maxFpmY = height * 0.38;
+      const clampedOffsetX = Math.max(-maxFpmX, Math.min(maxFpmX, rawOffsetX));
+      const clampedOffsetY = Math.max(-maxFpmY, Math.min(maxFpmY, rawOffsetY));
+      isCaged = Math.abs(rawOffsetX) > maxFpmX || Math.abs(rawOffsetY) > maxFpmY;
+
+      targetX = cx + clampedOffsetX;
+      targetY = cy + clampedOffsetY;
+    }
+
+    // Smooth exponential interpolation to eliminate telemetry packet stair-stepping
+    if (!fpmPosRef.current.initialized) {
+      fpmPosRef.current = { x: targetX, y: targetY, initialized: true };
+    } else {
+      fpmPosRef.current.x += (targetX - fpmPosRef.current.x) * 0.40;
+      fpmPosRef.current.y += (targetY - fpmPosRef.current.y) * 0.40;
+    }
+    const fpmX = fpmPosRef.current.x;
+    const fpmY = fpmPosRef.current.y;
+
+    // Draw the FPM Symbol:
+    ctx.save();
+    ctx.strokeStyle = HUD_HIGHLIGHT;
+    ctx.fillStyle = HUD_HIGHLIGHT;
+    ctx.lineWidth = 1.8;
+    if (isCaged) {
+      ctx.setLineDash([3, 2]); // Caged indicator
+    } else {
+      ctx.setLineDash([]);
+    }
+
+    // Center circle (5px radius)
+    ctx.beginPath();
+    ctx.arc(fpmX, fpmY, 5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Left wing (10px wide)
+    ctx.beginPath();
+    ctx.moveTo(fpmX - 5, fpmY);
+    ctx.lineTo(fpmX - 15, fpmY);
+    ctx.stroke();
+
+    // Right wing (10px wide)
+    ctx.beginPath();
+    ctx.moveTo(fpmX + 5, fpmY);
+    ctx.lineTo(fpmX + 15, fpmY);
+    ctx.stroke();
+
+    // Top vertical fin (6px tall)
+    ctx.beginPath();
+    ctx.moveTo(fpmX, fpmY - 5);
+    ctx.lineTo(fpmX, fpmY - 11);
+    ctx.stroke();
+
+    // Center precision pip
+    ctx.beginPath();
+    ctx.arc(fpmX, fpmY, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
 
     // =========================================================
     // 3. Roll Index & Bank Angle Scale (Continuous bottom arc)
