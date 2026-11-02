@@ -62,13 +62,17 @@ export const Navbar: React.FC = () => {
 
   const handleArm = (arm: boolean, force = false) => {
     const encoder = mavlinkConnection.getEncoder();
-    const cmd = encoder.createArmDisarm(1, 1, arm, force);
+    const sysId = heartbeat.systemId || 1;
+    const compId = heartbeat.componentId || 1;
+    const cmd = encoder.createArmDisarm(sysId, compId, arm, force);
     mavlinkConnection.send(cmd);
   };
 
   const handleSetMode = (modeNum: number) => {
     const encoder = mavlinkConnection.getEncoder();
-    const cmd = encoder.createSetMode(1, 1, modeNum);
+    const sysId = heartbeat.systemId || 1;
+    const compId = heartbeat.componentId || 1;
+    const cmd = encoder.createSetMode(sysId, compId, modeNum);
     mavlinkConnection.send(cmd);
   };
 
@@ -450,11 +454,11 @@ export const Navbar: React.FC = () => {
               type="text"
               value={inputUrl}
               onChange={(e) => setInputUrl(e.target.value)}
-              placeholder="ws://10.69.69.213:56781"
+              placeholder="ws://localhost:56781"
               className="font-mono text-xs"
             />
             <p className="text-[11px] text-zinc-500">
-              Default companion bridge endpoint is <code className="text-sky-400">ws://10.69.69.213:56781</code>. Saved automatically for page reloads.
+              Default companion bridge endpoint is <code className="text-sky-400">ws://localhost:56781</code>. Saved automatically for page reloads.
             </p>
           </div>
 

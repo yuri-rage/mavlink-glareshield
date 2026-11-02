@@ -32,10 +32,13 @@ import {
 
 export const GlareshieldWidget: React.FC = () => {
   const { heartbeat, vfr, position, gps } = useTelemetryStore();
-  const { formatSpeed, formatAltitude, altitudeMode, system: unitSystem } = useUnitsStore();
+  const { formatSpeed, formatAltitude, altitudeMode, isImperial } = useUnitsStore();
   const [targetAlt, setTargetAlt] = useState<number>(20);
   const [targetSpeed, setTargetSpeed] = useState<number>(5);
   const [sliderValue, setSliderValue] = useState<number>(0);
+
+  const altStep = isImperial() ? 10 / 3.28084 : 5;
+  const altStepDisplay = isImperial() ? '10ft' : '5m';
 
   useEffect(() => {
     messageRateManager.registerRequirement('glareshield-vfr', MAVLINK_MSG_ID.VFR_HUD);
@@ -50,14 +53,24 @@ export const GlareshieldWidget: React.FC = () => {
   const category = getVehicleCategory(heartbeat.type);
   const commonModes = getVehicleFlightModes(heartbeat.type);
 
-  const handleArmToggle = (arm: boolean) => {
-    const cmd = encoder.createArmDisarm(1, 1, arm);
+  const sysId = heartbeat.systemId || 1;
+  const compId = heartbeat.componentId || 1;
+
+  const handleArm = (arm: boolean) => {
+    const cmd = encoder.createArmDisarm(sysId, compId, arm);
     mavlinkConnection.send(cmd);
     setSliderValue(0);
   };
 
+  const handleSliderRelease = () => {
+    if (sliderValue >= 90) {
+      handleArm(!heartbeat.isArmed);
+    }
+    setSliderValue(0);
+  };
+
   const handleSetMode = (modeNum: number) => {
-    const cmd = encoder.createSetMode(1, 1, modeNum);
+    const cmd = encoder.createSetMode(sysId, compId, modeNum);
     mavlinkConnection.send(cmd);
   };
 
@@ -67,13 +80,15 @@ export const GlareshieldWidget: React.FC = () => {
       setTargetSpeed(customSpeed);
     }
     // MAV_CMD_DO_CHANGE_SPEED: param1 = type (0=airspeed, 1=groundspeed), param2 = speed (m/s)
-    const cmd = encoder.createCommandLong(1, 1, MAV_CMD.DO_CHANGE_SPEED, [1, speed, -1, 0, 0, 0, 0]);
+    const cmd = encoder.createCommandLong(sysId, compId, MAV_CMD.DO_CHANGE_SPEED, [1, speed, -1, 0, 0, 0, 0]);
     mavlinkConnection.send(cmd);
   };
 
   const handleSetAltitude = () => {
-    // Send guided altitude target or DO_REPOSITION
-    const cmd = encoder.createCommandLong(1, 1, 192, [-1, 0, 0, 0, 0, 0, targetAlt]); // MAV_CMD_DO_REPOSITION
+    // Send guided altitude target with vehicle current coordinates
+    const lat = position.lat || 0;
+    const lon = position.lon || 0;
+    const cmd = encoder.createDoReposition(sysId, compId, lat, lon, targetAlt);
     mavlinkConnection.send(cmd);
   };
 
@@ -83,18 +98,18 @@ export const GlareshieldWidget: React.FC = () => {
     } else if (category === 'plane') {
       handleSetMode(11); // Plane RTL
     } else {
-      const cmd = encoder.createCommandLong(1, 1, MAV_CMD.NAV_RETURN_TO_LAUNCH);
+      const cmd = encoder.createCommandLong(sysId, compId, MAV_CMD.NAV_RETURN_TO_LAUNCH);
       mavlinkConnection.send(cmd);
     }
   };
 
   const triggerLand = () => {
-    const cmd = encoder.createCommandLong(1, 1, MAV_CMD.NAV_LAND);
+    const cmd = encoder.createCommandLong(sysId, compId, MAV_CMD.NAV_LAND);
     mavlinkConnection.send(cmd);
   };
 
   const triggerTakeoff = () => {
-    const cmd = encoder.createCommandLong(1, 1, MAV_CMD.NAV_TAKEOFF, [0, 0, 0, 0, 0, 0, 10]); // 10m takeoff
+    const cmd = encoder.createCommandLong(sysId, compId, MAV_CMD.NAV_TAKEOFF, [0, 0, 0, 0, 0, 0, 10]); // 10m takeoff
     mavlinkConnection.send(cmd);
   };
 
@@ -123,15 +138,15 @@ export const GlareshieldWidget: React.FC = () => {
                 min="0"
                 max="100"
                 value={sliderValue}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setSliderValue(val);
-                  if (val >= 95) {
-                    handleArmToggle(!heartbeat.isArmed);
+                onChange={(e) => setSliderValue(Number(e.target.value))}
+                onPointerUp={handleSliderRelease}
+                onMouseUp={handleSliderRelease}
+                onTouchEnd={handleSliderRelease}
+                onKeyUp={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    handleSliderRelease();
                   }
                 }}
-                onMouseUp={() => setSliderValue(0)}
-                onTouchEnd={() => setSliderValue(0)}
                 className={`w-full h-8 rounded-lg appearance-none cursor-pointer transition-all ${
                   heartbeat.isArmed
                     ? 'accent-red-500 bg-red-950/40 border border-red-800/60'
@@ -412,18 +427,20 @@ export const GlareshieldWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 w-8 p-0 font-bold text-sm"
-                  onClick={() => setTargetAlt((prev) => Math.max(1, prev - 5))}
+                  className="h-8 px-2 font-bold text-xs"
+                  onClick={() => setTargetAlt((prev) => Math.max(1, Math.round((prev - altStep) * 10) / 10))}
+                  title={`Decrease altitude by ${altStepDisplay}`}
                 >
-                  -5
+                  -{altStepDisplay}
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 w-8 p-0 font-bold text-sm"
-                  onClick={() => setTargetAlt((prev) => prev + 5)}
+                  className="h-8 px-2 font-bold text-xs"
+                  onClick={() => setTargetAlt((prev) => Math.round((prev + altStep) * 10) / 10)}
+                  title={`Increase altitude by ${altStepDisplay}`}
                 >
-                  +5
+                  +{altStepDisplay}
                 </Button>
                 <Button
                   variant="default"
