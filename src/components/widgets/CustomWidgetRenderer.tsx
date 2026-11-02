@@ -316,6 +316,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
   // Parameter control state
   const [paramInputVal, setParamInputVal] = useState<string>('');
   const [isConfirmingParam, setIsConfirmingParam] = useState(false);
+  const [isConfirmingOutOfBounds, setIsConfirmingOutOfBounds] = useState(false);
   const [paramStatusMsg, setParamStatusMsg] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>(null);
   const pendingParamWriteRef = useRef<{ value: number; time: number } | null>(null);
 
@@ -478,18 +479,30 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
     mavlinkConnection.send(encoder.createParamRequestRead(sysId, compId, -1, paramId));
   };
 
-  const executeParamSet = (rawVal: number) => {
-    // 1. Enforce min/max clamping
-    let val = rawVal;
-    if (definition.paramControl?.min !== undefined && val < definition.paramControl.min) {
-      val = definition.paramControl.min;
-    }
-    if (definition.paramControl?.max !== undefined && val > definition.paramControl.max) {
-      val = definition.paramControl.max;
-    }
-    setParamInputVal(String(val));
+  const isValueOutOfBounds = (num: number) => {
+    const minVal = definition.paramControl?.min;
+    const maxVal = definition.paramControl?.max;
+    return (minVal !== undefined && num < minVal) || (maxVal !== undefined && num > maxVal);
+  };
 
-    // 2. Refuse to write until parameter's real type is known
+  const handleInitiateParamSet = () => {
+    const num = parseFloat(paramInputVal);
+    if (isNaN(num)) return;
+
+    if (definition.paramControl?.confirmation) {
+      setIsConfirmingParam(true);
+      setIsConfirmingOutOfBounds(false);
+    } else if (isValueOutOfBounds(num)) {
+      // Out-of-bounds parameter writes require explicit confirmation even if normal confirmation is off
+      setIsConfirmingOutOfBounds(true);
+      setIsConfirmingParam(false);
+    } else {
+      executeParamSet(num);
+    }
+  };
+
+  const executeParamSet = (val: number) => {
+    // 1. Refuse to write until parameter's real type is known
     if (paramEntry === undefined || paramEntry.type === undefined) {
       handleRequestParam();
       setParamStatusMsg({
@@ -497,10 +510,11 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
         text: `Cannot write: parameter type for ${paramId} is unknown. Requesting from autopilot...`,
       });
       setIsConfirmingParam(false);
+      setIsConfirmingOutOfBounds(false);
       return;
     }
 
-    // 3. Send PARAM_SET with known real type
+    // 2. Send PARAM_SET with known real type (without hard clamping)
     const encoder = mavlinkConnection.getEncoder();
     const pType = paramEntry.type;
     mavlinkConnection.send(encoder.createParamSet(sysId, compId, paramId, val, pType));
@@ -510,6 +524,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
       text: `PARAM_SET sent for ${paramId} = ${val}... awaiting vehicle confirmation echo`,
     });
     setIsConfirmingParam(false);
+    setIsConfirmingOutOfBounds(false);
   };
 
   const unit = definition.binding?.unit ?? '';
@@ -860,7 +875,11 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
               <div className="flex items-center gap-2">
                 <select
                   value={paramInputVal}
-                  onChange={(e) => setParamInputVal(e.target.value)}
+                  onChange={(e) => {
+                    setParamInputVal(e.target.value);
+                    if (isConfirmingParam) setIsConfirmingParam(false);
+                    if (isConfirmingOutOfBounds) setIsConfirmingOutOfBounds(false);
+                  }}
                   className="h-8 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-xs font-mono text-zinc-100"
                 >
                   {definition.paramControl.options.map((opt) => (
@@ -872,19 +891,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                 <Button
                   size="sm"
                   className={`h-8 text-xs font-bold gap-1 ${schemeColors.button} text-white`}
-                  onClick={() => {
-                    const num = parseFloat(paramInputVal);
-                    if (isNaN(num)) return;
-                    let clamped = num;
-                    if (definition.paramControl?.min !== undefined && clamped < definition.paramControl.min) clamped = definition.paramControl.min;
-                    if (definition.paramControl?.max !== undefined && clamped > definition.paramControl.max) clamped = definition.paramControl.max;
-                    setParamInputVal(String(clamped));
-                    if (definition.paramControl?.confirmation) {
-                      setIsConfirmingParam(true);
-                    } else {
-                      executeParamSet(clamped);
-                    }
-                  }}
+                  onClick={handleInitiateParamSet}
                 >
                   <Check className="h-3.5 w-3.5" />
                   Set
@@ -899,25 +906,17 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                   max={definition.paramControl?.max}
                   value={paramInputVal}
                   placeholder={paramEntry !== undefined ? String(paramEntry.value) : 'Enter value'}
-                  onChange={(e) => setParamInputVal(e.target.value)}
+                  onChange={(e) => {
+                    setParamInputVal(e.target.value);
+                    if (isConfirmingParam) setIsConfirmingParam(false);
+                    if (isConfirmingOutOfBounds) setIsConfirmingOutOfBounds(false);
+                  }}
                   className="h-8 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 text-xs font-mono text-zinc-100"
                 />
                 <Button
                   size="sm"
                   className={`h-8 text-xs font-bold gap-1 ${schemeColors.button} text-white`}
-                  onClick={() => {
-                    const num = parseFloat(paramInputVal);
-                    if (isNaN(num)) return;
-                    let clamped = num;
-                    if (definition.paramControl?.min !== undefined && clamped < definition.paramControl.min) clamped = definition.paramControl.min;
-                    if (definition.paramControl?.max !== undefined && clamped > definition.paramControl.max) clamped = definition.paramControl.max;
-                    setParamInputVal(String(clamped));
-                    if (definition.paramControl?.confirmation) {
-                      setIsConfirmingParam(true);
-                    } else {
-                      executeParamSet(clamped);
-                    }
-                  }}
+                  onClick={handleInitiateParamSet}
                 >
                   <Check className="h-3.5 w-3.5" />
                   Apply
@@ -932,7 +931,17 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                     size="sm"
                     variant="destructive"
                     className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs h-7 gap-1"
-                    onClick={() => executeParamSet(parseFloat(paramInputVal))}
+                    onClick={() => {
+                      const num = parseFloat(paramInputVal);
+                      if (isNaN(num)) return;
+                      if (isValueOutOfBounds(num)) {
+                        // Transition to second confirmation for out-of-bounds write
+                        setIsConfirmingParam(false);
+                        setIsConfirmingOutOfBounds(true);
+                      } else {
+                        executeParamSet(num);
+                      }
+                    }}
                   >
                     <AlertTriangle className="h-3.5 w-3.5" />
                     Write {paramId} = {paramInputVal}?
@@ -951,6 +960,39 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                     * Parameter type not yet loaded from autopilot. Will fetch type first.
                   </span>
                 )}
+              </div>
+            )}
+
+            {isConfirmingOutOfBounds && (
+              <div className="space-y-1.5 p-2 rounded-lg bg-amber-950/40 border border-amber-600/80">
+                <div className="flex items-start gap-1.5 text-amber-200 text-[11px] font-mono leading-tight">
+                  <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Out of Bounds:</strong> Value <span className="text-white font-bold">{paramInputVal}</span> is outside recommended limits ({definition.paramControl?.min ?? '–∞'} to {definition.paramControl?.max ?? '+∞'}). Confirm force write?
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 pt-0.5">
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold text-xs h-7 gap-1"
+                    onClick={() => {
+                      const num = parseFloat(paramInputVal);
+                      if (!isNaN(num)) executeParamSet(num);
+                    }}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Force Write {paramId} = {paramInputVal}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs text-zinc-400 h-7"
+                    onClick={() => setIsConfirmingOutOfBounds(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </div>
             )}
 
