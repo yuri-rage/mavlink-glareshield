@@ -62,7 +62,7 @@ export const GlareshieldWidget: React.FC = () => {
   const vfr = useTelemetryStore((state) => state.vfr);
   const gps = useTelemetryStore((state) => state.gps);
   const { formatSpeed, system } = useUnitsStore();
-  const [manualTargetSpeed, setManualTargetSpeed] = useState<number | null>(null);
+  const [manualTargetSpeedMs, setManualTargetSpeedMs] = useState<number | null>(null);
   const [sliderValue, setSliderValue] = useState<number>(0);
   const dragStartedFromLeft = useRef(false);
 
@@ -125,25 +125,30 @@ export const GlareshieldWidget: React.FC = () => {
   const activeUnit = system === 'ms' ? 'm/s' : system === 'kmh' ? 'km/h' : system === 'mph' ? 'mph' : 'kts';
   const defaultSpeedMs = category === 'plane' ? 15 : category === 'rover' ? 2 : category === 'sub' ? 1 : 5;
   const liveSpeedMs = vfr.groundspeed >= 0.5 ? vfr.groundspeed : defaultSpeedMs;
-  const autoTargetInActive = Math.round(toActiveUnits(liveSpeedMs, system) * 2) / 2;
-  const currentTargetSpeed = manualTargetSpeed ?? autoTargetInActive;
+  // Always store commanded target speed in m/s internally so unit changes never distort commands
+  const currentSpeedMs = manualTargetSpeedMs ?? liveSpeedMs;
+  const currentTargetDisplay = Number(toActiveUnits(currentSpeedMs, system).toFixed(1));
   const coarseStep = category === 'rover' || system === 'ms' ? 2 : 5;
 
-  const handleStepSpeed = (delta: number) => {
-    setManualTargetSpeed(Number(Math.max(0.5, currentTargetSpeed + delta).toFixed(1)));
+  const handleStepSpeed = (deltaDisplay: number) => {
+    const nextDisplay = Math.max(0.5, currentTargetDisplay + deltaDisplay);
+    const nextSpeedMs = Number(fromActiveUnitsToMs(nextDisplay, system).toFixed(2));
+    setManualTargetSpeedMs(nextSpeedMs);
   };
 
   const handleResetToLiveSpeed = () => {
-    setManualTargetSpeed(null);
+    setManualTargetSpeedMs(null);
   };
 
   const handleSetSpeed = (customSpeedMs?: number) => {
-    const speedMs = customSpeedMs !== undefined ? customSpeedMs : fromActiveUnitsToMs(currentTargetSpeed, system);
+    const speedMs = customSpeedMs !== undefined ? customSpeedMs : currentSpeedMs;
     if (customSpeedMs !== undefined) {
-      setManualTargetSpeed(Number(toActiveUnits(customSpeedMs, system).toFixed(1)));
+      setManualTargetSpeedMs(customSpeedMs);
     }
     // MAV_CMD_DO_CHANGE_SPEED: param1 = type (0=airspeed, 1=groundspeed), param2 = speed (m/s)
-    const cmd = encoder.createCommandLong(sysId, compId, MAV_CMD.DO_CHANGE_SPEED, [1, speedMs, -1, 0, 0, 0, 0]);
+    // In ArduPlane, type 1 sets MIN_GROUNDSPEED instead of target speed; airspeed (0) is required for planes
+    const speedType = category === 'plane' ? 0 : 1;
+    const cmd = encoder.createCommandLong(sysId, compId, MAV_CMD.DO_CHANGE_SPEED, [speedType, speedMs, -1, 0, 0, 0, 0]);
     mavlinkConnection.send(cmd);
   };
 
@@ -376,7 +381,7 @@ export const GlareshieldWidget: React.FC = () => {
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">Target Speed</span>
-                    {manualTargetSpeed !== null && (
+                    {manualTargetSpeedMs !== null && (
                       <button
                         type="button"
                         onClick={handleResetToLiveSpeed}
@@ -389,7 +394,7 @@ export const GlareshieldWidget: React.FC = () => {
                   </div>
                   <div className="flex items-baseline gap-1.5 mt-0.5">
                     <span className="text-lg font-mono font-bold text-zinc-100">
-                      {currentTargetSpeed} <span className="text-xs font-normal text-zinc-400">{activeUnit}</span>
+                      {currentTargetDisplay} <span className="text-xs font-normal text-zinc-400">{activeUnit}</span>
                     </span>
                     <span className="text-[10px] text-zinc-500 font-mono truncate">
                       (Cur: {formatSpeed(vfr.groundspeed).full})
@@ -481,7 +486,7 @@ export const GlareshieldWidget: React.FC = () => {
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">Target Speed</span>
-                    {manualTargetSpeed !== null && (
+                    {manualTargetSpeedMs !== null && (
                       <button
                         type="button"
                         onClick={handleResetToLiveSpeed}
@@ -494,7 +499,7 @@ export const GlareshieldWidget: React.FC = () => {
                   </div>
                   <div className="flex items-baseline gap-1.5 mt-0.5">
                     <span className="text-lg font-mono font-bold text-zinc-100">
-                      {currentTargetSpeed} <span className="text-xs font-normal text-zinc-400">{activeUnit}</span>
+                      {currentTargetDisplay} <span className="text-xs font-normal text-zinc-400">{activeUnit}</span>
                     </span>
                     <span className="text-[10px] text-zinc-500 font-mono truncate">
                       (Cur: {formatSpeed(vfr.groundspeed).full})
