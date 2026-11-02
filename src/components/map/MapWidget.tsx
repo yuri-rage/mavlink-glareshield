@@ -63,7 +63,7 @@ function lerpAngle(current: number, target: number, t: number): number {
   return current + diff * t;
 }
 
-type MapLayerType = 'satellite' | 'hybrid';
+type MapLayerType = 'satellite' | 'street';
 
 export const MapWidget: React.FC = () => {
   const {
@@ -159,18 +159,16 @@ export const MapWidget: React.FC = () => {
 
   const createTileLayer = (layerType: MapLayerType): L.TileLayer => {
     switch (layerType) {
-      case 'satellite':
-        return L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-          attribution: '&copy; Google Maps',
-          subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-          maxZoom: 21,
+      case 'street':
+        return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
+          maxZoom: 19,
         });
-      case 'hybrid':
+      case 'satellite':
       default:
-        return L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-          attribution: '&copy; Google Maps',
-          subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-          maxZoom: 21,
+        return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA',
+          maxZoom: 19,
         });
     }
   };
@@ -643,7 +641,7 @@ export const MapWidget: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 ml-auto">
-            {/* Map Imagery Selector (Satellite / Hybrid) */}
+            {/* Map Imagery Selector (Satellite / Streets) */}
             <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-[10px] font-mono font-medium">
               <button
                 onClick={() => setMapLayer('satellite')}
@@ -652,20 +650,20 @@ export const MapWidget: React.FC = () => {
                     ? 'bg-zinc-800 text-sky-400 font-bold shadow-sm'
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
-                title="Google Satellite Imagery"
+                title="Esri World Imagery (Satellite)"
               >
                 Sat
               </button>
               <button
-                onClick={() => setMapLayer('hybrid')}
+                onClick={() => setMapLayer('street')}
                 className={`px-1.5 py-0.5 rounded transition-colors ${
-                  mapLayer === 'hybrid'
+                  mapLayer === 'street'
                     ? 'bg-zinc-800 text-sky-400 font-bold shadow-sm'
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
-                title="Google Hybrid (Satellite + Roads/Labels)"
+                title="OpenStreetMap Standard Map"
               >
-                Hyb
+                Map
               </button>
             </div>
 
