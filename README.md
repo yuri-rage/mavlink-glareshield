@@ -119,11 +119,13 @@ Or for a command trigger button:
 
 ## 🧪 Testing
 
-Run unit tests for MAVLink v2 encoding, CRC-X25 calculation, and message decoders:
+Run both the core MAVLink engine unit tests and the `pymavlink` golden vector validation suite:
 
 ```bash
 npm test
 ```
+
+For advanced testing workflows (e.g. regenerating golden vectors or running live mock telemetry validation against `bridge/bridge.py`), see [tests/README.md](file:///home/yuri/Projects/mavlink-glareshield/tests/README.md).
 
 Build production bundle:
 

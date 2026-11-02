@@ -436,15 +436,14 @@ wp0Dv.setUint16(28, 0, true); // seq = 0
 wp0Dv.setUint16(30, 16, true); // NAV_WAYPOINT
 wp0Payload[37] = 0; // mission_type = 0 (MISSION)
 useTelemetryStore.getState().processPacket({
-  magic: 0xfd,
-  incompatibleFlags: 0,
-  compatibleFlags: 0,
+  version: 2,
   sequence: 1,
   systemId: 1,
   componentId: 1,
   messageId: MAVLINK_MSG_ID.MISSION_ITEM_INT,
   payload: wp0Payload,
-  checksum: 0,
+  crc: 0,
+  raw: new Uint8Array(0),
 });
 
 // Verify WP0 is stored in missionWaypoints
@@ -463,14 +462,14 @@ fence0Dv.setUint16(28, 0, true); // seq = 0
 fence0Dv.setUint16(30, 5005, true); // CIRCLE_INCLUSION
 fence0Payload[37] = 1; // mission_type = 1 (FENCE)
 useTelemetryStore.getState().processPacket({
-  magic: 0xfd,
-  incompatibleFlags: 0,
-  compatibleFlags: 0,
+  version: 2,
   sequence: 2,
   systemId: 1,
   componentId: 1,
   messageId: MAVLINK_MSG_ID.MISSION_ITEM_INT,
   payload: fence0Payload,
+  crc: 0,
+  raw: new Uint8Array(0),
 });
 
 storeState = useTelemetryStore.getState();
@@ -928,16 +927,14 @@ for (let i = 0; i < bannerStr.length; i++) {
   bootStatusPayload[1 + i] = bannerStr.charCodeAt(i);
 }
 useTelemetryStore.getState().processPacket({
-  magic: 0xfd,
-  length: 51,
-  incompatFlags: 0,
-  compatFlags: 0,
+  version: 2,
   sequence: 1,
   systemId: 1,
   componentId: 1,
   messageId: MAVLINK_MSG_ID.STATUSTEXT,
   payload: bootStatusPayload,
-  checksum: 0,
+  crc: 0,
+  raw: new Uint8Array(0),
 });
 
 if (useTelemetryStore.getState().firmwareVersion !== '4.8.0-dev') {
@@ -968,16 +965,14 @@ if (decodedMissionCur.seq !== 3) {
 }
 
 useTelemetryStore.getState().processPacket({
-  magic: 0xfd,
-  length: 2,
-  incompatFlags: 0,
-  compatFlags: 0,
+  version: 2,
   sequence: 2,
   systemId: 1,
   componentId: 1,
   messageId: MAVLINK_MSG_ID.MISSION_CURRENT,
   payload: missionCurPayload,
-  checksum: 0,
+  crc: 0,
+  raw: new Uint8Array(0),
 });
 
 if (useTelemetryStore.getState().currentWaypointSeq !== 3) {
@@ -1000,16 +995,14 @@ if (Math.abs(decodedScaledImu.nz - 1.2) > 0.001) {
 }
 
 useTelemetryStore.getState().processPacket({
-  magic: 0xfd,
-  length: 22,
-  incompatFlags: 0,
-  compatFlags: 0,
+  version: 2,
   sequence: 3,
   systemId: 1,
   componentId: 1,
   messageId: MAVLINK_MSG_ID.SCALED_IMU,
   payload: scaledImuPayload,
-  checksum: 0,
+  crc: 0,
+  raw: new Uint8Array(0),
 });
 
 if (Math.abs(useTelemetryStore.getState().imu.nz - 1.2) > 0.001) {

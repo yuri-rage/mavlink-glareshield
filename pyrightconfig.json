@@ -1,0 +1,6 @@
+{
+  "include": ["bridge", "tests"],
+  "typeCheckingMode": "standard",
+  "reportMissingImports": "none",
+  "reportMissingTypeStubs": "none"
+}
