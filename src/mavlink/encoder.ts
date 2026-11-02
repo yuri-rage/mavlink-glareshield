@@ -6,9 +6,18 @@ export class MavlinkEncoder {
   private systemId: number;
   private componentId: number;
 
-  constructor(systemId = 254, componentId = 190) { // GCS default IDs (254 avoids collision with Mission Planner on 255)
+  constructor(systemId = 255, componentId = 190) { // GCS default IDs (255 matches ArduPilot SYSID_MYGCS)
     this.systemId = systemId;
     this.componentId = componentId;
+  }
+
+  public setSourceId(systemId: number, componentId = 190) {
+    this.systemId = systemId;
+    this.componentId = componentId;
+  }
+
+  public getSystemId(): number {
+    return this.systemId;
   }
 
   private nextSequence(): number {
@@ -110,7 +119,7 @@ export class MavlinkEncoder {
     return this.packV2(MAVLINK_MSG_ID.COMMAND_INT, payload);
   }
 
-  // DO_REPOSITION with explicit coordinate frame and target position
+  // DO_REPOSITION with explicit coordinate frame, target position, and NaN yaw (maintain heading)
   public createDoReposition(
     targetSystem = 1,
     targetComponent = 1,
@@ -124,7 +133,7 @@ export class MavlinkEncoder {
       targetComponent,
       MAV_CMD.DO_REPOSITION,
       frame,
-      [-1, 1, 0, 0, latDeg * 1e7, lonDeg * 1e7, altM]
+      [-1, 1, 0, Number.NaN, latDeg * 1e7, lonDeg * 1e7, altM]
     );
   }
 

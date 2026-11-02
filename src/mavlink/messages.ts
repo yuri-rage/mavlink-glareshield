@@ -405,6 +405,15 @@ export function getVehicleFlightModes(type: number): { label: string; mode: numb
   }
 }
 
+export function getMavCmdName(commandId: number): string {
+  for (const [name, val] of Object.entries(MAV_CMD)) {
+    if (val === commandId) {
+      return name;
+    }
+  }
+  return `CMD_${commandId}`;
+}
+
 /**
  * Extract clean firmware version string from ArduPilot/PX4 boot banner or STATUSTEXT.
  * E.g., "ArduPlane V4.8.0-dev (1d44127b)" -> "4.8.0-dev"

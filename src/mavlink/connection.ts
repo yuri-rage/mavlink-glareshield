@@ -1,7 +1,6 @@
 import { MavlinkParser, MavlinkPacket } from './parser';
 import { MavlinkEncoder } from './encoder';
 import { messageRateManager } from './rateManager';
-import { useTelemetryStore } from '../store/telemetryStore';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -15,6 +14,7 @@ export interface ConnectionStats {
 
 export type PacketCallback = (packet: MavlinkPacket) => void;
 export type StatusCallback = (status: ConnectionStatus, error?: string) => void;
+export type SendCallback = (data: Uint8Array) => void;
 
 export function getDefaultWsUrl(): string {
   if (typeof window !== 'undefined' && window.location) {
@@ -31,6 +31,7 @@ export class MavlinkConnection {
   private encoder: MavlinkEncoder = new MavlinkEncoder();
   private packetListeners: Set<PacketCallback> = new Set();
   private statusListeners: Set<StatusCallback> = new Set();
+  private sendListeners: Set<SendCallback> = new Set();
 
   private status: ConnectionStatus = 'disconnected';
   private shouldReconnect = true;
@@ -71,6 +72,13 @@ export class MavlinkConnection {
 
   public getEncoder(): MavlinkEncoder {
     return this.encoder;
+  }
+
+  public onSend(callback: SendCallback): () => void {
+    this.sendListeners.add(callback);
+    return () => {
+      this.sendListeners.delete(callback);
+    };
   }
 
   public onPacket(callback: PacketCallback): () => void {
@@ -193,6 +201,11 @@ export class MavlinkConnection {
         this.ws.send(data);
         this.stats.bytesSent += data.length;
         this.stats.packetsSent++;
+        this.sendListeners.forEach((cb) => {
+          try {
+            cb(data);
+          } catch {}
+        });
         return true;
       } catch (err) {
         console.error('Failed to send MAVLink data:', err);
