@@ -7,7 +7,7 @@ import { MAVLINK_MSG_ID, getVehicleCategory } from '../../mavlink/messages';
 import { Card, CardHeader, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { RefreshCw, Crosshair, Maximize2, Shield, Flag, X, Eraser, MapPin } from 'lucide-react';
+import { RefreshCw, Crosshair, Maximize2, Shield, Flag, X, Eraser } from 'lucide-react';
 import L from 'leaflet';
 
 function renderVehicleSvg(type: number): string {
@@ -67,6 +67,7 @@ type MapLayerType = 'satellite' | 'street';
 
 interface GpsFix {
   t: number;
+  timeBootMs: number;
   lat: number;
   lon: number;
   yaw: number;
@@ -327,13 +328,14 @@ export const MapWidget: React.FC = () => {
     yawRef.current = attitude.yawDeg;
   }, [attitude.yawDeg]);
 
-  // Buffer incoming GPS fixes for linear interpolation (only on coordinate changes)
+  // Buffer incoming GPS fixes for linear interpolation
   useEffect(() => {
     if (position.lat === 0 && position.lon === 0) return;
 
     const now = performance.now();
     const fix: GpsFix = {
       t: now,
+      timeBootMs: position.timeBootMs,
       lat: position.lat,
       lon: position.lon,
       yaw: attitude.yawDeg,
@@ -345,10 +347,14 @@ export const MapWidget: React.FC = () => {
       if (prev.lat === position.lat && prev.lon === position.lon) {
         // Stationary: keep fix timestamp current so resume uses the true GPS fix interval
         prev.t = now;
+        prev.timeBootMs = position.timeBootMs;
         return;
       }
       // If gap exceeds 1.0s (telemetry dropout or link loss), reset history and snap immediately
-      if (now - prev.t > 1000) {
+      const gapMs = (fix.timeBootMs > 0 && prev.timeBootMs > 0)
+        ? (fix.timeBootMs - prev.timeBootMs)
+        : (now - prev.t);
+      if (gapMs > 1000) {
         fixesRef.current = [fix];
         displayPosRef.current = { lat: fix.lat, lon: fix.lon, yaw: fix.yaw };
         if (vehicleMarkerRef.current) {
@@ -372,7 +378,7 @@ export const MapWidget: React.FC = () => {
         vehicleMarkerRef.current.setLatLng([position.lat, position.lon]);
       }
     }
-  }, [position.lat, position.lon]);
+  }, [position.timeBootMs, position.lat, position.lon]);
 
   // Linear interpolation played back one fix-interval late, camera locked to marker
   useEffect(() => {
@@ -395,7 +401,9 @@ export const MapWidget: React.FC = () => {
       if (fixes.length >= 2) {
         const p0 = fixes[fixes.length - 2];
         const p1 = fixes[fixes.length - 1];
-        const fixDt = p1.t - p0.t;
+        // Use true autopilot time_boot_ms delta if available to eliminate WebSocket arrival jitter
+        const bootDt = (p1.timeBootMs > 0 && p0.timeBootMs > 0) ? (p1.timeBootMs - p0.timeBootMs) : 0;
+        const fixDt = (bootDt > 10 && bootDt <= 1000) ? bootDt : (p1.t - p0.t);
         if (fixDt > 10 && fixDt <= 1000) {
           // Play back one fix-interval late (steady, even motion)
           const u = Math.min(Math.max((now - p1.t) / fixDt, 0.0), 1.0);

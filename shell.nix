@@ -6,5 +6,6 @@ pkgs.mkShell {
     python3
     python3Packages.websockets
     python3Packages.pyserial
+    python3Packages.pymavlink
   ];
 }

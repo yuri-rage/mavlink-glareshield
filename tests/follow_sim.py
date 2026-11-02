@@ -89,7 +89,7 @@ def run_stop_and_move(speed_px_s: float = 15.9, gps_hz: float = 3.0, handle_gap:
     then resuming flight from 8s-12s.
     """
     t = 0.0
-    fixes: list[tuple[float, float]] = []
+    fixes: list[tuple[float, float, float]] = []  # (t_arrival, time_boot_ms, x)
     next_fix = 0.0
     marker = cam = 0.0
     prev_marker = 0.0
@@ -103,19 +103,21 @@ def run_stop_and_move(speed_px_s: float = 15.9, gps_hz: float = 3.0, handle_gap:
         else:
             true_x = speed_px_s * 3.0 + speed_px_s * (t - 8.0)
 
-        # GPS fix delivery
+        # GPS fix delivery (every 1/gps_hz from autopilot with incrementing time_boot_ms)
         if t >= next_fix - 1e-9:
-            if fixes and abs(true_x - fixes[-1][1]) < 1e-6:
+            time_boot_ms = t * 1000.0
+            if fixes and abs(true_x - fixes[-1][2]) < 1e-6:
                 if handle_gap:
                     # Shipped behavior: update timestamp on stationary fixes
-                    fixes[-1] = (t, true_x)
+                    fixes[-1] = (t, time_boot_ms, true_x)
             else:
-                fixes.append((t, true_x))
+                fixes.append((t, time_boot_ms, true_x))
             next_fix += 1.0 / gps_hz
 
         if len(fixes) >= 2:
-            (t0, x0), (t1, x1) = fixes[-2], fixes[-1]
-            fix_dt = t1 - t0
+            (t0, boot0, x0), (t1, boot1, x1) = fixes[-2], fixes[-1]
+            boot_dt = (boot1 - boot0) / 1000.0
+            fix_dt = boot_dt if 0.010 <= boot_dt <= 1.0 else (t1 - t0)
             if handle_gap and fix_dt > 1.0:
                 marker = x1
             elif fix_dt > 1e-6:
@@ -124,7 +126,7 @@ def run_stop_and_move(speed_px_s: float = 15.9, gps_hz: float = 3.0, handle_gap:
             else:
                 marker = x1
         elif fixes:
-            marker = fixes[-1][1]
+            marker = fixes[-1][2]
 
         step = round(marker - cam)
         cam += step

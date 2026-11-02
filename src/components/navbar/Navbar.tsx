@@ -193,7 +193,7 @@ export const Navbar: React.FC = () => {
                   <>
                     {getVehicleIcon('h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0')}
                     <div className="flex items-baseline gap-1 sm:gap-1.5 min-w-0">
-                      <span className="text-xs text-sky-300 font-sans font-medium tracking-tight max-w-[55px] sm:max-w-none truncate">
+                      <span className="text-xs text-sky-300 font-sans font-medium tracking-tight max-w-[42px] xs:max-w-[60px] sm:max-w-none truncate">
                         {vehicleCategoryLabel}
                       </span>
                       {firmwareVersion && (
@@ -389,7 +389,7 @@ export const Navbar: React.FC = () => {
                 }}
                 title="Click to switch flight mode"
               >
-                <span className="truncate max-w-[65px] xs:max-w-[100px] sm:max-w-none">{heartbeat.modeName}</span>
+                <span className="whitespace-nowrap">{heartbeat.modeName}</span>
                 <ChevronDown className="h-3.5 w-3.5 opacity-60 ml-0.5 shrink-0" />
               </Badge>
 

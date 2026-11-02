@@ -54,12 +54,12 @@ export const DashboardGrid: React.FC = () => {
   const getWidgetTitle = (widgetId: string): string => {
     const BUILTIN_TITLES: Record<string, string> = {
       'built-in-glareshield': 'Flight Controls',
-      'built-in-hud': 'HUD / PFD',
-      'built-in-pfd': 'HUD / PFD',
+      'built-in-hud': 'Heads-Up Display (HUD)',
+      'built-in-pfd': 'Heads-Up Display (HUD)',
       'built-in-map': 'Tactical Map',
       'built-in-battery-card': 'Battery',
-      'built-in-gps-card': 'GPS / GNSS',
-      'built-in-vfr-hud': 'VFR Data',
+      'built-in-gps-card': 'GNSS / GPS',
+      'built-in-vfr-hud': 'VFR Telemetry',
       'built-in-statustext': 'Messages',
       'built-in-parameters': 'Parameters',
       'built-in-charts': 'Telemetry Graphs',

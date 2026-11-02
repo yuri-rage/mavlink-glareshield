@@ -37,6 +37,7 @@ export interface VehicleIMU {
 }
 
 export interface VehiclePosition {
+  timeBootMs: number;
   lat: number;
   lon: number;
   alt: number; // m MSL
@@ -279,6 +280,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     nz: 1.0,
   },
   position: {
+    timeBootMs: 0,
     lat: 0,
     lon: 0,
     alt: 0,
@@ -455,6 +457,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
 
           return {
             position: {
+              timeBootMs: data.time_boot_ms ?? 0,
               lat: data.lat,
               lon: data.lon,
               alt: data.alt,

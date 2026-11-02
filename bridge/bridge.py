@@ -196,7 +196,9 @@ class BridgeServer:
             msgid = data[7] | (data[8] << 8) | (data[9] << 16)
             payload = data[10:-2]
 
-            if msgid == MSG_COMMAND_LONG and len(payload) >= 33:
+            if msgid == MSG_COMMAND_LONG:
+                if len(payload) < 33:
+                    payload = payload.ljust(33, b'\x00')
                 # COMMAND_LONG unpack
                 p1, p2, p3, p4, p5, p6, p7 = struct.unpack("<7f", payload[:28])
                 cmd, target_sys, target_comp, conf = struct.unpack("<HBBB", payload[28:33])
