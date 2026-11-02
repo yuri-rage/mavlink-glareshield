@@ -150,7 +150,7 @@ export const ParametersWidget: React.FC = () => {
             ) : (
               <>
                 <RefreshCw className="h-3.5 w-3.5 text-sky-400" />
-                <span>Fetch Params</span>
+                <span>Refresh</span>
               </>
             )}
           </Button>
@@ -184,7 +184,7 @@ export const ParametersWidget: React.FC = () => {
           {filteredKeys.length === 0 ? (
             <div className="text-zinc-600 text-center py-8 text-xs italic">
               {paramKeys.length === 0
-                ? 'No parameters loaded. Click "Fetch Params" to load from flight controller.'
+                ? 'No parameters loaded. Click "Refresh" to load from flight controller.'
                 : 'No matching parameters found.'}
             </div>
           ) : (
