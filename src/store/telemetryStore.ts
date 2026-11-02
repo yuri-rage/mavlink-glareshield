@@ -55,6 +55,7 @@ export interface VehicleGPS {
   hdop: number;
   vdop: number;
   groundspeed: number;
+  cog: number;
 }
 
 export interface VehicleBattery {
@@ -297,6 +298,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     hdop: 99.9,
     vdop: 99.9,
     groundspeed: 0,
+    cog: 0,
   },
   battery: {
     voltage: 0,
@@ -480,6 +482,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
               hdop: data.eph,
               vdop: data.epv,
               groundspeed: data.vel,
+              cog: data.cog,
             },
           };
         }

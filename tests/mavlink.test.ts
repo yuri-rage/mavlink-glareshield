@@ -604,7 +604,8 @@ if (parsedGps.length === 1 && parsedGps[0].messageId === MAVLINK_MSG_ID.GPS_RAW_
     Math.abs(decodedGps.lon - -122.4194) > 0.0001 ||
     decodedGps.alt !== 45 ||
     decodedGps.eph !== 1.2 ||
-    decodedGps.vel !== 5.4
+    decodedGps.vel !== 5.4 ||
+    decodedGps.cog !== 185.5
   ) {
     console.error('GPS_RAW_INT field decoding mismatch!', decodedGps);
     process.exit(1);
