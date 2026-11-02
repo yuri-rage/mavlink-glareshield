@@ -144,7 +144,7 @@ export const NtripWidget: React.FC = () => {
 
             {/* Connection Status Badge */}
             {injectorState.status === 'streaming' ? (
-              <Badge variant="outline" className="bg-emerald-950/80 border-emerald-500 text-emerald-300 font-mono text-[10px] px-2 py-0.5 animate-pulse">
+              <Badge variant="outline" className="bg-emerald-950/80 border-emerald-500 text-emerald-300 font-mono text-[10px] px-2 py-0.5">
                 STREAMING
               </Badge>
             ) : injectorState.status === 'connected' ? (
@@ -152,7 +152,7 @@ export const NtripWidget: React.FC = () => {
                 CONNECTED
               </Badge>
             ) : injectorState.status === 'connecting' ? (
-              <Badge variant="outline" className="bg-amber-950/50 border-amber-600 text-amber-400 font-mono text-[10px] px-2 py-0.5 animate-pulse">
+              <Badge variant="outline" className="bg-amber-950/50 border-amber-600 text-amber-400 font-mono text-[10px] px-2 py-0.5">
                 CONNECTING
               </Badge>
             ) : injectorState.status === 'error' ? (
