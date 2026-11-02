@@ -42,7 +42,7 @@ const BUILT_IN_CATALOG = [
     id: 'built-in-glareshield',
     name: 'Autopilot Glareshield Panel',
     category: 'control',
-    description: 'Arm/Disarm slider, flight mode switcher, and guided targets (Altitude & Speed).',
+    description: 'Arm/Disarm slider, flight mode switcher, and target speed controls.',
     icon: Radio,
     defaultSpan: 12,
   },

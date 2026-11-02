@@ -35,6 +35,7 @@ export class MavlinkConnection {
 
   private status: ConnectionStatus = 'disconnected';
   private shouldReconnect = true;
+  private isReconnectPaused = false;
   private reconnectTimeout: any = null;
   private heartbeatInterval: any = null;
   private statsInterval: any = null;
@@ -166,15 +167,36 @@ export class MavlinkConnection {
         if (this.ws !== socket) return;
         this.cleanup();
         this.setStatus('disconnected');
-        if (this.shouldReconnect) {
+        if (this.shouldReconnect && !this.isReconnectPaused) {
           this.reconnectTimeout = setTimeout(() => this.connect(), 2000);
         }
       };
     } catch (e: any) {
       this.setStatus('error', e?.message || 'Failed to connect');
-      if (this.shouldReconnect) {
+      if (this.shouldReconnect && !this.isReconnectPaused) {
         this.reconnectTimeout = setTimeout(() => this.connect(), 3000);
       }
+    }
+  }
+
+  /**
+   * Pauses automatic reconnect attempts (e.g. while user is editing connection settings in modal).
+   */
+  public pauseReconnect() {
+    this.isReconnectPaused = true;
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+  }
+
+  /**
+   * Resumes automatic reconnect attempts after connection settings modal closes.
+   */
+  public resumeReconnect() {
+    this.isReconnectPaused = false;
+    if (this.shouldReconnect && this.status === 'disconnected' && !this.ws) {
+      this.connect();
     }
   }
 

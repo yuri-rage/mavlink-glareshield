@@ -34,23 +34,16 @@ import {
 export const GlareshieldWidget: React.FC = () => {
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
   const vfr = useTelemetryStore((state) => state.vfr);
-  const position = useTelemetryStore((state) => state.position);
   const gps = useTelemetryStore((state) => state.gps);
-  const { formatSpeed, formatAltitude, altitudeMode, isImperial } = useUnitsStore();
-  const [targetAlt, setTargetAlt] = useState<number>(20);
+  const { formatSpeed } = useUnitsStore();
   const [targetSpeed, setTargetSpeed] = useState<number>(5);
   const [sliderValue, setSliderValue] = useState<number>(0);
   const dragStartedFromLeft = useRef(false);
 
-  const altStep = isImperial() ? 10 / 3.28084 : 5;
-  const altStepDisplay = isImperial() ? '10ft' : '5m';
-
   useEffect(() => {
     messageRateManager.registerRequirement('glareshield-vfr', MAVLINK_MSG_ID.VFR_HUD);
-    messageRateManager.registerRequirement('glareshield-pos', MAVLINK_MSG_ID.GLOBAL_POSITION_INT);
     return () => {
       messageRateManager.unregisterRequirement('glareshield-vfr');
-      messageRateManager.unregisterRequirement('glareshield-pos');
     };
   }, []);
 
@@ -110,18 +103,6 @@ export const GlareshieldWidget: React.FC = () => {
     }
     // MAV_CMD_DO_CHANGE_SPEED: param1 = type (0=airspeed, 1=groundspeed), param2 = speed (m/s)
     const cmd = encoder.createCommandLong(sysId, compId, MAV_CMD.DO_CHANGE_SPEED, [1, speed, -1, 0, 0, 0, 0]);
-    mavlinkConnection.send(cmd);
-  };
-
-  const handleSetAltitude = () => {
-    // Check for valid vehicle coordinates
-    const lat = position.lat || 0;
-    const lon = position.lon || 0;
-    if (lat === 0 && lon === 0) {
-      console.warn('Cannot send DO_REPOSITION without valid GPS coordinates');
-      return;
-    }
-    const cmd = encoder.createDoReposition(sysId, compId, lat, lon, targetAlt);
     mavlinkConnection.send(cmd);
   };
 
@@ -433,55 +414,8 @@ export const GlareshieldWidget: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 border-t border-zinc-800/60">
-            {/* Target Altitude / Depth Stepper */}
-            <div className="flex items-center justify-between bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 min-w-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="p-2 rounded-lg bg-sky-950/40 text-sky-400 shrink-0">
-                  <ArrowUp className="h-4 w-4" />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">
-                    {category === 'sub' ? 'Target Depth' : 'Target Altitude'}
-                  </span>
-                  <span className="text-lg font-mono font-bold text-zinc-100">{formatAltitude(targetAlt).full}</span>
-                  <span className="text-[10px] text-zinc-500 font-mono ml-1.5 truncate">
-                    (Cur: {formatAltitude(altitudeMode === 'msl' ? (position.alt || position.relativeAlt) : position.relativeAlt).full} {altitudeMode.toUpperCase()})
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2 font-bold text-xs"
-                  onClick={() => setTargetAlt((prev) => Math.max(1, Math.round((prev - altStep) * 10) / 10))}
-                  title={`Decrease altitude by ${altStepDisplay}`}
-                >
-                  -{altStepDisplay}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2 font-bold text-xs"
-                  onClick={() => setTargetAlt((prev) => Math.round((prev + altStep) * 10) / 10)}
-                  title={`Increase altitude by ${altStepDisplay}`}
-                >
-                  +{altStepDisplay}
-                </Button>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="h-8 px-2.5 text-xs font-bold bg-sky-500 hover:bg-sky-600 text-white ml-0.5"
-                  onClick={handleSetAltitude}
-                >
-                  {category === 'sub' ? 'Set Depth' : 'Set Alt'}
-                </Button>
-              </div>
-            </div>
-
-            {/* Target Speed Stepper */}
+          <div className="pt-1 border-t border-zinc-800/60">
+            {/* Target Speed Stepper (Safe in-mode speed adjustment via DO_CHANGE_SPEED) */}
             <div className="flex items-center justify-between bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 min-w-0">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="p-2 rounded-lg bg-emerald-950/40 text-emerald-400 shrink-0">

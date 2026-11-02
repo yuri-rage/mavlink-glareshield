@@ -13,6 +13,8 @@ interface ModalProps {
 export function Modal({ isOpen, onClose, title, description, children }: ModalProps) {
   const dialogRef = React.useRef<HTMLDivElement | null>(null);
   const previousActiveElementRef = React.useRef<HTMLElement | null>(null);
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
 
   // Focus trap and keyboard handling (Escape closes, Tab/Shift+Tab cycles within modal)
   React.useEffect(() => {
@@ -30,17 +32,25 @@ export function Modal({ isOpen, onClose, title, description, children }: ModalPr
         );
       };
 
-      const focusable = getFocusableElements();
-      if (focusable.length > 0) {
-        focusable[0].focus();
-      } else {
-        dialog.focus();
+      // Only auto-focus initial element if focus is not already inside the dialog
+      if (!dialog.contains(document.activeElement)) {
+        const firstInput = dialog.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), select:not([disabled])');
+        if (firstInput) {
+          firstInput.focus();
+        } else {
+          const focusable = getFocusableElements();
+          if (focusable.length > 0) {
+            focusable[0].focus();
+          } else {
+            dialog.focus();
+          }
+        }
       }
 
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
           e.preventDefault();
-          onClose();
+          onCloseRef.current();
           return;
         }
 
@@ -76,7 +86,7 @@ export function Modal({ isOpen, onClose, title, description, children }: ModalPr
         }
       };
     }
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

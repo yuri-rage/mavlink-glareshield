@@ -83,15 +83,22 @@ export const Navbar: React.FC = () => {
   const openConnectModal = () => {
     setInputUrl(url);
     setInputGcsSysId(gcsSystemId);
+    mavlinkConnection.pauseReconnect();
     setIsConnectModalOpen(true);
+  };
+
+  const handleCloseConnectModal = () => {
+    setIsConnectModalOpen(false);
+    mavlinkConnection.resumeReconnect();
   };
 
   const handleConnectSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setUrl(inputUrl);
     setGcsSystemId(inputGcsSysId);
-    connect();
     setIsConnectModalOpen(false);
+    mavlinkConnection.resumeReconnect();
+    connect();
   };
 
   const vehicleCategory = getVehicleCategory(heartbeat.type);
@@ -462,7 +469,7 @@ export const Navbar: React.FC = () => {
       {/* Link & Display Settings Modal */}
       <Modal
         isOpen={isConnectModalOpen}
-        onClose={() => setIsConnectModalOpen(false)}
+        onClose={handleCloseConnectModal}
         title="Link & Display Settings"
         description="Configure your MAVLink WebSocket endpoint, display units, altitude reference, and telemetry bandwidth."
       >

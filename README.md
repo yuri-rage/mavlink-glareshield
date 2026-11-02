@@ -26,7 +26,7 @@ Designed to remove the "glare" from more fully featured GCS applications and foc
 - **Autopilot Glareshield & Controls**:
   - Slide-and-release confirmation to Arm / Disarm.
   - Mode switcher (Loiter, RTL, Auto, Guided, FBWA, Cruise, Stabilize, Land).
-  - Target altitude and speed adjusters via `DO_REPOSITION` and `DO_CHANGE_SPEED`.
+  - Target speed adjusters via `DO_CHANGE_SPEED`.
   - Quick action buttons (RTL, Pause/Loiter, Land, Takeoff).
 - **Heads-Up Display (HUD) & Tactical Map**:
   - Canvas artificial horizon with pitch ladder, roll arc, airspeed, altitude, and heading tapes.
