@@ -125,11 +125,12 @@ export const GlareshieldWidget: React.FC = () => {
   const activeUnit = system === 'ms' ? 'm/s' : system === 'kmh' ? 'km/h' : system === 'mph' ? 'mph' : 'kts';
   const defaultSpeedMs = category === 'plane' ? 15 : category === 'rover' ? 2 : category === 'sub' ? 1 : 5;
   const liveSpeedMs = vfr.groundspeed >= 0.5 ? vfr.groundspeed : defaultSpeedMs;
-  const autoTargetInActive = Math.round(toActiveUnits(liveSpeedMs, system));
+  const autoTargetInActive = Math.round(toActiveUnits(liveSpeedMs, system) * 2) / 2;
   const currentTargetSpeed = manualTargetSpeed ?? autoTargetInActive;
+  const coarseStep = category === 'rover' || system === 'ms' ? 2 : 5;
 
   const handleStepSpeed = (delta: number) => {
-    setManualTargetSpeed(Math.max(1, currentTargetSpeed + delta));
+    setManualTargetSpeed(Number(Math.max(0.5, currentTargetSpeed + delta).toFixed(1)));
   };
 
   const handleResetToLiveSpeed = () => {
@@ -139,7 +140,7 @@ export const GlareshieldWidget: React.FC = () => {
   const handleSetSpeed = (customSpeedMs?: number) => {
     const speedMs = customSpeedMs !== undefined ? customSpeedMs : fromActiveUnitsToMs(currentTargetSpeed, system);
     if (customSpeedMs !== undefined) {
-      setManualTargetSpeed(Math.round(toActiveUnits(customSpeedMs, system)));
+      setManualTargetSpeed(Number(toActiveUnits(customSpeedMs, system).toFixed(1)));
     }
     // MAV_CMD_DO_CHANGE_SPEED: param1 = type (0=airspeed, 1=groundspeed), param2 = speed (m/s)
     const cmd = encoder.createCommandLong(sysId, compId, MAV_CMD.DO_CHANGE_SPEED, [1, speedMs, -1, 0, 0, 0, 0]);
@@ -366,88 +367,82 @@ export const GlareshieldWidget: React.FC = () => {
         {/* Bottom Section: Autopilot Targets (Vehicle-Specific Guidance) */}
         {category === 'rover' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-zinc-800/60">
-            {/* Target Speed Stepper + Speed Presets for Rover */}
-            <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-lg bg-emerald-950/40 text-emerald-400">
-                    <Gauge className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">Target Speed</span>
-                      {manualTargetSpeed !== null && (
-                        <button
-                          type="button"
-                          onClick={handleResetToLiveSpeed}
-                          title="Reset to follow vehicle speed"
-                          className="text-zinc-500 hover:text-sky-400 p-0.5 rounded transition-colors"
-                        >
-                          <RotateCcw className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-baseline gap-1.5 mt-0.5">
-                      <span className="text-lg font-mono font-bold text-zinc-100">
-                        {currentTargetSpeed} <span className="text-xs font-normal text-zinc-400">{activeUnit}</span>
-                      </span>
-                      <span className="text-[10px] text-zinc-500 font-mono truncate">
-                        (Cur: {formatSpeed(vfr.groundspeed).full})
-                      </span>
-                    </div>
-                  </div>
+            {/* Target Speed Stepper for Rover */}
+            <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 flex items-center justify-between min-w-0">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="p-2 rounded-lg bg-emerald-950/40 text-emerald-400 shrink-0">
+                  <Gauge className="h-4 w-4" />
                 </div>
-
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2 font-bold text-xs"
-                    onClick={() => handleStepSpeed(-1)}
-                    title={`Decrease speed by 1 ${activeUnit}`}
-                  >
-                    -1
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2 font-bold text-xs"
-                    onClick={() => handleStepSpeed(1)}
-                    title={`Increase speed by 1 ${activeUnit}`}
-                  >
-                    +1
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="h-8 px-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white ml-1"
-                    onClick={() => handleSetSpeed()}
-                  >
-                    Set Spd
-                  </Button>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">Target Speed</span>
+                    {manualTargetSpeed !== null && (
+                      <button
+                        type="button"
+                        onClick={handleResetToLiveSpeed}
+                        title="Reset to follow vehicle speed"
+                        className="text-zinc-500 hover:text-sky-400 p-0.5 rounded transition-colors"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-baseline gap-1.5 mt-0.5">
+                    <span className="text-lg font-mono font-bold text-zinc-100">
+                      {currentTargetSpeed} <span className="text-xs font-normal text-zinc-400">{activeUnit}</span>
+                    </span>
+                    <span className="text-[10px] text-zinc-500 font-mono truncate">
+                      (Cur: {formatSpeed(vfr.groundspeed).full})
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {/* Speed Preset Quick Chips */}
-              <div className="flex items-center gap-1.5 pt-1 border-t border-zinc-800/40">
-                <span className="text-[10px] text-zinc-500 font-sans">Presets:</span>
-                {[0.5, 1.0, 2.0, 3.0, 5.0].map((spdMs) => {
-                  const spdActive = Math.round(toActiveUnits(spdMs, system));
-                  const isCurrent = currentTargetSpeed === spdActive;
-                  return (
-                    <button
-                      key={spdMs}
-                      onClick={() => handleSetSpeed(spdMs)}
-                      className={`px-2 py-0.5 rounded text-[11px] font-sans font-semibold transition-colors border ${
-                        isCurrent
-                          ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300'
-                          : 'bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      {spdActive} {activeUnit}
-                    </button>
-                  );
-                })}
+              <div className="flex items-center gap-1 shrink-0 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 font-mono text-xs text-zinc-300"
+                  onClick={() => handleStepSpeed(-coarseStep)}
+                  title={`Decrease speed by ${coarseStep} ${activeUnit}`}
+                >
+                  -{coarseStep}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 font-mono text-xs text-zinc-300"
+                  onClick={() => handleStepSpeed(-0.5)}
+                  title={`Decrease speed by 0.5 ${activeUnit}`}
+                >
+                  -0.5
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 font-mono text-xs text-zinc-300"
+                  onClick={() => handleStepSpeed(0.5)}
+                  title={`Increase speed by 0.5 ${activeUnit}`}
+                >
+                  +0.5
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 font-mono text-xs text-zinc-300"
+                  onClick={() => handleStepSpeed(coarseStep)}
+                  title={`Increase speed by ${coarseStep} ${activeUnit}`}
+                >
+                  +{coarseStep}
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-8 px-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white ml-0.5"
+                  onClick={() => handleSetSpeed()}
+                >
+                  Set Spd
+                </Button>
               </div>
             </div>
 
@@ -508,24 +503,42 @@ export const GlareshieldWidget: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center gap-1 shrink-0 flex-wrap">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 px-2 font-bold text-xs"
-                  onClick={() => handleStepSpeed(-1)}
-                  title={`Decrease speed by 1 ${activeUnit}`}
+                  className="h-8 px-2 font-mono text-xs text-zinc-300"
+                  onClick={() => handleStepSpeed(-coarseStep)}
+                  title={`Decrease speed by ${coarseStep} ${activeUnit}`}
                 >
-                  -1
+                  -{coarseStep}
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 px-2 font-bold text-xs"
-                  onClick={() => handleStepSpeed(1)}
-                  title={`Increase speed by 1 ${activeUnit}`}
+                  className="h-8 px-2 font-mono text-xs text-zinc-300"
+                  onClick={() => handleStepSpeed(-0.5)}
+                  title={`Decrease speed by 0.5 ${activeUnit}`}
                 >
-                  +1
+                  -0.5
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 font-mono text-xs text-zinc-300"
+                  onClick={() => handleStepSpeed(0.5)}
+                  title={`Increase speed by 0.5 ${activeUnit}`}
+                >
+                  +0.5
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 font-mono text-xs text-zinc-300"
+                  onClick={() => handleStepSpeed(coarseStep)}
+                  title={`Increase speed by ${coarseStep} ${activeUnit}`}
+                >
+                  +{coarseStep}
                 </Button>
                 <Button
                   variant="default"
