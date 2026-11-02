@@ -246,7 +246,12 @@ export const HudWidget: React.FC = () => {
     const isCaged = Math.abs(rawFpmX) > maxFpmX || Math.abs(rawFpmY) > maxFpmY;
 
     // Draw the FPM Symbol:
+    // Wings remain parallel to the aircraft waterline (fixed horizontal screen frame),
+    // counter-rotating against the artificial horizon roll.
     ctx.save();
+    ctx.translate(fpmX, fpmY);
+    ctx.rotate(attitude.roll);
+
     ctx.strokeStyle = HUD_HIGHLIGHT;
     ctx.fillStyle = HUD_HIGHLIGHT;
     ctx.lineWidth = 1.8;
@@ -258,25 +263,25 @@ export const HudWidget: React.FC = () => {
 
     // Center circle (5px radius, open center without dot)
     ctx.beginPath();
-    ctx.arc(fpmX, fpmY, 5, 0, Math.PI * 2);
+    ctx.arc(0, 0, 5, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Left wing / leg (7px wide)
+    // Left wing / leg (7px wide, parallel to waterline)
     ctx.beginPath();
-    ctx.moveTo(fpmX - 5, fpmY);
-    ctx.lineTo(fpmX - 12, fpmY);
+    ctx.moveTo(-5, 0);
+    ctx.lineTo(-12, 0);
     ctx.stroke();
 
-    // Right wing / leg (7px wide)
+    // Right wing / leg (7px wide, parallel to waterline)
     ctx.beginPath();
-    ctx.moveTo(fpmX + 5, fpmY);
-    ctx.lineTo(fpmX + 12, fpmY);
+    ctx.moveTo(5, 0);
+    ctx.lineTo(12, 0);
     ctx.stroke();
 
-    // Top vertical fin (5px tall)
+    // Top vertical fin (5px tall, perpendicular to waterline)
     ctx.beginPath();
-    ctx.moveTo(fpmX, fpmY - 5);
-    ctx.lineTo(fpmX, fpmY - 10);
+    ctx.moveTo(0, -5);
+    ctx.lineTo(0, -10);
     ctx.stroke();
 
     ctx.restore();
