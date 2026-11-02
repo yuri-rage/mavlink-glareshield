@@ -7,7 +7,10 @@ import { MAVLINK_MSG_ID, getVehicleCategory } from '../../mavlink/messages';
 import { Card, CardHeader, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { RefreshCw, Crosshair, Maximize2, Shield, Flag, X, Eraser, Upload } from 'lucide-react';
+import { Modal } from '../ui/modal';
+import { parseDroppedMissionFile, ParsedMissionFile } from '../../mavlink/missionFileParser';
+import { MissionItemIntData } from '../../mavlink/encoder';
+import { RefreshCw, Crosshair, Maximize2, Shield, Flag, X, Eraser, Upload, AlertTriangle } from 'lucide-react';
 import L from 'leaflet';
 
 function renderVehicleSvg(type: number): string {
@@ -132,6 +135,13 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const [mapLayer, setMapLayer] = useState<MapLayerType>('satellite');
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [pendingUpload, setPendingUpload] = useState<{
+    filename: string;
+    buffer: Uint8Array;
+    parsed: ParsedMissionFile;
+  } | null>(null);
+  const previewLayersRef = useRef<L.Layer[]>([]);
+
   const [missionStatus, setMissionStatus] = useState<MissionManagerStatus>({
     isFetching: false,
     method: 'idle',
@@ -153,17 +163,134 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     try {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = new Uint8Array(arrayBuffer);
-      const result = await missionManager.uploadFile(file.name, buffer);
-      if (!result.success && result.error) {
-        setUploadError(result.error);
+      const parsed = parseDroppedMissionFile(file.name, buffer);
+      if (!parsed || parsed.items.length === 0) {
+        setUploadError('Unable to parse file. Format not recognized or file is empty.');
         setTimeout(() => setUploadError(null), 6000);
+        return;
       }
+      setPendingUpload({ filename: file.name, buffer, parsed });
     } catch (err: any) {
-      console.error('Failed to process dropped file:', err);
-      setUploadError(err?.message || 'Failed to read dropped file');
-      setTimeout(() => setUploadError(null), 6000);
+      console.error('Failed to parse dropped flight plan file:', err);
+      setUploadError(err?.message || 'Failed to parse dropped flight plan file');
+      setTimeout(() => setUploadError(null), 7000);
     }
   };
+
+  const handleCancelUpload = () => {
+    previewLayersRef.current.forEach((l) => l.remove());
+    previewLayersRef.current = [];
+    setPendingUpload(null);
+  };
+
+  const handleConfirmUpload = async () => {
+    if (!pendingUpload) return;
+    const { filename, buffer } = pendingUpload;
+    handleCancelUpload();
+
+    try {
+      const result = await missionManager.uploadFile(filename, buffer);
+      if (!result.success && result.error) {
+        setUploadError(result.error);
+        setTimeout(() => setUploadError(null), 7000);
+      }
+    } catch (err: any) {
+      console.error('Failed to upload flight plan file:', err);
+      setUploadError(err?.message || 'Failed to upload flight plan file');
+      setTimeout(() => setUploadError(null), 7000);
+    }
+  };
+
+  // Render dashed preview overlay on map whenever a pending upload is staged
+  useEffect(() => {
+    previewLayersRef.current.forEach((l) => l.remove());
+    previewLayersRef.current = [];
+
+    if (!pendingUpload || !mapInstanceRef.current) return;
+
+    const map = mapInstanceRef.current;
+    const previewPoints: [number, number][] = [];
+
+    const renderItemsPreview = (items: MissionItemIntData[], type: string) => {
+      if (type === 'mission') {
+        const validCoords = items
+          .filter((w) => (w.x !== 0 || w.y !== 0) && Math.abs(w.x ?? 0) <= 90 && Math.abs(w.y ?? 0) <= 180)
+          .map((w) => [w.x!, w.y!] as [number, number]);
+
+        if (validCoords.length > 0) {
+          validCoords.forEach((pt) => previewPoints.push(pt));
+          const line = L.polyline(validCoords, {
+            color: '#f59e0b',
+            weight: 3,
+            dashArray: '6, 6',
+            opacity: 0.9,
+          }).addTo(map);
+          previewLayersRef.current.push(line);
+
+          validCoords.forEach(([lat, lon], idx) => {
+            const icon = L.divIcon({
+              className: 'preview-wp-icon',
+              html: `<div style="background:#f59e0b;color:#000;font-size:10px;font-weight:bold;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.6);">${idx}</div>`,
+              iconSize: [18, 18],
+              iconAnchor: [9, 9],
+            });
+            const marker = L.marker([lat, lon], { icon }).addTo(map);
+            previewLayersRef.current.push(marker);
+          });
+        }
+      } else if (type === 'fence') {
+        const fps = items.map((it) => ({
+          seq: it.seq,
+          command: it.command,
+          lat: it.x ?? 0,
+          lon: it.y ?? 0,
+          alt: it.z ?? 0,
+          param1: it.param1,
+          inclusion: it.command === 5001 || it.command === 5003 || it.command === 5005,
+        }));
+        const polys = groupFencePolygons(fps);
+        polys.forEach((p) => {
+          if (p.points && p.points.length > 0) {
+            p.points.forEach((pt: [number, number]) => previewPoints.push(pt));
+            const poly = L.polygon(p.points, {
+              color: '#f97316',
+              weight: 2,
+              dashArray: '6, 6',
+              fillColor: '#ea580c',
+              fillOpacity: 0.15,
+            }).addTo(map);
+            previewLayersRef.current.push(poly);
+          }
+        });
+      } else if (type === 'rally') {
+        items.forEach((rp) => {
+          if (rp.x && rp.y) {
+            previewPoints.push([rp.x, rp.y]);
+            const icon = L.divIcon({
+              className: 'preview-rally-icon',
+              html: `<div style="background:#a855f7;color:#fff;font-size:10px;font-weight:bold;width:16px;height:16px;border-radius:3px;display:flex;align-items:center;justify-content:center;border:1px solid #fff;">R</div>`,
+              iconSize: [16, 16],
+              iconAnchor: [8, 8],
+            });
+            const marker = L.marker([rp.x, rp.y], { icon }).addTo(map);
+            previewLayersRef.current.push(marker);
+          }
+        });
+      }
+    };
+
+    if (pendingUpload.parsed.sections && pendingUpload.parsed.sections.length > 0) {
+      pendingUpload.parsed.sections.forEach((sec) => renderItemsPreview(sec.items, sec.type));
+    } else {
+      renderItemsPreview(pendingUpload.parsed.items, pendingUpload.parsed.type);
+    }
+
+    if (previewPoints.length > 0) {
+      setFollowVehicle(false);
+      followVehicleRef.current = false;
+      map.fitBounds(L.latLngBounds(previewPoints), { padding: [50, 50] });
+    }
+  }, [pendingUpload]);
 
   // Track waypoint/mission download state
   useEffect(() => {
@@ -1031,6 +1158,75 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           <span>Alt: <b className="text-emerald-400">{formatAltitude(altitudeMode === 'msl' ? (position.alt || position.relativeAlt) : position.relativeAlt).full} {altitudeMode.toUpperCase()}</b></span>
         </div>
       </CardContent>
+
+      {/* Confirmation Modal with Armed/Auto Warning and Summary */}
+      {pendingUpload && (
+        <Modal
+          isOpen={true}
+          onClose={handleCancelUpload}
+          title={`Confirm Upload: ${pendingUpload.filename}`}
+          description="Review flight plan items and vehicle status before replacing vehicle memory."
+        >
+          <div className="space-y-4">
+            {/* Explicit Armed / AUTO Flight Warning */}
+            {(heartbeat.isArmed || heartbeat.modeName === 'AUTO') && (
+              <div className="p-3 rounded-lg bg-red-950/80 border border-red-500/70 text-red-200 text-xs flex items-start gap-2.5 shadow-md">
+                <AlertTriangle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+                <div>
+                  <b className="text-red-300 font-bold block mb-1">
+                    ACTIVE FLIGHT WARNING: VEHICLE IS {heartbeat.isArmed ? 'ARMED' : ''}{heartbeat.isArmed && heartbeat.modeName === 'AUTO' ? ' AND IN ' : ''}{heartbeat.modeName === 'AUTO' ? 'AUTO MODE' : ''}!
+                  </b>
+                  Uploading will immediately overwrite the active flight plan or geofence in mid-air. Ensure you intend to replace the active mission now.
+                </div>
+              </div>
+            )}
+
+            <div className="bg-zinc-900/70 border border-zinc-800 rounded-lg p-3 space-y-2 text-xs">
+              <div className="flex items-center justify-between text-zinc-300">
+                <span className="text-zinc-400">File Type:</span>
+                <Badge variant="outline" className="font-mono uppercase text-sky-400 border-sky-500/30">
+                  {pendingUpload.parsed.type}
+                </Badge>
+              </div>
+
+              {pendingUpload.parsed.sections && pendingUpload.parsed.sections.length > 1 ? (
+                <div className="space-y-1.5 pt-1 border-t border-zinc-800/60">
+                  <span className="text-zinc-400 block font-medium">Plan Sections:</span>
+                  {pendingUpload.parsed.sections.map((s, idx) => (
+                    <div key={idx} className="flex items-center justify-between pl-2 text-zinc-300">
+                      <span className="capitalize">{s.type}:</span>
+                      <span className="font-mono text-zinc-400">{s.items.length} items</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between text-zinc-300">
+                  <span className="text-zinc-400">Total Items:</span>
+                  <span className="font-mono font-bold text-zinc-100">{pendingUpload.parsed.items.length}</span>
+                </div>
+              )}
+
+              <p className="text-[11px] text-zinc-500 pt-1">
+                Preview route and boundaries are highlighted with dashed lines on the map.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <Button variant="outline" size="sm" onClick={handleCancelUpload}>
+                Cancel
+              </Button>
+              <Button
+                variant={heartbeat.isArmed ? 'destructive' : 'default'}
+                size="sm"
+                className="font-bold"
+                onClick={handleConfirmUpload}
+              >
+                Confirm & Upload
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </Card>
   );
 };

@@ -1,4 +1,4 @@
-import { MAVLINK_MSG_ID, MAVLINK_MESSAGE_CRC_EXTRA, MAV_CMD } from './messages';
+import { MAVLINK_MSG_ID, MAVLINK_MESSAGE_CRC_EXTRA, MAV_CMD, cmdHasLocation } from './messages';
 import { calculateCrc } from './parser';
 
 export interface MissionItemIntData {
@@ -317,8 +317,9 @@ export class MavlinkEncoder {
     view.setFloat32(4, item.param2 ?? 0, true);
     view.setFloat32(8, item.param3 ?? 0, true);
     view.setFloat32(12, item.param4 ?? 0, true);
-    view.setInt32(16, Math.round((item.x ?? 0) * 1e7), true);
-    view.setInt32(20, Math.round((item.y ?? 0) * 1e7), true);
+    const hasLoc = cmdHasLocation(item.command);
+    view.setInt32(16, Math.round(hasLoc ? (item.x ?? 0) * 1e7 : (item.x ?? 0)), true);
+    view.setInt32(20, Math.round(hasLoc ? (item.y ?? 0) * 1e7 : (item.y ?? 0)), true);
     view.setFloat32(24, item.z ?? 0, true);
     view.setUint16(28, item.seq, true);
     view.setUint16(30, item.command, true);

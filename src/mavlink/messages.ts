@@ -438,6 +438,46 @@ export function getMavCmdName(commandId: number): string {
 }
 
 /**
+ * Determines whether a MAVLink mission command has geographic location (lat/lon in param 5 & 6).
+ * Matches ArduPilot AP_Mission::cmd_has_location() / stored_in_location().
+ * Non-location commands (e.g. DO_DIGICAM_CONTROL, DO_SET_SERVO, NAV_DELAY, etc.)
+ * pass param 5 & 6 as raw integers/floats and MUST NOT be scaled by 1e7.
+ */
+export function cmdHasLocation(command: number): boolean {
+  switch (command) {
+    case 16: // MAV_CMD_NAV_WAYPOINT
+    case 17: // MAV_CMD_NAV_LOITER_UNLIM
+    case 18: // MAV_CMD_NAV_LOITER_TURNS
+    case 19: // MAV_CMD_NAV_LOITER_TIME
+    case 21: // MAV_CMD_NAV_LAND
+    case 22: // MAV_CMD_NAV_TAKEOFF
+    case 30: // MAV_CMD_NAV_CONTINUE_AND_CHANGE_ALT
+    case 31: // MAV_CMD_NAV_LOITER_TO_ALT
+    case 82: // MAV_CMD_NAV_SPLINE_WAYPOINT
+    case 84: // MAV_CMD_NAV_VTOL_TAKEOFF
+    case 85: // MAV_CMD_NAV_VTOL_LAND
+    case 92: // MAV_CMD_NAV_GUIDED_ENABLE
+    case 94: // MAV_CMD_NAV_PAYLOAD_PLACE
+    case 95: // MAV_CMD_NAV_ARC_WAYPOINT
+    case 179: // MAV_CMD_DO_SET_HOME
+    case 180: // MAV_CMD_DO_RETURN_PATH_START
+    case 189: // MAV_CMD_DO_LAND_START
+    case 191: // MAV_CMD_DO_GO_AROUND
+    case 195: // MAV_CMD_DO_SET_ROI_LOCATION
+    case 201: // MAV_CMD_DO_SET_ROI
+    case 5001: // MAV_CMD_NAV_FENCE_POLYGON_VERTEX_INCLUSION
+    case 5002: // MAV_CMD_NAV_FENCE_POLYGON_VERTEX_EXCLUSION
+    case 5003: // MAV_CMD_NAV_FENCE_CIRCLE_INCLUSION
+    case 5004: // MAV_CMD_NAV_FENCE_CIRCLE_EXCLUSION
+    case 5005: // MAV_CMD_NAV_FENCE_RETURN_POINT
+    case 5100: // MAV_CMD_NAV_RALLY_POINT
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
  * Extract clean firmware version string from ArduPilot/PX4 boot banner or STATUSTEXT.
  * E.g., "ArduPlane V4.8.0-dev (1d44127b)" -> "4.8.0-dev"
  * E.g., "ArduCopter V4.5.2 (78057ebe)" -> "4.5.2"

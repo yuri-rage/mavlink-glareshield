@@ -1,4 +1,4 @@
-import { MAVLINK_MSG_ID, MAVLINK_MESSAGE_CRC_EXTRA } from './messages';
+import { MAVLINK_MSG_ID, MAVLINK_MESSAGE_CRC_EXTRA, cmdHasLocation } from './messages';
 
 export interface MavlinkPacket {
   version: 1 | 2;
@@ -471,17 +471,19 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         mission_type: getUint8(37),
       };
 
-    case MAVLINK_MSG_ID.MISSION_ITEM_INT:
+    case MAVLINK_MSG_ID.MISSION_ITEM_INT: {
+      const command = getUint16(30);
+      const hasLoc = cmdHasLocation(command);
       return {
         param1: getFloat32(0),
         param2: getFloat32(4),
         param3: getFloat32(8),
         param4: getFloat32(12),
-        x: getInt32(16) / 1e7, // latitude (int32 * 1e7)
-        y: getInt32(20) / 1e7, // longitude (int32 * 1e7)
+        x: hasLoc ? getInt32(16) / 1e7 : getInt32(16),
+        y: hasLoc ? getInt32(20) / 1e7 : getInt32(20),
         z: getFloat32(24), // altitude (float)
         seq: getUint16(28),
-        command: getUint16(30),
+        command,
         target_system: getUint8(32),
         target_component: getUint8(33),
         frame: getUint8(34),
@@ -489,6 +491,7 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         autocontinue: getUint8(36),
         mission_type: getUint8(37),
       };
+    }
 
     case MAVLINK_MSG_ID.MISSION_ACK:
       return {

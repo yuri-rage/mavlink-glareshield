@@ -1,6 +1,14 @@
 import { MissionItemIntData } from './encoder';
+import { cmdHasLocation } from './messages';
 
-export type MissionFileType = 'mission' | 'fence' | 'rally';
+export type MissionFileType = 'mission' | 'fence' | 'rally' | 'plan';
+
+export interface PlanSectionData {
+  type: 'mission' | 'fence' | 'rally';
+  missionType: number;
+  items: MissionItemIntData[];
+  rawDat: Uint8Array;
+}
 
 export interface ParsedMissionFile {
   type: MissionFileType;
@@ -8,6 +16,7 @@ export interface ParsedMissionFile {
   items: MissionItemIntData[];
   rawDat?: Uint8Array;
   filename: string;
+  sections?: PlanSectionData[];
 }
 
 /**
@@ -36,15 +45,18 @@ export function packDatFile(items: MissionItemIntData[], missionType: number): U
   let offset = headerSize;
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
+    const cmd = item.command ?? 16;
+    const hasLoc = cmdHasLocation(cmd);
+
     view.setFloat32(offset + 0, item.param1 ?? 0, true);
     view.setFloat32(offset + 4, item.param2 ?? 0, true);
     view.setFloat32(offset + 8, item.param3 ?? 0, true);
     view.setFloat32(offset + 12, item.param4 ?? 0, true);
-    view.setInt32(offset + 16, Math.round((item.x ?? 0) * 1e7), true);
-    view.setInt32(offset + 20, Math.round((item.y ?? 0) * 1e7), true);
+    view.setInt32(offset + 16, Math.round(hasLoc ? (item.x ?? 0) * 1e7 : (item.x ?? 0)), true);
+    view.setInt32(offset + 20, Math.round(hasLoc ? (item.y ?? 0) * 1e7 : (item.y ?? 0)), true);
     view.setFloat32(offset + 24, item.z ?? 0, true);
     view.setUint16(offset + 28, item.seq ?? i, true);
-    view.setUint16(offset + 30, item.command ?? 16, true);
+    view.setUint16(offset + 30, cmd, true);
     view.setUint8(offset + 32, 0); // target_system
     view.setUint8(offset + 33, 0); // target_component
     view.setUint8(offset + 34, item.frame ?? 3); // MAV_FRAME_GLOBAL_RELATIVE_ALT
@@ -113,67 +125,126 @@ export function parseQgcWplText(text: string): MissionItemIntData[] {
 
 /**
  * Parses a QGroundControl Plan JSON format.
+ * Expands ComplexItems (e.g. Survey, Corridor Scan) and validates that no waypoint defaults to (0, 0).
  */
-export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; items: MissionItemIntData[] } | null {
+export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; items: MissionItemIntData[]; sections?: PlanSectionData[] } | null {
   try {
     const obj = JSON.parse(jsonStr);
-    const items: MissionItemIntData[] = [];
+    const sections: PlanSectionData[] = [];
+
+    // Helper: Expand QGC ComplexItems (Survey, Corridor Scan, etc.)
+    const expandItem = (rawItem: any): any[] => {
+      if (rawItem.type === 'ComplexItem') {
+        if (Array.isArray(rawItem.TransectStyleComplexItem?.Items) && rawItem.TransectStyleComplexItem.Items.length > 0) {
+          return rawItem.TransectStyleComplexItem.Items;
+        }
+        if (Array.isArray(rawItem.Items) && rawItem.Items.length > 0) {
+          return rawItem.Items;
+        }
+        if (Array.isArray(rawItem.transects) && rawItem.transects.length > 0) {
+          const flat: any[] = [];
+          for (const transect of rawItem.transects) {
+            if (Array.isArray(transect)) {
+              for (const pt of transect) {
+                const lat = pt.lat ?? pt[0];
+                const lon = pt.lon ?? pt[1];
+                const alt = pt.alt ?? 30;
+                flat.push({ command: 16, frame: 3, autoContinue: true, params: [0, 0, 0, null, lat, lon, alt] });
+              }
+            }
+          }
+          if (flat.length > 0) return flat;
+        }
+        throw new Error(
+          `Complex item "${rawItem.complexItemType || 'survey'}" contains no expandable waypoints. Export individual waypoints from QGroundControl before uploading.`
+        );
+      }
+      return [rawItem];
+    };
 
     // 1. Mission items
     if (obj.mission && Array.isArray(obj.mission.items) && obj.mission.items.length > 0) {
+      const missionItems: MissionItemIntData[] = [];
+
       // If planned home position exists, add as seq 0
       if (obj.mission.plannedHomePosition && Array.isArray(obj.mission.plannedHomePosition)) {
         const [hLat, hLon, hAlt] = obj.mission.plannedHomePosition;
-        items.push({
-          seq: 0,
-          command: 16,
-          current: 1,
-          frame: 0,
-          param1: 0,
-          param2: 0,
-          param3: 0,
-          param4: 0,
-          x: hLat,
-          y: hLon,
-          z: hAlt ?? 0,
-          autocontinue: 1,
-          mission_type: 0,
-        });
+        if (hLat !== 0 || hLon !== 0) {
+          missionItems.push({
+            seq: 0,
+            command: 16,
+            current: 1,
+            frame: 0,
+            param1: 0,
+            param2: 0,
+            param3: 0,
+            param4: 0,
+            x: hLat,
+            y: hLon,
+            z: hAlt ?? 0,
+            autocontinue: 1,
+            mission_type: 0,
+          });
+        }
       }
 
       for (let i = 0; i < obj.mission.items.length; i++) {
-        const it = obj.mission.items[i];
-        const params = it.params || [0, 0, 0, 0, 0, 0, 0];
-        const seq = items.length;
-        items.push({
-          seq,
-          command: it.command ?? 16,
-          current: 0,
-          frame: it.frame ?? 3,
-          param1: params[0] ?? 0,
-          param2: params[1] ?? 0,
-          param3: params[2] ?? 0,
-          param4: params[3] ?? 0,
-          x: params[4] ?? 0,
-          y: params[5] ?? 0,
-          z: params[6] ?? 0,
-          autocontinue: it.autoContinue ?? 1,
-          mission_type: 0,
+        const rawItem = obj.mission.items[i];
+        const subItems = expandItem(rawItem);
+
+        for (const it of subItems) {
+          const params = it.params || [0, 0, 0, 0, 0, 0, 0];
+          const cmd = it.command ?? 16;
+          const seq = missionItems.length;
+          const x = params[4] ?? 0;
+          const y = params[5] ?? 0;
+          const z = params[6] ?? 0;
+
+          // Never default coordinates to (0, 0) for commands that have a location!
+          if (cmdHasLocation(cmd) && x === 0 && y === 0) {
+            throw new Error(`Waypoint ${seq} (command ${cmd}) has invalid coordinates (0, 0) [Gulf of Guinea]. Upload rejected for vehicle safety.`);
+          }
+
+          missionItems.push({
+            seq,
+            command: cmd,
+            current: missionItems.length === 0,
+            frame: it.frame ?? 3,
+            param1: params[0] ?? 0,
+            param2: params[1] ?? 0,
+            param3: params[2] ?? 0,
+            param4: params[3] ?? 0,
+            x,
+            y,
+            z,
+            autocontinue: it.autoContinue ?? 1,
+            mission_type: 0,
+          });
+        }
+      }
+
+      if (missionItems.length > 0) {
+        sections.push({
+          type: 'mission',
+          missionType: 0,
+          items: missionItems,
+          rawDat: packDatFile(missionItems, 0),
         });
       }
-      return { type: 'mission', items };
     }
 
     // 2. GeoFence
     if (obj.geoFence) {
+      const fenceItems: MissionItemIntData[] = [];
       let fenceSeq = 0;
+
       if (Array.isArray(obj.geoFence.polygons)) {
         for (const poly of obj.geoFence.polygons) {
           const inclusion = poly.inclusion !== false;
           const cmd = inclusion ? 5001 : 5002;
           const coords = poly.polygon || [];
           for (const pt of coords) {
-            items.push({
+            fenceItems.push({
               seq: fenceSeq++,
               command: cmd,
               frame: 0,
@@ -186,15 +257,21 @@ export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; item
           }
         }
       }
+
       if (Array.isArray(obj.geoFence.circles)) {
         for (const circ of obj.geoFence.circles) {
           const inclusion = circ.inclusion !== false;
           const cmd = inclusion ? 5003 : 5004;
-          items.push({
+          // Correctly read circle radius from circ.circle.radius (fallback to circ.radius)
+          const radius = typeof circ.circle?.radius === 'number'
+            ? circ.circle.radius
+            : (typeof circ.radius === 'number' ? circ.radius : 50);
+
+          fenceItems.push({
             seq: fenceSeq++,
             command: cmd,
             frame: 0,
-            param1: circ.radius ?? 50,
+            param1: radius,
             x: circ.circle?.center?.[0] ?? 0,
             y: circ.circle?.center?.[1] ?? 0,
             z: 0,
@@ -202,16 +279,23 @@ export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; item
           });
         }
       }
-      if (items.length > 0) {
-        return { type: 'fence', items };
+
+      if (fenceItems.length > 0) {
+        sections.push({
+          type: 'fence',
+          missionType: 1,
+          items: fenceItems,
+          rawDat: packDatFile(fenceItems, 1),
+        });
       }
     }
 
     // 3. Rally points
     if (obj.rallyPoints && Array.isArray(obj.rallyPoints.points) && obj.rallyPoints.points.length > 0) {
+      const rallyItems: MissionItemIntData[] = [];
       for (let i = 0; i < obj.rallyPoints.points.length; i++) {
         const pt = obj.rallyPoints.points[i];
-        items.push({
+        rallyItems.push({
           seq: i,
           command: 5100,
           frame: 3,
@@ -225,9 +309,34 @@ export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; item
           mission_type: 2,
         });
       }
-      return { type: 'rally', items };
+      if (rallyItems.length > 0) {
+        sections.push({
+          type: 'rally',
+          missionType: 2,
+          items: rallyItems,
+          rawDat: packDatFile(rallyItems, 2),
+        });
+      }
     }
-  } catch {
+
+    if (sections.length === 0) return null;
+
+    if (sections.length === 1) {
+      const sec = sections[0];
+      return { type: sec.type, items: sec.items, sections };
+    }
+
+    // Multi-section Plan file containing mission, fence, and/or rally
+    const primarySection = sections.find((s) => s.type === 'mission') || sections[0];
+    return {
+      type: 'plan',
+      items: primarySection.items,
+      sections,
+    };
+  } catch (err: any) {
+    if (err?.message?.includes('invalid coordinates') || err?.message?.includes('Complex item')) {
+      throw err;
+    }
     // Not valid JSON
   }
   return null;
@@ -249,18 +358,31 @@ export function parseDroppedMissionFile(filename: string, buffer: Uint8Array): P
       const dataType = view.getUint16(2, true);
       const numItems = view.getUint16(8, true);
 
+      // Rely on the binary header dataType (0=mission, 1=fence, 2=rally)
       let detectedType: MissionFileType = 'mission';
       let missionType = 0;
 
-      if (dataType === 1 || lowerName.includes('fence')) {
+      if (dataType === 1) {
         detectedType = 'fence';
         missionType = 1;
-      } else if (dataType === 2 || lowerName.includes('rally')) {
+      } else if (dataType === 2) {
         detectedType = 'rally';
         missionType = 2;
+      } else if (dataType === 0) {
+        detectedType = 'mission';
+        missionType = 0;
+      } else {
+        // Fallback to exact extension only if dataType is unknown
+        if (lowerName.endsWith('.fence')) {
+          detectedType = 'fence';
+          missionType = 1;
+        } else if (lowerName.endsWith('.rally')) {
+          detectedType = 'rally';
+          missionType = 2;
+        }
       }
 
-      // Unpack binary items so we have them available for legacy fallback
+      // Unpack binary items so we have them available for legacy fallback and validation
       const items: MissionItemIntData[] = [];
       let itemSize = 38;
       if (numItems > 0) {
@@ -276,11 +398,12 @@ export function parseDroppedMissionFile(filename: string, buffer: Uint8Array): P
         const p2 = view.getFloat32(offset + 4, true);
         const p3 = view.getFloat32(offset + 8, true);
         const p4 = view.getFloat32(offset + 12, true);
-        const x = view.getInt32(offset + 16, true) / 1e7;
-        const y = view.getInt32(offset + 20, true) / 1e7;
+        const command = view.getUint16(offset + 30, true);
+        const hasLoc = cmdHasLocation(command);
+        const x = hasLoc ? (view.getInt32(offset + 16, true) / 1e7) : view.getInt32(offset + 16, true);
+        const y = hasLoc ? (view.getInt32(offset + 20, true) / 1e7) : view.getInt32(offset + 20, true);
         const z = view.getFloat32(offset + 24, true);
         const seq = view.getUint16(offset + 28, true);
-        const command = view.getUint16(offset + 30, true);
         const frame = view.getUint8(offset + 34);
         const current = view.getUint8(offset + 35) === 1;
 
@@ -319,14 +442,12 @@ export function parseDroppedMissionFile(filename: string, buffer: Uint8Array): P
   if (text.trim().startsWith('{')) {
     const planResult = parseQgcPlanJson(text);
     if (planResult && planResult.items.length > 0) {
-      const missionType = planResult.type === 'mission' ? 0 : planResult.type === 'fence' ? 1 : 2;
-      planResult.items.forEach((it) => {
-        it.mission_type = missionType;
-      });
+      const missionType = planResult.type === 'mission' || planResult.type === 'plan' ? 0 : planResult.type === 'fence' ? 1 : 2;
       return {
         type: planResult.type,
         missionType,
         items: planResult.items,
+        sections: planResult.sections,
         rawDat: packDatFile(planResult.items, missionType),
         filename,
       };
@@ -339,26 +460,22 @@ export function parseDroppedMissionFile(filename: string, buffer: Uint8Array): P
     let type: MissionFileType = 'mission';
     let missionType = 0;
 
-    // Detect type based on file extension, header, or commands
-    if (lowerName.endsWith('.fence') || lowerName.includes('fence')) {
+    // Detect type based on explicit headers and commands, NOT loose filename substrings (e.g. fence_line_inspection.waypoints is a mission)
+    const lines = text.trim().split(/\r?\n/);
+    const headerLine = lines[0]?.trim().toUpperCase() || '';
+    const fenceCommands = [5001, 5002, 5003, 5004, 5005];
+    const isFenceCommands = wplItems.some((it) => fenceCommands.includes(it.command));
+    const isRallyCommands = wplItems.some((it) => it.command === 5100);
+
+    if (headerLine.startsWith('QGC FENCE') || isFenceCommands || lowerName.endsWith('.fence')) {
       type = 'fence';
       missionType = 1;
-    } else if (lowerName.endsWith('.rally') || lowerName.includes('rally')) {
+    } else if (headerLine.startsWith('QGC RALLY') || isRallyCommands || lowerName.endsWith('.rally')) {
       type = 'rally';
       missionType = 2;
     } else {
-      // Check command distribution
-      const fenceCommands = [5001, 5002, 5003, 5004, 5005];
-      const isFence = wplItems.some((it) => fenceCommands.includes(it.command));
-      const isRally = wplItems.some((it) => it.command === 5100);
-
-      if (isFence) {
-        type = 'fence';
-        missionType = 1;
-      } else if (isRally) {
-        type = 'rally';
-        missionType = 2;
-      }
+      type = 'mission';
+      missionType = 0;
     }
 
     wplItems.forEach((it) => {
