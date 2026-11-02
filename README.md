@@ -20,8 +20,8 @@ Designed to remove the "glare" from more fully featured GCS applications and foc
 
 - **MAVLink v2/v1 & MAVFTP Engine**:
   - In-browser binary framing, parsing, and CRC verification in TypeScript.
-  - ArduPilot Mega (Copter, Plane, Rover) dialect support with vehicle lock-on.
-  - High-speed MAVFTP for parameters (`@PARAM/param.pck`) and missions (`mission.dat`), with automatic fallback to legacy parameter and mission streaming.
+  - ArduPilot Mega (Copter, Plane, Rover, Sub, Tracker) dialect support with vehicle lock-on.
+  - High-speed MAVFTP for parameters (`@PARAM/param.pck`), missions (`mission.dat`), fences (`fence.dat`), and rally points (`rally.dat`), with automatic fallback to legacy parameter and mission streaming.
   - Periodic GCS heartbeat broadcast with automatic reconnection.
 - **Autopilot Glareshield & Controls**:
   - Slide-and-release confirmation to Arm / Disarm.
@@ -30,16 +30,22 @@ Designed to remove the "glare" from more fully featured GCS applications and foc
   - Quick action buttons (RTL, Pause/Loiter, Land, Takeoff).
 - **Heads-Up Display (HUD) & Tactical Map**:
   - Canvas artificial horizon with pitch ladder, roll arc, airspeed, altitude, and heading tapes.
-  - Leaflet-based map with vehicle trail, mission waypoints, fences, and follow mode.
+  - Leaflet-based map with configurable aspect ratios (4:3, 16:9, or full), high-zoom map tile overzoom (up to level 22), vehicle trail, mission waypoints, polygon fences, rally points, and follow mode.
+- **Flight & System Telemetry Widgets**:
+  - GNSS / GPS monitor supporting dual-module setups (GPS1 / GPS2 fix badges), satellite counts, HDOP, speed, and dual-antenna yaw.
+  - Battery monitor with pack voltage, current, capacity remaining, and individual cell voltages.
+  - StatusText message console with consecutive message grouping, counter badges, and cross-tab audio alert chimes.
 - **Dynamic Bandwidth Management**:
-  - Requests message intervals via `MAV_CMD_SET_MESSAGE_INTERVAL` only for widgets on screen.
+  - Requests message intervals via `MAV_CMD_SET_MESSAGE_INTERVAL` adaptively based on visible widgets on screen.
   - Bandwidth profiles: Low (SiK 57600 baud), Standard (115200 baud), and High (WiFi/Ethernet).
-- **Custom Widget Engine**:
-  - Declarative JSON widgets (stat cards, gauges, LED indicators, switches, action buttons with confirmation).
-  - Multi-tab customizable dashboard with layout persistence.
+- **Custom Widget Engine & Dashboard Profiles**:
+  - Declarative JSON widgets: stat cards, gauges, LED indicators, switches, sliders, multi-bar channel visualizers (RC, servos, ESCs), compass roses, sparklines, and parameter controls.
+  - Safe parameter controls with autopilot type verification, vehicle echo confirmation, and out-of-bounds warning checks.
+  - Component-level Error Boundaries isolating individual card crashes from taking down the dashboard.
+  - Multi-tab customizable dashboard with drag-and-drop layout, import/export, and ID collision protection.
 - **Companion Bridge**:
   - Python bridge (`bridge/bridge.py`) for UDP (SITL `14550`), TCP (`5760`), or Serial (`/dev/ttyUSB0`) to WebSockets.
-  - Built-in `--mock` mode for offline testing.
+  - Built-in `--mock` mode for offline testing and development.
 
 ---
 
