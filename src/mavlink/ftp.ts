@@ -52,6 +52,49 @@ export interface FtpParsedMessage {
   data: Uint8Array;
 }
 
+function addRange(ranges: [number, number][], start: number, end: number): [number, number][] {
+  if (start >= end) return ranges;
+  const merged: [number, number][] = [];
+  let inserted = false;
+  let curStart = start;
+  let curEnd = end;
+
+  for (const [rStart, rEnd] of ranges) {
+    if (rEnd < curStart) {
+      merged.push([rStart, rEnd]);
+    } else if (rStart > curEnd) {
+      if (!inserted) {
+        merged.push([curStart, curEnd]);
+        inserted = true;
+      }
+      merged.push([rStart, rEnd]);
+    } else {
+      curStart = Math.min(curStart, rStart);
+      curEnd = Math.max(curEnd, rEnd);
+    }
+  }
+  if (!inserted) {
+    merged.push([curStart, curEnd]);
+  }
+  return merged;
+}
+
+function findGaps(ranges: [number, number][], targetTotal: number): [number, number][] {
+  const gaps: [number, number][] = [];
+  let expectedStart = 0;
+  for (const [rStart, rEnd] of ranges) {
+    if (rStart > expectedStart) {
+      gaps.push([expectedStart, Math.min(rStart, targetTotal)]);
+    }
+    expectedStart = Math.max(expectedStart, rEnd);
+    if (expectedStart >= targetTotal) break;
+  }
+  if (expectedStart < targetTotal) {
+    gaps.push([expectedStart, targetTotal]);
+  }
+  return gaps;
+}
+
 export function parseFtpPayload(rawPayload: Uint8Array): FtpParsedMessage | null {
   // MAVLink FILE_TRANSFER_PROTOCOL layout:
   // byte 0: target_network
@@ -180,6 +223,7 @@ export class MavFtpClient {
       let fileSize = -1;
       let useBurst = true;
       let highestOffset = 0;
+      let receivedRanges: [number, number][] = [];
       let buffer = new Uint8Array(65536);
       let stepTimer: any = null;
       let retryCount = 0;
@@ -188,6 +232,27 @@ export class MavFtpClient {
         if (isDone) return;
         console.log(`[MAVFTP] Transfer of ${filePath} was cancelled.`);
         finish(null);
+      };
+
+      const checkCompletionAndFillGaps = (targetTotal: number): boolean => {
+        const gaps = findGaps(receivedRanges, targetTotal);
+        if (gaps.length === 0) {
+          console.log(`[MAVFTP] Completed reading ${filePath} without holes (${targetTotal} bytes verified).`);
+          finish(buffer.subarray(0, targetTotal));
+          return true;
+        }
+
+        if (retryCount >= 4) {
+          console.warn(`[MAVFTP] Failed to fill ${gaps.length} holes in ${filePath} after retries, aborting corrupted file.`);
+          finish(null);
+          return false;
+        }
+
+        retryCount++;
+        const [gapStart, gapEnd] = gaps[0];
+        console.warn(`[MAVFTP] Detected ${gaps.length} missing holes in ${filePath} (re-requesting gap ${gapStart}-${gapEnd}, attempt ${retryCount})...`);
+        requestSingleChunk(gapStart);
+        return false;
       };
 
       const finish = (result: Uint8Array | null) => {
@@ -285,13 +350,11 @@ export class MavFtpClient {
             const errCode = ftp.data[0];
             if (retryCount < 2) {
               retryCount++;
-              console.log(`[MAVFTP] OpenFileRO Nack (code=${errCode}) for ${filePath}, resetting vehicle sessions and retrying (attempt ${retryCount + 1})...`);
-              this.seq = 0;
-              const resetMsg = packFtpMessage(sysId, compId, 0, 0, FTP_OPCODE.ResetSessions, 0, 0);
-              mavlinkConnection.send(resetMsg);
-              this.seq = 0;
+              console.log(`[MAVFTP] OpenFileRO Nack (code=${errCode}) for ${filePath}, terminating stale session and retrying (attempt ${retryCount + 1})...`);
+              const termMsg = packFtpMessage(sysId, compId, this.nextSeq(), session, FTP_OPCODE.TerminateSession, 0, 0);
+              mavlinkConnection.send(termMsg);
               setTimeout(() => {
-                if (!isDone) openFile(false);
+                if (!isDone) openFile();
               }, 80);
               return;
             }
@@ -344,10 +407,10 @@ export class MavFtpClient {
         // Check if NACK during read
         if (ftp.opcode === FTP_OPCODE.Nack) {
           const errCode = ftp.data[0];
-          // If error is EndOfFile (code 6), we've read everything
+          // If error is EndOfFile (code 6), verify that no gaps exist before finishing
           if (errCode === FTP_ERR.EndOfFile) {
-            console.log(`[MAVFTP] Reached EOF on ${filePath}: ${highestOffset} bytes total.`);
-            finish(buffer.subarray(0, highestOffset));
+            console.log(`[MAVFTP] Reached EOF on ${filePath}: ${highestOffset} bytes reported. Verifying integrity...`);
+            checkCompletionAndFillGaps(highestOffset);
             return;
           }
 
@@ -385,16 +448,16 @@ export class MavFtpClient {
 
             buffer.set(ftp.data, chunkOffset);
             highestOffset = Math.max(highestOffset, chunkOffset + chunkLen);
+            receivedRanges = addRange(receivedRanges, chunkOffset, chunkOffset + chunkLen);
 
             if (onProgress) {
               onProgress(highestOffset, fileSize > 0 ? fileSize : 0);
             }
           }
 
-          // Check if entire file received
+          // Check if entire file received without holes
           if (fileSize > 0 && highestOffset >= fileSize) {
-            console.log(`[MAVFTP] Burst read complete for ${filePath}: ${highestOffset} / ${fileSize} bytes.`);
-            finish(buffer.subarray(0, highestOffset));
+            checkCompletionAndFillGaps(fileSize);
             return;
           }
 
@@ -408,13 +471,13 @@ export class MavFtpClient {
                 requestBurst(highestOffset);
               } else if (ftp.size < chunkSize) {
                 // Short read indicates EOF
-                finish(buffer.subarray(0, highestOffset));
+                checkCompletionAndFillGaps(highestOffset);
               }
             }
           } else {
             // In lockstep ReadFile mode
             if (ftp.size < chunkSize || (fileSize > 0 && highestOffset >= fileSize)) {
-              finish(buffer.subarray(0, highestOffset));
+              checkCompletionAndFillGaps(fileSize > 0 ? fileSize : highestOffset);
             } else {
               requestSingleChunk(highestOffset);
             }
@@ -423,14 +486,7 @@ export class MavFtpClient {
       });
 
       // Step 1: Open file
-      const openFile = (sendReset = false) => {
-        if (sendReset) {
-          this.seq = 0;
-          const resetMsg = packFtpMessage(sysId, compId, 0, 0, FTP_OPCODE.ResetSessions, 0, 0);
-          mavlinkConnection.send(resetMsg);
-          this.seq = 0;
-        }
-
+      const openFile = () => {
         const pathBytes = new TextEncoder().encode(filePath);
         const pathWithNull = new Uint8Array(pathBytes.length + 1);
         pathWithNull.set(pathBytes);
@@ -447,10 +503,10 @@ export class MavFtpClient {
           pathWithNull
         );
         mavlinkConnection.send(openMsg);
-        setStepTimeout(() => openFile(false));
+        setStepTimeout(() => openFile());
       };
 
-      openFile(false);
+      openFile();
     });
   }
 }
