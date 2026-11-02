@@ -27,4 +27,10 @@ dist-ssr
 .direnv
 result
 
+# Python & TypeScript build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.tsbuildinfo
+
 TODO*
