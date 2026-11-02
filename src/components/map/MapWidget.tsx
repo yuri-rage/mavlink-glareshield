@@ -89,17 +89,17 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const baseStationPosition = useTelemetryStore((s) => s.baseStationPosition);
 
   const isFullWidth = colSpan === 12;
-  const [aspectRatio, setAspectRatio] = useState<'4:3' | '16:9'>(() => {
+  const [aspectRatio, setAspectRatio] = useState<'4:3' | '16:9' | '1:1'>(() => {
     try {
       if (typeof localStorage !== 'undefined') {
         const saved = localStorage.getItem('mavlink_glareshield_map_aspect');
-        if (saved === '16:9' || saved === '4:3') return saved;
+        if (saved === '16:9' || saved === '4:3' || saved === '1:1') return saved;
       }
     } catch {}
     return '4:3';
   });
 
-  const handleAspectChange = (aspect: '4:3' | '16:9') => {
+  const handleAspectChange = (aspect: '4:3' | '16:9' | '1:1') => {
     setAspectRatio(aspect);
     try {
       if (typeof localStorage !== 'undefined') {
@@ -779,7 +779,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   }, [baseStationPosition]);
 
   const aspectClass = isFullWidth
-    ? (aspectRatio === '4:3'
+    ? (aspectRatio === '1:1'
+        ? 'aspect-square min-h-[440px] max-h-[85vh]'
+        : aspectRatio === '4:3'
         ? 'aspect-[16/9] md:aspect-[4/3] min-h-[440px] max-h-[82vh]'
         : 'aspect-[16/9] min-h-[440px] max-h-[82vh]')
     : 'h-full min-h-[350px] lg:min-h-[480px]';
@@ -821,13 +823,24 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             {isFullWidth && (
               <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-[10px] font-sans font-medium">
                 <button
+                  onClick={() => handleAspectChange('1:1')}
+                  className={`px-1.5 py-0.5 rounded transition-colors ${
+                    aspectRatio === '1:1'
+                      ? 'bg-zinc-800 text-sky-400 font-bold shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                  title="1:1 Square Aspect Ratio"
+                >
+                  1:1
+                </button>
+                <button
                   onClick={() => handleAspectChange('4:3')}
                   className={`px-1.5 py-0.5 rounded transition-colors ${
                     aspectRatio === '4:3'
                       ? 'bg-zinc-800 text-sky-400 font-bold shadow-sm'
                       : 'text-zinc-400 hover:text-zinc-200'
                   }`}
-                  title="4:3 Square Tactical Aspect Ratio"
+                  title="4:3 Tactical Aspect Ratio"
                 >
                   4:3
                 </button>
