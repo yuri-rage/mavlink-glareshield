@@ -19,7 +19,7 @@ import socket
 import struct
 import sys
 import time
-from typing import Set
+from typing import Set, Any, cast
 import websockets
 
 # Message IDs
@@ -125,7 +125,7 @@ class BridgeServer:
         self.port = port
         self.mode = mode
         self.target = target
-        self.clients: Set[websockets.WebSocketServerProtocol] = set()
+        self.clients: Set[Any] = set()
         self.encoder = MavlinkV2Encoder(sysid=1, compid=1)
         self.transport = None
 
@@ -184,9 +184,9 @@ class BridgeServer:
 
     def send_to_vehicle(self, data: bytes):
         if self.mode == "udp" and self.transport:
-            self.transport.sendto(data, self.udp_target)
+            cast(Any, self.transport).sendto(data, self.udp_target)
         elif self.mode == "tcp" and self.transport:
-            self.transport.write(data)
+            cast(Any, self.transport).write(data)
         elif self.mode == "serial" and self.serial_conn:
             self.serial_conn.write(data)
 
@@ -404,12 +404,24 @@ class BridgeServer:
                 # SYS_STATUS
                 load = int(180) # 18.0%
                 v_bat = int(self.sim_voltage * 1000)
-                c_bat = int(450 if self.armed else 45) # 4.5A or 0.45A
-                sys_st = struct.pack("<IIIHHhHhh", 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, load, v_bat, c_bat, int(self.sim_battery_pct), 0, 0)
+                c_bat = int(450 if self.armed else 45) # 4.5A or 0.45A in 10mA units
+                sys_st = struct.pack(
+                    "<IIIHHhHHHHHHb",
+                    0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF,
+                    load, v_bat, c_bat,
+                    0, 0, 0, 0, 0, 0,
+                    int(self.sim_battery_pct)
+                )
                 await self.broadcast(self.encoder.pack(MSG_SYS_STATUS, sys_st))
 
                 # BATTERY_STATUS
-                bat_st = bytes(14) + struct.pack("<10H", v_bat, 0, 0, 0, 0, 0, 0, 0, 0, 0) + struct.pack("<hiiB", c_bat, int(elapsed * 5), int(elapsed * 20), int(self.sim_battery_pct))
+                bat_st = struct.pack(
+                    "<iih10HhBBBb",
+                    int(elapsed * 5), int(elapsed * 20), 2500,
+                    v_bat, *([65535] * 9),
+                    c_bat, 0, 0, 1,
+                    int(self.sim_battery_pct)
+                )
                 await self.broadcast(self.encoder.pack(MSG_BATTERY_STATUS, bat_st))
 
                 # Slowly discharge battery
@@ -424,12 +436,13 @@ class BridgeServer:
                 att = struct.pack("<I6f", int(elapsed * 1000), roll, pitch, yaw, 0.01, 0.01, 0.05)
                 await self.broadcast(self.encoder.pack(MSG_ATTITUDE, att))
 
-            # 5Hz: VFR_HUD
+            # 5Hz: VFR_HUD (airspeed, groundspeed, alt, climb, heading, throttle)
             if step % 4 == 0:
                 gs = 5.2 if self.armed else 0.0
                 climb = math.sin(elapsed * 0.5) * 0.8
                 throttle = 45 if self.armed else 0
-                hud = struct.pack("<ffhHff", gs, gs, int(math.degrees((elapsed * 0.05) % (2 * math.pi))), throttle, self.sim_alt, climb)
+                heading = int(math.degrees((elapsed * 0.05) % (2 * math.pi)))
+                hud = struct.pack("<ffffhH", gs, gs, self.sim_alt, climb, heading, throttle)
                 await self.broadcast(self.encoder.pack(MSG_VFR_HUD, hud))
 
             # 2Hz: Global Position & GPS
@@ -446,8 +459,14 @@ class BridgeServer:
                 pos = struct.pack("<IiiiihhhH", int(elapsed * 1000), lat_i, lon_i, alt_i, alt_i, 50, 0, 0, hdg_u)
                 await self.broadcast(self.encoder.pack(MSG_GLOBAL_POSITION_INT, pos))
 
-                # GPS_RAW_INT (3D Fix, 14 satellites, HDOP 0.85)
-                gps = struct.pack("<QBi2i2H2HB", int(now * 1e6), 3, lat_i, lon_i, alt_i, 85, 120, 520, int(hdg_u / 100), 14)
+                # GPS_RAW_INT (time_usec, lat, lon, alt, eph, epv, vel, cog, fix_type, satellites_visible)
+                gps = struct.pack(
+                    "<QiiiHHHHBB",
+                    int(now * 1e6),
+                    lat_i, lon_i, alt_i,
+                    85, 120, 520, hdg_u,
+                    3, 14
+                )
                 await self.broadcast(self.encoder.pack(MSG_GPS_RAW_INT, gps))
 
     async def setup_udp(self):
@@ -535,7 +554,7 @@ class BridgeServer:
 
 def main():
     parser = argparse.ArgumentParser(description="MAVLink WebSocket Bridge & Simulator")
-    parser.add_argument("--host", default="0.0.0.0", help="WebSocket bind host (default: 0.0.0.0)")
+    parser.add_argument("--host", default="127.0.0.1", help="WebSocket bind host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=56781, help="WebSocket bind port (default: 56781)")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--mock", action="store_true", help="Run simulated ArduPilot mock telemetry")
