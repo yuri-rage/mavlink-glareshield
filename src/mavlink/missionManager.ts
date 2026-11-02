@@ -194,51 +194,82 @@ export class MissionManager {
     });
   }
 
+  private updateStoreItems(type: 'mission' | 'fence' | 'rally', items: MissionItemIntData[]) {
+    if (type === 'mission') {
+      const wps: MissionWaypoint[] = items.map((it) => ({
+        seq: it.seq,
+        command: it.command,
+        lat: it.x ?? 0,
+        lon: it.y ?? 0,
+        alt: it.z ?? 0,
+        current: Boolean(it.current),
+        frame: it.frame ?? 3,
+        param1: it.param1,
+        param2: it.param2,
+        param3: it.param3,
+        param4: it.param4,
+      }));
+      useTelemetryStore.setState({ missionWaypoints: wps });
+    } else if (type === 'fence') {
+      const fps: FencePoint[] = items.map((it) => {
+        const isCircle = it.command === 5004 || it.command === 5005 || (it.command === 5003 && (it.param1 ?? 0) > 0);
+        const isInclusion = it.command === 5001 || it.command === 5005 || (it.command === 5003 && (it.param1 ?? 0) > 0);
+        return {
+          seq: it.seq,
+          command: it.command,
+          lat: it.x ?? 0,
+          lon: it.y ?? 0,
+          alt: it.z ?? 0,
+          param1: it.param1,
+          vertexCount: !isCircle ? Math.round(it.param1 ?? 0) : undefined,
+          radius: isCircle ? it.param1 : undefined,
+          inclusion: isInclusion,
+        };
+      });
+      useTelemetryStore.setState({ fencePoints: fps });
+    } else if (type === 'rally') {
+      const rps: RallyPoint[] = items.map((it) => ({
+        seq: it.seq,
+        lat: it.x ?? 0,
+        lon: it.y ?? 0,
+        alt: it.z ?? 0,
+      }));
+      useTelemetryStore.setState({ rallyPoints: rps });
+    }
+  }
+
   /**
-   * Uploads dropped file (mission, fence, or rally) via MAVFTP with item-by-item fallback.
+   * Uploads an individual section (mission, fence, or rally) via MAVFTP with item-by-item fallback.
    */
-  public async uploadFile(
-    filename: string,
-    buffer: Uint8Array,
+  public async uploadSection(
+    type: 'mission' | 'fence' | 'rally',
+    missionType: number,
+    items: MissionItemIntData[],
+    rawDat?: Uint8Array,
     targetSys?: number,
     targetComp?: number
-  ): Promise<{ success: boolean; type: MissionFileType; count: number; method: 'ftp' | 'legacy'; error?: string }> {
-    const parsed = parseDroppedMissionFile(filename, buffer);
-    if (!parsed || parsed.items.length === 0) {
-      return {
-        success: false,
-        type: 'mission',
-        count: 0,
-        method: 'idle' as any,
-        error: 'Unable to parse file. Format not recognized or empty.',
-      };
-    }
-
+  ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; error?: string }> {
     const hb = useTelemetryStore.getState().heartbeat;
     const sysId = targetSys ?? (hb.systemId > 0 ? hb.systemId : 1);
     const compId = targetComp ?? (hb.componentId > 0 ? hb.componentId : 1);
-
-    this.targetSys = sysId;
-    this.targetComp = compId;
-    this.isCancelled = false;
-    const typeName = parsed.type === 'mission' ? 'Mission' : parsed.type === 'fence' ? 'Geofence' : 'Rally points';
-    const ftpPath = parsed.type === 'mission' ? '@MISSION/mission.dat' : parsed.type === 'fence' ? '@MISSION/fence.dat' : '@MISSION/rally.dat';
+    const typeName = type === 'mission' ? 'Mission' : type === 'fence' ? 'Geofence' : 'Rally points';
+    const ftpPath = type === 'mission' ? '@MISSION/mission.dat' : type === 'fence' ? '@MISSION/fence.dat' : '@MISSION/rally.dat';
 
     this.setStatus({
       isUploading: true,
       method: 'ftp',
-      message: `Uploading ${typeName} (${parsed.items.length} items) via MAVFTP...`,
+      message: `Uploading ${typeName} (${items.length} items) via MAVFTP...`,
       uploadProgress: {
-        type: parsed.type,
+        type,
         current: 0,
-        total: parsed.items.length,
+        total: items.length,
         method: 'ftp',
       },
     });
 
     // 1. Try fast MAVFTP
     let ftpSuccess = false;
-    const datBuffer = parsed.rawDat || packDatFile(parsed.items, parsed.missionType);
+    const datBuffer = rawDat || packDatFile(items, missionType);
 
     try {
       console.log(`[MissionManager] Attempting MAVFTP upload to ${ftpPath} (${datBuffer.length} bytes)...`);
@@ -262,82 +293,28 @@ export class MissionManager {
     }
 
     if (ftpSuccess) {
-      console.log(`[MissionManager] MAVFTP upload to ${ftpPath} succeeded!`);
-      this.setStatus({
-        isUploading: false,
-        method: 'idle',
-        message: `${typeName} (${parsed.items.length} items) uploaded via MAVFTP successfully!`,
-        uploadProgress: undefined,
-      });
-
-      // Update store state with newly uploaded items
-      if (parsed.type === 'mission') {
-        const wps: MissionWaypoint[] = parsed.items.map((it) => ({
-          seq: it.seq,
-          command: it.command,
-          lat: it.x ?? 0,
-          lon: it.y ?? 0,
-          alt: it.z ?? 0,
-          current: Boolean(it.current),
-          frame: it.frame ?? 3,
-          param1: it.param1,
-          param2: it.param2,
-          param3: it.param3,
-          param4: it.param4,
-        }));
-        useTelemetryStore.setState({ missionWaypoints: wps });
-      } else if (parsed.type === 'fence') {
-        const fps: FencePoint[] = parsed.items.map((it) => {
-          const isCircle = it.command === 5004 || it.command === 5005 || (it.command === 5003 && (it.param1 ?? 0) > 0);
-          const isInclusion = it.command === 5001 || it.command === 5005 || (it.command === 5003 && (it.param1 ?? 0) > 0);
-          return {
-            seq: it.seq,
-            command: it.command,
-            lat: it.x ?? 0,
-            lon: it.y ?? 0,
-            alt: it.z ?? 0,
-            param1: it.param1,
-            vertexCount: !isCircle ? Math.round(it.param1 ?? 0) : undefined,
-            radius: isCircle ? it.param1 : undefined,
-            inclusion: isInclusion,
-          };
-        });
-        useTelemetryStore.setState({ fencePoints: fps });
-      } else if (parsed.type === 'rally') {
-        const rps: RallyPoint[] = parsed.items.map((it) => ({
-          seq: it.seq,
-          lat: it.x ?? 0,
-          lon: it.y ?? 0,
-          alt: it.z ?? 0,
-        }));
-        useTelemetryStore.setState({ rallyPoints: rps });
-      }
-
-      return {
-        success: true,
-        type: parsed.type,
-        count: parsed.items.length,
-        method: 'ftp',
-      };
+      console.log(`[MissionManager] MAVFTP upload to ${ftpPath} succeeded and verified!`);
+      this.updateStoreItems(type, items);
+      return { success: true, method: 'ftp' };
     }
 
     // 2. Fall back to MAVLink item-by-item protocol
-    console.warn(`[MissionManager] MAVFTP upload unavailable or rejected, falling back to legacy item-by-item stream...`);
+    console.warn(`[MissionManager] MAVFTP upload unavailable or rejected for ${typeName}, falling back to legacy item-by-item stream...`);
     this.setStatus({
       isUploading: true,
       method: 'legacy',
-      message: `Uploading ${typeName} via MAVLink item-by-item (0 / ${parsed.items.length})...`,
+      message: `Uploading ${typeName} via MAVLink item-by-item (0 / ${items.length})...`,
       uploadProgress: {
-        type: parsed.type,
+        type,
         current: 0,
-        total: parsed.items.length,
+        total: items.length,
         method: 'legacy',
       },
     });
 
     const legacySuccess = await this.uploadLegacyItems(
-      parsed.missionType,
-      parsed.items,
+      missionType,
+      items,
       sysId,
       compId,
       2000,
@@ -345,7 +322,7 @@ export class MissionManager {
         this.setStatus({
           message: `Uploading ${typeName} item-by-item: ${sent} / ${total}`,
           uploadProgress: {
-            type: parsed.type,
+            type,
             current: sent,
             total,
             method: 'legacy',
@@ -356,79 +333,117 @@ export class MissionManager {
 
     if (legacySuccess) {
       console.log(`[MissionManager] Legacy item-by-item upload for ${typeName} completed successfully!`);
+      this.updateStoreItems(type, items);
+      return { success: true, method: 'legacy' };
+    }
+
+    const errMsg = `Failed to upload ${typeName} to vehicle. Vehicle did not acknowledge transfer.`;
+    return { success: false, method: 'legacy', error: errMsg };
+  }
+
+  /**
+   * Uploads dropped file (mission, fence, rally, or full multi-section plan) via MAVFTP with item-by-item fallback.
+   */
+  public async uploadFile(
+    filename: string,
+    buffer: Uint8Array,
+    targetSys?: number,
+    targetComp?: number
+  ): Promise<{ success: boolean; type: MissionFileType; count: number; method: 'ftp' | 'legacy'; error?: string }> {
+    let parsed;
+    try {
+      parsed = parseDroppedMissionFile(filename, buffer);
+    } catch (err: any) {
+      return {
+        success: false,
+        type: 'mission',
+        count: 0,
+        method: 'idle' as any,
+        error: err?.message || 'Failed to parse mission file.',
+      };
+    }
+
+    if (!parsed || parsed.items.length === 0) {
+      return {
+        success: false,
+        type: 'mission',
+        count: 0,
+        method: 'idle' as any,
+        error: 'Unable to parse file. Format not recognized or empty.',
+      };
+    }
+
+    const hb = useTelemetryStore.getState().heartbeat;
+    const sysId = targetSys ?? (hb.systemId > 0 ? hb.systemId : 1);
+    const compId = targetComp ?? (hb.componentId > 0 ? hb.componentId : 1);
+
+    this.targetSys = sysId;
+    this.targetComp = compId;
+    this.isCancelled = false;
+
+    // Handle multi-section QGC .plan files
+    if (parsed.sections && parsed.sections.length > 0) {
+      let finalMethod: 'ftp' | 'legacy' = 'ftp';
+      let totalCount = 0;
+
+      for (const section of parsed.sections) {
+        if (this.isCancelled) {
+          return { success: false, type: parsed.type, count: totalCount, method: finalMethod, error: 'Upload cancelled.' };
+        }
+        const res = await this.uploadSection(section.type, section.missionType, section.items, section.rawDat, sysId, compId);
+        if (!res.success) {
+          this.setStatus({
+            isUploading: false,
+            method: 'idle',
+            message: res.error || `Failed to upload ${section.type}`,
+            uploadProgress: undefined,
+          });
+          return {
+            success: false,
+            type: parsed.type,
+            count: totalCount,
+            method: res.method,
+            error: res.error,
+          };
+        }
+        if (res.method === 'legacy') finalMethod = 'legacy';
+        totalCount += section.items.length;
+      }
+
       this.setStatus({
         isUploading: false,
         method: 'idle',
-        message: `${typeName} (${parsed.items.length} items) uploaded successfully via MAVLink item-by-item!`,
+        message: `Plan uploaded successfully (${totalCount} total items across ${parsed.sections.length} sections)!`,
         uploadProgress: undefined,
       });
-
-      // Update store state
-      if (parsed.type === 'mission') {
-        const wps: MissionWaypoint[] = parsed.items.map((it) => ({
-          seq: it.seq,
-          command: it.command,
-          lat: it.x ?? 0,
-          lon: it.y ?? 0,
-          alt: it.z ?? 0,
-          current: Boolean(it.current),
-          frame: it.frame ?? 3,
-          param1: it.param1,
-          param2: it.param2,
-          param3: it.param3,
-          param4: it.param4,
-        }));
-        useTelemetryStore.setState({ missionWaypoints: wps });
-      } else if (parsed.type === 'fence') {
-        const fps: FencePoint[] = parsed.items.map((it) => {
-          const isCircle = it.command === 5004 || it.command === 5005 || (it.command === 5003 && (it.param1 ?? 0) > 0);
-          const isInclusion = it.command === 5001 || it.command === 5005 || (it.command === 5003 && (it.param1 ?? 0) > 0);
-          return {
-            seq: it.seq,
-            command: it.command,
-            lat: it.x ?? 0,
-            lon: it.y ?? 0,
-            alt: it.z ?? 0,
-            param1: it.param1,
-            vertexCount: !isCircle ? Math.round(it.param1 ?? 0) : undefined,
-            radius: isCircle ? it.param1 : undefined,
-            inclusion: isInclusion,
-          };
-        });
-        useTelemetryStore.setState({ fencePoints: fps });
-      } else if (parsed.type === 'rally') {
-        const rps: RallyPoint[] = parsed.items.map((it) => ({
-          seq: it.seq,
-          lat: it.x ?? 0,
-          lon: it.y ?? 0,
-          alt: it.z ?? 0,
-        }));
-        useTelemetryStore.setState({ rallyPoints: rps });
-      }
 
       return {
         success: true,
         type: parsed.type,
-        count: parsed.items.length,
-        method: 'legacy',
+        count: totalCount,
+        method: finalMethod,
       };
     }
 
-    const errMsg = `Failed to upload ${typeName} to vehicle. Vehicle did not acknowledge transfer.`;
-    console.error(`[MissionManager] ${errMsg}`);
+    // Single section upload
+    const sectionType = parsed.type === 'plan' ? 'mission' : parsed.type;
+    const res = await this.uploadSection(sectionType, parsed.missionType, parsed.items, parsed.rawDat, sysId, compId);
+
     this.setStatus({
       isUploading: false,
       method: 'idle',
-      message: errMsg,
+      message: res.success
+        ? `${parsed.type} (${parsed.items.length} items) uploaded successfully!`
+        : res.error || `Failed to upload ${parsed.type}`,
       uploadProgress: undefined,
     });
 
     return {
-      success: false,
+      success: res.success,
       type: parsed.type,
       count: parsed.items.length,
-      method: 'legacy',
-      error: errMsg,
+      method: res.method,
+      error: res.error,
     };
   }
 

@@ -1,7 +1,7 @@
-import { mavlinkConnection } from './connection';
-import { MAVLINK_MSG_ID } from './messages';
-import { MavlinkPacket } from './parser';
-import { useTelemetryStore } from '../store/telemetryStore';
+import { mavlinkConnection } from "./connection";
+import { MAVLINK_MSG_ID } from "./messages";
+import { MavlinkPacket } from "./parser";
+import { useTelemetryStore } from "../store/telemetryStore";
 
 // MAVFTP OpCodes
 export const FTP_OPCODE = {
@@ -52,7 +52,11 @@ export interface FtpParsedMessage {
   data: Uint8Array;
 }
 
-function addRange(ranges: [number, number][], start: number, end: number): [number, number][] {
+function addRange(
+  ranges: [number, number][],
+  start: number,
+  end: number,
+): [number, number][] {
   if (start >= end) return ranges;
   const merged: [number, number][] = [];
   let inserted = false;
@@ -79,7 +83,10 @@ function addRange(ranges: [number, number][], start: number, end: number): [numb
   return merged;
 }
 
-function findGaps(ranges: [number, number][], targetTotal: number): [number, number][] {
+function findGaps(
+  ranges: [number, number][],
+  targetTotal: number,
+): [number, number][] {
   const gaps: [number, number][] = [];
   let expectedStart = 0;
   for (const [rStart, rEnd] of ranges) {
@@ -95,7 +102,9 @@ function findGaps(ranges: [number, number][], targetTotal: number): [number, num
   return gaps;
 }
 
-export function parseFtpPayload(rawPayload: Uint8Array): FtpParsedMessage | null {
+export function parseFtpPayload(
+  rawPayload: Uint8Array,
+): FtpParsedMessage | null {
   // MAVLink FILE_TRANSFER_PROTOCOL layout:
   // byte 0: target_network
   // byte 1: target_system
@@ -108,7 +117,11 @@ export function parseFtpPayload(rawPayload: Uint8Array): FtpParsedMessage | null
   const fullPayload = new Uint8Array(254);
   fullPayload.set(rawPayload.subarray(0, Math.min(rawPayload.length, 254)));
 
-  const view = new DataView(fullPayload.buffer, fullPayload.byteOffset + 3, 251);
+  const view = new DataView(
+    fullPayload.buffer,
+    fullPayload.byteOffset + 3,
+    251,
+  );
 
   const seq = view.getUint16(0, true);
   const session = view.getUint8(2);
@@ -143,7 +156,7 @@ export function packFtpMessage(
   opcode: number,
   size: number,
   offset: number,
-  data?: Uint8Array
+  data?: Uint8Array,
 ): Uint8Array {
   // MAVLink FILE_TRANSFER_PROTOCOL message payload is exactly 254 bytes:
   // 3 bytes routing + 251 bytes FTP packet (12 bytes header + 239 bytes data).
@@ -194,7 +207,9 @@ export class MavFtpClient {
     this.queueGeneration++;
     this.transferQueue = Promise.resolve();
     if (this.currentAbort) {
-      console.log('[MAVFTP] Aborting active file transfer and clearing queue...');
+      console.log(
+        "[MAVFTP] Aborting active file transfer and clearing queue...",
+      );
       const abortFn = this.currentAbort;
       this.currentAbort = null;
       abortFn();
@@ -212,10 +227,10 @@ export class MavFtpClient {
   public readFile(
     targetSys?: number,
     targetComp?: number,
-    filePath = '@PARAM/param.pck',
+    filePath = "@PARAM/param.pck",
     chunkSize = 239,
     timeoutMs = 1500,
-    onProgress?: (bytesReceived: number, totalBytes: number) => void
+    onProgress?: (bytesReceived: number, totalBytes: number) => void,
   ): Promise<Uint8Array | null> {
     const generation = this.queueGeneration;
     const nextTransfer = this.transferQueue.then(
@@ -224,15 +239,29 @@ export class MavFtpClient {
           console.log(`[MAVFTP] Queued transfer of ${filePath} was cancelled.`);
           return null;
         }
-        return this.executeReadFile(targetSys, targetComp, filePath, chunkSize, timeoutMs, onProgress);
+        return this.executeReadFile(
+          targetSys,
+          targetComp,
+          filePath,
+          chunkSize,
+          timeoutMs,
+          onProgress,
+        );
       },
       () => {
         if (this.queueGeneration !== generation) {
           console.log(`[MAVFTP] Queued transfer of ${filePath} was cancelled.`);
           return null;
         }
-        return this.executeReadFile(targetSys, targetComp, filePath, chunkSize, timeoutMs, onProgress);
-      }
+        return this.executeReadFile(
+          targetSys,
+          targetComp,
+          filePath,
+          chunkSize,
+          timeoutMs,
+          onProgress,
+        );
+      },
     );
     this.transferQueue = nextTransfer.catch(() => null);
     return nextTransfer;
@@ -241,10 +270,10 @@ export class MavFtpClient {
   private async executeReadFile(
     targetSys?: number,
     targetComp?: number,
-    filePath = '@PARAM/param.pck',
+    filePath = "@PARAM/param.pck",
     chunkSize = 239,
     timeoutMs = 1500,
-    onProgress?: (bytesReceived: number, totalBytes: number) => void
+    onProgress?: (bytesReceived: number, totalBytes: number) => void,
   ): Promise<Uint8Array | null> {
     const hb = useTelemetryStore.getState().heartbeat;
     const sysId = targetSys ?? hb.systemId ?? 1;
@@ -271,20 +300,26 @@ export class MavFtpClient {
       const checkCompletionAndFillGaps = (targetTotal: number): boolean => {
         const gaps = findGaps(receivedRanges, targetTotal);
         if (gaps.length === 0) {
-          console.log(`[MAVFTP] Completed reading ${filePath} without holes (${targetTotal} bytes verified).`);
+          console.log(
+            `[MAVFTP] Completed reading ${filePath} without holes (${targetTotal} bytes verified).`,
+          );
           finish(buffer.subarray(0, targetTotal));
           return true;
         }
 
         if (retryCount >= 4) {
-          console.warn(`[MAVFTP] Failed to fill ${gaps.length} holes in ${filePath} after retries, aborting corrupted file.`);
+          console.warn(
+            `[MAVFTP] Failed to fill ${gaps.length} holes in ${filePath} after retries, aborting corrupted file.`,
+          );
           finish(null);
           return false;
         }
 
         retryCount++;
         const [gapStart, gapEnd] = gaps[0];
-        console.warn(`[MAVFTP] Detected ${gaps.length} missing holes in ${filePath} (re-requesting gap ${gapStart}-${gapEnd}, attempt ${retryCount})...`);
+        console.warn(
+          `[MAVFTP] Detected ${gaps.length} missing holes in ${filePath} (re-requesting gap ${gapStart}-${gapEnd}, attempt ${retryCount})...`,
+        );
         requestSingleChunk(gapStart);
         return false;
       };
@@ -310,7 +345,7 @@ export class MavFtpClient {
             session,
             FTP_OPCODE.TerminateSession,
             0,
-            0
+            0,
           );
           mavlinkConnection.send(term);
           setTimeout(() => resolve(result), 60);
@@ -325,10 +360,14 @@ export class MavFtpClient {
           if (isDone) return;
           if (retryCount < 3) {
             retryCount++;
-            console.log(`[MAVFTP] Inactivity timeout on ${filePath} at offset ${highestOffset} (retry ${retryCount})...`);
+            console.log(
+              `[MAVFTP] Inactivity timeout on ${filePath} at offset ${highestOffset} (retry ${retryCount})...`,
+            );
             action();
           } else {
-            console.warn(`[MAVFTP] Timeout reading ${filePath}, falling back...`);
+            console.warn(
+              `[MAVFTP] Timeout reading ${filePath}, falling back...`,
+            );
             finish(null);
           }
         }, ms);
@@ -343,7 +382,7 @@ export class MavFtpClient {
           session,
           FTP_OPCODE.BurstReadFile,
           chunkSize,
-          fromOffset
+          fromOffset,
         );
         mavlinkConnection.send(msg);
         setStepTimeout(() => requestBurst(highestOffset));
@@ -358,169 +397,214 @@ export class MavFtpClient {
           session,
           FTP_OPCODE.ReadFile,
           chunkSize,
-          fromOffset
+          fromOffset,
         );
         mavlinkConnection.send(msg);
         setStepTimeout(() => requestSingleChunk(highestOffset));
       };
 
       // Listen for incoming FTP responses
-      const unsubscribe = mavlinkConnection.onPacket((packet: MavlinkPacket) => {
-        if (isDone) return;
-        if (packet.messageId !== MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL) return;
-
-        const ftp = parseFtpPayload(packet.payload);
-        if (!ftp) return;
-
-        // Phase 1: Waiting for OpenFileRO ACK/NACK
-        if (!fileOpened) {
-          // Strictly ignore any stray packet that is NOT responding to OpenFileRO
-          // (e.g. trailing EOF NACK from a preceding file's burst read)
-          if (ftp.req_opcode !== FTP_OPCODE.OpenFileRO) {
+      const unsubscribe = mavlinkConnection.onPacket(
+        (packet: MavlinkPacket) => {
+          if (isDone) return;
+          if (packet.messageId !== MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL)
             return;
-          }
 
-          if (ftp.opcode === FTP_OPCODE.Nack) {
-            const errCode = ftp.data[0];
-            if (retryCount < 2) {
-              retryCount++;
-              console.log(`[MAVFTP] OpenFileRO Nack (code=${errCode}) for ${filePath}, terminating stale session and retrying (attempt ${retryCount + 1})...`);
-              const termMsg = packFtpMessage(sysId, compId, this.nextSeq(), session, FTP_OPCODE.TerminateSession, 0, 0);
-              mavlinkConnection.send(termMsg);
-              setTimeout(() => {
-                if (!isDone) openFile();
-              }, 80);
+          const ftp = parseFtpPayload(packet.payload);
+          if (!ftp) return;
+
+          // Phase 1: Waiting for OpenFileRO ACK/NACK
+          if (!fileOpened) {
+            // Strictly ignore any stray packet that is NOT responding to OpenFileRO
+            // (e.g. trailing EOF NACK from a preceding file's burst read)
+            if (ftp.req_opcode !== FTP_OPCODE.OpenFileRO) {
               return;
             }
 
-            console.warn(`[MAVFTP] Received Nack for ${filePath} (code=${errCode ?? 'unknown'}), falling back...`);
+            if (ftp.opcode === FTP_OPCODE.Nack) {
+              const errCode = ftp.data[0];
+              if (retryCount < 2) {
+                retryCount++;
+                console.log(
+                  `[MAVFTP] OpenFileRO Nack (code=${errCode}) for ${filePath}, terminating stale session and retrying (attempt ${retryCount + 1})...`,
+                );
+                const termMsg = packFtpMessage(
+                  sysId,
+                  compId,
+                  this.nextSeq(),
+                  session,
+                  FTP_OPCODE.TerminateSession,
+                  0,
+                  0,
+                );
+                mavlinkConnection.send(termMsg);
+                setTimeout(() => {
+                  if (!isDone) openFile();
+                }, 80);
+                return;
+              }
+
+              console.warn(
+                `[MAVFTP] Received Nack for ${filePath} (code=${errCode ?? "unknown"}), falling back...`,
+              );
+              finish(null);
+              return;
+            }
+
+            if (ftp.opcode === FTP_OPCODE.Ack) {
+              if (stepTimer) clearTimeout(stepTimer);
+              retryCount = 0;
+              session = ftp.session;
+              fileOpened = true;
+
+              if (ftp.data.length >= 4) {
+                const dv = new DataView(
+                  ftp.data.buffer,
+                  ftp.data.byteOffset,
+                  ftp.data.byteLength,
+                );
+                fileSize = dv.getUint32(0, true);
+                console.log(
+                  `[MAVFTP] OpenFileRO succeeded for ${filePath}. Session: ${session}, Size: ${fileSize} bytes.`,
+                );
+                if (fileSize > 0) {
+                  buffer = new Uint8Array(fileSize);
+                }
+              } else {
+                console.log(
+                  `[MAVFTP] OpenFileRO succeeded for ${filePath}. Session: ${session} (size not reported).`,
+                );
+              }
+
+              if (onProgress) {
+                onProgress(0, fileSize > 0 ? fileSize : 0);
+              }
+
+              if (fileSize === 0) {
+                console.log(`[MAVFTP] File ${filePath} is empty (0 bytes).`);
+                finish(new Uint8Array(0));
+                return;
+              }
+
+              // Start fast burst read
+              requestBurst(0);
+              return;
+            }
+            return;
+          }
+
+          // Phase 2: Reading file content (fileOpened === true)
+          // Strictly ignore any packet not matching our active session or not responding to ReadFile / BurstReadFile
+          if (ftp.session !== session) {
+            return;
+          }
+          if (
+            ftp.req_opcode !== FTP_OPCODE.ReadFile &&
+            ftp.req_opcode !== FTP_OPCODE.BurstReadFile
+          ) {
+            return;
+          }
+
+          // Check if NACK during read
+          if (ftp.opcode === FTP_OPCODE.Nack) {
+            const errCode = ftp.data[0];
+            // If error is EndOfFile (code 6), verify that no gaps exist before finishing
+            if (errCode === FTP_ERR.EndOfFile) {
+              console.log(
+                `[MAVFTP] Reached EOF on ${filePath}: ${highestOffset} bytes reported. Verifying integrity...`,
+              );
+              checkCompletionAndFillGaps(highestOffset);
+              return;
+            }
+
+            // If BurstReadFile got rejected with Nack, fallback to standard ReadFile
+            if (ftp.req_opcode === FTP_OPCODE.BurstReadFile && useBurst) {
+              console.log(
+                `[MAVFTP] BurstReadFile not supported on vehicle for ${filePath}, falling back to lockstep ReadFile...`,
+              );
+              useBurst = false;
+              retryCount = 0;
+              requestSingleChunk(highestOffset);
+              return;
+            }
+
+            console.warn(
+              `[MAVFTP] Received Nack for ${filePath} during read (code=${errCode ?? "unknown"}), falling back...`,
+            );
             finish(null);
             return;
           }
 
-          if (ftp.opcode === FTP_OPCODE.Ack) {
-            if (stepTimer) clearTimeout(stepTimer);
+          // Check ACK for ReadFile or BurstReadFile
+          if (
+            ftp.opcode === FTP_OPCODE.Ack &&
+            (ftp.req_opcode === FTP_OPCODE.ReadFile ||
+              ftp.req_opcode === FTP_OPCODE.BurstReadFile)
+          ) {
             retryCount = 0;
-            session = ftp.session;
-            fileOpened = true;
+            const chunkLen = ftp.data.length;
+            const chunkOffset = ftp.offset;
 
-            if (ftp.data.length >= 4) {
-              const dv = new DataView(ftp.data.buffer, ftp.data.byteOffset, ftp.data.byteLength);
-              fileSize = dv.getUint32(0, true);
-              console.log(`[MAVFTP] OpenFileRO succeeded for ${filePath}. Session: ${session}, Size: ${fileSize} bytes.`);
-              if (fileSize > 0) {
-                buffer = new Uint8Array(fileSize);
+            if (chunkLen > 0) {
+              // Expand buffer if needed
+              if (chunkOffset + chunkLen > buffer.length) {
+                const newLen = Math.max(
+                  buffer.length * 2,
+                  chunkOffset + chunkLen + 1024,
+                );
+                const newBuf = new Uint8Array(newLen);
+                newBuf.set(buffer);
+                buffer = newBuf;
               }
-            } else {
-              console.log(`[MAVFTP] OpenFileRO succeeded for ${filePath}. Session: ${session} (size not reported).`);
+
+              buffer.set(ftp.data, chunkOffset);
+              highestOffset = Math.max(highestOffset, chunkOffset + chunkLen);
+              receivedRanges = addRange(
+                receivedRanges,
+                chunkOffset,
+                chunkOffset + chunkLen,
+              );
+
+              if (onProgress) {
+                onProgress(highestOffset, fileSize > 0 ? fileSize : 0);
+              }
             }
 
-            if (onProgress) {
-              onProgress(0, fileSize > 0 ? fileSize : 0);
-            }
-
-            if (fileSize === 0) {
-              console.log(`[MAVFTP] File ${filePath} is empty (0 bytes).`);
-              finish(new Uint8Array(0));
+            // Check if entire file received without holes
+            if (fileSize > 0 && highestOffset >= fileSize) {
+              checkCompletionAndFillGaps(fileSize);
               return;
             }
 
-            // Start fast burst read
-            requestBurst(0);
-            return;
-          }
-          return;
-        }
+            if (ftp.req_opcode === FTP_OPCODE.BurstReadFile) {
+              // During burst, reset inactivity timeout on each received packet
+              setStepTimeout(() => requestBurst(highestOffset), 1200);
 
-        // Phase 2: Reading file content (fileOpened === true)
-        // Strictly ignore any packet not matching our active session or not responding to ReadFile / BurstReadFile
-        if (ftp.session !== session) {
-          return;
-        }
-        if (ftp.req_opcode !== FTP_OPCODE.ReadFile && ftp.req_opcode !== FTP_OPCODE.BurstReadFile) {
-          return;
-        }
-
-        // Check if NACK during read
-        if (ftp.opcode === FTP_OPCODE.Nack) {
-          const errCode = ftp.data[0];
-          // If error is EndOfFile (code 6), verify that no gaps exist before finishing
-          if (errCode === FTP_ERR.EndOfFile) {
-            console.log(`[MAVFTP] Reached EOF on ${filePath}: ${highestOffset} bytes reported. Verifying integrity...`);
-            checkCompletionAndFillGaps(highestOffset);
-            return;
-          }
-
-          // If BurstReadFile got rejected with Nack, fallback to standard ReadFile
-          if (ftp.req_opcode === FTP_OPCODE.BurstReadFile && useBurst) {
-            console.log(`[MAVFTP] BurstReadFile not supported on vehicle for ${filePath}, falling back to lockstep ReadFile...`);
-            useBurst = false;
-            retryCount = 0;
-            requestSingleChunk(highestOffset);
-            return;
-          }
-
-          console.warn(`[MAVFTP] Received Nack for ${filePath} during read (code=${errCode ?? 'unknown'}), falling back...`);
-          finish(null);
-          return;
-        }
-
-        // Check ACK for ReadFile or BurstReadFile
-        if (
-          ftp.opcode === FTP_OPCODE.Ack &&
-          (ftp.req_opcode === FTP_OPCODE.ReadFile || ftp.req_opcode === FTP_OPCODE.BurstReadFile)
-        ) {
-          retryCount = 0;
-          const chunkLen = ftp.data.length;
-          const chunkOffset = ftp.offset;
-
-          if (chunkLen > 0) {
-            // Expand buffer if needed
-            if (chunkOffset + chunkLen > buffer.length) {
-              const newLen = Math.max(buffer.length * 2, chunkOffset + chunkLen + 1024);
-              const newBuf = new Uint8Array(newLen);
-              newBuf.set(buffer);
-              buffer = newBuf;
-            }
-
-            buffer.set(ftp.data, chunkOffset);
-            highestOffset = Math.max(highestOffset, chunkOffset + chunkLen);
-            receivedRanges = addRange(receivedRanges, chunkOffset, chunkOffset + chunkLen);
-
-            if (onProgress) {
-              onProgress(highestOffset, fileSize > 0 ? fileSize : 0);
-            }
-          }
-
-          // Check if entire file received without holes
-          if (fileSize > 0 && highestOffset >= fileSize) {
-            checkCompletionAndFillGaps(fileSize);
-            return;
-          }
-
-          if (ftp.req_opcode === FTP_OPCODE.BurstReadFile) {
-            // During burst, reset inactivity timeout on each received packet
-            setStepTimeout(() => requestBurst(highestOffset), 1200);
-
-            // If burst finished but we still need more bytes
-            if (ftp.burst_complete) {
-              if (fileSize > 0 && highestOffset < fileSize) {
-                requestBurst(highestOffset);
-              } else if (ftp.size < chunkSize) {
-                // Short read indicates EOF
-                checkCompletionAndFillGaps(highestOffset);
+              // If burst finished but we still need more bytes
+              if (ftp.burst_complete) {
+                if (fileSize > 0 && highestOffset < fileSize) {
+                  requestBurst(highestOffset);
+                } else if (ftp.size < chunkSize) {
+                  // Short read indicates EOF
+                  checkCompletionAndFillGaps(highestOffset);
+                }
+              }
+            } else {
+              // In lockstep ReadFile mode
+              if (
+                ftp.size < chunkSize ||
+                (fileSize > 0 && highestOffset >= fileSize)
+              ) {
+                checkCompletionAndFillGaps(
+                  fileSize > 0 ? fileSize : highestOffset,
+                );
+              } else {
+                requestSingleChunk(highestOffset);
               }
             }
-          } else {
-            // In lockstep ReadFile mode
-            if (ftp.size < chunkSize || (fileSize > 0 && highestOffset >= fileSize)) {
-              checkCompletionAndFillGaps(fileSize > 0 ? fileSize : highestOffset);
-            } else {
-              requestSingleChunk(highestOffset);
-            }
           }
-        }
-      });
+        },
+      );
 
       // Step 1: Open file
       const openFile = () => {
@@ -537,7 +621,7 @@ export class MavFtpClient {
           FTP_OPCODE.OpenFileRO,
           pathBytes.length,
           0,
-          pathWithNull
+          pathWithNull,
         );
         mavlinkConnection.send(openMsg);
         setStepTimeout(() => openFile());
@@ -556,11 +640,11 @@ export class MavFtpClient {
   public writeFile(
     targetSys?: number,
     targetComp?: number,
-    filePath = '@MISSION/mission.dat',
+    filePath = "@MISSION/mission.dat",
     data: Uint8Array = new Uint8Array(0),
     chunkSize = 239,
     timeoutMs = 1500,
-    onProgress?: (bytesWritten: number, totalBytes: number) => void
+    onProgress?: (bytesWritten: number, totalBytes: number) => void,
   ): Promise<boolean> {
     const generation = this.queueGeneration;
     const nextTransfer = this.transferQueue.then(
@@ -569,15 +653,31 @@ export class MavFtpClient {
           console.log(`[MAVFTP] Queued write of ${filePath} was cancelled.`);
           return false;
         }
-        return this.executeWriteFile(targetSys, targetComp, filePath, data, chunkSize, timeoutMs, onProgress);
+        return this.executeWriteFile(
+          targetSys,
+          targetComp,
+          filePath,
+          data,
+          chunkSize,
+          timeoutMs,
+          onProgress,
+        );
       },
       () => {
         if (this.queueGeneration !== generation) {
           console.log(`[MAVFTP] Queued write of ${filePath} was cancelled.`);
           return false;
         }
-        return this.executeWriteFile(targetSys, targetComp, filePath, data, chunkSize, timeoutMs, onProgress);
-      }
+        return this.executeWriteFile(
+          targetSys,
+          targetComp,
+          filePath,
+          data,
+          chunkSize,
+          timeoutMs,
+          onProgress,
+        );
+      },
     );
     this.transferQueue = nextTransfer.catch(() => false);
     return nextTransfer;
@@ -586,23 +686,25 @@ export class MavFtpClient {
   private async executeWriteFile(
     targetSys?: number,
     targetComp?: number,
-    filePath = '@MISSION/mission.dat',
+    filePath = "@MISSION/mission.dat",
     data: Uint8Array = new Uint8Array(0),
     chunkSize = 239,
     timeoutMs = 1500,
-    onProgress?: (bytesWritten: number, totalBytes: number) => void
+    onProgress?: (bytesWritten: number, totalBytes: number) => void,
   ): Promise<boolean> {
     const hb = useTelemetryStore.getState().heartbeat;
     const sysId = targetSys ?? (hb.systemId > 0 ? hb.systemId : 1);
     const compId = targetComp ?? (hb.componentId > 0 ? hb.componentId : 1);
 
-    return new Promise((resolve) => {
+    const writePromise = new Promise<boolean>((resolve) => {
       let isDone = false;
       let session = 0;
       let fileCreated = false;
       let currentOffset = 0;
       let stepTimer: any = null;
       let retryCount = 0;
+      let activeExpectedSeq = -1;
+      let phase: "create" | "write" | "terminate" = "create";
 
       this.currentAbort = () => {
         if (isDone) return;
@@ -620,23 +722,7 @@ export class MavFtpClient {
         if (success && onProgress) {
           onProgress(data.length, data.length);
         }
-
-        if (fileCreated) {
-          fileCreated = false;
-          const term = packFtpMessage(
-            sysId,
-            compId,
-            this.nextSeq(),
-            session,
-            FTP_OPCODE.TerminateSession,
-            0,
-            0
-          );
-          mavlinkConnection.send(term);
-          setTimeout(() => resolve(success), 60);
-        } else {
-          resolve(success);
-        }
+        resolve(success);
       };
 
       const setStepTimeout = (action: () => void, ms = timeoutMs) => {
@@ -645,105 +731,181 @@ export class MavFtpClient {
           if (isDone) return;
           if (retryCount < 3) {
             retryCount++;
-            console.log(`[MAVFTP] Inactivity timeout on write ${filePath} at offset ${currentOffset} (retry ${retryCount})...`);
+            console.log(
+              `[MAVFTP] Inactivity timeout on write ${filePath} (phase=${phase}, offset=${currentOffset}, retry ${retryCount})...`,
+            );
             action();
           } else {
-            console.warn(`[MAVFTP] Timeout writing ${filePath}, falling back...`);
+            console.warn(
+              `[MAVFTP] Timeout writing ${filePath} in phase ${phase}, falling back...`,
+            );
             finish(false);
           }
         }, ms);
+      };
+
+      const sendTerminate = () => {
+        if (isDone) return;
+        const seq = this.nextSeq();
+        activeExpectedSeq = seq;
+        const term = packFtpMessage(
+          sysId,
+          compId,
+          seq,
+          session,
+          FTP_OPCODE.TerminateSession,
+          0,
+          0,
+        );
+        mavlinkConnection.send(term);
+        setStepTimeout(() => sendTerminate());
       };
 
       const sendChunk = (offset: number) => {
         if (isDone) return;
         const remaining = data.length - offset;
         if (remaining <= 0) {
-          console.log(`[MAVFTP] Successfully wrote all ${data.length} bytes to ${filePath}.`);
-          finish(true);
+          console.log(
+            `[MAVFTP] Successfully wrote all ${data.length} bytes to ${filePath}. Terminating session...`,
+          );
+          phase = "terminate";
+          sendTerminate();
           return;
         }
 
         const len = Math.min(remaining, chunkSize);
         const chunk = data.subarray(offset, offset + len);
+        const seq = this.nextSeq();
+        activeExpectedSeq = seq;
 
         const writeMsg = packFtpMessage(
           sysId,
           compId,
-          this.nextSeq(),
+          seq,
           session,
           FTP_OPCODE.WriteFile,
           len,
           offset,
-          chunk
+          chunk,
         );
         mavlinkConnection.send(writeMsg);
         setStepTimeout(() => sendChunk(offset));
       };
 
-      const unsubscribe = mavlinkConnection.onPacket((packet: MavlinkPacket) => {
-        if (isDone) return;
-        if (packet.messageId !== MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL) return;
+      const unsubscribe = mavlinkConnection.onPacket(
+        (packet: MavlinkPacket) => {
+          if (isDone) return;
+          if (packet.messageId !== MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL)
+            return;
 
-        const ftp = parseFtpPayload(packet.payload);
-        if (!ftp) return;
+          const ftp = parseFtpPayload(packet.payload);
+          if (!ftp) return;
 
-        // Phase 1: Waiting for CreateFile ACK/NACK
-        if (!fileCreated) {
-          if (ftp.req_opcode !== FTP_OPCODE.CreateFile) return;
-
-          if (ftp.opcode === FTP_OPCODE.Nack) {
-            const errCode = ftp.data[0];
-            console.warn(`[MAVFTP] CreateFile Nack for ${filePath} (code=${errCode}), falling back...`);
-            finish(false);
+          // Sequence number match: strictly drop stale/duplicate ACKs from older requests
+          if (activeExpectedSeq >= 0 && ftp.seq !== activeExpectedSeq) {
             return;
           }
 
-          if (ftp.opcode === FTP_OPCODE.Ack) {
-            if (stepTimer) clearTimeout(stepTimer);
-            retryCount = 0;
-            session = ftp.session;
-            fileCreated = true;
-            console.log(`[MAVFTP] CreateFile succeeded for ${filePath}. Session: ${session}`);
+          // Phase 1: Waiting for CreateFile ACK/NACK
+          if (phase === "create") {
+            if (ftp.req_opcode !== FTP_OPCODE.CreateFile) return;
 
-            if (data.length === 0) {
-              finish(true);
+            if (ftp.opcode === FTP_OPCODE.Nack) {
+              const errCode = ftp.data[0];
+              console.warn(
+                `[MAVFTP] CreateFile Nack for ${filePath} (code=${errCode}), falling back...`,
+              );
+              finish(false);
               return;
             }
 
-            sendChunk(0);
+            if (ftp.opcode === FTP_OPCODE.Ack) {
+              if (stepTimer) clearTimeout(stepTimer);
+              retryCount = 0;
+              session = ftp.session;
+              fileCreated = true;
+              phase = "write";
+              console.log(
+                `[MAVFTP] CreateFile succeeded for ${filePath}. Session: ${session}`,
+              );
+
+              if (data.length === 0) {
+                phase = "terminate";
+                sendTerminate();
+                return;
+              }
+
+              sendChunk(0);
+              return;
+            }
             return;
           }
-          return;
-        }
 
-        // Phase 2: Writing chunks
-        if (ftp.session !== session) return;
-        if (ftp.req_opcode !== FTP_OPCODE.WriteFile) return;
+          // Phase 2: Writing chunks (strictly match session and sequence)
+          if (phase === "write") {
+            if (ftp.session !== session) return;
+            if (ftp.req_opcode !== FTP_OPCODE.WriteFile) return;
 
-        if (ftp.opcode === FTP_OPCODE.Nack) {
-          const errCode = ftp.data[0];
-          console.warn(`[MAVFTP] WriteFile Nack for ${filePath} at offset ${currentOffset} (code=${errCode}), falling back...`);
-          finish(false);
-          return;
-        }
+            if (ftp.opcode === FTP_OPCODE.Nack) {
+              const errCode = ftp.data[0];
+              console.warn(
+                `[MAVFTP] WriteFile Nack for ${filePath} at offset ${currentOffset} (code=${errCode}), falling back...`,
+              );
+              finish(false);
+              return;
+            }
 
-        if (ftp.opcode === FTP_OPCODE.Ack) {
-          retryCount = 0;
-          const chunkSizeSent = Math.min(data.length - currentOffset, chunkSize);
-          currentOffset += chunkSizeSent;
+            if (ftp.opcode === FTP_OPCODE.Ack) {
+              if (stepTimer) clearTimeout(stepTimer);
+              retryCount = 0;
+              const chunkSizeSent = Math.min(
+                data.length - currentOffset,
+                chunkSize,
+              );
+              currentOffset += chunkSizeSent;
 
-          if (onProgress) {
-            onProgress(Math.min(currentOffset, data.length), data.length);
+              if (onProgress) {
+                onProgress(Math.min(currentOffset, data.length), data.length);
+              }
+
+              if (currentOffset >= data.length) {
+                console.log(
+                  `[MAVFTP] Completed writing ${filePath} (${data.length} bytes). Terminating session...`,
+                );
+                phase = "terminate";
+                sendTerminate();
+              } else {
+                sendChunk(currentOffset);
+              }
+            }
+            return;
           }
 
-          if (currentOffset >= data.length) {
-            console.log(`[MAVFTP] Completed writing ${filePath} (${data.length} bytes).`);
-            finish(true);
-          } else {
-            sendChunk(currentOffset);
+          // Phase 3: Waiting for TerminateSession ACK/NACK (where vehicle validates and commits upload)
+          if (phase === "terminate") {
+            if (ftp.session !== session) return;
+            if (ftp.req_opcode !== FTP_OPCODE.TerminateSession) return;
+
+            if (ftp.opcode === FTP_OPCODE.Nack) {
+              const errCode = ftp.data[0];
+              console.warn(
+                `[MAVFTP] TerminateSession Nack for ${filePath} (code=${errCode}) - vehicle rejected upload!`,
+              );
+              finish(false);
+              return;
+            }
+
+            if (ftp.opcode === FTP_OPCODE.Ack) {
+              if (stepTimer) clearTimeout(stepTimer);
+              console.log(
+                `[MAVFTP] TerminateSession Ack received for ${filePath}. Upload committed by vehicle.`,
+              );
+              finish(true);
+              return;
+            }
           }
-        }
-      });
+        },
+      );
 
       // Step 1: Create file
       const createFile = () => {
@@ -752,15 +914,18 @@ export class MavFtpClient {
         pathWithNull.set(pathBytes);
         pathWithNull[pathBytes.length] = 0;
 
+        const seq = this.nextSeq();
+        activeExpectedSeq = seq;
+
         const createMsg = packFtpMessage(
           sysId,
           compId,
-          this.nextSeq(),
+          seq,
           0,
           FTP_OPCODE.CreateFile,
           pathBytes.length,
           0,
-          pathWithNull
+          pathWithNull,
         );
         mavlinkConnection.send(createMsg);
         setStepTimeout(() => createFile());
@@ -768,6 +933,44 @@ export class MavFtpClient {
 
       createFile();
     });
+
+    const success = await writePromise;
+    if (!success) return false;
+
+    // Phase 4: Read back file and verify contents byte-for-byte to guard against corrupt uploads
+    try {
+      console.log(
+        `[MAVFTP] Verifying upload for ${filePath} (${data.length} bytes)...`,
+      );
+      const readBack = await this.executeReadFile(
+        sysId,
+        compId,
+        filePath,
+        chunkSize,
+        timeoutMs,
+      );
+      if (!readBack || readBack.length !== data.length) {
+        console.warn(
+          `[MAVFTP] Verification failed for ${filePath}: read ${readBack?.length ?? 0} bytes, expected ${data.length}`,
+        );
+        return false;
+      }
+      for (let i = 0; i < data.length; i++) {
+        if (readBack[i] !== data[i]) {
+          console.warn(
+            `[MAVFTP] Verification failed for ${filePath}: byte mismatch at offset ${i}`,
+          );
+          return false;
+        }
+      }
+      console.log(
+        `[MAVFTP] Verification succeeded: ${filePath} matches 100% byte-for-byte.`,
+      );
+      return true;
+    } catch (err) {
+      console.warn(`[MAVFTP] Verification read-back failed with error:`, err);
+      return false;
+    }
   }
 }
 
