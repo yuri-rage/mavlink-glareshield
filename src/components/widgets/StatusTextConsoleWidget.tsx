@@ -5,16 +5,38 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Terminal, Trash2, Volume2, VolumeX, ArrowUpDown } from 'lucide-react';
 
+const STORAGE_KEY_SORT = 'glareshield_messages_sort';
+
+const getInitialSortOrder = (): 'newest' | 'oldest' => {
+  if (typeof localStorage !== 'undefined') {
+    const saved = localStorage.getItem(STORAGE_KEY_SORT);
+    if (saved === 'newest' || saved === 'oldest') {
+      return saved;
+    }
+  }
+  return 'newest';
+};
+
 export const StatusTextConsoleWidget: React.FC = () => {
   const statusMessages = useTelemetryStore((state) => state.statusMessages);
   const clearMessages = useTelemetryStore((state) => state.clearMessages);
   const [filterSeverity, setFilterSeverity] = useState<number | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
-  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>(getInitialSortOrder);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const prevSortOrderRef = useRef(sortOrder);
+
+  const toggleSortOrder = () => {
+    setSortOrder((prev) => {
+      const next = prev === 'newest' ? 'oldest' : 'newest';
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_SORT, next);
+      }
+      return next;
+    });
+  };
 
   const getSeverityBadgeVariant = (sev: number) => {
     if (sev <= 2) return 'destructive'; // Emergency, Alert, Critical
@@ -64,7 +86,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setSortOrder((prev) => (prev === 'newest' ? 'oldest' : 'newest'))}
+              onClick={toggleSortOrder}
               className="h-7 px-2 text-xs font-sans font-semibold text-zinc-400 hover:text-zinc-200 gap-1"
               title={`Sort: ${sortOrder === 'newest' ? 'Newest first (click for Oldest)' : 'Oldest first (click for Newest)'}`}
             >
