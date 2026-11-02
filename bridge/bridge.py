@@ -46,6 +46,7 @@ MSG_COMMAND_LONG = 76
 MSG_COMMAND_ACK = 77
 MSG_VFR_HUD = 74
 MSG_FILE_TRANSFER_PROTOCOL = 110
+MSG_GPS2_RAW = 124
 MSG_POWER_STATUS = 125
 MSG_DISTANCE_SENSOR = 132
 MSG_BATTERY_STATUS = 147
@@ -82,6 +83,7 @@ CRC_EXTRA = {
     MSG_COMMAND_ACK: 143,
     MSG_VFR_HUD: 20,
     MSG_FILE_TRANSFER_PROTOCOL: 84,
+    MSG_GPS2_RAW: 87,
     MSG_POWER_STATUS: 203,
     MSG_DISTANCE_SENSOR: 85,
     MSG_BATTERY_STATUS: 154,
@@ -185,6 +187,7 @@ class BridgeServer:
                 (6, "ChibiOS: 6a85082c"),
                 (6, "EKF3 IMU0 initialised"),
                 (6, "GPS 1: detected as u-blox at 115200 baud"),
+                (6, "GPS 2: detected as u-blox at 115200 baud"),
                 (5, "Arm: Safety switch engaged"),
             ]
             for sev, txt in boot_messages:
@@ -750,9 +753,9 @@ class BridgeServer:
                 )
                 await self.broadcast(self.encoder.pack(MSG_GLOBAL_POSITION_INT, pos))
 
-                # GPS_RAW_INT (time_usec, lat, lon, alt, eph, epv, vel, cog, fix_type, satellites_visible)
+                # GPS_RAW_INT (time_usec, lat, lon, alt, eph, epv, vel, cog, fix_type, satellites_visible, alt_ellipsoid, h_acc, v_acc, vel_acc, hdg_acc, yaw)
                 gps = struct.pack(
-                    "<QiiiHHHHBB",
+                    "<QiiiHHHHBBiIIIIH",
                     int(now * 1e6),
                     lat_i,
                     lon_i,
@@ -763,8 +766,33 @@ class BridgeServer:
                     hdg_u,
                     3,
                     14,
+                    alt_i,
+                    150,
+                    200,
+                    50,
+                    100,
+                    hdg_u,
                 )
                 await self.broadcast(self.encoder.pack(MSG_GPS_RAW_INT, gps))
+
+                # GPS2_RAW (time_usec, lat, lon, alt, dgps_age, eph, epv, vel, cog, fix_type, satellites_visible, dgps_numch, yaw)
+                gps2 = struct.pack(
+                    "<QiiiIHHHHBBBH",
+                    int(now * 1e6),
+                    lat_i,
+                    lon_i,
+                    alt_i,
+                    0,
+                    65,
+                    95,
+                    515,
+                    hdg_u,
+                    6,
+                    18,
+                    0,
+                    hdg_u,
+                )
+                await self.broadcast(self.encoder.pack(MSG_GPS2_RAW, gps2))
 
                 # RC_CHANNELS & SERVO_OUTPUT_RAW & WIND & VIBRATION & EKF & RANGEFINDER & ESC
                 ch1 = int(1500 + 200 * math.sin(elapsed * 0.8))

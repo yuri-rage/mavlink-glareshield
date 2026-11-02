@@ -287,6 +287,26 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         cog: getUint16(26) === 65535 ? 0 : getUint16(26) / 100, // Course over ground deg
         fix_type: getUint8(28),
         satellites_visible: getUint8(29),
+        yaw: getUint16(50) === 65535 ? 0 : getUint16(50) / 100, // cdeg to deg (0 if not configured/sentinel)
+        raw_yaw: getUint16(50),
+      };
+
+    case MAVLINK_MSG_ID.GPS2_RAW:
+      return {
+        time_usec: Number(getBigUint64(0)),
+        lat: getInt32(8) / 1e7,
+        lon: getInt32(12) / 1e7,
+        alt: getInt32(16) / 1000,
+        dgps_age: getUint32(20),
+        eph: getUint16(24) === 65535 ? 0 : getUint16(24) / 100, // HDOP
+        epv: getUint16(26) === 65535 ? 0 : getUint16(26) / 100, // VDOP
+        vel: getUint16(28) === 65535 ? 0 : getUint16(28) / 100, // Groundspeed m/s
+        cog: getUint16(30) === 65535 ? 0 : getUint16(30) / 100, // Course over ground deg
+        fix_type: getUint8(32),
+        satellites_visible: getUint8(33),
+        dgps_numch: getUint8(34),
+        yaw: getUint16(35) === 65535 ? 0 : getUint16(35) / 100, // cdeg to deg
+        raw_yaw: getUint16(35),
       };
 
     case MAVLINK_MSG_ID.VFR_HUD: {

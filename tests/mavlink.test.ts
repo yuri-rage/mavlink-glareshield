@@ -1105,4 +1105,116 @@ if (afterTabs[0] !== beforeTabs[1] || afterTabs[1] !== beforeTabs[0]) {
 }
 console.log('Extended telemetry slices, custom widget bindings, and dashboard drag reordering verified!');
 
+// 20. Test Dual GPS Modules (GPS_RAW_INT & GPS2_RAW) with Yaw Latching
+// Initial state: gps.hasYaw should be false, gps2 null
+const testGpsPayload1 = new Uint8Array(52);
+const testGpsDv1 = new DataView(testGpsPayload1.buffer);
+testGpsDv1.setBigUint64(0, 1000n, true);
+testGpsDv1.setInt32(8, Math.round(37.7749 * 1e7), true);
+testGpsDv1.setInt32(12, Math.round(-122.4194 * 1e7), true);
+testGpsDv1.setInt32(16, 45000, true);
+testGpsDv1.setUint16(20, 85, true); // HDOP 0.85
+testGpsDv1.setUint16(22, 120, true); // VDOP 1.2
+testGpsDv1.setUint16(24, 520, true); // vel 5.2 m/s
+testGpsDv1.setUint16(26, 18000, true); // cog 180 deg
+testGpsPayload1[28] = 3; // fix_type 3D
+testGpsPayload1[29] = 14; // satellites
+testGpsDv1.setUint16(50, 0, true); // yaw 0 (not configured)
+
+useTelemetryStore.getState().processPacket({
+  version: 2,
+  sequence: 20,
+  systemId: 1,
+  componentId: 1,
+  messageId: MAVLINK_MSG_ID.GPS_RAW_INT,
+  payload: testGpsPayload1,
+  crc: 0,
+  raw: new Uint8Array(0),
+});
+
+let gpsState = useTelemetryStore.getState().gps;
+if (gpsState.hasYaw || gpsState.yaw !== undefined) {
+  console.error('GPS_RAW_INT with yaw=0 should not have hasYaw=true!', gpsState);
+  process.exit(1);
+}
+
+// Receive GPS_RAW_INT with valid yaw = 24550 (245.5 deg)
+testGpsDv1.setUint16(50, 24550, true);
+useTelemetryStore.getState().processPacket({
+  version: 2,
+  sequence: 21,
+  systemId: 1,
+  componentId: 1,
+  messageId: MAVLINK_MSG_ID.GPS_RAW_INT,
+  payload: testGpsPayload1,
+  crc: 0,
+  raw: new Uint8Array(0),
+});
+
+gpsState = useTelemetryStore.getState().gps;
+if (!gpsState.hasYaw || Math.abs((gpsState.yaw ?? 0) - 245.5) > 0.01) {
+  console.error('GPS_RAW_INT failed to latch yaw!', gpsState);
+  process.exit(1);
+}
+
+// Now simulate vehicle turning North (yaw = 0): hasYaw must remain true
+testGpsDv1.setUint16(50, 0, true);
+useTelemetryStore.getState().processPacket({
+  version: 2,
+  sequence: 22,
+  systemId: 1,
+  componentId: 1,
+  messageId: MAVLINK_MSG_ID.GPS_RAW_INT,
+  payload: testGpsPayload1,
+  crc: 0,
+  raw: new Uint8Array(0),
+});
+gpsState = useTelemetryStore.getState().gps;
+if (!gpsState.hasYaw || gpsState.yaw !== 0) {
+  console.error('GPS_RAW_INT should retain hasYaw=true even when yaw reaches 0 deg (North)!', gpsState);
+  process.exit(1);
+}
+
+// Test GPS2_RAW (msg 124) packet decode & store handling
+const testGps2Payload = new Uint8Array(37);
+const testGps2Dv = new DataView(testGps2Payload.buffer);
+testGps2Dv.setBigUint64(0, 2000n, true);
+testGps2Dv.setInt32(8, Math.round(37.7749 * 1e7), true);
+testGps2Dv.setInt32(12, Math.round(-122.4194 * 1e7), true);
+testGps2Dv.setInt32(16, 45000, true);
+testGps2Dv.setUint32(20, 0, true); // dgps_age
+testGps2Dv.setUint16(24, 65, true); // eph = 0.65
+testGps2Dv.setUint16(26, 95, true); // epv = 0.95
+testGps2Dv.setUint16(28, 515, true); // vel = 5.15
+testGps2Dv.setUint16(30, 18000, true); // cog = 180
+testGps2Payload[32] = 6; // fix_type = 6 (RTK Fixed)
+testGps2Payload[33] = 18; // satellites_visible = 18
+testGps2Payload[34] = 0; // dgps_numch
+testGps2Dv.setUint16(35, 12030, true); // yaw = 120.30 deg
+
+const parsedGps2 = decodePayload(MAVLINK_MSG_ID.GPS2_RAW, testGps2Payload);
+if (parsedGps2.fix_type !== 6 || parsedGps2.satellites_visible !== 18 || Math.abs(parsedGps2.yaw - 120.3) > 0.01) {
+  console.error('decodePayload(GPS2_RAW) failed!', parsedGps2);
+  process.exit(1);
+}
+
+useTelemetryStore.getState().processPacket({
+  version: 2,
+  sequence: 23,
+  systemId: 1,
+  componentId: 1,
+  messageId: MAVLINK_MSG_ID.GPS2_RAW,
+  payload: testGps2Payload,
+  crc: 0,
+  raw: new Uint8Array(0),
+});
+
+const gps2State = useTelemetryStore.getState().gps2;
+if (!gps2State || gps2State.fixType !== 6 || gps2State.fixLabel !== 'RTK Fixed' || !gps2State.hasYaw || Math.abs((gps2State.yaw ?? 0) - 120.3) > 0.01) {
+  console.error('telemetryStore gps2 handling failed!', gps2State);
+  process.exit(1);
+}
+
+console.log('Dual GPS modules (GPS_RAW_INT & GPS2_RAW) and yaw latching verified successfully!');
+
 console.log('All MAVLink protocol unit tests PASSED!');

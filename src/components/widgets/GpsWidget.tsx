@@ -9,14 +9,17 @@ import { Satellite } from 'lucide-react';
 
 export const GpsWidget: React.FC = () => {
   const gps = useTelemetryStore((state) => state.gps);
+  const gps2 = useTelemetryStore((state) => state.gps2);
   const position = useTelemetryStore((state) => state.position);
   const { formatSpeed, formatAltitude, altitudeMode } = useUnitsStore();
 
   useEffect(() => {
     messageRateManager.registerRequirement('gps-raw', MAVLINK_MSG_ID.GPS_RAW_INT);
+    messageRateManager.registerRequirement('gps2-raw', MAVLINK_MSG_ID.GPS2_RAW);
     messageRateManager.registerRequirement('gps-pos', MAVLINK_MSG_ID.GLOBAL_POSITION_INT);
     return () => {
       messageRateManager.unregisterRequirement('gps-raw');
+      messageRateManager.unregisterRequirement('gps2-raw');
       messageRateManager.unregisterRequirement('gps-pos');
     };
   }, []);
@@ -35,14 +38,27 @@ export const GpsWidget: React.FC = () => {
   return (
     <Card className="h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
+        <div className="flex items-center justify-between gap-1 flex-wrap">
+          <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5 shrink-0">
             <Satellite className="h-3.5 w-3.5 text-sky-400" />
             GNSS / GPS
           </CardTitle>
-          <Badge variant={getFixBadgeVariant(gps.fixType)} className="font-mono text-[10px] px-2 py-0.5">
-            {gps.fixLabel}
-          </Badge>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {gps2 ? (
+              <>
+                <Badge variant={getFixBadgeVariant(gps.fixType)} className="font-mono text-[10px] px-2 py-0.5 whitespace-nowrap">
+                  GPS1: {gps.fixLabel}
+                </Badge>
+                <Badge variant={getFixBadgeVariant(gps2.fixType)} className="font-mono text-[10px] px-2 py-0.5 whitespace-nowrap">
+                  GPS2: {gps2.fixLabel}
+                </Badge>
+              </>
+            ) : (
+              <Badge variant={getFixBadgeVariant(gps.fixType)} className="font-mono text-[10px] px-2 py-0.5">
+                {gps.fixLabel}
+              </Badge>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="p-3 space-y-2.5 flex-1 flex flex-col justify-between">
@@ -52,7 +68,7 @@ export const GpsWidget: React.FC = () => {
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2 text-center min-w-0">
             <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">Satellites</span>
             <div className="text-lg sm:text-xl font-mono font-bold text-zinc-100 mt-0.5 truncate">
-              {gps.satellites}
+              {gps2 ? `${gps.satellites} | ${gps2.satellites}` : gps.satellites}
             </div>
           </div>
 
@@ -86,6 +102,22 @@ export const GpsWidget: React.FC = () => {
             <span className="text-zinc-500">Alt ({altitudeMode.toUpperCase()}):</span>
             <span className="font-bold text-emerald-400 truncate">{altFormatted.full}</span>
           </div>
+          {gps.hasYaw && (
+            <div className="flex justify-between items-center text-zinc-300">
+              <span className="text-zinc-500">{gps2 ? 'GPS1 Yaw:' : 'GPS Yaw:'}</span>
+              <span className="font-bold text-sky-400 truncate">
+                {gps.yaw !== undefined ? `${gps.yaw.toFixed(1)}°` : '--'}
+              </span>
+            </div>
+          )}
+          {gps2?.hasYaw && (
+            <div className="flex justify-between items-center text-zinc-300">
+              <span className="text-zinc-500">GPS2 Yaw:</span>
+              <span className="font-bold text-sky-400 truncate">
+                {gps2.yaw !== undefined ? `${gps2.yaw.toFixed(1)}°` : '--'}
+              </span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

@@ -56,6 +56,9 @@ export interface VehicleGPS {
   vdop: number;
   groundspeed: number;
   cog: number;
+  yaw?: number;
+  hasYaw?: boolean;
+  lastUpdate?: number;
 }
 
 export interface VehicleBattery {
@@ -226,6 +229,7 @@ interface TelemetryState {
   imu: VehicleIMU;
   position: VehiclePosition;
   gps: VehicleGPS;
+  gps2: VehicleGPS | null;
   battery: VehicleBattery;
   vfr: VehicleVFR;
   sysStatus: VehicleSysStatus;
@@ -281,6 +285,7 @@ const HANDLED_MESSAGE_IDS = new Set<number>([
   MAVLINK_MSG_ID.SCALED_PRESSURE,
   MAVLINK_MSG_ID.GLOBAL_POSITION_INT,
   MAVLINK_MSG_ID.GPS_RAW_INT,
+  MAVLINK_MSG_ID.GPS2_RAW,
   MAVLINK_MSG_ID.SYS_STATUS,
   MAVLINK_MSG_ID.POWER_STATUS,
   MAVLINK_MSG_ID.BATTERY_STATUS,
@@ -413,7 +418,9 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     vdop: 99.9,
     groundspeed: 0,
     cog: 0,
+    hasYaw: false,
   },
+  gps2: null,
   battery: {
     voltage: 0,
     current: 0,
@@ -665,6 +672,9 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         }
 
         case MAVLINK_MSG_ID.GPS_RAW_INT: {
+          const rawYaw = data.raw_yaw ?? 0;
+          const hasYaw = Boolean(state.gps.hasYaw || (rawYaw > 0 && rawYaw < 36000));
+          const yaw = rawYaw === 65535 ? undefined : (hasYaw ? data.yaw : undefined);
           return {
             gps: {
               fixType: data.fix_type,
@@ -674,6 +684,29 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
               vdop: data.epv,
               groundspeed: data.vel,
               cog: data.cog,
+              yaw,
+              hasYaw,
+              lastUpdate: Date.now(),
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.GPS2_RAW: {
+          const rawYaw = data.raw_yaw ?? 0;
+          const hasYaw = Boolean(state.gps2?.hasYaw || (rawYaw > 0 && rawYaw < 36000));
+          const yaw = rawYaw === 65535 ? undefined : (hasYaw ? data.yaw : undefined);
+          return {
+            gps2: {
+              fixType: data.fix_type,
+              fixLabel: GPS_FIX_LABELS[data.fix_type] ?? `Fix ${data.fix_type}`,
+              satellites: data.satellites_visible,
+              hdop: data.eph,
+              vdop: data.epv,
+              groundspeed: data.vel,
+              cog: data.cog,
+              yaw,
+              hasYaw,
+              lastUpdate: Date.now(),
             },
           };
         }

@@ -133,6 +133,15 @@
    }
   },
   {
+   "name": "GPS_RAW_INT with dual-antenna yaw",
+   "msgid": 24,
+   "hex": "fd34000000010118000040e201000000000008fe8316304808b7c8af00005500780008025046030e0000000000000000000000000000000000000000e65fca00",
+   "expect": {
+    "yaw": 245.5,
+    "raw_yaw": 24550
+   }
+  },
+  {
    "name": "GPS_RAW_INT RTK fixed, unknown DOP/vel/cog",
    "msgid": 24,
    "hex": "fd1e00000001011800000100000000000000010000000200000003000000ffffffffffffffff061ed125",
@@ -143,6 +152,25 @@
     "vel": 0,
     "cog": 0,
     "satellites_visible": 30
+   }
+  },
+  {
+   "name": "GPS2_RAW RTK with yaw",
+   "msgid": 124,
+   "hex": "fd2500000001017c0000f1fb09000000000008fe8316304808b7c8af00000000000041005f0003025046061200fe2e99f0",
+   "expect": {
+    "time_usec": 654321,
+    "fix_type": 6,
+    "lat": 37.7749,
+    "lon": -122.4194,
+    "alt": 45.0,
+    "eph": 0.65,
+    "epv": 0.95,
+    "vel": 5.15,
+    "cog": 180.0,
+    "satellites_visible": 18,
+    "yaw": 120.3,
+    "raw_yaw": 12030
    }
   },
   {

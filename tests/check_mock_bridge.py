@@ -68,6 +68,13 @@ CHECKS = {
         ("satellites_visible 14", lambda m: m.satellites_visible == 14),
         ("eph (HDOP x100) below 500", lambda m: m.eph < 500),
         ("cog 0-35999 cdeg", lambda m: 0 <= m.cog < 36000),
+        ("yaw 0-35999 cdeg", lambda m: 0 <= m.yaw < 36000),
+    ],
+    "GPS2_RAW": [
+        ("fix_type is RTK Fixed (6)", lambda m: m.fix_type == 6),
+        ("lat/lon near San Francisco", lambda m: near(m.lat / 1e7, SF_LAT, 0.05) and near(m.lon / 1e7, SF_LON, 0.05)),
+        ("satellites_visible 18", lambda m: m.satellites_visible == 18),
+        ("yaw 0-35999 cdeg", lambda m: 0 <= m.yaw < 36000),
     ],
     "VFR_HUD": [
         ("heading 0-359", lambda m: 0 <= m.heading < 360),

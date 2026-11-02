@@ -86,9 +86,18 @@ dcase("GPS_RAW_INT 3D fix",
       vehicle.gps_raw_int_encode(123456, 3, 377749000, -1224194000, 45000, 85, 120, 520, 18000, 14),
       {"time_usec": 123456, "fix_type": 3, "lat": 377749000 / 1e7, "lon": -1224194000 / 1e7, "alt": 45.0,
        "eph": 0.85, "epv": 1.2, "vel": 5.2, "cog": 180.0, "satellites_visible": 14})
+dcase("GPS_RAW_INT with dual-antenna yaw",
+      vehicle.gps_raw_int_encode(123456, 3, 377749000, -1224194000, 45000, 85, 120, 520, 18000, 14, yaw=24550),
+      {"yaw": 245.5, "raw_yaw": 24550})
 dcase("GPS_RAW_INT RTK fixed, unknown DOP/vel/cog",
       vehicle.gps_raw_int_encode(1, 6, 1, 2, 3, 65535, 65535, 65535, 65535, 30),
       {"fix_type": 6, "eph": 0, "epv": 0, "vel": 0, "cog": 0, "satellites_visible": 30})
+
+# --- GPS2_RAW --------------------------------------------------------------
+dcase("GPS2_RAW RTK with yaw",
+      vehicle.gps2_raw_encode(654321, 6, 377749000, -1224194000, 45000, 65, 95, 515, 18000, 18, 0, 0, yaw=12030),
+      {"time_usec": 654321, "fix_type": 6, "lat": 377749000 / 1e7, "lon": -1224194000 / 1e7, "alt": 45.0,
+       "eph": 0.65, "epv": 0.95, "vel": 5.15, "cog": 180.0, "satellites_visible": 18, "yaw": 120.3, "raw_yaw": 12030})
 
 # --- VFR_HUD ---------------------------------------------------------------
 dcase("VFR_HUD", vehicle.vfr_hud_encode(12.5, 11.0, 270, 45, 120.5, -1.5),
