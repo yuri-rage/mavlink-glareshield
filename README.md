@@ -57,6 +57,10 @@ By default, the bridge listens on `ws://127.0.0.1:56781`.
 > **Remote & Phone Access over LAN**:
 > The bridge binds to `127.0.0.1` by default. To connect from a phone, tablet, or secondary PC on your local network, start the bridge with `--host 0.0.0.0` (e.g. `python3 bridge/bridge.py --host 0.0.0.0 --mock`) and run Vite with `npm run dev -- --host`. The browser will automatically resolve the WebSocket connection to your host IP.
 
+> [!TIP]
+> **Coexisting with Mission Planner or QGroundControl**:
+> Glareshield defaults to GCS System ID `255` (`SYSID_MYGCS`). If connecting through Mission Planner's WebSocket or sharing an active MAVLink telemetry stream, set Glareshield's GCS System ID to `254` (or another unused ID) in **Link Settings** so MAVFTP and mission protocol replies do not cross over.
+
 ### 3. Start the Web Application
 
 ```bash
