@@ -47,8 +47,9 @@ export class MessageRateManager {
   };
 
   public setProfile(profile: BandwidthProfile) {
-    if (this.profile !== profile) {
-      this.profile = profile;
+    const validProfile = BANDWIDTH_PROFILES[profile] ? profile : 'standard';
+    if (this.profile !== validProfile) {
+      this.profile = validProfile;
       this.recalculateAndApply();
     }
   }
@@ -58,8 +59,16 @@ export class MessageRateManager {
   }
 
   public setTarget(systemId: number, componentId: number) {
-    this.targetSystem = systemId;
-    this.targetComponent = componentId;
+    if (this.targetSystem !== systemId || this.targetComponent !== componentId) {
+      this.targetSystem = systemId;
+      this.targetComponent = componentId;
+      this.resetCache();
+    }
+  }
+
+  public resetCache() {
+    this.currentRequestedIntervals.clear();
+    this.scheduleApply();
   }
 
   /**
@@ -134,17 +143,10 @@ export class MessageRateManager {
       }
     }
 
-    // Disable messages that no longer have subscribers
-    for (const [prevMsgId, _interval] of this.currentRequestedIntervals.entries()) {
+    // Avoid sending interval = -1 which switches off message streams across shared links
+    // (e.g. disrupting Mission Planner or other companion tools on the same MAVLink channel).
+    for (const [prevMsgId] of this.currentRequestedIntervals.entries()) {
       if (!activeMsgIds.has(prevMsgId)) {
-        // Send interval = -1 to stop streaming
-        const cmd = encoder.createSetMessageInterval(
-          this.targetSystem,
-          this.targetComponent,
-          prevMsgId,
-          -1
-        );
-        mavlinkConnection.send(cmd);
         this.currentRequestedIntervals.delete(prevMsgId);
       }
     }
