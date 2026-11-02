@@ -4,6 +4,7 @@ import { Modal } from '../ui/modal';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { CustomWidgetDefinition, WidgetDisplayType } from '../../types/widget';
+import { MAV_CMD } from '../../mavlink/messages';
 import {
   Compass,
   Radio,
@@ -17,7 +18,15 @@ import {
   Plus,
   Upload,
   Zap,
+  AlertTriangle,
 } from 'lucide-react';
+
+function getMavCmdName(cmdId: number): string {
+  for (const [key, val] of Object.entries(MAV_CMD)) {
+    if (val === cmdId) return key;
+  }
+  return `CMD_${cmdId}`;
+}
 
 interface AddWidgetModalProps {
   isOpen: boolean;
@@ -107,6 +116,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
 }) => {
   const { profile, addWidgetToActiveTab, saveCustomWidget } = useDashboardStore();
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [pendingImportWidget, setPendingImportWidget] = useState<CustomWidgetDefinition | null>(null);
 
   const handleAddBuiltIn = (widgetId: string, colSpan: number) => {
     addWidgetToActiveTab(widgetId, colSpan);
@@ -122,9 +132,11 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
       try {
         const parsed = JSON.parse(event.target?.result as string) as CustomWidgetDefinition;
         if (parsed.id && parsed.name && parsed.displayType) {
-          saveCustomWidget(parsed);
-          addWidgetToActiveTab(parsed.id, 6);
-          onClose();
+          // If the widget defines an action, enforce confirmation for flight safety
+          if (parsed.action) {
+            parsed.action.confirmation = true;
+          }
+          setPendingImportWidget(parsed);
         } else {
           alert('Invalid custom widget format: missing id, name, or displayType.');
         }
@@ -133,6 +145,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
   const filteredBuiltIn = filterCategory === 'all'
@@ -147,7 +160,67 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
       description="Choose a built-in instrument or select/upload a declarative custom widget."
     >
       <div className="space-y-4">
-        {/* Action Header: Creator & Upload */}
+        {pendingImportWidget ? (
+          <div className="space-y-3 p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
+            <div className="flex items-center gap-2 text-sky-400 font-bold text-sm">
+              <Zap className="h-4 w-4" />
+              <span>Import Preview: {pendingImportWidget.name}</span>
+            </div>
+            <div className="text-xs text-zinc-400 space-y-1.5 font-mono">
+              <div><b className="text-zinc-300">Display Type:</b> {pendingImportWidget.displayType}</div>
+              <div><b className="text-zinc-300">Category:</b> {pendingImportWidget.category}</div>
+              {pendingImportWidget.description && <div><b className="text-zinc-300">Description:</b> {pendingImportWidget.description}</div>}
+              {pendingImportWidget.binding && (
+                <div className="p-2 bg-zinc-950 rounded border border-zinc-800 mt-2 space-y-0.5">
+                  <div className="text-zinc-300 font-bold">Telemetry Binding:</div>
+                  <div>Message: {pendingImportWidget.binding.messageName}</div>
+                  <div>Field: {pendingImportWidget.binding.fieldName}</div>
+                  <div>Unit: {pendingImportWidget.binding.unit || 'none'}</div>
+                </div>
+              )}
+              {pendingImportWidget.action ? (
+                <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded mt-2 space-y-1 text-amber-200">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                    <AlertTriangle className="h-4 w-4" />
+                    Autopilot Action Command:
+                  </div>
+                  <div>Label: <b className="text-zinc-100">{pendingImportWidget.action.label}</b></div>
+                  <div>MAV_CMD: <b className="text-zinc-100">{getMavCmdName(pendingImportWidget.action.commandId)} ({pendingImportWidget.action.commandId})</b></div>
+                  <div>Parameters: [{pendingImportWidget.action.params.join(', ')}]</div>
+                  <div className="text-[11px] text-amber-400 mt-1">
+                    * Confirmation is enforced on imported actions to prevent accidental autopilot commands.
+                  </div>
+                </div>
+              ) : (
+                <div className="text-zinc-500 italic mt-1">No autopilot actions configured (read-only instrument).</div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <Button
+                variant="default"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                onClick={() => {
+                  saveCustomWidget(pendingImportWidget);
+                  addWidgetToActiveTab(pendingImportWidget.id, 6);
+                  setPendingImportWidget(null);
+                  onClose();
+                }}
+              >
+                Accept & Add to View
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setPendingImportWidget(null)}
+                className="text-zinc-400"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Action Header: Creator & Upload */}
         <div className="flex items-center gap-2 p-3 bg-zinc-900/80 border border-zinc-800 rounded-xl">
           <Button
             variant="default"
@@ -263,6 +336,8 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
             );
           })}
         </div>
+        </>
+        )}
       </div>
     </Modal>
   );

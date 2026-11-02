@@ -7,7 +7,7 @@ import { MAVLINK_MSG_ID } from '../../mavlink/messages';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Activity, Play, Zap, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Activity, Play, Zap, ToggleLeft, ToggleRight, AlertTriangle } from 'lucide-react';
 
 interface CustomWidgetRendererProps {
   definition: CustomWidgetDefinition;
@@ -17,6 +17,8 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
   const telemetry = useTelemetryStore();
   const [toggleState, setToggleState] = useState(false);
   const [lastActionTime, setLastActionTime] = useState<number | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [sliderVal, setSliderVal] = useState<number>(definition.binding?.min ?? 0);
 
   // Register message rate subscription if bound to a telemetry stream
   useEffect(() => {
@@ -79,17 +81,30 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
     return rawVal;
   };
 
-  const handleTriggerAction = () => {
+  const sysId = telemetry.heartbeat.systemId || 1;
+  const compId = telemetry.heartbeat.componentId || 1;
+
+  const executeAction = () => {
     if (!definition.action) return;
     const encoder = mavlinkConnection.getEncoder();
     const cmd = encoder.createCommandLong(
-      1,
-      1,
+      sysId,
+      compId,
       definition.action.commandId,
       definition.action.params
     );
     mavlinkConnection.send(cmd);
     setLastActionTime(Date.now());
+  };
+
+  const handleTriggerAction = () => {
+    if (!definition.action) return;
+    if (definition.action.confirmation && !isConfirming) {
+      setIsConfirming(true);
+      return;
+    }
+    setIsConfirming(false);
+    executeAction();
   };
 
   const handleToggle = () => {
@@ -100,7 +115,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
       const params = [...definition.action.params] as [number, number, number, number, number, number, number];
       params[0] = next ? 1 : 0;
       const encoder = mavlinkConnection.getEncoder();
-      const cmd = encoder.createCommandLong(1, 1, definition.action.commandId, params);
+      const cmd = encoder.createCommandLong(sysId, compId, definition.action.commandId, params);
       mavlinkConnection.send(cmd);
     }
   };
@@ -142,6 +157,42 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
           </div>
         )}
 
+        {definition.displayType === 'gauge-radial' && (
+          <div className="flex flex-col items-center justify-center py-2">
+            <div className="relative w-28 h-28 flex items-center justify-center">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="38"
+                  className="stroke-zinc-800"
+                  strokeWidth="8"
+                  fill="transparent"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="38"
+                  className="stroke-sky-500 transition-all duration-300"
+                  strokeWidth="8"
+                  strokeDasharray={2 * Math.PI * 38}
+                  strokeDashoffset={2 * Math.PI * 38 * (1 - pct / 100)}
+                  strokeLinecap="round"
+                  fill="transparent"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center font-mono">
+                <span className="text-xl font-bold text-zinc-100">{boundValue}</span>
+                <span className="text-[10px] text-zinc-400">{unit}</span>
+              </div>
+            </div>
+            <div className="flex justify-between w-full px-4 text-[10px] text-zinc-500 font-mono mt-1">
+              <span>{min} {unit}</span>
+              <span>{max} {unit}</span>
+            </div>
+          </div>
+        )}
+
         {definition.displayType === 'gauge-linear' && (
           <div className="space-y-2">
             <div className="flex justify-between items-baseline font-mono">
@@ -155,6 +206,40 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                 className="h-full bg-sky-500 transition-all duration-300"
                 style={{ width: `${pct}%` }}
               />
+            </div>
+          </div>
+        )}
+
+        {definition.displayType === 'slider-control' && (
+          <div className="space-y-3 py-1">
+            <div className="flex justify-between items-baseline font-mono">
+              <span className="text-xs text-zinc-400">Control Target</span>
+              <span className="text-lg font-bold text-zinc-100">
+                {sliderVal} <span className="text-xs text-zinc-400">{unit}</span>
+              </span>
+            </div>
+            <input
+              type="range"
+              min={min}
+              max={max}
+              step={(max - min) / 100 || 1}
+              value={sliderVal}
+              onChange={(e) => setSliderVal(Number(e.target.value))}
+              onPointerUp={() => {
+                if (definition.action) {
+                  const params = [...definition.action.params] as [number, number, number, number, number, number, number];
+                  params[0] = sliderVal;
+                  const encoder = mavlinkConnection.getEncoder();
+                  const cmd = encoder.createCommandLong(sysId, compId, definition.action.commandId, params);
+                  mavlinkConnection.send(cmd);
+                  setLastActionTime(Date.now());
+                }
+              }}
+              className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
+            />
+            <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
+              <span>{min} {unit}</span>
+              <span>{max} {unit}</span>
             </div>
           </div>
         )}
@@ -181,14 +266,35 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
 
         {definition.displayType === 'action-button' && (
           <div className="space-y-2 py-1">
-            <Button
-              variant="default"
-              className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold gap-2"
-              onClick={handleTriggerAction}
-            >
-              <Play className="h-4 w-4" />
-              {definition.action?.label || 'Execute Action'}
-            </Button>
+            {isConfirming ? (
+              <div className="space-y-1.5">
+                <Button
+                  variant="destructive"
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold gap-2 animate-pulse"
+                  onClick={handleTriggerAction}
+                >
+                  <AlertTriangle className="h-4 w-4" />
+                  Confirm: {definition.action?.label || 'Execute'}?
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs text-zinc-400 h-7"
+                  onClick={() => setIsConfirming(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="default"
+                className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold gap-2"
+                onClick={handleTriggerAction}
+              >
+                <Play className="h-4 w-4" />
+                {definition.action?.label || 'Execute Action'}
+              </Button>
+            )}
             {lastActionTime && (
               <p className="text-[10px] text-emerald-400 text-center font-mono">
                 Command dispatched at {new Date(lastActionTime).toLocaleTimeString()}
