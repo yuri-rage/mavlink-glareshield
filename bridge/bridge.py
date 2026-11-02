@@ -17,11 +17,23 @@ import asyncio
 import base64
 import json
 import math
+import re
 import struct
 import time
 from typing import Any, cast
 
 import websockets
+
+DEFAULT_ALLOWED_ORIGINS: list[Any] = [
+    re.compile(r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$"),
+    re.compile(
+        r"^https?://(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$"
+    ),
+    re.compile(r"^tauri://.*$"),
+    re.compile(r"^https?://tauri\.localhost(:\d+)?$"),
+    "null",
+    None,
+]
 
 # Message IDs
 MSG_HEARTBEAT = 0
@@ -57,6 +69,7 @@ MSG_RANGEFINDER = 173
 MSG_EKF_STATUS_REPORT = 193
 MSG_RPM = 226
 MSG_VIBRATION = 241
+MSG_GPS_RTCM_DATA = 233
 MSG_STATUSTEXT = 253
 MSG_ESC_TELEMETRY_1_TO_4 = 11030
 
@@ -94,6 +107,7 @@ CRC_EXTRA = {
     MSG_EKF_STATUS_REPORT: 71,
     MSG_RPM: 207,
     MSG_VIBRATION: 90,
+    MSG_GPS_RTCM_DATA: 35,
     MSG_STATUSTEXT: 83,
     MSG_ESC_TELEMETRY_1_TO_4: 144,
 }
@@ -141,13 +155,53 @@ class MavlinkV2Encoder:
         return hdr + payload + struct.pack("<H", crc)
 
 
+class ClientSession:
+    def __init__(self, websocket: Any):
+        self.websocket = websocket
+        self.ntrip_writer: asyncio.StreamWriter | None = None
+        self.ntrip_task: asyncio.Task[None] | None = None
+
+    async def stop_ntrip(self) -> None:
+        if self.ntrip_task:
+            self.ntrip_task.cancel()
+            try:
+                await self.ntrip_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001, S110
+                pass
+            self.ntrip_task = None
+        if self.ntrip_writer:
+            try:
+                self.ntrip_writer.close()
+                await self.ntrip_writer.wait_closed()
+            except Exception:  # noqa: BLE001, S110
+                pass
+            self.ntrip_writer = None
+        try:
+            await self.websocket.send(
+                json.dumps({"type": "ntrip_status", "status": "disconnected"})
+            )
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+
 class BridgeServer:
-    def __init__(self, host: str, port: int, mode: str, target: str):
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        mode: str,
+        target: str,
+        allowed_origins: list[Any] | None = None,
+    ):
         self.host = host
         self.port = port
         self.mode = mode
         self.target = target
+        self.allowed_origins = (
+            allowed_origins if allowed_origins is not None else DEFAULT_ALLOWED_ORIGINS
+        )
         self.clients: set[Any] = set()
+        self.client_sessions: dict[Any, ClientSession] = {}
         self.encoder = MavlinkV2Encoder(sysid=1, compid=1)
         self.transport = None
         self.serial_conn = None
@@ -163,9 +217,15 @@ class BridgeServer:
         self.sim_voltage = 16.4
         self.sim_start_time = time.time()
 
-        # NTRIP stream state
-        self.ntrip_writer: asyncio.StreamWriter | None = None
-        self.ntrip_task: asyncio.Task[None] | None = None
+        # Mock MAVFTP file store and session tracking
+        self.mock_files: dict[str, bytearray] = {}
+        self.mock_ftp_sessions: dict[int, dict[str, Any]] = {}
+        self.next_ftp_session_id = 1
+
+        # Mock MAVLink mission upload state
+        self.mock_mission_upload_count = 0
+        self.mock_mission_upload_type = 0
+        self.mock_mission_items: list[bytes] = []
 
     async def broadcast(self, data: bytes):
         if not self.clients:
@@ -182,6 +242,8 @@ class BridgeServer:
             self.clients.discard(d)
 
     async def ws_handler(self, websocket):
+        session = ClientSession(websocket)
+        self.client_sessions[websocket] = session
         self.clients.add(websocket)
         print(
             f"[WS] Client connected from {websocket.remote_address}. Active: {len(self.clients)}"
@@ -214,15 +276,16 @@ class BridgeServer:
                     elif self.transport:
                         self.send_to_vehicle(message)
                 elif isinstance(message, str):
-                    await self.handle_text_command(websocket, message)
+                    await self.handle_text_command(session, message)
         except websockets.exceptions.ConnectionClosed:
             pass
         finally:
-            await self.stop_ntrip_stream()
+            await session.stop_ntrip()
+            self.client_sessions.pop(websocket, None)
             self.clients.discard(websocket)
             print(f"[WS] Client disconnected. Active: {len(self.clients)}")
 
-    async def handle_text_command(self, websocket: Any, message: str) -> None:
+    async def handle_text_command(self, session: ClientSession, message: str) -> None:
         try:
             cmd = json.loads(message)
         except Exception:  # noqa: BLE001
@@ -230,14 +293,15 @@ class BridgeServer:
 
         cmd_type = cmd.get("type")
         if cmd_type == "ntrip_connect":
-            await self.start_ntrip_stream(websocket, cmd)
+            await self.start_ntrip_stream(session, cmd)
         elif cmd_type == "ntrip_disconnect":
-            await self.stop_ntrip_stream(websocket)
+            await session.stop_ntrip()
         elif cmd_type == "ntrip_gga":
-            await self.send_ntrip_gga(cmd.get("gga", ""))
+            await self.send_ntrip_gga(session, cmd.get("gga", ""))
 
-    async def start_ntrip_stream(self, websocket: Any, cmd: dict[str, Any]) -> None:
-        await self.stop_ntrip_stream()
+    async def start_ntrip_stream(self, session: ClientSession, cmd: dict[str, Any]) -> None:
+        await session.stop_ntrip()
+        websocket = session.websocket
         host = str(cmd.get("host", "")).strip()
         port = int(cmd.get("port", 2101))
         mountpoint = str(cmd.get("mountpoint", "")).strip().lstrip("/")
@@ -263,7 +327,7 @@ class BridgeServer:
 
         try:
             reader, writer = await asyncio.open_connection(host, port)
-            self.ntrip_writer = writer
+            session.ntrip_writer = writer
             writer.write(req.encode("latin1"))
             await writer.drain()
 
@@ -292,7 +356,7 @@ class BridgeServer:
                     if "200 OK" not in header_str:
                         writer.close()
                         await writer.wait_closed()
-                        self.ntrip_writer = None
+                        session.ntrip_writer = None
                         await websocket.send(
                             json.dumps({
                                 "type": "ntrip_error",
@@ -328,43 +392,24 @@ class BridgeServer:
                 except Exception:  # noqa: BLE001, S110
                     pass
                 finally:
-                    await self.stop_ntrip_stream(websocket)
+                    await session.stop_ntrip()
 
-            self.ntrip_task = asyncio.create_task(ntrip_read_loop())
+            session.ntrip_task = asyncio.create_task(ntrip_read_loop())
 
         except Exception as e:  # noqa: BLE001
-            if self.ntrip_writer:
+            if session.ntrip_writer:
                 try:
-                    self.ntrip_writer.close()
+                    session.ntrip_writer.close()
                 except Exception:  # noqa: BLE001, S110
                     pass
-                self.ntrip_writer = None
+                session.ntrip_writer = None
             await websocket.send(json.dumps({"type": "ntrip_error", "message": str(e)}))
 
-    async def send_ntrip_gga(self, gga: str) -> None:
-        if self.ntrip_writer and gga:
+    async def send_ntrip_gga(self, session: ClientSession, gga: str) -> None:
+        if session.ntrip_writer and gga:
             try:
-                self.ntrip_writer.write(gga.encode("ascii"))
-                await self.ntrip_writer.drain()
-            except Exception:  # noqa: BLE001, S110
-                pass
-
-    async def stop_ntrip_stream(self, websocket: Any | None = None) -> None:
-        if self.ntrip_task:
-            self.ntrip_task.cancel()
-            self.ntrip_task = None
-        if self.ntrip_writer:
-            try:
-                self.ntrip_writer.close()
-                await self.ntrip_writer.wait_closed()
-            except Exception:  # noqa: BLE001, S110
-                pass
-            self.ntrip_writer = None
-        if websocket:
-            try:
-                await websocket.send(
-                    json.dumps({"type": "ntrip_status", "status": "disconnected"})
-                )
+                session.ntrip_writer.write(gga.encode("ascii"))
+                await session.ntrip_writer.drain()
             except Exception:  # noqa: BLE001, S110
                 pass
 
@@ -555,11 +600,42 @@ class BridgeServer:
                         self.encoder.pack(MSG_MISSION_ITEM_INT, item_payload)
                     )
 
+            elif msgid == MSG_MISSION_COUNT and len(payload) >= 5:
+                count, _target_sys, _target_comp, m_type = struct.unpack("<HBBB", payload[:5])
+                self.mock_mission_upload_count = count
+                self.mock_mission_upload_type = m_type
+                self.mock_mission_items = []
+                print(f"[MOCK] Received MISSION_COUNT = {count} (type={m_type})")
+                if count > 0:
+                    req_payload = struct.pack("<HBBB", 0, 1, 1, m_type)
+                    await self.broadcast(self.encoder.pack(MSG_MISSION_REQUEST_INT, req_payload))
+                else:
+                    ack_payload = struct.pack("<BBBB", 1, 1, 0, m_type)
+                    await self.broadcast(self.encoder.pack(MSG_MISSION_ACK, ack_payload))
+
+            elif msgid == MSG_MISSION_ITEM_INT and len(payload) >= 38:
+                seq, cmd = struct.unpack("<HH", payload[28:32])
+                m_type = payload[37] if len(payload) > 37 else 0
+                self.mock_mission_items.append(payload)
+                print(f"[MOCK] Received MISSION_ITEM_INT seq={seq} cmd={cmd}")
+                if seq + 1 < getattr(self, "mock_mission_upload_count", 0):
+                    req_payload = struct.pack("<HBBB", seq + 1, 1, 1, m_type)
+                    await self.broadcast(self.encoder.pack(MSG_MISSION_REQUEST_INT, req_payload))
+                else:
+                    ack_payload = struct.pack("<BBBB", 1, 1, 0, m_type)
+                    await self.broadcast(self.encoder.pack(MSG_MISSION_ACK, ack_payload))
+                    status_str = f"Flight plan received: {len(self.mock_mission_items)} items"
+                    txt_bytes = status_str.encode("ascii")[:50].ljust(50, b"\x00")
+                    await self.broadcast(self.encoder.pack(MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes))
+
             elif msgid == MSG_MISSION_ACK:
                 ack_type = payload[2] if len(payload) > 2 else 0
                 print(
                     f"[MOCK] Received MISSION_ACK (type={ack_type}). Waypoint sync complete!"
                 )
+
+            elif msgid == MSG_GPS_RTCM_DATA:
+                pass  # Successfully accepted RTCM frame in mock
 
             elif msgid == MSG_FILE_TRANSFER_PROTOCOL and len(payload) >= 15:
                 # payload[0]=net, [1]=sys, [2]=comp
@@ -580,7 +656,20 @@ class BridgeServer:
                 if f_opcode == 4:  # OpenFileRO
                     filename = f_body.decode("utf-8", errors="ignore").strip("\x00")
                     print(f"[MOCK MAVFTP] OpenFileRO request for: {filename}")
-                    if "@PARAM" in filename or "param.pck" in filename:
+                    if filename in self.mock_files:
+                        buf = bytes(self.mock_files[filename])
+                        sess_id = 50 + (len(getattr(self, "ftp_files", {})) % 100)
+                        self.ftp_files = getattr(self, "ftp_files", {})
+                        self.ftp_files[sess_id] = buf
+                        ack_payload = (
+                            bytes([0, 1, 1])
+                            + struct.pack("<HBBBBBBI", f_seq, sess_id, 128, 4, 4, 0, 0, 0)
+                            + struct.pack("<I", len(buf))
+                        )
+                        await self.broadcast(
+                            self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
+                        )
+                    elif "@PARAM" in filename or "param.pck" in filename:
                         params = [
                             ("BATT_CAPACITY", 5000.0, 4),
                             ("WPNAV_SPEED", 500.0, 4),
@@ -807,7 +896,58 @@ class BridgeServer:
                         self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
                     )
 
+                elif f_opcode == 6:  # CreateFile
+                    filename = f_body.decode("utf-8", errors="ignore").strip("\x00")
+                    print(f"[MOCK MAVFTP] CreateFile: {filename}")
+                    sess_id = 20 + (len(self.mock_files) % 100)
+                    self.mock_files[filename] = bytearray()
+                    self.ftp_files = getattr(self, "ftp_files", {})
+                    self.ftp_files[sess_id] = self.mock_files[filename]
+                    ack_payload = (
+                        bytes([0, 1, 1])
+                        + struct.pack("<HBBBBBBI", f_seq, sess_id, 128, 0, 6, 0, 0, 0)
+                    )
+                    await self.broadcast(
+                        self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
+                    )
+
+                elif f_opcode == 7:  # WriteFile
+                    buf = getattr(self, "ftp_files", {}).get(f_session)
+                    if buf is not None and isinstance(buf, bytearray):
+                        if f_offset > len(buf):
+                            buf.extend(b"\x00" * (f_offset - len(buf)))
+                        buf[f_offset : f_offset + f_size] = f_body
+                        ack_payload = (
+                            bytes([0, 1, 1])
+                            + struct.pack("<HBBBBBBI", f_seq, f_session, 128, 0, 7, 0, 0, f_offset)
+                        )
+                        await self.broadcast(
+                            self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
+                        )
+                    else:
+                        nack_payload = (
+                            bytes([0, 1, 1])
+                            + struct.pack("<HBBBBBBI", f_seq, f_session, 129, 1, 7, 0, 0, f_offset)
+                            + bytes([4])
+                        )
+                        await self.broadcast(
+                            self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, nack_payload)
+                        )
+
+                elif f_opcode == 2:  # ResetSessions
+                    if hasattr(self, "ftp_files"):
+                        self.ftp_files.clear()
+                    ack_payload = (
+                        bytes([0, 1, 1])
+                        + struct.pack("<HBBBBBBI", f_seq, 0, 128, 0, 2, 0, 0, 0)
+                    )
+                    await self.broadcast(
+                        self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
+                    )
+
                 elif f_opcode == 1:  # TerminateSession
+                    if hasattr(self, "ftp_files") and f_session in self.ftp_files:
+                        self.ftp_files.pop(f_session, None)
                     ack_payload = bytes([0, 1, 1]) + struct.pack(
                         "<HBBBBBBI", f_seq, f_session, 128, 0, 1, 0, 0, 0
                     )
@@ -1131,7 +1271,14 @@ class BridgeServer:
                 await asyncio.sleep(2)
 
     async def run(self):
-        await websockets.serve(self.ws_handler, self.host, self.port)
+        origins_arg = (
+            None
+            if (self.allowed_origins and "*" in self.allowed_origins)
+            else self.allowed_origins
+        )
+        await websockets.serve(
+            self.ws_handler, self.host, self.port, origins=origins_arg
+        )
         print("============================================================")
         print(f" MAVLink Glareshield Bridge running on ws://{self.host}:{self.port}")
         print(
@@ -1157,6 +1304,17 @@ def main():
     )
     parser.add_argument(
         "--port", type=int, default=56781, help="WebSocket bind port (default: 56781)"
+    )
+    parser.add_argument(
+        "--allow-origin",
+        action="append",
+        dest="allowed_origins",
+        help="Allowed WebSocket Origin (e.g. 'http://my-domain:5173' or '*' for any origin). Can be passed multiple times.",
+    )
+    parser.add_argument(
+        "--allow-all-origins",
+        action="store_true",
+        help="Allow WebSocket connections from any Origin (*)",
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
@@ -1186,7 +1344,18 @@ def main():
         mode = "serial"
         target = args.serial
 
-    server = BridgeServer(args.host, args.port, mode, target)
+    allowed_origins = list(DEFAULT_ALLOWED_ORIGINS)
+    if args.allow_all_origins:
+        allowed_origins = ["*"]
+    elif args.allowed_origins:
+        if "*" in args.allowed_origins:
+            allowed_origins = ["*"]
+        else:
+            allowed_origins.extend(args.allowed_origins)
+
+    server = BridgeServer(
+        args.host, args.port, mode, target, allowed_origins=allowed_origins
+    )
     try:
         asyncio.run(server.run())
     except KeyboardInterrupt:

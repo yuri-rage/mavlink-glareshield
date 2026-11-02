@@ -5,62 +5,108 @@ import net from 'net';
 
 function ntripProxyPlugin() {
   const activeSockets = new Map<string, net.Socket>();
+  const ALLOWED_PORTS = new Set([2101, 2102, 2103, 2104, 2105]);
 
   return {
     name: 'ntrip-proxy-middleware',
     configureServer(server: any) {
       server.middlewares.use('/api/ntrip-stream', (req: any, res: any) => {
+        // 1. Restrict client to localhost (reject external Wi-Fi clients trying to use dev server as TCP relay)
+        const remoteIp = req.socket.remoteAddress || '';
+        const isLoopback = remoteIp === '127.0.0.1' || remoteIp === '::1' || remoteIp === '::ffff:127.0.0.1';
+        if (!isLoopback) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Forbidden: NTRIP proxy only accessible from localhost' }));
+          return;
+        }
+
+        // 2. Validate Origin header: only allow localhost / 127.0.0.1 origins
+        const origin = req.headers['origin'];
+        const allowedOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+        if (origin && !allowedOriginPattern.test(origin)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Forbidden: Invalid origin' }));
+          return;
+        }
+        const corsOrigin = origin || 'http://localhost:5173';
+
         // Handle CORS preflight
         if (req.method === 'OPTIONS') {
           res.writeHead(204, {
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': corsOrigin,
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': '*',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, Ntrip-Version, User-Agent',
           });
           res.end();
           return;
         }
 
         const parsedUrl = new URL(req.url, 'http://localhost:3000');
-        const host = parsedUrl.searchParams.get('host');
+        const host = parsedUrl.searchParams.get('host') || '';
         const port = parseInt(parsedUrl.searchParams.get('port') || '2101', 10);
         const mountpoint = (parsedUrl.searchParams.get('mountpoint') || '').replace(/^\//, '');
         const username = parsedUrl.searchParams.get('username') || '';
         const password = parsedUrl.searchParams.get('password') || '';
         const sessionKey = `${host}:${port}/${mountpoint}`;
 
-        // Handle POST for sending GGA sentences
+        // 3. Port allowlist check (prevent arbitrary port scanning / local intranet service relay)
+        if (!ALLOWED_PORTS.has(port)) {
+          res.writeHead(400, {
+            'Access-Control-Allow-Origin': corsOrigin,
+            'Content-Type': 'application/json',
+          });
+          res.end(JSON.stringify({ error: `Port ${port} not permitted. Allowed NTRIP caster ports: 2101-2105` }));
+          return;
+        }
+
+        // 4. Validate host and mountpoint (prevent CRLF injection and path traversal)
+        const hostRegex = /^[a-zA-Z0-9.-]+$/;
+        const mountpointRegex = /^[a-zA-Z0-9_\-\.]{1,64}$/;
+        if (!host || !hostRegex.test(host) || !mountpoint || !mountpointRegex.test(mountpoint)) {
+          res.writeHead(400, {
+            'Access-Control-Allow-Origin': corsOrigin,
+            'Content-Type': 'application/json',
+          });
+          res.end(JSON.stringify({ error: 'Invalid host or mountpoint format' }));
+          return;
+        }
+
+        // 5. Handle POST for sending GGA sentences: validate NMEA sentence format and drop raw POST write
         if (req.method === 'POST') {
           let body = '';
           req.on('data', (c: any) => {
             body += c;
+            if (body.length > 256) {
+              req.destroy();
+            }
           });
           req.on('end', () => {
+            const trimmedBody = body.trim();
+            if (!/^\$G[A-Z]{4},[ -~]{1,120}$/.test(trimmedBody)) {
+              res.writeHead(400, {
+                'Access-Control-Allow-Origin': corsOrigin,
+                'Content-Type': 'application/json',
+              });
+              res.end(JSON.stringify({ error: 'Invalid GGA NMEA sentence format' }));
+              return;
+            }
+
             const socket = activeSockets.get(sessionKey);
             if (socket && !socket.destroyed) {
-              socket.write(body);
+              socket.write(trimmedBody + '\r\n');
               res.writeHead(200, {
-                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Origin': corsOrigin,
                 'Content-Type': 'application/json',
               });
               res.end(JSON.stringify({ ok: true }));
             } else {
               res.writeHead(404, {
-                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Origin': corsOrigin,
                 'Content-Type': 'application/json',
               });
               res.end(JSON.stringify({ error: 'No active NTRIP socket for session' }));
             }
           });
-          return;
-        }
-
-        if (!host || !mountpoint) {
-          res.writeHead(400, {
-            'Access-Control-Allow-Origin': '*',
-            'Content-Type': 'application/json',
-          });
-          res.end(JSON.stringify({ error: 'Missing host or mountpoint' }));
           return;
         }
 
@@ -99,7 +145,7 @@ function ntripProxyPlugin() {
 
               if (!headerStr.includes('200 OK')) {
                 res.writeHead(401, {
-                  'Access-Control-Allow-Origin': '*',
+                  'Access-Control-Allow-Origin': corsOrigin,
                   'Content-Type': 'text/plain',
                 });
                 res.end(`Caster rejected: ${headerStr.trim()}`);
@@ -110,8 +156,7 @@ function ntripProxyPlugin() {
 
               res.writeHead(200, {
                 'Content-Type': 'application/octet-stream',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': '*',
+                'Access-Control-Allow-Origin': corsOrigin,
                 'Cache-Control': 'no-cache',
                 'Connection': 'keep-alive',
               });
@@ -130,7 +175,7 @@ function ntripProxyPlugin() {
           activeSockets.delete(sessionKey);
           if (!headerParsed) {
             res.writeHead(502, {
-              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Origin': corsOrigin,
               'Content-Type': 'application/json',
             });
             res.end(JSON.stringify({ error: `Connection to ${host}:${port} failed: ${err.message}` }));
