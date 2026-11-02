@@ -36,10 +36,10 @@ export const NtripWidget: React.FC = () => {
     return {
       host: 'rtk2go.com',
       port: 2101,
-      mountpoint: '',
-      username: '',
-      password: '',
-      protocol: 'websocket',
+      mountpoint: 'TEST-BASE',
+      username: 'testuser@example.com',
+      password: 'none',
+      protocol: 'http',
       sendGga: true,
     };
   });
@@ -63,6 +63,29 @@ export const NtripWidget: React.FC = () => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       }
     } catch {}
+  };
+
+  const handleHostChange = (raw: string) => {
+    let text = raw.trim();
+    text = text.replace(/^https?:\/\//i, '').replace(/^wss?:\/\//i, '');
+    if (text.includes('/')) {
+      const slashIdx = text.indexOf('/');
+      const hostPart = text.slice(0, slashIdx);
+      const mountPart = text.slice(slashIdx + 1);
+      let host = hostPart;
+      let port = ntripConfig.port;
+      if (hostPart.includes(':')) {
+        const [h, p] = hostPart.split(':');
+        host = h;
+        port = parseInt(p, 10) || port;
+      }
+      saveConfig({ ...ntripConfig, host, port, mountpoint: mountPart });
+    } else if (text.includes(':')) {
+      const [h, p] = text.split(':');
+      saveConfig({ ...ntripConfig, host: h, port: parseInt(p, 10) || ntripConfig.port });
+    } else {
+      saveConfig({ ...ntripConfig, host: text });
+    }
   };
 
   const handleConnectNtrip = async () => {
@@ -212,8 +235,8 @@ export const NtripWidget: React.FC = () => {
                   type="text"
                   disabled={isConnected || isConnecting}
                   value={ntripConfig.host}
-                  onChange={(e) => saveConfig({ ...ntripConfig, host: e.target.value })}
-                  placeholder="e.g. rtk2go.com or 192.168.1.50"
+                  onChange={(e) => handleHostChange(e.target.value)}
+                  placeholder="e.g. rtk2go.com or rtk2go.com:2101/TEST-BASE"
                   className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
                 />
               </div>
@@ -248,12 +271,12 @@ export const NtripWidget: React.FC = () => {
                 <label className="text-[10px] text-zinc-400 uppercase font-bold">Protocol</label>
                 <select
                   disabled={isConnected || isConnecting}
-                  value={ntripConfig.protocol || 'websocket'}
+                  value={ntripConfig.protocol || 'http'}
                   onChange={(e) => saveConfig({ ...ntripConfig, protocol: e.target.value as any })}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
                 >
-                  <option value="websocket">WebSocket / Proxy (Recommended)</option>
-                  <option value="http">Direct HTTP Stream</option>
+                  <option value="http">HTTP Streaming (Default)</option>
+                  <option value="websocket">WebSocket / Direct Proxy</option>
                 </select>
               </div>
             </div>

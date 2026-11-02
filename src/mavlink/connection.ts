@@ -32,6 +32,7 @@ export class MavlinkConnection {
   private packetListeners: Set<PacketCallback> = new Set();
   private statusListeners: Set<StatusCallback> = new Set();
   private sendListeners: Set<SendCallback> = new Set();
+  private textListeners: Set<(msg: string) => void> = new Set();
 
   private status: ConnectionStatus = 'disconnected';
   private shouldReconnect = true;
@@ -80,6 +81,19 @@ export class MavlinkConnection {
     return () => {
       this.sendListeners.delete(callback);
     };
+  }
+
+  public onText(callback: (msg: string) => void): () => void {
+    this.textListeners.add(callback);
+    return () => this.textListeners.delete(callback);
+  }
+
+  public sendText(message: string): boolean {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(message);
+      return true;
+    }
+    return false;
   }
 
   public onPacket(callback: PacketCallback): () => void {
@@ -154,6 +168,14 @@ export class MavlinkConnection {
               }
             });
           }
+        } else if (typeof event.data === 'string') {
+          this.textListeners.forEach((listener) => {
+            try {
+              listener(event.data as string);
+            } catch (err) {
+              console.error('Error in text listener:', err);
+            }
+          });
         }
       };
 

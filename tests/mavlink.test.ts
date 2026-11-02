@@ -1784,6 +1784,49 @@ try {
     process.exit(1);
   }
   console.log('RTCM3 fragmentation and GPS_RTCM_DATA injection PASSED!');
+
+  // 28d. Test connectViaBridge and text control messages
+  let bridgeReceivedText = '';
+  const origSendText = mavlinkConnection.sendText.bind(mavlinkConnection);
+  (mavlinkConnection as any).sendText = (msg: string) => {
+    bridgeReceivedText = msg;
+    return true;
+  };
+
+  let injectorBridgeStatus = '';
+  const unsubInj = rtcmInjector.onStateChange((st) => {
+    injectorBridgeStatus = st.status;
+  });
+
+  await rtcmInjector.connectViaBridge({
+    host: 'rtk2go.com',
+    port: 2101,
+    mountpoint: 'TEST-BASE',
+    username: 'testuser@example.com',
+    password: 'none',
+    sendGga: true,
+  });
+
+  if (!bridgeReceivedText.includes('ntrip_connect') || !bridgeReceivedText.includes('TEST-BASE')) {
+    console.error('connectViaBridge failed to send ntrip_connect:', bridgeReceivedText);
+    process.exit(1);
+  }
+
+  // Simulate bridge status message back to frontend
+  const textListeners = (mavlinkConnection as any).textListeners;
+  for (const l of textListeners) {
+    l(JSON.stringify({ type: 'ntrip_status', status: 'streaming' }));
+  }
+
+  if (injectorBridgeStatus !== 'streaming') {
+    console.error('Failed to transition to streaming on bridge message:', injectorBridgeStatus);
+    process.exit(1);
+  }
+
+  await rtcmInjector.disconnect();
+  (mavlinkConnection as any).sendText = origSendText;
+  unsubInj();
+  console.log('connectViaBridge and text control messages PASSED!');
 } finally {
   (mavlinkConnection as any).send = origSend;
   rtcmInjector.stopRateMeter();

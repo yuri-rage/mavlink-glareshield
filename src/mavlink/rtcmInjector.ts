@@ -214,6 +214,7 @@ export class RtcmInjector {
   private ntripSocket: WebSocket | null = null;
   private ntripAbortController: AbortController | null = null;
   private ggaIntervalTimer: any = null;
+  private unsubBridgeText: (() => void) | null = null;
 
   constructor() {
     this.startRateMeter();
@@ -441,24 +442,63 @@ export class RtcmInjector {
           }
         };
       } else {
-        // Direct HTTP / fetch streaming
-        this.ntripAbortController = new AbortController();
-        const headers: Record<string, string> = {
-          'Ntrip-Version': 'Ntrip/2.0',
-          'User-Agent': 'NTRIP MavlinkGlareshield/1.0',
-        };
-        if (config.username || config.password) {
-          headers['Authorization'] = `Basic ${btoa(`${config.username || ''}:${config.password || ''}`)}`;
+        // HTTP streaming mode:
+        // Try local Vite dev server proxy endpoint first (/api/ntrip-stream),
+        // which connects directly to the caster via raw TCP, strips ICY 200 OK headers, and streams without CORS issues.
+        const proxyUrl = `/api/ntrip-stream?host=${encodeURIComponent(host)}&port=${port}&mountpoint=${encodeURIComponent(mountpoint)}` +
+          (config.username ? `&username=${encodeURIComponent(config.username)}` : '') +
+          (config.password ? `&password=${encodeURIComponent(config.password)}` : '');
+
+        let response: Response | null = null;
+        let usedProxy = false;
+
+        try {
+          this.ntripAbortController = new AbortController();
+          response = await fetch(proxyUrl, {
+            signal: this.ntripAbortController.signal,
+          });
+          if (response.ok) {
+            usedProxy = true;
+          }
+        } catch {
+          response = null;
         }
 
-        const url = `http://${host}:${port}/${mountpoint}`;
-        const response = await fetch(url, {
-          signal: this.ntripAbortController.signal,
-          headers,
-        });
+        // If local proxy endpoint is not available or returned non-ok (e.g. standalone production build):
+        // Try via the companion bridge WebSocket connection if active
+        if (!response || !response.ok) {
+          if (mavlinkConnection.getStatus() === 'connected') {
+            console.log('[NTRIP] Local Vite proxy unavailable, connecting to caster via MAVLink bridge proxy...');
+            await this.connectViaBridge(config);
+            return;
+          }
 
-        if (!response.ok && response.status !== 200) {
-          throw new Error(`Caster returned HTTP ${response.status}: ${response.statusText}`);
+          // Fall back to direct fetch to caster
+          console.log(`[NTRIP] Attempting direct fetch to http://${host}:${port}/${mountpoint}...`);
+          this.ntripAbortController = new AbortController();
+          const headers: Record<string, string> = {
+            'Ntrip-Version': 'Ntrip/2.0',
+            'User-Agent': 'NTRIP MavlinkGlareshield/1.0',
+          };
+          if (config.username || config.password) {
+            headers['Authorization'] = `Basic ${btoa(`${config.username || ''}:${config.password || ''}`)}`;
+          }
+
+          try {
+            response = await fetch(`http://${host}:${port}/${mountpoint}`, {
+              signal: this.ntripAbortController.signal,
+              headers,
+            });
+          } catch (fetchErr: any) {
+            throw new Error(
+              `Caster connection failed. Browsers block direct TCP/ICY connections (CORS/ICY 200). Please start the bridge ('python3 bridge/bridge.py') or Vite dev server to stream from ${host}:${port}.`
+            );
+          }
+        }
+
+        if (!response || !response.ok) {
+          const errText = response ? await response.text().catch(() => '') : '';
+          throw new Error(`Caster connection failed (${response?.status || 'Error'}): ${errText || response?.statusText || 'Unknown error'}`);
         }
 
         this.updateState({ status: 'connected', source: 'ntrip' });
@@ -467,8 +507,13 @@ export class RtcmInjector {
 
         // Start GGA feedback
         if (config.sendGga) {
-          this.startGgaLoop(() => {
-            // In HTTP streaming mode, GGA feedback is sent periodically via separate POST/request if supported
+          this.startGgaLoop((ggaSentence) => {
+            if (usedProxy) {
+              fetch(proxyUrl, {
+                method: 'POST',
+                body: ggaSentence,
+              }).catch(() => {});
+            }
           });
         }
 
@@ -495,6 +540,56 @@ export class RtcmInjector {
         error: err?.message || 'NTRIP caster connection failed',
       });
       throw err;
+    }
+  }
+
+  public async connectViaBridge(config: NtripConfig) {
+    this.updateState({ status: 'connecting', source: 'ntrip', error: null });
+
+    this.unsubBridgeText = mavlinkConnection.onText((msgStr) => {
+      try {
+        const msg = JSON.parse(msgStr);
+        if (msg.type === 'ntrip_status') {
+          if (msg.status === 'streaming') {
+            this.updateState({ status: 'streaming', source: 'ntrip' });
+          } else if (msg.status === 'disconnected') {
+            this.updateState({ status: 'disconnected', source: 'none' });
+          }
+        } else if (msg.type === 'ntrip_data' && msg.data) {
+          // Decode base64 binary bytes
+          const binaryStr = atob(msg.data);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+          this.processRawStream(bytes);
+        } else if (msg.type === 'ntrip_error') {
+          this.updateState({ status: 'error', error: msg.message || 'Bridge NTRIP error' });
+        }
+      } catch {}
+    });
+
+    const sent = mavlinkConnection.sendText(
+      JSON.stringify({
+        type: 'ntrip_connect',
+        host: config.host.trim(),
+        port: config.port || 2101,
+        mountpoint: config.mountpoint.trim().replace(/^\//, ''),
+        username: config.username || '',
+        password: config.password || '',
+      })
+    );
+
+    if (!sent) {
+      throw new Error('Bridge is not connected. Start the bridge using python3 bridge/bridge.py.');
+    }
+
+    this.updateState({ status: 'connected', source: 'ntrip' });
+
+    if (config.sendGga) {
+      this.startGgaLoop((gga) => {
+        mavlinkConnection.sendText(JSON.stringify({ type: 'ntrip_gga', gga }));
+      });
     }
   }
 
@@ -533,6 +628,12 @@ export class RtcmInjector {
       this.ntripAbortController.abort();
       this.ntripAbortController = null;
     }
+
+    if (this.unsubBridgeText) {
+      this.unsubBridgeText();
+      this.unsubBridgeText = null;
+    }
+    mavlinkConnection.sendText(JSON.stringify({ type: 'ntrip_disconnect' }));
 
     if (this.serialPort) {
       this.isSerialReading = false;

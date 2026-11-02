@@ -14,6 +14,8 @@ Usage:
 
 import argparse
 import asyncio
+import base64
+import json
 import math
 import struct
 import time
@@ -161,6 +163,10 @@ class BridgeServer:
         self.sim_voltage = 16.4
         self.sim_start_time = time.time()
 
+        # NTRIP stream state
+        self.ntrip_writer: asyncio.StreamWriter | None = None
+        self.ntrip_task: asyncio.Task[None] | None = None
+
     async def broadcast(self, data: bytes):
         if not self.clients:
             return
@@ -207,11 +213,160 @@ class BridgeServer:
                         await self.handle_mock_command(message)
                     elif self.transport:
                         self.send_to_vehicle(message)
+                elif isinstance(message, str):
+                    await self.handle_text_command(websocket, message)
         except websockets.exceptions.ConnectionClosed:
             pass
         finally:
+            await self.stop_ntrip_stream()
             self.clients.discard(websocket)
             print(f"[WS] Client disconnected. Active: {len(self.clients)}")
+
+    async def handle_text_command(self, websocket: Any, message: str) -> None:
+        try:
+            cmd = json.loads(message)
+        except Exception:  # noqa: BLE001
+            return
+
+        cmd_type = cmd.get("type")
+        if cmd_type == "ntrip_connect":
+            await self.start_ntrip_stream(websocket, cmd)
+        elif cmd_type == "ntrip_disconnect":
+            await self.stop_ntrip_stream(websocket)
+        elif cmd_type == "ntrip_gga":
+            await self.send_ntrip_gga(cmd.get("gga", ""))
+
+    async def start_ntrip_stream(self, websocket: Any, cmd: dict[str, Any]) -> None:
+        await self.stop_ntrip_stream()
+        host = str(cmd.get("host", "")).strip()
+        port = int(cmd.get("port", 2101))
+        mountpoint = str(cmd.get("mountpoint", "")).strip().lstrip("/")
+        username = str(cmd.get("username", "")).strip()
+        password = str(cmd.get("password", "")).strip()
+
+        if not host or not mountpoint:
+            await websocket.send(
+                json.dumps({"type": "ntrip_error", "message": "Missing host or mountpoint"})
+            )
+            return
+
+        auth_header = ""
+        if username or password:
+            token = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
+            auth_header = f"Authorization: Basic {token}\r\n"
+
+        req = (
+            f"GET /{mountpoint} HTTP/1.0\r\n"
+            f"User-Agent: NTRIP MavlinkGlareshield/1.0\r\n"
+            f"{auth_header}\r\n"
+        )
+
+        try:
+            reader, writer = await asyncio.open_connection(host, port)
+            self.ntrip_writer = writer
+            writer.write(req.encode("latin1"))
+            await writer.drain()
+
+            resp_buf = bytearray()
+            header_parsed = False
+
+            while not header_parsed:
+                chunk = await reader.read(512)
+                if not chunk:
+                    msg = "Caster closed connection before response"
+                    raise ConnectionError(msg)
+                resp_buf.extend(chunk)
+
+                split_at = -1
+                double_crlf = resp_buf.find(b"\r\n\r\n")
+                icy_idx = resp_buf.find(b"ICY 200 OK\r\n")
+
+                if double_crlf != -1:
+                    split_at = double_crlf + 4
+                elif icy_idx != -1:
+                    split_at = icy_idx + 12
+
+                if split_at != -1:
+                    header_parsed = True
+                    header_str = bytes(resp_buf[:split_at]).decode("latin1", errors="replace")
+                    if "200 OK" not in header_str:
+                        writer.close()
+                        await writer.wait_closed()
+                        self.ntrip_writer = None
+                        await websocket.send(
+                            json.dumps({
+                                "type": "ntrip_error",
+                                "message": f"Caster rejected: {header_str.strip()}",
+                            })
+                        )
+                        return
+
+                    await websocket.send(
+                        json.dumps({"type": "ntrip_status", "status": "streaming"})
+                    )
+                    body_start = bytes(resp_buf[split_at:])
+                    if body_start:
+                        await websocket.send(
+                            json.dumps({
+                                "type": "ntrip_data",
+                                "data": base64.b64encode(body_start).decode("ascii"),
+                            })
+                        )
+
+            async def ntrip_read_loop() -> None:
+                try:
+                    while True:
+                        data = await reader.read(1024)
+                        if not data:
+                            break
+                        await websocket.send(
+                            json.dumps({
+                                "type": "ntrip_data",
+                                "data": base64.b64encode(data).decode("ascii"),
+                            })
+                        )
+                except Exception:  # noqa: BLE001, S110
+                    pass
+                finally:
+                    await self.stop_ntrip_stream(websocket)
+
+            self.ntrip_task = asyncio.create_task(ntrip_read_loop())
+
+        except Exception as e:  # noqa: BLE001
+            if self.ntrip_writer:
+                try:
+                    self.ntrip_writer.close()
+                except Exception:  # noqa: BLE001, S110
+                    pass
+                self.ntrip_writer = None
+            await websocket.send(json.dumps({"type": "ntrip_error", "message": str(e)}))
+
+    async def send_ntrip_gga(self, gga: str) -> None:
+        if self.ntrip_writer and gga:
+            try:
+                self.ntrip_writer.write(gga.encode("ascii"))
+                await self.ntrip_writer.drain()
+            except Exception:  # noqa: BLE001, S110
+                pass
+
+    async def stop_ntrip_stream(self, websocket: Any | None = None) -> None:
+        if self.ntrip_task:
+            self.ntrip_task.cancel()
+            self.ntrip_task = None
+        if self.ntrip_writer:
+            try:
+                self.ntrip_writer.close()
+                await self.ntrip_writer.wait_closed()
+            except Exception:  # noqa: BLE001, S110
+                pass
+            self.ntrip_writer = None
+        if websocket:
+            try:
+                await websocket.send(
+                    json.dumps({"type": "ntrip_status", "status": "disconnected"})
+                )
+            except Exception:  # noqa: BLE001, S110
+                pass
 
     def send_to_vehicle(self, data: bytes):
         if self.mode == "udp" and self.transport:
