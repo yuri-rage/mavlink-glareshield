@@ -3,13 +3,14 @@ import { useTelemetryStore } from '../../store/telemetryStore';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Terminal, Trash2, Volume2, VolumeX, AlertTriangle, Info } from 'lucide-react';
+import { Terminal, Trash2, Volume2, VolumeX, ArrowUpDown } from 'lucide-react';
 
 export const StatusTextConsoleWidget: React.FC = () => {
   const statusMessages = useTelemetryStore((state) => state.statusMessages);
   const clearMessages = useTelemetryStore((state) => state.clearMessages);
   const [filterSeverity, setFilterSeverity] = useState<number | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
 
   const getSeverityBadgeVariant = (sev: number) => {
     if (sev <= 2) return 'destructive'; // Emergency, Alert, Critical
@@ -22,6 +23,8 @@ export const StatusTextConsoleWidget: React.FC = () => {
     ? statusMessages
     : statusMessages.filter((m) => m.severity <= filterSeverity);
 
+  const displayed = sortOrder === 'newest' ? filtered : [...filtered].reverse();
+
   return (
     <Card className="border-zinc-800 bg-zinc-950/90 shadow-md flex flex-col h-full min-h-[300px]">
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
@@ -31,7 +34,18 @@ export const StatusTextConsoleWidget: React.FC = () => {
             MESSAGES
           </CardTitle>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSortOrder((prev) => (prev === 'newest' ? 'oldest' : 'newest'))}
+              className="h-7 px-2 text-xs font-sans font-semibold text-zinc-400 hover:text-zinc-200 gap-1"
+              title={`Sort: ${sortOrder === 'newest' ? 'Newest first (click for Oldest)' : 'Oldest first (click for Newest)'}`}
+            >
+              <ArrowUpDown className="h-3.5 w-3.5 text-sky-400" />
+              <span className="hidden sm:inline capitalize">{sortOrder}</span>
+            </Button>
+
             <Button
               variant="ghost"
               size="icon"
@@ -47,7 +61,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
               size="icon"
               onClick={clearMessages}
               className="h-7 w-7 text-zinc-400 hover:text-red-400"
-              title="Clear Console"
+              title="Clear Messages"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -86,12 +100,12 @@ export const StatusTextConsoleWidget: React.FC = () => {
 
         {/* Message Log Box */}
         <div className="flex-1 bg-black/60 rounded-xl border border-zinc-850 p-1.5 font-mono text-xs overflow-y-auto max-h-[260px] space-y-0.5 select-text">
-          {filtered.length === 0 ? (
+          {displayed.length === 0 ? (
             <div className="text-zinc-600 text-center py-8 italic">
               No STATUSTEXT messages received yet.
             </div>
           ) : (
-            filtered.map((msg) => (
+            displayed.map((msg) => (
               <div key={msg.id} className="flex items-center gap-1.5 hover:bg-zinc-900/60 py-0.5 px-1.5 rounded transition-colors text-[11px]">
                 <span className="text-zinc-500 text-[10px] whitespace-nowrap font-mono">{msg.time}</span>
                 <Badge variant={getSeverityBadgeVariant(msg.severity)} className="text-[8.5px] px-1 py-0 h-3.5 leading-none">
