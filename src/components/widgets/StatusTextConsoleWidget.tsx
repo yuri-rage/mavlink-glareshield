@@ -6,6 +6,7 @@ import { Badge } from '../ui/badge';
 import { Terminal, Trash2, Volume2, VolumeX, ArrowUpDown } from 'lucide-react';
 
 const STORAGE_KEY_SORT = 'glareshield_messages_sort';
+const STORAGE_KEY_SOUND = 'glareshield_messages_sound';
 
 const getInitialSortOrder = (): 'newest' | 'oldest' => {
   if (typeof localStorage !== 'undefined') {
@@ -17,16 +18,89 @@ const getInitialSortOrder = (): 'newest' | 'oldest' => {
   return 'newest';
 };
 
+const getInitialSoundEnabled = (): boolean => {
+  if (typeof localStorage !== 'undefined') {
+    return localStorage.getItem(STORAGE_KEY_SOUND) === 'true';
+  }
+  return false;
+};
+
+function playAlertChime(severity: number) {
+  if (typeof window === 'undefined') return;
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    if (severity <= 2) {
+      // Critical / Emergency: Dual high-urgency tone
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.setValueAtTime(1174.66, now + 0.12);
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    } else {
+      // Warning / Error: Single clean avionics chime
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(659.25, now);
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+      osc.start(now);
+      osc.stop(now + 0.2);
+    }
+    osc.onended = () => {
+      ctx.close().catch(() => {});
+    };
+  } catch {
+    // Ignore audio context restrictions if user hasn't interacted yet
+  }
+}
+
 export const StatusTextConsoleWidget: React.FC = () => {
   const statusMessages = useTelemetryStore((state) => state.statusMessages);
   const clearMessages = useTelemetryStore((state) => state.clearMessages);
   const [filterSeverity, setFilterSeverity] = useState<number | null>(null);
-  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(getInitialSoundEnabled);
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>(getInitialSortOrder);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const prevSortOrderRef = useRef(sortOrder);
+  const lastSeenMsgIdRef = useRef<string | null>(statusMessages[0]?.id ?? null);
+
+  const toggleSound = () => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_SOUND, String(next));
+      }
+      if (next) {
+        playAlertChime(4);
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const newest = statusMessages[0];
+    if (!newest) {
+      lastSeenMsgIdRef.current = null;
+      return;
+    }
+    if (newest.id !== lastSeenMsgIdRef.current) {
+      lastSeenMsgIdRef.current = newest.id;
+      if (soundEnabled && newest.severity <= 4) {
+        playAlertChime(newest.severity);
+      }
+    }
+  }, [statusMessages, soundEnabled]);
 
   const toggleSortOrder = () => {
     setSortOrder((prev) => {
@@ -97,7 +171,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setSoundEnabled(!soundEnabled)}
+              onClick={toggleSound}
               className="h-7 w-7 text-zinc-400 hover:text-zinc-200"
               title={soundEnabled ? 'Mute alert chime' : 'Enable alert chime'}
             >
