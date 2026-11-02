@@ -134,6 +134,19 @@ export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; item
 
     // Helper: Expand QGC ComplexItems (Survey, Corridor Scan, etc.)
     const expandItem = (rawItem: any): any[] => {
+      if (rawItem.type === 'ComplexItem' && (rawItem.complexItemType === 'fwLandingPattern' || rawItem.complexItemType === 'vtolLandingPattern')) {
+        const rel = rawItem.altitudesAreRelative !== false;
+        const frame = rel ? 3 : 0;
+        const ap = rawItem.landingApproachCoordinate ?? rawItem.loiterCoordinate;
+        const ld = rawItem.landCoordinate;
+        const out: any[] = [{ command: 189, frame: 2, autoContinue: true, params: [0, 0, 0, 0, 0, 0, 0] }];
+        if (rawItem.useDoChangeSpeed) out.push({ command: 178, frame: 2, autoContinue: true, params: [0, rawItem.finalApproachSpeed, -1, 0, 0, 0, 0] });
+        out.push(rawItem.useLoiterToAlt !== false
+          ? { command: 31, frame, autoContinue: true, params: [1, (rawItem.loiterClockwise === false ? -1 : 1) * rawItem.loiterRadius, 0, 1, ap[0], ap[1], ap[2]] }
+          : { command: 16, frame, autoContinue: true, params: [0, 0, 0, null, ap[0], ap[1], ap[2]] });
+        out.push({ command: rawItem.complexItemType === 'vtolLandingPattern' ? 85 : 21, frame, autoContinue: true, params: [0, 0, 0, null, ld[0], ld[1], ld[2] ?? 0] });
+        return out;
+      }
       if (rawItem.type === 'ComplexItem') {
         if (Array.isArray(rawItem.TransectStyleComplexItem?.Items) && rawItem.TransectStyleComplexItem.Items.length > 0) {
           return rawItem.TransectStyleComplexItem.Items;
@@ -201,7 +214,7 @@ export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; item
           const z = params[6] ?? 0;
 
           // Never default coordinates to (0, 0) for commands that have a location!
-          if (cmdHasLocation(cmd) && x === 0 && y === 0) {
+          if ((cmd === 16 || cmd === 82) && x === 0 && y === 0) {
             throw new Error(`Waypoint ${seq} (command ${cmd}) has invalid coordinates (0, 0) [Gulf of Guinea]. Upload rejected for vehicle safety.`);
           }
 
