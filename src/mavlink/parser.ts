@@ -259,7 +259,8 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
       };
     }
 
-    case MAVLINK_MSG_ID.GLOBAL_POSITION_INT:
+    case MAVLINK_MSG_ID.GLOBAL_POSITION_INT: {
+      const rawHdg = getUint16(26);
       return {
         time_boot_ms: getUint32(0),
         lat: getInt32(4) / 1e7, // degrees
@@ -269,8 +270,10 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         vx: getInt16(20) / 100, // m/s
         vy: getInt16(22) / 100, // m/s
         vz: getInt16(24) / 100, // m/s
-        hdg: getUint16(26) === 65535 ? 0 : getUint16(26) / 100, // degrees
+        hdg: rawHdg === 65535 ? 0 : rawHdg / 100, // degrees
+        rawHdg,
       };
+    }
 
     case MAVLINK_MSG_ID.GPS_RAW_INT:
       return {

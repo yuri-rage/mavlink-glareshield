@@ -10,20 +10,23 @@ export const HudWidget: React.FC = () => {
   const attitude = useTelemetryStore((state) => state.attitude);
   const vfr = useTelemetryStore((state) => state.vfr);
   const position = useTelemetryStore((state) => state.position);
-  const gps = useTelemetryStore((state) => state.gps);
   const missionWaypoints = useTelemetryStore((state) => state.missionWaypoints);
   const currentWaypointSeq = useTelemetryStore((state) => state.currentWaypointSeq);
   const imu = useTelemetryStore((state) => state.imu);
   const { formatSpeed, formatAltitude, formatClimb, system: unitSystem, altitudeMode } = useUnitsStore();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const fpmStateRef = useRef<{ gamma: number; delta: number; initialized: boolean }>({ gamma: 0, delta: 0, initialized: false });
+  const fpmStateRef = useRef<{ gamma: number; delta: number; initialized: boolean; lastTime: number }>({
+    gamma: 0,
+    delta: 0,
+    initialized: false,
+    lastTime: 0,
+  });
 
   // Register subscription for high-frequency attitude, VFR, and IMU
   useEffect(() => {
     messageRateManager.registerRequirement('hud-attitude', MAVLINK_MSG_ID.ATTITUDE);
     messageRateManager.registerRequirement('hud-vfr', MAVLINK_MSG_ID.VFR_HUD);
     messageRateManager.registerRequirement('hud-pos', MAVLINK_MSG_ID.GLOBAL_POSITION_INT);
-    messageRateManager.registerRequirement('hud-gps', MAVLINK_MSG_ID.GPS_RAW_INT);
     messageRateManager.registerRequirement('hud-imu', MAVLINK_MSG_ID.RAW_IMU);
     messageRateManager.registerRequirement('hud-scaled-imu', MAVLINK_MSG_ID.SCALED_IMU);
     messageRateManager.registerRequirement('hud-highres-imu', MAVLINK_MSG_ID.HIGHRES_IMU);
@@ -31,7 +34,6 @@ export const HudWidget: React.FC = () => {
       messageRateManager.unregisterRequirement('hud-attitude');
       messageRateManager.unregisterRequirement('hud-vfr');
       messageRateManager.unregisterRequirement('hud-pos');
-      messageRateManager.unregisterRequirement('hud-gps');
       messageRateManager.unregisterRequirement('hud-imu');
       messageRateManager.unregisterRequirement('hud-scaled-imu');
       messageRateManager.unregisterRequirement('hud-highres-imu');
@@ -174,16 +176,15 @@ export const HudWidget: React.FC = () => {
       }
     }
     ctx.setLineDash([]);
+    ctx.restore();
 
     // =========================================================
     // 1b. Flight Path Marker (FPM) / Velocity Vector (The "Bird")
     // Conformal Earth-referenced trajectory marker anchored to the
-    // artificial horizon and pitch ladder. In this horizon frame:
-    // y = 0 is the horizon line (0° climb/descent).
-    // y = -gamma * PITCH_SCALE is the flight path angle.
-    // x = delta * PITCH_SCALE is the drift angle (Track - Heading).
-    // Roll and pitch maneuvers translate/rotate the frame in hardware
-    // sync, eliminating all lag, jitter, and rubber-banding.
+    // flight path angle (gamma) and track drift relative to heading.
+    // Screen position is computed first and then clamped in screen
+    // coordinates so steep climbs and dives are never falsely caged.
+    // Wings remain strictly parallel to the aircraft waterline.
     // =========================================================
     let vn = position.vx;
     let ve = position.vy;
@@ -206,13 +207,19 @@ export const HudWidget: React.FC = () => {
       fpaDeg = (Math.atan2(climb, gs) * 180) / Math.PI;
     }
 
-    // Track (Course Over Ground) & Drift Angle relative to high-rate AHRS heading
+    // Track (Course Over Ground) & Drift Angle relative to heading.
+    // Prefer GLOBAL_POSITION_INT's own hdg (sampled synchronously with velocity),
+    // falling back to ATTITUDE yaw only when hdg is unknown (65535 or undefined).
     let driftDeg = 0;
     if (gs > 0.2) {
       let trackDeg = (Math.atan2(ve, vn) * 180) / Math.PI;
       if (trackDeg < 0) trackDeg += 360;
 
-      driftDeg = trackDeg - attitude.yawDeg;
+      const posHdg = position.hdg;
+      const hasValidPosHdg = posHdg != null && posHdg !== 65535 && posHdg !== 655.35;
+      const refHeadingDeg = hasValidPosHdg ? posHdg : attitude.yawDeg;
+
+      driftDeg = trackDeg - refHeadingDeg;
       while (driftDeg > 180) driftDeg -= 360;
       while (driftDeg < -180) driftDeg += 360;
     }
@@ -223,35 +230,64 @@ export const HudWidget: React.FC = () => {
     const targetGamma = (1 - blend) * attitude.pitchDeg + blend * fpaDeg;
     const targetDelta = blend * driftDeg;
 
-    // Filter in angular space with an EMA to absorb discrete GPS/baro step-updates
+    // Time-based smoothing with shortest-arc wrapping at +/-180 deg
+    const now = performance.now();
     if (!fpmStateRef.current.initialized) {
-      fpmStateRef.current = { gamma: targetGamma, delta: targetDelta, initialized: true };
+      fpmStateRef.current = {
+        gamma: targetGamma,
+        delta: targetDelta,
+        initialized: true,
+        lastTime: now,
+      };
     } else {
-      fpmStateRef.current.gamma += (targetGamma - fpmStateRef.current.gamma) * 0.35;
-      fpmStateRef.current.delta += (targetDelta - fpmStateRef.current.delta) * 0.35;
+      const dt = Math.min(Math.max((now - fpmStateRef.current.lastTime) / 1000, 0.001), 0.5);
+      fpmStateRef.current.lastTime = now;
+
+      // Time-based exponential smoothing: tau ~ 0.23s (matches alpha = 0.35 at 10 Hz)
+      const alpha = 1 - Math.exp(-dt / 0.23);
+
+      fpmStateRef.current.gamma += (targetGamma - fpmStateRef.current.gamma) * alpha;
+
+      // Shortest-arc angular difference to prevent 360-degree sweep when reversing (+/-180 wrap)
+      let deltaDiff = targetDelta - fpmStateRef.current.delta;
+      while (deltaDiff > 180) deltaDiff -= 360;
+      while (deltaDiff < -180) deltaDiff += 360;
+
+      fpmStateRef.current.delta += deltaDiff * alpha;
+      while (fpmStateRef.current.delta > 180) fpmStateRef.current.delta -= 360;
+      while (fpmStateRef.current.delta < -180) fpmStateRef.current.delta += 360;
     }
 
     const displayGamma = fpmStateRef.current.gamma;
     const displayDelta = fpmStateRef.current.delta;
 
-    // Coordinates in the horizon frame
-    const rawFpmX = displayDelta * PITCH_SCALE;
-    const rawFpmY = -displayGamma * PITCH_SCALE;
+    // Compute the marker's unclamped screen offset from HUD center (cx, cy).
+    // In the roll-rotated frame:
+    //   xr = displayDelta * PITCH_SCALE
+    //   yr = (attitude.pitchDeg - displayGamma) * PITCH_SCALE
+    // Rotating by the horizon's rotation (-attitude.roll) gives true screen offsets:
+    const xr = displayDelta * PITCH_SCALE;
+    const yr = (attitude.pitchDeg - displayGamma) * PITCH_SCALE;
+    const rollRot = -attitude.roll;
+    const cosR = Math.cos(rollRot);
+    const sinR = Math.sin(rollRot);
+    const screenDx = xr * cosR - yr * sinR;
+    const screenDy = xr * sinR + yr * cosR;
 
-    // Bounded within central corridor so it never overlaps speed/alt ladders
-    const maxFpmX = width * 0.34;
-    const maxFpmY = height * 0.38;
-    const fpmX = Math.max(-maxFpmX, Math.min(maxFpmX, rawFpmX));
-    const fpmY = Math.max(-maxFpmY, Math.min(maxFpmY, rawFpmY));
-    const isCaged = Math.abs(rawFpmX) > maxFpmX || Math.abs(rawFpmY) > maxFpmY;
+    // Clamp in screen coordinates to central corridor (so steep climbs/dives are never
+    // falsely clamped against the off-screen horizon line)
+    const maxScreenDx = width * 0.34;
+    const maxScreenDy = height * 0.38;
+    const isCaged = Math.abs(screenDx) > maxScreenDx || Math.abs(screenDy) > maxScreenDy;
+    const clampedDx = Math.max(-maxScreenDx, Math.min(maxScreenDx, screenDx));
+    const clampedDy = Math.max(-maxScreenDy, Math.min(maxScreenDy, screenDy));
 
-    // Draw the FPM Symbol:
-    // Wings remain parallel to the aircraft waterline (fixed horizontal screen frame),
-    // counter-rotating against the artificial horizon roll.
+    const fpmScreenX = cx + clampedDx;
+    const fpmScreenY = cy + clampedDy;
+
+    // Draw the FPM Symbol in screen space:
+    // Wings remain strictly parallel to the waterline (screen horizontal)
     ctx.save();
-    ctx.translate(fpmX, fpmY);
-    ctx.rotate(attitude.roll);
-
     ctx.strokeStyle = HUD_HIGHLIGHT;
     ctx.fillStyle = HUD_HIGHLIGHT;
     ctx.lineWidth = 1.8;
@@ -263,28 +299,26 @@ export const HudWidget: React.FC = () => {
 
     // Center circle (5px radius, open center without dot)
     ctx.beginPath();
-    ctx.arc(0, 0, 5, 0, Math.PI * 2);
+    ctx.arc(fpmScreenX, fpmScreenY, 5, 0, Math.PI * 2);
     ctx.stroke();
 
     // Left wing / leg (7px wide, parallel to waterline)
     ctx.beginPath();
-    ctx.moveTo(-5, 0);
-    ctx.lineTo(-12, 0);
+    ctx.moveTo(fpmScreenX - 5, fpmScreenY);
+    ctx.lineTo(fpmScreenX - 12, fpmScreenY);
     ctx.stroke();
 
     // Right wing / leg (7px wide, parallel to waterline)
     ctx.beginPath();
-    ctx.moveTo(5, 0);
-    ctx.lineTo(12, 0);
+    ctx.moveTo(fpmScreenX + 5, fpmScreenY);
+    ctx.lineTo(fpmScreenX + 12, fpmScreenY);
     ctx.stroke();
 
     // Top vertical fin (5px tall, perpendicular to waterline)
     ctx.beginPath();
-    ctx.moveTo(0, -5);
-    ctx.lineTo(0, -10);
+    ctx.moveTo(fpmScreenX, fpmScreenY - 5);
+    ctx.lineTo(fpmScreenX, fpmScreenY - 10);
     ctx.stroke();
-
-    ctx.restore();
 
     ctx.restore();
 

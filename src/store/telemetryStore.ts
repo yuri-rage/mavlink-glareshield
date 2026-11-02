@@ -467,7 +467,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
               vx: data.vx,
               vy: data.vy,
               vz: data.vz,
-              hdg: data.hdg,
+              hdg: data.rawHdg === 65535 ? 65535 : data.hdg,
             },
             ...(updatedTrace !== state.flightTrace ? { flightTrace: updatedTrace } : {}),
           };
