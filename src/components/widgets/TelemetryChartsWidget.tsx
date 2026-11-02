@@ -31,7 +31,7 @@ export const TelemetryChartsWidget: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
-      <CardHeader className="py-2.5 px-4 bg-zinc-900/60 border-b border-zinc-800">
+      <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center justify-between">
           <span className="flex items-center gap-1.5">
             <ChartIcon className="h-4 w-4 text-sky-400" />

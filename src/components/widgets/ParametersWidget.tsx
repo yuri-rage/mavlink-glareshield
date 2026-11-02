@@ -112,7 +112,7 @@ export const ParametersWidget: React.FC = () => {
 
   return (
     <Card className="border-zinc-800 bg-zinc-950/90 shadow-md flex flex-col h-full min-h-[300px]">
-      <CardHeader className="py-2.5 px-4 bg-zinc-900/60 border-b border-zinc-800">
+      <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">

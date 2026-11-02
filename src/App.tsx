@@ -20,7 +20,7 @@ export const App: React.FC = () => {
   }, [connect]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-sky-500/30">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-sky-500/30 overflow-x-clip">
       {/* Top Navbar */}
       <Navbar />
 

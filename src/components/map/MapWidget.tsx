@@ -669,13 +669,9 @@ export const MapWidget: React.FC = () => {
 
   return (
     <Card className="border-zinc-800 bg-zinc-950/90 shadow-lg overflow-hidden flex flex-col h-full min-h-[350px] lg:min-h-[480px]">
-      <CardHeader className="py-1.5 px-2.5 sm:px-3 bg-zinc-900/60 border-b border-zinc-800">
+      <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <div className="flex flex-wrap items-center justify-between gap-1.5">
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-            <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5 mr-1 select-none">
-              <MapPin className="h-3.5 w-3.5 text-sky-400 shrink-0" />
-              <span>Map</span>
-            </span>
             {missionWaypoints.length > 0 && (
               <Badge variant="warning" className="text-[10px] font-mono px-1.5 py-0.5">
                 {missionWaypoints.length} WPs

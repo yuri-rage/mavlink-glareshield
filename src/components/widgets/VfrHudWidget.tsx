@@ -25,7 +25,7 @@ export const VfrHudWidget: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
-      <CardHeader className="py-2.5 px-4 bg-zinc-900/60 border-b border-zinc-800">
+      <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
           <Gauge className="h-3.5 w-3.5 text-sky-400 shrink-0" />
           <span>VFR Telemetry</span>

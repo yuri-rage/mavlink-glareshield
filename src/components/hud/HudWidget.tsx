@@ -541,7 +541,7 @@ export const HudWidget: React.FC = () => {
 
   return (
     <Card className="h-full border-zinc-800 bg-zinc-950 shadow-lg overflow-hidden flex flex-col">
-      <CardHeader className="py-2.5 px-4 bg-zinc-900/60 border-b border-zinc-800 flex flex-row items-center justify-between space-y-0">
+      <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800 flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
           <Compass className="h-3.5 w-3.5 text-sky-400" />
           Heads-Up Display (HUD)
