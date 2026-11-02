@@ -25,25 +25,31 @@ export function Modal({ isOpen, onClose, title, description, children }: ModalPr
 
     const dialog = dialogRef.current;
     if (dialog) {
+      const isElementVisible = (el: HTMLElement) => {
+        if (el.hasAttribute('disabled')) return false;
+        if (el instanceof HTMLInputElement && el.type === 'hidden') return false;
+        if (el.getAttribute('aria-hidden') === 'true') return false;
+        if (el.style.display === 'none' || el.style.visibility === 'hidden') return false;
+        return el.offsetParent !== null || el.getClientRects().length > 0;
+      };
+
       const getFocusableElements = () => {
-        const selector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-        return Array.from(dialog.querySelectorAll<HTMLElement>(selector)).filter(
-          (el) => !el.hasAttribute('disabled') && el.offsetParent !== null
-        );
+        const selector =
+          'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+        return Array.from(dialog.querySelectorAll<HTMLElement>(selector)).filter(isElementVisible);
       };
 
       // Only auto-focus initial element if focus is not already inside the dialog
       if (!dialog.contains(document.activeElement)) {
-        const firstInput = dialog.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), select:not([disabled])');
-        if (firstInput) {
-          firstInput.focus();
-        } else {
-          const focusable = getFocusableElements();
-          if (focusable.length > 0) {
-            focusable[0].focus();
-          } else {
-            dialog.focus();
-          }
+        const focusable = getFocusableElements();
+        const firstInput = focusable.find((el) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
+        const target = firstInput || focusable[0];
+        if (target) {
+          target.focus();
+        }
+        // Fallback if focus didn't land on target or no focusable element was found
+        if (!dialog.contains(document.activeElement)) {
+          dialog.focus();
         }
       }
 
@@ -58,6 +64,18 @@ export function Modal({ isOpen, onClose, title, description, children }: ModalPr
           const elements = getFocusableElements();
           if (elements.length === 0) {
             e.preventDefault();
+            dialog.focus();
+            return;
+          }
+
+          // If focus is currently outside the dialog, trap it immediately inside
+          if (!dialog.contains(document.activeElement)) {
+            e.preventDefault();
+            if (e.shiftKey) {
+              elements[elements.length - 1].focus();
+            } else {
+              elements[0].focus();
+            }
             return;
           }
 

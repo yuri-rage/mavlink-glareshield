@@ -17,6 +17,27 @@ import {
 
 const STORAGE_KEY = 'mavlink_ntrip_config';
 
+function maskPassword(pwd: string): string {
+  if (!pwd) return '';
+  try {
+    const encoded = btoa(pwd.split('').map((c, i) => String.fromCharCode(c.charCodeAt(0) ^ ((i % 5) + 0x5a))).join(''));
+    return `enc:${encoded}`;
+  } catch {
+    return pwd;
+  }
+}
+
+function unmaskPassword(stored: string): string {
+  if (!stored) return '';
+  if (!stored.startsWith('enc:')) return stored;
+  try {
+    const raw = atob(stored.slice(4));
+    return raw.split('').map((c, i) => String.fromCharCode(c.charCodeAt(0) ^ ((i % 5) + 0x5a))).join('');
+  } catch {
+    return '';
+  }
+}
+
 export const NtripWidget: React.FC = () => {
   const [injectorState, setInjectorState] = useState<RtcmInjectorState>(() => (rtcmInjector as any).state);
   const [sourceMode, setSourceMode] = useState<'ntrip' | 'serial'>('ntrip');
@@ -27,7 +48,13 @@ export const NtripWidget: React.FC = () => {
     try {
       if (typeof localStorage !== 'undefined') {
         const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed.password === 'string') {
+            parsed.password = unmaskPassword(parsed.password);
+          }
+          return parsed;
+        }
       }
     } catch {}
     return {
@@ -56,7 +83,11 @@ export const NtripWidget: React.FC = () => {
     setNtripConfig(updated);
     try {
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        const toStore = {
+          ...updated,
+          password: maskPassword(updated.password || ''),
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
       }
     } catch {}
   };

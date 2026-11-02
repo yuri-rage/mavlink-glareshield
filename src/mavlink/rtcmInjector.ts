@@ -1,5 +1,6 @@
 import { mavlinkConnection } from './connection';
 import { useTelemetryStore } from '../store/telemetryStore';
+import { useConnectionStore } from '../store/connectionStore';
 
 export interface NtripConfig {
   host: string;
@@ -28,6 +29,8 @@ export interface RtcmInjectorState {
   dataRateBps: number;
   packetRateHz: number;
   detectedTypes: Record<number, RtcmMessageTypeInfo>;
+  droppedOversizedFrames: number;
+  droppedRateLimitedFrames: number;
   error: string | null;
 }
 
@@ -290,12 +293,15 @@ export class RtcmInjector {
     dataRateBps: 0,
     packetRateHz: 0,
     detectedTypes: {},
+    droppedOversizedFrames: 0,
+    droppedRateLimitedFrames: 0,
     error: null,
   };
 
   private listeners: Set<(state: RtcmInjectorState) => void> = new Set();
   private parser = new RtcmFrameParser();
   private seq = 0;
+  private msmLastSent: Record<number, number> = {};
 
   // Rate tracking
   private recentBytes = 0;
@@ -357,8 +363,35 @@ export class RtcmInjector {
    * Chunks large frames (>180 bytes) with fragmentation flags.
    */
   public injectRtcmFrame(frame: Uint8Array, msgType: number) {
-    const encoder = mavlinkConnection.getEncoder();
     const frameLen = frame.length;
+
+    // ArduPilot's rtcm_buffer holds at most 4 fragments of 180 bytes (720 bytes max).
+    // Frames > 720 bytes overflow the buffer and cannot be reassembled; drop and count them.
+    if (frameLen > 720) {
+      this.state.droppedOversizedFrames++;
+      this.notify();
+      return;
+    }
+
+    // Limit RTCM injection rate based on link profile.
+    // On low-bandwidth links (SiK radio 57.6k), multi-constellation MSM7 frames (1077, 1087, 1097, 1127)
+    // starve MAVLink heartbeats and high-rate telemetry. Throttle MSM7 frames to 0.5 Hz per constellation.
+    const bandwidthProfile = useConnectionStore.getState().bandwidthProfile;
+    if (bandwidthProfile === 'low') {
+      const isMsm7 = msgType === 1077 || msgType === 1087 || msgType === 1097 || msgType === 1127;
+      if (isMsm7) {
+        const now = Date.now();
+        const lastSent = this.msmLastSent[msgType] || 0;
+        if (now - lastSent < 2000) {
+          this.state.droppedRateLimitedFrames++;
+          this.notify();
+          return;
+        }
+        this.msmLastSent[msgType] = now;
+      }
+    }
+
+    const encoder = mavlinkConnection.getEncoder();
     this.recentBytes += frameLen;
     this.state.bytesReceived += frameLen;
     this.state.bytesInjected += frameLen;
@@ -392,10 +425,9 @@ export class RtcmInjector {
       this.state.packetsSent++;
       this.recentPackets++;
     } else {
-      // Fragmented across multiple packets (max 4 fragments: 0..3)
-      const maxFrags = 4;
+      // Fragmented across multiple packets
       const fragSize = 180;
-      const numFrags = Math.min(Math.ceil(frameLen / fragSize), maxFrags);
+      const numFrags = Math.ceil(frameLen / fragSize);
 
       for (let fragId = 0; fragId < numFrags; fragId++) {
         const offset = fragId * fragSize;
@@ -409,6 +441,20 @@ export class RtcmInjector {
         this.state.packetsSent++;
         this.recentPackets++;
       }
+
+      // In ArduPilot's AP_GPS::handle_gps_rtcm_fragment, the reassembled buffer is delivered ONLY
+      // when a fragment arrives with len < 180.
+      // If frameLen is exactly 360 or 540 bytes, all chunks have len == 180, so ArduPilot never commits
+      // the reassembly unless followed by a zero-length tail fragment (len == 0).
+      if (frameLen === 360 || frameLen === 540) {
+        const tailFragId = numFrags;
+        const flags = 1 | ((tailFragId & 0x03) << 1) | ((this.seq & 0x1f) << 3);
+        const tailPacket = encoder.createGpsRtcmData(flags, new Uint8Array(0));
+        mavlinkConnection.send(tailPacket);
+        this.state.packetsSent++;
+        this.recentPackets++;
+      }
+
       this.seq = (this.seq + 1) & 0x1f;
     }
 

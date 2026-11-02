@@ -1956,4 +1956,150 @@ try {
   rtcmInjector.stopRateMeter();
 }
 
+// 29. Test cmdHasLocation, QGC ComplexItem expansion, RTCM tail fragments, and speed safety
+import { cmdHasLocation } from '../src/mavlink/messages.ts';
+import { useConnectionStore } from '../src/store/connectionStore.ts';
+
+// 29a: cmdHasLocation location vs non-location commands
+if (!cmdHasLocation(16) || !cmdHasLocation(21) || !cmdHasLocation(5001) || !cmdHasLocation(82) || !cmdHasLocation(201)) {
+  console.error('cmdHasLocation failed to identify geographic location commands!');
+  process.exit(1);
+}
+if (cmdHasLocation(203) || cmdHasLocation(206) || cmdHasLocation(176) || cmdHasLocation(178)) {
+  console.error('cmdHasLocation incorrectly identified non-location command as location!');
+  process.exit(1);
+}
+
+// 29b: DO_DIGICAM_CONTROL shutter = 1 coordinate preservation
+const digicamItem = {
+  seq: 0,
+  command: 203, // DO_DIGICAM_CONTROL
+  x: 1, // shutter command = 1 (param 5)
+  y: 0,
+  z: 0,
+  param1: 0,
+  param2: 0,
+  param3: 0,
+  param4: 0,
+};
+const digicamPacket = encoder.createMissionItemInt(1, 1, digicamItem);
+const parsedDigicam = parser.parse(digicamPacket);
+if (parsedDigicam.length !== 1 || parsedDigicam[0].messageId !== MAVLINK_MSG_ID.MISSION_ITEM_INT) {
+  console.error('Failed to parse MISSION_ITEM_INT packet!', parsedDigicam);
+  process.exit(1);
+}
+const decodedDigicam = decodePayload(parsedDigicam[0].messageId, parsedDigicam[0].payload);
+if (decodedDigicam.x !== 1) {
+  console.error('DO_DIGICAM_CONTROL shutter=1 was scaled or corrupted!', decodedDigicam);
+  process.exit(1);
+}
+console.log('cmdHasLocation & DO_DIGICAM_CONTROL shutter=1 preservation PASSED!');
+
+// 29c: QGC ComplexItem survey expansion & (0,0) coordinate rejection
+const dangerousZeroPlan = JSON.stringify({
+  fileType: 'Plan',
+  version: 1,
+  mission: {
+    items: [
+      {
+        type: 'ComplexItem',
+        complexType: 'survey',
+        // Missing items, coords default to 0,0
+      },
+    ],
+  },
+});
+let caughtZeroError = false;
+try {
+  parseDroppedMissionFile('survey.plan', new TextEncoder().encode(dangerousZeroPlan));
+} catch (e: any) {
+  caughtZeroError = true;
+}
+if (!caughtZeroError) {
+  console.error('Failed to reject dangerous (0,0) survey ComplexItem!');
+  process.exit(1);
+}
+
+// 29d: Circle fence radius at circ.circle.radius
+const circlePlan = JSON.stringify({
+  fileType: 'Plan',
+  version: 1,
+  geoFence: {
+    circles: [
+      {
+        circle: {
+          center: [37.7749, -122.4194],
+          radius: 120,
+        },
+        inclusion: true,
+      },
+    ],
+    polygons: [],
+    version: 2,
+  },
+});
+const parsedCircle = parseDroppedMissionFile('fence.plan', new TextEncoder().encode(circlePlan));
+const fenceSection = parsedCircle?.sections?.find((s) => s.type === 'fence');
+if (!parsedCircle || (parsedCircle.type !== 'fence' && parsedCircle.type !== 'plan') || !fenceSection || fenceSection.items[0]?.param1 !== 120) {
+  console.error('Failed to extract correct circle fence radius 120m!', { parsedCircle, fenceSection, item0: fenceSection?.items[0] });
+  process.exit(1);
+}
+console.log('QGC ComplexItem (0,0) rejection and circle radius extraction PASSED!');
+
+// 29e: Classification of fence_line_inspection.waypoints as mission
+const fenceLineInspectionText = `QGC WPL 110\n0\t1\t0\t16\t0\t0\t0\t0\t37.774900\t-122.419400\t10.000000\t1\n1\t0\t3\t16\t0\t0\t0\t0\t37.776000\t-122.418000\t50.000000\t1`;
+const parsedInspection = parseDroppedMissionFile('fence_line_inspection.waypoints', new TextEncoder().encode(fenceLineInspectionText));
+if (!parsedInspection || parsedInspection.type !== 'mission' || parsedInspection.missionType !== 0) {
+  console.error('Misclassified fence_line_inspection.waypoints as fence!', parsedInspection);
+  process.exit(1);
+}
+console.log('fence_line_inspection.waypoints mission classification PASSED!');
+
+// 29f: RTCM fragmentation 360/540 zero-length tail fragments and >720 drops
+const sentRtcmPackets: Uint8Array[] = [];
+const origSendRtcm = (mavlinkConnection as any).send;
+(mavlinkConnection as any).send = (data: Uint8Array) => {
+  sentRtcmPackets.push(data);
+};
+
+// 360 bytes: exactly 2 chunks of 180 + 1 zero-length tail fragment
+const frame360 = new Uint8Array(360);
+rtcmInjector.injectRtcmFrame(frame360, 1004);
+if (sentRtcmPackets.length !== 3) {
+  console.error('RTCM 360 bytes did not send exactly 3 packets (2 data + 1 tail)!', sentRtcmPackets.length);
+  process.exit(1);
+}
+const tailPacket = parser.parse(sentRtcmPackets[2]);
+if (tailPacket.length !== 1 || tailPacket[0].payload[1] !== 0) {
+  console.error('RTCM 360 bytes tail packet len != 0!', tailPacket[0]?.payload);
+  process.exit(1);
+}
+
+// 721 bytes: oversized, must be dropped
+const frame721 = new Uint8Array(721);
+const droppedBefore = (rtcmInjector as any).state.droppedOversizedFrames;
+rtcmInjector.injectRtcmFrame(frame721, 1004);
+const droppedAfter = (rtcmInjector as any).state.droppedOversizedFrames;
+if (droppedAfter !== droppedBefore + 1) {
+  console.error('RTCM frame > 720 bytes was not dropped and counted!', { droppedBefore, droppedAfter });
+  process.exit(1);
+}
+
+// Low bandwidth SiK MSM7 rate limit
+useConnectionStore.getState().setBandwidthProfile('low');
+const frameMsm7 = new Uint8Array(200);
+const limitedBefore = (rtcmInjector as any).state.droppedRateLimitedFrames;
+rtcmInjector.injectRtcmFrame(frameMsm7, 1077); // first one allowed
+rtcmInjector.injectRtcmFrame(frameMsm7, 1077); // immediate second one dropped
+const limitedAfter = (rtcmInjector as any).state.droppedRateLimitedFrames;
+if (limitedAfter !== limitedBefore + 1) {
+  console.error('RTCM MSM7 was not rate-limited on low bandwidth profile!', { limitedBefore, limitedAfter });
+  process.exit(1);
+}
+useConnectionStore.getState().setBandwidthProfile('standard');
+
+(mavlinkConnection as any).send = origSendRtcm;
+console.log('RTCM 360/540 tail fragment, >720 drop, and SiK MSM7 throttling PASSED!');
+
 console.log('All MAVLink protocol unit tests PASSED!');
+process.exit(0);

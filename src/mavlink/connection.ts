@@ -187,6 +187,7 @@ export class MavlinkConnection {
 
       socket.onclose = () => {
         if (this.ws !== socket) return;
+        this.ws = null;
         this.cleanup();
         this.setStatus('disconnected');
         if (this.shouldReconnect && !this.isReconnectPaused) {
@@ -217,7 +218,8 @@ export class MavlinkConnection {
    */
   public resumeReconnect() {
     this.isReconnectPaused = false;
-    if (this.shouldReconnect && this.status === 'disconnected' && !this.ws) {
+    const isSocketInactive = !this.ws || this.ws.readyState === WebSocket.CLOSED || this.ws.readyState === WebSocket.CLOSING;
+    if (this.shouldReconnect && this.status === 'disconnected' && isSocketInactive) {
       this.connect();
     }
   }
