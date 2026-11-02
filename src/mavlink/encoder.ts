@@ -198,6 +198,16 @@ export class MavlinkEncoder {
     );
   }
 
+  // Request version banner via MAV_CMD_DO_SEND_BANNER (42428)
+  public createRequestBanner(targetSystem = 1, targetComponent = 1): Uint8Array {
+    return this.createCommandLong(
+      targetSystem,
+      targetComponent,
+      MAV_CMD.DO_SEND_BANNER,
+      [0, 0, 0, 0, 0, 0, 0]
+    );
+  }
+
   // Request single parameter by index or ID
   public createParamRequestRead(
     targetSystem = 1,

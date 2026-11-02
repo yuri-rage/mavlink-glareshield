@@ -12,12 +12,6 @@ import {
   Shield,
   ShieldAlert,
   Activity,
-  Car,
-  Plane,
-  Ship,
-  Anchor,
-  Compass,
-  Disc,
   ChevronDown,
   Check,
   AlertTriangle,
@@ -105,24 +99,43 @@ export const Navbar: React.FC = () => {
   const vehicleCategoryLabel = getVehicleCategoryLabel(heartbeat.type);
   const availableModes = getVehicleFlightModes(heartbeat.type);
 
-  const getVehicleIcon = (sizeClass = 'h-4 w-4') => {
-    switch (vehicleCategory) {
-      case 'rover':
-        return heartbeat.type === 11 ? (
-          <Ship className={`${sizeClass} text-cyan-400 shrink-0`} />
-        ) : (
-          <Car className={`${sizeClass} text-emerald-400 shrink-0`} />
-        );
-      case 'plane':
-        return <Plane className={`${sizeClass} text-sky-400 shrink-0`} />;
-      case 'sub':
-        return <Anchor className={`${sizeClass} text-blue-400 shrink-0`} />;
-      case 'tracker':
-        return <Compass className={`${sizeClass} text-amber-400 shrink-0`} />;
-      case 'copter':
-      default:
-        return <Disc className={`${sizeClass} text-sky-400 shrink-0`} />;
+  // Vehicle icons from Mission Planner / TitanPlanner resources (copter, heli, plane, rover, boat, sub, tracker)
+  const getVehicleIcon = (sizeClass = 'h-3.5 sm:h-4 w-auto max-w-[24px] sm:max-w-[28px]') => {
+    let src = '/vehicles/copter.png';
+    let alt = 'Copter';
+
+    if (vehicleCategory === 'plane') {
+      src = '/vehicles/plane.png';
+      alt = 'Plane';
+    } else if (vehicleCategory === 'rover') {
+      if (heartbeat.type === 11) {
+        src = '/vehicles/boat.png';
+        alt = 'Boat';
+      } else {
+        src = '/vehicles/rover.png';
+        alt = 'Rover';
+      }
+    } else if (vehicleCategory === 'sub') {
+      src = '/vehicles/sub.png';
+      alt = 'Sub';
+    } else if (vehicleCategory === 'tracker') {
+      src = '/vehicles/tracker.png';
+      alt = 'Tracker';
+    } else if (heartbeat.type === 4) {
+      src = '/vehicles/heli.png';
+      alt = 'Helicopter';
+    } else {
+      src = '/vehicles/copter.png';
+      alt = 'Copter';
     }
+
+    return (
+      <img
+        src={src}
+        alt={alt}
+        className={`${sizeClass} shrink-0 object-contain`}
+      />
+    );
   };
 
   const getStatusBadge = () => {
@@ -200,14 +213,14 @@ export const Navbar: React.FC = () => {
                 {status === 'connected' ? (
                   heartbeat.lastHeartbeatTime > 0 ? (
                     <>
-                      {getVehicleIcon('h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0')}
+                      {getVehicleIcon()}
                       <div className="flex items-baseline gap-1 sm:gap-1.5 min-w-0">
                         <span className="text-xs text-sky-300 font-sans font-medium tracking-tight max-w-[42px] xs:max-w-[60px] sm:max-w-none truncate">
                           {vehicleCategoryLabel}
                         </span>
                         {firmwareVersion && (
                           <span
-                            className="text-[11px] text-zinc-400 font-sans font-normal tracking-tight hidden md:inline"
+                            className="text-[10px] sm:text-[11px] text-zinc-400 font-mono font-normal tracking-tight hidden sm:inline"
                             title={firmwareRaw || `Firmware: ${firmwareVersion}`}
                           >
                             {firmwareVersion}

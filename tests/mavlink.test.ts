@@ -924,6 +924,24 @@ if (roverVer !== '4.2.0') {
   process.exit(1);
 }
 
+const arduRoverVer = extractFirmwareVersion('ArduRover V4.8.0-dev (0d6ca064)');
+if (arduRoverVer !== '4.8.0-dev') {
+  console.error('Expected "4.8.0-dev", got:', arduRoverVer);
+  process.exit(1);
+}
+
+// Test MAV_CMD_DO_SEND_BANNER (42428) creation
+const bannerCmd = encoder.createRequestBanner(1, 1);
+if (bannerCmd[0] !== 0xfd || bannerCmd.length < 45) {
+  console.error('Failed to create DO_SEND_BANNER command');
+  process.exit(1);
+}
+const bannerCmdId = bannerCmd[38] | (bannerCmd[39] << 8);
+if (bannerCmdId !== 42428) {
+  console.error('Expected command ID 42428, got:', bannerCmdId);
+  process.exit(1);
+}
+
 // Test TelemetryStore STATUSTEXT processing sets firmwareVersion
 const bootStatusPayload = new Uint8Array(51);
 bootStatusPayload[0] = 6; // severity INFO

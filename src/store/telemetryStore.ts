@@ -357,6 +357,9 @@ export function appendStatusMessage(
   return [newMsg, ...existing.slice(0, 99)];
 }
 
+let lastVersionPollTime = 0;
+let versionPollAttempts = 0;
+
 const GPS_FIX_LABELS: Record<number, string> = {
   0: 'No GPS',
   1: 'No Fix',
@@ -617,6 +620,23 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         const isArmed = (data.base_mode & 0x80) !== 0;
         const modeName = resolveModeName(data.type, data.custom_mode);
         messageRateManager.setTarget(packet.systemId, packet.componentId);
+
+        // Poll for firmware version / version banner if not yet resolved
+        if (!state.firmwareVersion) {
+          if (now - lastVersionPollTime >= 2500) {
+            lastVersionPollTime = now;
+            versionPollAttempts++;
+            const encoder = mavlinkConnection.getEncoder();
+            mavlinkConnection.send(encoder.createRequestBanner(packet.systemId, packet.componentId));
+            mavlinkConnection.send(encoder.createRequestAutopilotVersion(packet.systemId, packet.componentId));
+            if (versionPollAttempts >= 2 && versionPollAttempts % 2 === 0) {
+              mavlinkConnection.send(encoder.createParamRequestList(packet.systemId, packet.componentId));
+            }
+          }
+        } else {
+          versionPollAttempts = 0;
+        }
+
         return {
           heartbeat: {
             type: data.type,
@@ -1143,7 +1163,11 @@ mavlinkConnection.onPacket((packet) => {
 // Reset vehicle heartbeat state when disconnected
 mavlinkConnection.onStatus((status) => {
   if (status === 'disconnected') {
+    lastVersionPollTime = 0;
+    versionPollAttempts = 0;
     useTelemetryStore.setState((state) => ({
+      firmwareVersion: null,
+      firmwareRaw: undefined,
       heartbeat: {
         ...state.heartbeat,
         type: 0,
@@ -1190,7 +1214,8 @@ mavlinkConnection.onSend((data) => {
         const isHousekeeping =
           cmdId === MAV_CMD.SET_MESSAGE_INTERVAL ||
           cmdId === MAV_CMD.REQUEST_MESSAGE ||
-          cmdId === MAV_CMD.REQUEST_AUTOPILOT_CAPABILITIES;
+          cmdId === MAV_CMD.REQUEST_AUTOPILOT_CAPABILITIES ||
+          cmdId === MAV_CMD.DO_SEND_BANNER;
         const timeoutMsg = {
           severity: isHousekeeping ? 6 : 4, // INFO for background housekeeping, WARNING for user commands
           severityLabel: isHousekeeping ? 'INFO' : 'WARNING',
