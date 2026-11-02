@@ -143,7 +143,7 @@ class BridgeServer:
         if not self.clients:
             return
         dead = []
-        for client in self.clients:
+        for client in list(self.clients):
             try:
                 await client.send(data)
             except Exception:
