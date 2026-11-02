@@ -7,7 +7,7 @@ import { MAVLINK_MSG_ID, getVehicleCategory } from '../../mavlink/messages';
 import { Card, CardHeader, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { RefreshCw, Crosshair, Maximize2, Shield, Flag, X, Eraser } from 'lucide-react';
+import { RefreshCw, Crosshair, Maximize2, Shield, Flag, X, Eraser, MapPin } from 'lucide-react';
 import L from 'leaflet';
 
 function renderVehicleSvg(type: number): string {
@@ -346,6 +346,17 @@ export const MapWidget: React.FC = () => {
     if (fixes.length > 0) {
       const prev = fixes[fixes.length - 1];
       if (prev.lat === position.lat && prev.lon === position.lon) {
+        // Stationary: keep fix timestamp current so resume uses the true GPS fix interval
+        prev.t = now;
+        return;
+      }
+      // If gap exceeds 1.0s (telemetry dropout or link loss), reset history and snap immediately
+      if (now - prev.t > 1000) {
+        fixesRef.current = [fix];
+        displayPosRef.current = { lat: fix.lat, lon: fix.lon, yaw: fix.yaw };
+        if (vehicleMarkerRef.current) {
+          vehicleMarkerRef.current.setLatLng([fix.lat, fix.lon]);
+        }
         return;
       }
     }
@@ -388,11 +399,15 @@ export const MapWidget: React.FC = () => {
         const p0 = fixes[fixes.length - 2];
         const p1 = fixes[fixes.length - 1];
         const fixDt = p1.t - p0.t;
-        if (fixDt > 10) {
+        if (fixDt > 10 && fixDt <= 1000) {
           // Play back one fix-interval late (steady, even motion)
           const u = Math.min(Math.max((now - p1.t) / fixDt, 0.0), 1.0);
           curLat = p0.lat + (p1.lat - p0.lat) * u;
           curLon = p0.lon + (p1.lon - p0.lon) * u;
+        } else {
+          // Gap > 1s (stop or link dropout): snap directly to newest fix
+          curLat = p1.lat;
+          curLon = p1.lon;
         }
       }
 
@@ -657,6 +672,10 @@ export const MapWidget: React.FC = () => {
       <CardHeader className="py-1.5 px-2.5 sm:px-3 bg-zinc-900/60 border-b border-zinc-800">
         <div className="flex flex-wrap items-center justify-between gap-1.5">
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+            <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5 mr-1 select-none">
+              <MapPin className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+              <span>Map</span>
+            </span>
             {missionWaypoints.length > 0 && (
               <Badge variant="warning" className="text-[10px] font-mono px-1.5 py-0.5">
                 {missionWaypoints.length} WPs
