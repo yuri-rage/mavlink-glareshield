@@ -354,13 +354,13 @@ export function getVehicleFlightModes(type: number): { label: string; mode: numb
   switch (category) {
     case 'rover':
       return [
-        { label: 'MANUAL', mode: 0 },
         { label: 'HOLD', mode: 4 },
+        { label: 'MANUAL', mode: 0 },
+        { label: 'ACRO', mode: 1 },
+        { label: 'AUTO', mode: 10 },
         { label: 'STEERING', mode: 3 },
         { label: 'LOITER', mode: 5 },
-        { label: 'AUTO', mode: 10 },
         { label: 'RTL', mode: 11 },
-        { label: 'SMART RTL', mode: 12 },
         { label: 'GUIDED', mode: 15 },
       ];
     case 'plane':

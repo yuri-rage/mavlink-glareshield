@@ -712,6 +712,10 @@ if (roverLabels.includes('ALT HOLD') || roverLabels.includes('LAND')) {
   console.error('Rover flight modes must NOT include ALT HOLD or LAND!', roverLabels);
   process.exit(1);
 }
+if (roverLabels[0] !== 'HOLD' || roverLabels[1] !== 'MANUAL' || roverLabels[2] !== 'ACRO' || roverLabels[3] !== 'AUTO') {
+  console.error('Rover first 4 modes must be HOLD | MANUAL | ACRO | AUTO, got:', roverLabels.slice(0, 4));
+  process.exit(1);
+}
 const roverAuto = roverModes.find((m) => m.label === 'AUTO');
 if (!roverAuto || roverAuto.mode !== 10) {
   console.error('Rover AUTO mode index must be 10, got:', roverAuto);

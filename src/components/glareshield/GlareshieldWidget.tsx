@@ -28,6 +28,7 @@ import {
   Sliders,
   Radio,
   Car,
+  Zap,
 } from 'lucide-react';
 
 export const GlareshieldWidget: React.FC = () => {
@@ -196,31 +197,31 @@ export const GlareshieldWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={triggerRTL}
-                  className="flex-1 border-amber-600/40 text-amber-300 hover:bg-amber-950/30 gap-1.5 font-bold h-11"
-                >
-                  <Navigation className="h-4 w-4" />
-                  RTL (Home)
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
                   onClick={() => handleSetMode(4)} // Rover HOLD mode
                   className="flex-1 border-rose-600/60 text-rose-300 hover:bg-rose-950/40 gap-1.5 font-bold h-11"
                 >
                   <CircleStop className="h-4 w-4 text-rose-400" />
-                  Hold (Stop)
+                  Hold
                 </Button>
 
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleSetMode(5)} // Rover LOITER
-                  className="flex-1 border-sky-600/40 text-sky-300 hover:bg-sky-950/30 gap-1.5 font-bold h-11"
+                  onClick={() => handleSetMode(0)} // Rover MANUAL mode
+                  className="flex-1 border-zinc-700 hover:bg-zinc-800 gap-1.5 font-bold h-11"
                 >
-                  <Anchor className="h-4 w-4" />
-                  Loiter
+                  <Radio className="h-4 w-4 text-sky-400" />
+                  Manual
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSetMode(1)} // Rover ACRO mode
+                  className="flex-1 border-amber-600/40 text-amber-300 hover:bg-amber-950/30 gap-1.5 font-bold h-11"
+                >
+                  <Zap className="h-4 w-4 text-amber-400" />
+                  Acro
                 </Button>
 
                 <Button
@@ -230,7 +231,7 @@ export const GlareshieldWidget: React.FC = () => {
                   className="flex-1 border-emerald-600/40 text-emerald-300 hover:bg-emerald-950/30 gap-1.5 font-bold h-11"
                 >
                   <Play className="h-4 w-4 text-emerald-400" />
-                  Auto (Start)
+                  Auto
                 </Button>
               </>
             ) : category === 'sub' ? (
