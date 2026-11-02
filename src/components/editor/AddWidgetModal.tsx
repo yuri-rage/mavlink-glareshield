@@ -19,6 +19,8 @@ import {
   Upload,
   Zap,
   AlertTriangle,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 
 function getMavCmdName(cmdId: number): string {
@@ -32,6 +34,7 @@ interface AddWidgetModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenWidgetCreator: () => void;
+  onEditCustomWidget?: (widget: CustomWidgetDefinition) => void;
 }
 
 const BUILT_IN_CATALOG = [
@@ -113,8 +116,9 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
   isOpen,
   onClose,
   onOpenWidgetCreator,
+  onEditCustomWidget,
 }) => {
-  const { profile, addWidgetToActiveTab, saveCustomWidget } = useDashboardStore();
+  const { profile, addWidgetToActiveTab, saveCustomWidget, deleteCustomWidget } = useDashboardStore();
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [pendingImportWidget, setPendingImportWidget] = useState<CustomWidgetDefinition | null>(null);
 
@@ -295,16 +299,38 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                   </div>
                 </div>
 
-                <Button
-                  size="sm"
-                  variant="default"
-                  className="h-8 px-3 text-xs font-bold bg-sky-500 hover:bg-sky-600 text-white"
-                  onClick={() => handleAddBuiltIn(cw.id, 6)}
-                >
-                  Place
-                </Button>
-              </div>
-            ))}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {onEditCustomWidget && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-2 text-xs border-zinc-700 text-zinc-300 hover:text-white"
+                        onClick={() => onEditCustomWidget(cw)}
+                        title="Edit custom widget definition"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-2 text-xs border-zinc-700 text-red-400 hover:text-red-300 hover:border-red-500/40"
+                      onClick={() => deleteCustomWidget(cw.id)}
+                      title="Delete custom widget definition"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="h-8 px-3 text-xs font-bold bg-sky-500 hover:bg-sky-600 text-white"
+                      onClick={() => handleAddBuiltIn(cw.id, 6)}
+                    >
+                      Place
+                    </Button>
+                  </div>
+                </div>
+              ))}
 
           {/* Built-in Widgets */}
           {filteredBuiltIn.map((item) => {

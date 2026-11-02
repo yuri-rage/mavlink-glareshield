@@ -6,12 +6,14 @@ import { AddWidgetModal } from './components/editor/AddWidgetModal';
 import { CustomWidgetCreatorModal } from './components/editor/CustomWidgetCreatorModal';
 import { ProfileManagerModal } from './components/editor/ProfileManagerModal';
 import { useConnectionStore } from './store/connectionStore';
+import { CustomWidgetDefinition } from './types/widget';
 
 export const App: React.FC = () => {
   const { connect } = useConnectionStore();
 
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
   const [isWidgetCreatorOpen, setIsWidgetCreatorOpen] = useState(false);
+  const [editingCustomWidget, setEditingCustomWidget] = useState<CustomWidgetDefinition | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Attempt auto-connect to default websocket on mount
@@ -32,19 +34,36 @@ export const App: React.FC = () => {
 
       {/* Main Responsive Dashboard Area */}
       <main className="flex-1 flex flex-col">
-        <DashboardGrid />
+        <DashboardGrid
+          onEditCustomWidget={(cw) => {
+            setEditingCustomWidget(cw);
+            setIsWidgetCreatorOpen(true);
+          }}
+        />
       </main>
 
       {/* Modals */}
       <AddWidgetModal
         isOpen={isAddWidgetOpen}
         onClose={() => setIsAddWidgetOpen(false)}
-        onOpenWidgetCreator={() => setIsWidgetCreatorOpen(true)}
+        onOpenWidgetCreator={() => {
+          setEditingCustomWidget(null);
+          setIsWidgetCreatorOpen(true);
+        }}
+        onEditCustomWidget={(cw) => {
+          setIsAddWidgetOpen(false);
+          setEditingCustomWidget(cw);
+          setIsWidgetCreatorOpen(true);
+        }}
       />
 
       <CustomWidgetCreatorModal
         isOpen={isWidgetCreatorOpen}
-        onClose={() => setIsWidgetCreatorOpen(false)}
+        onClose={() => {
+          setIsWidgetCreatorOpen(false);
+          setEditingCustomWidget(null);
+        }}
+        initialWidget={editingCustomWidget}
       />
 
       <ProfileManagerModal
