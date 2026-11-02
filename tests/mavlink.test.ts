@@ -2085,12 +2085,16 @@ if (droppedAfter !== droppedBefore + 1) {
   process.exit(1);
 }
 
-// Low bandwidth SiK MSM7 rate limit
+// Low bandwidth SiK MSM7 rate limit (epoch-based throttling)
 useConnectionStore.getState().setBandwidthProfile('low');
 const frameMsm7 = new Uint8Array(200);
+(rtcmInjector as any).msm7EpochStartTime = 0;
 const limitedBefore = (rtcmInjector as any).state.droppedRateLimitedFrames;
-rtcmInjector.injectRtcmFrame(frameMsm7, 1077); // first one allowed
-rtcmInjector.injectRtcmFrame(frameMsm7, 1077); // immediate second one dropped
+rtcmInjector.injectRtcmFrame(frameMsm7, 1077); // first one allowed (starts epoch)
+rtcmInjector.injectRtcmFrame(frameMsm7, 1087); // frame within same epoch (<=250ms) allowed
+// Advance epoch to simulate a new epoch arriving too soon (<2000ms)
+(rtcmInjector as any).msm7EpochStartTime = Date.now() - 500;
+rtcmInjector.injectRtcmFrame(frameMsm7, 1077); // new epoch within 2s throttled
 const limitedAfter = (rtcmInjector as any).state.droppedRateLimitedFrames;
 if (limitedAfter !== limitedBefore + 1) {
   console.error('RTCM MSM7 was not rate-limited on low bandwidth profile!', { limitedBefore, limitedAfter });

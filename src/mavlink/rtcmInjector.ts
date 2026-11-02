@@ -301,7 +301,7 @@ export class RtcmInjector {
   private listeners: Set<(state: RtcmInjectorState) => void> = new Set();
   private parser = new RtcmFrameParser();
   private seq = 0;
-  private msmLastSent: Record<number, number> = {};
+  private msm7EpochStartTime = 0;
 
   // Rate tracking
   private recentBytes = 0;
@@ -367,7 +367,7 @@ export class RtcmInjector {
 
     // ArduPilot's rtcm_buffer holds at most 4 fragments of 180 bytes (720 bytes max).
     // Frames > 720 bytes overflow the buffer and cannot be reassembled; drop and count them.
-    if (frameLen > 720) {
+    if (frameLen >= 720) {
       this.state.droppedOversizedFrames++;
       this.notify();
       return;
@@ -375,19 +375,22 @@ export class RtcmInjector {
 
     // Limit RTCM injection rate based on link profile.
     // On low-bandwidth links (SiK radio 57.6k), multi-constellation MSM7 frames (1077, 1087, 1097, 1127)
-    // starve MAVLink heartbeats and high-rate telemetry. Throttle MSM7 frames to 0.5 Hz per constellation.
+    // starve MAVLink heartbeats and high-rate telemetry. Throttle whole MSM7 epochs to 0.5 Hz so constellations
+    // within the same observation epoch are not torn across different timestamps.
     const bandwidthProfile = useConnectionStore.getState().bandwidthProfile;
     if (bandwidthProfile === 'low') {
       const isMsm7 = msgType === 1077 || msgType === 1087 || msgType === 1097 || msgType === 1127;
       if (isMsm7) {
         const now = Date.now();
-        const lastSent = this.msmLastSent[msgType] || 0;
-        if (now - lastSent < 2000) {
-          this.state.droppedRateLimitedFrames++;
-          this.notify();
-          return;
+        const inCurrentEpoch = now - this.msm7EpochStartTime <= 250;
+        if (!inCurrentEpoch) {
+          if (now - this.msm7EpochStartTime < 2000) {
+            this.state.droppedRateLimitedFrames++;
+            this.notify();
+            return;
+          }
+          this.msm7EpochStartTime = now;
         }
-        this.msmLastSent[msgType] = now;
       }
     }
 

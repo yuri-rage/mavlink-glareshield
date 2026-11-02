@@ -124,7 +124,9 @@ export const GlareshieldWidget: React.FC = () => {
 
   const activeUnit = system === 'ms' ? 'm/s' : system === 'kmh' ? 'km/h' : system === 'mph' ? 'mph' : 'kts';
   const defaultSpeedMs = category === 'plane' ? 15 : category === 'rover' ? 2 : category === 'sub' ? 1 : 5;
-  const liveSpeedMs = vfr.groundspeed >= 0.5 ? vfr.groundspeed : defaultSpeedMs;
+  const liveSpeedMs = category === 'plane'
+    ? (vfr.airspeed >= 0.5 ? vfr.airspeed : defaultSpeedMs)
+    : (vfr.groundspeed >= 0.5 ? vfr.groundspeed : defaultSpeedMs);
   // Always store commanded target speed in m/s internally so unit changes never distort commands
   const currentSpeedMs = manualTargetSpeedMs ?? liveSpeedMs;
   const currentTargetDisplay = Number(toActiveUnits(currentSpeedMs, system).toFixed(1));
@@ -502,7 +504,7 @@ export const GlareshieldWidget: React.FC = () => {
                       {currentTargetDisplay} <span className="text-xs font-normal text-zinc-400">{activeUnit}</span>
                     </span>
                     <span className="text-[10px] text-zinc-500 font-mono truncate">
-                      (Cur: {formatSpeed(vfr.groundspeed).full})
+                      (Cur: {formatSpeed(category === 'plane' ? vfr.airspeed : vfr.groundspeed).full})
                     </span>
                   </div>
                 </div>

@@ -622,18 +622,18 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         messageRateManager.setTarget(packet.systemId, packet.componentId);
 
         // Poll for firmware version / version banner if not yet resolved
-        if (!state.firmwareVersion) {
+        if (!state.firmwareVersion) { if (versionPollAttempts < 5) {
           if (now - lastVersionPollTime >= 2500) {
             lastVersionPollTime = now;
             versionPollAttempts++;
             const encoder = mavlinkConnection.getEncoder();
             mavlinkConnection.send(encoder.createRequestBanner(packet.systemId, packet.componentId));
             mavlinkConnection.send(encoder.createRequestAutopilotVersion(packet.systemId, packet.componentId));
-            if (versionPollAttempts >= 2 && versionPollAttempts % 2 === 0) {
+            if (versionPollAttempts === 3) {
               mavlinkConnection.send(encoder.createParamRequestList(packet.systemId, packet.componentId));
             }
           }
-        } else {
+        } } else {
           versionPollAttempts = 0;
         }
 

@@ -10,7 +10,11 @@
     "test": "npx tsx tests/mavlink.test.ts && npx tsx tests/golden.test.ts",
     "test:golden": "npx tsx tests/golden.test.ts",
     "test:vectors": "python3 tests/gen_vectors.py",
-    "test:mock": "python3 tests/check_mock_bridge.py"
+    "test:mock": "python3 tests/check_mock_bridge.py",
+    "test:ftp-sim": "npx tsx tests/ftp_ardupilot.test.ts",
+    "test:regressions": "npx tsx tests/regressions.test.ts",
+    "test:bridge-security": "python3 tests/check_bridge_security.py",
+    "test:review": "npm run test:ftp-sim && npm run test:regressions && npm run test:bridge-security"
   },
   "dependencies": {
     "clsx": "^2.1.1",

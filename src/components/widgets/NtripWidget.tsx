@@ -20,10 +20,18 @@ const STORAGE_KEY = 'mavlink_ntrip_config';
 function maskPassword(pwd: string): string {
   if (!pwd) return '';
   try {
-    const encoded = btoa(pwd.split('').map((c, i) => String.fromCharCode(c.charCodeAt(0) ^ ((i % 5) + 0x5a))).join(''));
-    return `enc:${encoded}`;
+    const utf8Bytes = new TextEncoder().encode(pwd);
+    const masked = new Uint8Array(utf8Bytes.length);
+    for (let i = 0; i < utf8Bytes.length; i++) {
+      masked[i] = utf8Bytes[i] ^ ((i % 5) + 0x5a);
+    }
+    let binary = '';
+    for (let i = 0; i < masked.length; i++) {
+      binary += String.fromCharCode(masked[i]);
+    }
+    return `enc:${btoa(binary)}`;
   } catch {
-    return pwd;
+    return '';
   }
 }
 
@@ -31,8 +39,12 @@ function unmaskPassword(stored: string): string {
   if (!stored) return '';
   if (!stored.startsWith('enc:')) return stored;
   try {
-    const raw = atob(stored.slice(4));
-    return raw.split('').map((c, i) => String.fromCharCode(c.charCodeAt(0) ^ ((i % 5) + 0x5a))).join('');
+    const binary = atob(stored.slice(4));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i) ^ ((i % 5) + 0x5a);
+    }
+    return new TextDecoder().decode(bytes);
   } catch {
     return '';
   }
