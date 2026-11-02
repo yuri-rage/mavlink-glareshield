@@ -176,6 +176,7 @@ export function packFtpMessage(
 export class MavFtpClient {
   private seq = 0;
   private currentAbort: (() => void) | null = null;
+  private transferQueue: Promise<any> = Promise.resolve();
 
   private nextSeq(): number {
     const s = this.seq;
@@ -199,11 +200,28 @@ export class MavFtpClient {
 
   /**
    * Reads an entire file using high-speed MAVFTP (e.g. '@PARAM/param.pck' or 'mission.dat').
+   * Serializes concurrent calls so session descriptors and burst packets never collide.
    * Uses BurstReadFile (opcode 15) with 239-byte chunks for maximum line-rate throughput,
    * with automatic fallback to lockstep ReadFile (opcode 5) if burst is unsupported.
    * Returns Uint8Array with the complete file contents, or null if MAVFTP fails.
    */
-  public async readFile(
+  public readFile(
+    targetSys?: number,
+    targetComp?: number,
+    filePath = '@PARAM/param.pck',
+    chunkSize = 239,
+    timeoutMs = 1500,
+    onProgress?: (bytesReceived: number, totalBytes: number) => void
+  ): Promise<Uint8Array | null> {
+    const nextTransfer = this.transferQueue.then(
+      () => this.executeReadFile(targetSys, targetComp, filePath, chunkSize, timeoutMs, onProgress),
+      () => this.executeReadFile(targetSys, targetComp, filePath, chunkSize, timeoutMs, onProgress)
+    );
+    this.transferQueue = nextTransfer.catch(() => null);
+    return nextTransfer;
+  }
+
+  private async executeReadFile(
     targetSys?: number,
     targetComp?: number,
     filePath = '@PARAM/param.pck',
@@ -219,7 +237,6 @@ export class MavFtpClient {
       let isDone = false;
       let session = 0;
       let fileOpened = false;
-      let offset = 0;
       let fileSize = -1;
       let useBurst = true;
       let highestOffset = 0;
@@ -399,7 +416,10 @@ export class MavFtpClient {
         }
 
         // Phase 2: Reading file content (fileOpened === true)
-        // Strictly ignore any packet not responding to ReadFile or BurstReadFile
+        // Strictly ignore any packet not matching our active session or not responding to ReadFile / BurstReadFile
+        if (ftp.session !== session) {
+          return;
+        }
         if (ftp.req_opcode !== FTP_OPCODE.ReadFile && ftp.req_opcode !== FTP_OPCODE.BurstReadFile) {
           return;
         }
