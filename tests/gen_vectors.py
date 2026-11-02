@@ -151,6 +151,71 @@ dcase("MISSION_ITEM_INT fence vertex",
 dcase("MISSION_ACK", vehicle.mission_ack_encode(255, 190, 0, 2),
       {"target_system": 255, "target_component": 190, "type": 0, "mission_type": 2})
 
+# --- Extended MAVLink Telemetry Messages -----------------------------------
+dcase("SCALED_PRESSURE",
+      vehicle.scaled_pressure_encode(2000, 1013.25, 0.5, 2550, 2600),
+      {"time_boot_ms": 2000, "press_abs": 1013.25, "press_diff": 0.5, "temperature": 25.5, "temperature_press_diff": 26.0})
+
+dcase("RC_CHANNELS_RAW",
+      vehicle.rc_channels_raw_encode(3000, 0, 1500, 1510, 1000, 1490, 1800, 1200, 1500, 1500, 95),
+      {"time_boot_ms": 3000, "port": 0, "chan1_raw": 1500, "chan2_raw": 1510, "chan3_raw": 1000, "chan4_raw": 1490,
+       "chan5_raw": 1800, "chan6_raw": 1200, "chan7_raw": 1500, "chan8_raw": 1500, "rssi": 95})
+
+dcase("RC_CHANNELS 18ch",
+      vehicle.rc_channels_encode(3500, 16, 1500, 1500, 1100, 1500, 1200, 1800, 1500, 1500,
+                                 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 0, 0, 88),
+      {"time_boot_ms": 3500, "chancount": 16, "chan1_raw": 1500, "chan3_raw": 1100, "chan5_raw": 1200,
+       "chan6_raw": 1800, "rssi": 88})
+
+dcase("SERVO_OUTPUT_RAW with MAVLink 2 extensions",
+      vehicle.servo_output_raw_encode(400000, 0, 1520, 1530, 1510, 1540, 1100, 1100, 1500, 1500,
+                                      1600, 1700, 0, 0, 0, 0, 0, 0),
+      {"time_usec": 400000, "port": 0, "servo1_raw": 1520, "servo2_raw": 1530, "servo3_raw": 1510,
+       "servo4_raw": 1540, "servo9_raw": 1600, "servo10_raw": 1700})
+
+dcase("NAV_CONTROLLER_OUTPUT",
+      vehicle.nav_controller_output_encode(5.5, -2.25, 180, 185, 240, 1.5, 0.25, -0.75),
+      {"nav_roll": 5.5, "nav_pitch": -2.25, "nav_bearing": 180, "target_bearing": 185,
+       "wp_dist": 240, "alt_error": 1.5, "aspd_error": 0.25, "xtrack_error": -0.75})
+
+dcase("POWER_STATUS",
+      vehicle.power_status_encode(5050, 5200, 1),
+      {"Vcc": 5.05, "Vservo": 5.2, "vcc_mv": 5050, "vservo_mv": 5200, "flags": 1})
+
+dcase("DISTANCE_SENSOR",
+      vehicle.distance_sensor_encode(5000, 20, 4000, 1250, 0, 1, 25, 0, 0.5, 0.5, [1.0, 0.0, 0.0, 0.0], 90),
+      {"time_boot_ms": 5000, "min_distance": 0.2, "max_distance": 40.0, "current_distance": 12.5,
+       "type": 0, "id": 1, "orientation": 25, "signal_quality": 90})
+
+dcase("WIND",
+      vehicle.wind_encode(245.0, 6.5, -0.5),
+      {"direction": 245.0, "speed": 6.5, "speed_z": -0.5})
+
+dcase("RANGEFINDER",
+      vehicle.rangefinder_encode(14.25, 2.5),
+      {"distance": 14.25, "voltage": 2.5})
+
+dcase("EKF_STATUS_REPORT",
+      vehicle.ekf_status_report_encode(0x01FF, 0.125, 0.25, 0.1, 0.05, 0.02, 0.01),
+      {"flags": 0x01FF, "velocity_variance": 0.125, "pos_horiz_variance": 0.25, "pos_vert_variance": 0.1,
+       "compass_variance": 0.05, "terrain_alt_variance": 0.02, "airspeed_variance": 0.01})
+
+dcase("RPM",
+      vehicle.rpm_encode(5400.0, 5420.0),
+      {"rpm1": 5400.0, "rpm2": 5420.0})
+
+dcase("VIBRATION",
+      vehicle.vibration_encode(987654321, 4.5, 5.25, 8.75, 0, 1, 2),
+      {"time_usec": 987654321, "vibration_x": 4.5, "vibration_y": 5.25, "vibration_z": 8.75,
+       "clipping_0": 0, "clipping_1": 1, "clipping_2": 2})
+
+dcase("ESC_TELEMETRY_1_TO_4",
+      vehicle.esc_telemetry_1_to_4_encode([40, 42, 41, 43], [1620, 1610, 1615, 1625], [850, 860, 840, 870],
+                                          [120, 125, 118, 130], [5100, 5120, 5090, 5140], [100, 100, 100, 100]),
+      {"temperature": [40, 42, 41, 43], "voltage": [16.2, 16.1, 16.15, 16.25],
+       "current": [8.5, 8.6, 8.4, 8.7], "totalcurrent": [120, 125, 118, 130],
+       "rpm": [5100, 5120, 5090, 5140], "rpm1": 5100, "temp1": 40, "curr1": 8.5, "volt1": 16.2})
+
 # --- Encoder cases: app method + args, and the pymavlink payload for the same fields ---
 encode = []
 

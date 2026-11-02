@@ -75,6 +75,95 @@ export interface VehicleVFR {
   climb: number;
 }
 
+export interface VehicleSysStatus {
+  load: number; // %
+  dropRateComm: number;
+  errorsComm: number;
+  sensorsPresent: number;
+  sensorsEnabled: number;
+  sensorsHealth: number;
+}
+
+export interface VehicleRC {
+  chancount: number;
+  rssi: number;
+  channels: number[]; // up to 18 channels (PWM us)
+}
+
+export interface VehicleServo {
+  port: number;
+  servos: number[]; // up to 16 servo outputs (PWM us)
+}
+
+export interface VehicleNavController {
+  navRoll: number;
+  navPitch: number;
+  navBearing: number;
+  targetBearing: number;
+  wpDist: number;
+  altError: number;
+  aspdError: number;
+  xtrackError: number;
+}
+
+export interface VehicleWind {
+  direction: number; // deg
+  speed: number; // m/s
+  speedZ: number; // m/s
+}
+
+export interface VehicleVibration {
+  vibrationX: number;
+  vibrationY: number;
+  vibrationZ: number;
+  clipping0: number;
+  clipping1: number;
+  clipping2: number;
+}
+
+export interface VehicleEKF {
+  flags: number;
+  velocityVariance: number;
+  posHorizVariance: number;
+  posVertVariance: number;
+  compassVariance: number;
+  terrainAltVariance: number;
+  airspeedVariance: number;
+}
+
+export interface VehicleRangefinder {
+  distance: number; // m
+  voltage: number; // V
+  minDistance: number; // m
+  maxDistance: number; // m
+  signalQuality: number;
+}
+
+export interface VehicleRPM {
+  rpm1: number;
+  rpm2: number;
+}
+
+export interface VehicleESC {
+  voltage: number[]; // V (4 ESCs)
+  current: number[]; // A (4 ESCs)
+  totalCurrent: number[]; // mAh (4 ESCs)
+  rpm: number[]; // RPM (4 ESCs)
+  temperature: number[]; // degC (4 ESCs)
+}
+
+export interface VehiclePower {
+  vcc: number; // V
+  vservo: number; // V
+  flags: number;
+}
+
+export interface VehiclePressure {
+  pressAbs: number; // hPa
+  pressDiff: number; // hPa
+  temperature: number; // degC
+}
+
 export interface StatusMessage {
   id: string;
   time: string;
@@ -139,6 +228,18 @@ interface TelemetryState {
   gps: VehicleGPS;
   battery: VehicleBattery;
   vfr: VehicleVFR;
+  sysStatus: VehicleSysStatus;
+  rc: VehicleRC;
+  servo: VehicleServo;
+  navController: VehicleNavController;
+  wind: VehicleWind;
+  vibration: VehicleVibration;
+  ekf: VehicleEKF;
+  rangefinder: VehicleRangefinder;
+  rpm: VehicleRPM;
+  esc: VehicleESC;
+  power: VehiclePower;
+  pressure: VehiclePressure;
   statusMessages: StatusMessage[];
   firmwareVersion: string | null;
   firmwareRaw?: string;
@@ -177,11 +278,24 @@ const HANDLED_MESSAGE_IDS = new Set<number>([
   MAVLINK_MSG_ID.RAW_IMU,
   MAVLINK_MSG_ID.SCALED_IMU,
   MAVLINK_MSG_ID.HIGHRES_IMU,
+  MAVLINK_MSG_ID.SCALED_PRESSURE,
   MAVLINK_MSG_ID.GLOBAL_POSITION_INT,
   MAVLINK_MSG_ID.GPS_RAW_INT,
   MAVLINK_MSG_ID.SYS_STATUS,
+  MAVLINK_MSG_ID.POWER_STATUS,
   MAVLINK_MSG_ID.BATTERY_STATUS,
   MAVLINK_MSG_ID.VFR_HUD,
+  MAVLINK_MSG_ID.RC_CHANNELS,
+  MAVLINK_MSG_ID.RC_CHANNELS_RAW,
+  MAVLINK_MSG_ID.SERVO_OUTPUT_RAW,
+  MAVLINK_MSG_ID.NAV_CONTROLLER_OUTPUT,
+  MAVLINK_MSG_ID.WIND,
+  MAVLINK_MSG_ID.RANGEFINDER,
+  MAVLINK_MSG_ID.DISTANCE_SENSOR,
+  MAVLINK_MSG_ID.EKF_STATUS_REPORT,
+  MAVLINK_MSG_ID.RPM,
+  MAVLINK_MSG_ID.VIBRATION,
+  MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4,
   MAVLINK_MSG_ID.AUTOPILOT_VERSION,
   MAVLINK_MSG_ID.STATUSTEXT,
   MAVLINK_MSG_ID.PARAM_VALUE,
@@ -314,6 +428,83 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     throttle: 0,
     alt: 0,
     climb: 0,
+  },
+  sysStatus: {
+    load: 0,
+    dropRateComm: 0,
+    errorsComm: 0,
+    sensorsPresent: 0,
+    sensorsEnabled: 0,
+    sensorsHealth: 0,
+  },
+  rc: {
+    chancount: 8,
+    rssi: 0,
+    channels: [1500, 1500, 1000, 1500, 1500, 1500, 1500, 1500, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  },
+  servo: {
+    port: 0,
+    servos: [1100, 1100, 1100, 1100, 1500, 1500, 1500, 1500, 0, 0, 0, 0, 0, 0, 0, 0],
+  },
+  navController: {
+    navRoll: 0,
+    navPitch: 0,
+    navBearing: 0,
+    targetBearing: 0,
+    wpDist: 0,
+    altError: 0,
+    aspdError: 0,
+    xtrackError: 0,
+  },
+  wind: {
+    direction: 0,
+    speed: 0,
+    speedZ: 0,
+  },
+  vibration: {
+    vibrationX: 0,
+    vibrationY: 0,
+    vibrationZ: 0,
+    clipping0: 0,
+    clipping1: 0,
+    clipping2: 0,
+  },
+  ekf: {
+    flags: 0,
+    velocityVariance: 0,
+    posHorizVariance: 0,
+    posVertVariance: 0,
+    compassVariance: 0,
+    terrainAltVariance: 0,
+    airspeedVariance: 0,
+  },
+  rangefinder: {
+    distance: 0,
+    voltage: 0,
+    minDistance: 0,
+    maxDistance: 0,
+    signalQuality: 0,
+  },
+  rpm: {
+    rpm1: 0,
+    rpm2: 0,
+  },
+  esc: {
+    voltage: [0, 0, 0, 0],
+    current: [0, 0, 0, 0],
+    totalCurrent: [0, 0, 0, 0],
+    rpm: [0, 0, 0, 0],
+    temperature: [0, 0, 0, 0],
+  },
+  power: {
+    vcc: 5.0,
+    vservo: 5.0,
+    flags: 0,
+  },
+  pressure: {
+    pressAbs: 1013.25,
+    pressDiff: 0,
+    temperature: 25.0,
   },
   statusMessages: [],
   firmwareVersion: null,
@@ -495,6 +686,162 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
               current: data.current_battery !== undefined ? data.current_battery : state.battery.current,
               remaining: data.battery_remaining >= 0 ? data.battery_remaining : state.battery.remaining,
             },
+            sysStatus: {
+              load: data.load ?? state.sysStatus.load,
+              dropRateComm: data.drop_rate_comm ?? state.sysStatus.dropRateComm,
+              errorsComm: data.errors_comm ?? state.sysStatus.errorsComm,
+              sensorsPresent: data.onboard_control_sensors_present ?? state.sysStatus.sensorsPresent,
+              sensorsEnabled: data.onboard_control_sensors_enabled ?? state.sysStatus.sensorsEnabled,
+              sensorsHealth: data.onboard_control_sensors_health ?? state.sysStatus.sensorsHealth,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.SCALED_PRESSURE: {
+          return {
+            pressure: {
+              pressAbs: data.press_abs,
+              pressDiff: data.press_diff,
+              temperature: data.temperature,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.RC_CHANNELS: {
+          return {
+            rc: {
+              chancount: data.chancount || 18,
+              rssi: data.rssi,
+              channels: data.channels,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.RC_CHANNELS_RAW: {
+          const merged = [...state.rc.channels];
+          for (let i = 0; i < 8; i++) {
+            merged[i] = data.channels[i];
+          }
+          return {
+            rc: {
+              chancount: Math.max(state.rc.chancount, 8),
+              rssi: data.rssi,
+              channels: merged,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.SERVO_OUTPUT_RAW: {
+          return {
+            servo: {
+              port: data.port,
+              servos: data.servos,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.NAV_CONTROLLER_OUTPUT: {
+          return {
+            navController: {
+              navRoll: data.nav_roll,
+              navPitch: data.nav_pitch,
+              navBearing: data.nav_bearing,
+              targetBearing: data.target_bearing,
+              wpDist: data.wp_dist,
+              altError: data.alt_error,
+              aspdError: data.aspd_error,
+              xtrackError: data.xtrack_error,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.POWER_STATUS: {
+          return {
+            power: {
+              vcc: data.Vcc,
+              vservo: data.Vservo,
+              flags: data.flags,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.WIND: {
+          return {
+            wind: {
+              direction: ((data.direction % 360) + 360) % 360,
+              speed: data.speed,
+              speedZ: data.speed_z,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.RANGEFINDER: {
+          return {
+            rangefinder: {
+              ...state.rangefinder,
+              distance: data.distance,
+              voltage: data.voltage,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.DISTANCE_SENSOR: {
+          return {
+            rangefinder: {
+              ...state.rangefinder,
+              distance: data.current_distance,
+              minDistance: data.min_distance,
+              maxDistance: data.max_distance,
+              signalQuality: data.signal_quality,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.EKF_STATUS_REPORT: {
+          return {
+            ekf: {
+              flags: data.flags,
+              velocityVariance: data.velocity_variance,
+              posHorizVariance: data.pos_horiz_variance,
+              posVertVariance: data.pos_vert_variance,
+              compassVariance: data.compass_variance,
+              terrainAltVariance: data.terrain_alt_variance,
+              airspeedVariance: data.airspeed_variance,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.RPM: {
+          return {
+            rpm: {
+              rpm1: data.rpm1,
+              rpm2: data.rpm2,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.VIBRATION: {
+          return {
+            vibration: {
+              vibrationX: data.vibration_x,
+              vibrationY: data.vibration_y,
+              vibrationZ: data.vibration_z,
+              clipping0: data.clipping_0,
+              clipping1: data.clipping_1,
+              clipping2: data.clipping_2,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4: {
+          return {
+            esc: {
+              voltage: data.voltage,
+              current: data.current,
+              totalCurrent: data.totalcurrent,
+              rpm: data.rpm,
+              temperature: data.temperature,
+            },
           };
         }
 
@@ -663,10 +1010,13 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         }
 
         case MAVLINK_MSG_ID.COMMAND_ACK: {
-          const pending = pendingCommands.get(data.command);
-          if (pending) {
-            clearTimeout(pending.timer);
-            pendingCommands.delete(data.command);
+          const pendingList = pendingCommands.get(data.command);
+          if (pendingList && pendingList.length > 0) {
+            const oldest = pendingList.shift()!;
+            clearTimeout(oldest.timer);
+            if (pendingList.length === 0) {
+              pendingCommands.delete(data.command);
+            }
           }
           const cmdName = getMavCmdName(data.command);
           const resultText = COMMAND_ACK_RESULTS[data.result] ?? `CODE_${data.result}`;
@@ -720,24 +1070,34 @@ mavlinkConnection.onStatus((status) => {
 
 // Automatic command timeout tracking (5s timeout for commands missing COMMAND_ACK)
 interface PendingCommand {
+  id: number;
   commandId: number;
   cmdName: string;
   sentAt: number;
   timer: any;
 }
-const pendingCommands = new Map<number, PendingCommand>();
+let nextPendingId = 1;
+const pendingCommands = new Map<number, PendingCommand[]>();
 
 mavlinkConnection.onSend((data) => {
-  if (data.length >= 40 && data[0] === 0xFD) {
+  if (data.length >= 12 && data[0] === 0xFD) {
+    const payloadLen = data[1];
     const msgId = data[7] | (data[8] << 8) | (data[9] << 16);
     if (msgId === MAVLINK_MSG_ID.COMMAND_LONG || msgId === MAVLINK_MSG_ID.COMMAND_INT) {
-      const cmdId = data[38] | (data[39] << 8);
+      // Command ID is at payload offset 28..29 (bytes 38..39 in packet); zero-pad safe if trimmed
+      const b0 = payloadLen > 28 && data.length > 38 ? data[38] : 0;
+      const b1 = payloadLen > 29 && data.length > 39 ? data[39] : 0;
+      const cmdId = b0 | (b1 << 8);
       const cmdName = getMavCmdName(cmdId);
-      const existing = pendingCommands.get(cmdId);
-      if (existing) clearTimeout(existing.timer);
+      const entryId = nextPendingId++;
 
       const timer = setTimeout(() => {
-        pendingCommands.delete(cmdId);
+        const list = pendingCommands.get(cmdId);
+        if (list) {
+          const idx = list.findIndex((item) => item.id === entryId);
+          if (idx >= 0) list.splice(idx, 1);
+          if (list.length === 0) pendingCommands.delete(cmdId);
+        }
         const now = Date.now();
         const isHousekeeping =
           cmdId === MAV_CMD.SET_MESSAGE_INTERVAL ||
@@ -761,12 +1121,15 @@ mavlinkConnection.onSend((data) => {
         }));
       }, 5000);
 
-      pendingCommands.set(cmdId, {
+      const list = pendingCommands.get(cmdId) ?? [];
+      list.push({
+        id: entryId,
         commandId: cmdId,
         cmdName,
         sentAt: Date.now(),
         timer,
       });
+      pendingCommands.set(cmdId, list);
     }
   }
 });

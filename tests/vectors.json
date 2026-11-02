@@ -369,6 +369,204 @@
     "type": 0,
     "mission_type": 2
    }
+  },
+  {
+   "name": "SCALED_PRESSURE",
+   "msgid": 29,
+   "hex": "fd1000000001011d0000d007000000507d440000003ff609280ae3fe",
+   "expect": {
+    "time_boot_ms": 2000,
+    "press_abs": 1013.25,
+    "press_diff": 0.5,
+    "temperature": 25.5,
+    "temperature_press_diff": 26.0
+   }
+  },
+  {
+   "name": "RC_CHANNELS_RAW",
+   "msgid": 35,
+   "hex": "fd160000000101230000b80b0000dc05e605e803d2050807b004dc05dc05005f8034",
+   "expect": {
+    "time_boot_ms": 3000,
+    "port": 0,
+    "chan1_raw": 1500,
+    "chan2_raw": 1510,
+    "chan3_raw": 1000,
+    "chan4_raw": 1490,
+    "chan5_raw": 1800,
+    "chan6_raw": 1200,
+    "chan7_raw": 1500,
+    "chan8_raw": 1500,
+    "rssi": 95
+   }
+  },
+  {
+   "name": "RC_CHANNELS 18ch",
+   "msgid": 65,
+   "hex": "fd2a0000000101410000ac0d0000dc05dc054c04dc05b0040807dc05dc05dc05dc05dc05dc05dc05dc05dc05dc050000000010586b62",
+   "expect": {
+    "time_boot_ms": 3500,
+    "chancount": 16,
+    "chan1_raw": 1500,
+    "chan3_raw": 1100,
+    "chan5_raw": 1200,
+    "chan6_raw": 1800,
+    "rssi": 88
+   }
+  },
+  {
+   "name": "SERVO_OUTPUT_RAW with MAVLink 2 extensions",
+   "msgid": 36,
+   "hex": "fd190000000101240000801a0600f005fa05e60504064c044c04dc05dc05004006a406bb98",
+   "expect": {
+    "time_usec": 400000,
+    "port": 0,
+    "servo1_raw": 1520,
+    "servo2_raw": 1530,
+    "servo3_raw": 1510,
+    "servo4_raw": 1540,
+    "servo9_raw": 1600,
+    "servo10_raw": 1700
+   }
+  },
+  {
+   "name": "NAV_CONTROLLER_OUTPUT",
+   "msgid": 62,
+   "hex": "fd1900000001013e00000000b040000010c00000c03f0000803e000040bfb400b900f0a498",
+   "expect": {
+    "nav_roll": 5.5,
+    "nav_pitch": -2.25,
+    "nav_bearing": 180,
+    "target_bearing": 185,
+    "wp_dist": 240,
+    "alt_error": 1.5,
+    "aspd_error": 0.25,
+    "xtrack_error": -0.75
+   }
+  },
+  {
+   "name": "POWER_STATUS",
+   "msgid": 125,
+   "hex": "fd0500000001017d0000ba135014015e29",
+   "expect": {
+    "Vcc": 5.05,
+    "Vservo": 5.2,
+    "vcc_mv": 5050,
+    "vservo_mv": 5200,
+    "flags": 1
+   }
+  },
+  {
+   "name": "DISTANCE_SENSOR",
+   "msgid": 132,
+   "hex": "fd270000000101840000881300001400a00fe204000119000000003f0000003f0000803f0000000000000000000000005aa893",
+   "expect": {
+    "time_boot_ms": 5000,
+    "min_distance": 0.2,
+    "max_distance": 40.0,
+    "current_distance": 12.5,
+    "type": 0,
+    "id": 1,
+    "orientation": 25,
+    "signal_quality": 90
+   }
+  },
+  {
+   "name": "WIND",
+   "msgid": 168,
+   "hex": "fd0c0000000101a80000000075430000d040000000bf1a03",
+   "expect": {
+    "direction": 245.0,
+    "speed": 6.5,
+    "speed_z": -0.5
+   }
+  },
+  {
+   "name": "RANGEFINDER",
+   "msgid": 173,
+   "hex": "fd080000000101ad000000006441000020405fb6",
+   "expect": {
+    "distance": 14.25,
+    "voltage": 2.5
+   }
+  },
+  {
+   "name": "EKF_STATUS_REPORT",
+   "msgid": 193,
+   "hex": "fd1a0000000101c100000000003e0000803ecdcccc3dcdcc4c3d0ad7a33cff010ad7233c9912",
+   "expect": {
+    "flags": 511,
+    "velocity_variance": 0.125,
+    "pos_horiz_variance": 0.25,
+    "pos_vert_variance": 0.1,
+    "compass_variance": 0.05,
+    "terrain_alt_variance": 0.02,
+    "airspeed_variance": 0.01
+   }
+  },
+  {
+   "name": "RPM",
+   "msgid": 226,
+   "hex": "fd080000000101e2000000c0a8450060a9453e0e",
+   "expect": {
+    "rpm1": 5400.0,
+    "rpm2": 5420.0
+   }
+  },
+  {
+   "name": "VIBRATION",
+   "msgid": 241,
+   "hex": "fd1d0000000101f10000b168de3a00000000000090400000a84000000c41000000000100000002a56e",
+   "expect": {
+    "time_usec": 987654321,
+    "vibration_x": 4.5,
+    "vibration_y": 5.25,
+    "vibration_z": 8.75,
+    "clipping_0": 0,
+    "clipping_1": 1,
+    "clipping_2": 2
+   }
+  },
+  {
+   "name": "ESC_TELEMETRY_1_TO_4",
+   "msgid": 11030,
+   "hex": "fd2c0000000101162b0054064a064f06590652035c034803660378007d0076008200ec130014e21314146400640064006400282a292b04df",
+   "expect": {
+    "temperature": [
+     40,
+     42,
+     41,
+     43
+    ],
+    "voltage": [
+     16.2,
+     16.1,
+     16.15,
+     16.25
+    ],
+    "current": [
+     8.5,
+     8.6,
+     8.4,
+     8.7
+    ],
+    "totalcurrent": [
+     120,
+     125,
+     118,
+     130
+    ],
+    "rpm": [
+     5100,
+     5120,
+     5090,
+     5140
+    ],
+    "rpm1": 5100,
+    "temp1": 40,
+    "curr1": 8.5,
+    "volt1": 16.2
+   }
   }
  ],
  "encode": [

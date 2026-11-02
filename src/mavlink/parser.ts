@@ -453,6 +453,218 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         mission_type: getUint8(3),
       };
 
+    case MAVLINK_MSG_ID.SCALED_PRESSURE:
+      return {
+        time_boot_ms: getUint32(0),
+        press_abs: getFloat32(4), // hPa
+        press_diff: getFloat32(8), // hPa
+        temperature: getInt16(12) / 100, // degC
+        temperature_press_diff: getInt16(14) / 100, // degC
+      };
+
+    case MAVLINK_MSG_ID.RC_CHANNELS_RAW: {
+      const channels = [
+        getUint16(4),
+        getUint16(6),
+        getUint16(8),
+        getUint16(10),
+        getUint16(12),
+        getUint16(14),
+        getUint16(16),
+        getUint16(18),
+      ];
+      return {
+        time_boot_ms: getUint32(0),
+        chan1_raw: channels[0],
+        chan2_raw: channels[1],
+        chan3_raw: channels[2],
+        chan4_raw: channels[3],
+        chan5_raw: channels[4],
+        chan6_raw: channels[5],
+        chan7_raw: channels[6],
+        chan8_raw: channels[7],
+        channels,
+        port: getUint8(20),
+        rssi: getUint8(21),
+      };
+    }
+
+    case MAVLINK_MSG_ID.RC_CHANNELS: {
+      const channels: number[] = [];
+      for (let i = 0; i < 18; i++) {
+        channels.push(getUint16(4 + i * 2));
+      }
+      return {
+        time_boot_ms: getUint32(0),
+        chan1_raw: channels[0],
+        chan2_raw: channels[1],
+        chan3_raw: channels[2],
+        chan4_raw: channels[3],
+        chan5_raw: channels[4],
+        chan6_raw: channels[5],
+        chan7_raw: channels[6],
+        chan8_raw: channels[7],
+        chan9_raw: channels[8],
+        chan10_raw: channels[9],
+        chan11_raw: channels[10],
+        chan12_raw: channels[11],
+        chan13_raw: channels[12],
+        chan14_raw: channels[13],
+        chan15_raw: channels[14],
+        chan16_raw: channels[15],
+        chan17_raw: channels[16],
+        chan18_raw: channels[17],
+        channels,
+        chancount: getUint8(40),
+        rssi: getUint8(41),
+      };
+    }
+
+    case MAVLINK_MSG_ID.SERVO_OUTPUT_RAW: {
+      const servos: number[] = [];
+      for (let i = 0; i < 8; i++) {
+        servos.push(getUint16(4 + i * 2));
+      }
+      const port = getUint8(20);
+      for (let i = 0; i < 8; i++) {
+        servos.push(getUint16(21 + i * 2));
+      }
+      return {
+        time_usec: getUint32(0),
+        port,
+        servo1_raw: servos[0],
+        servo2_raw: servos[1],
+        servo3_raw: servos[2],
+        servo4_raw: servos[3],
+        servo5_raw: servos[4],
+        servo6_raw: servos[5],
+        servo7_raw: servos[6],
+        servo8_raw: servos[7],
+        servo9_raw: servos[8],
+        servo10_raw: servos[9],
+        servo11_raw: servos[10],
+        servo12_raw: servos[11],
+        servo13_raw: servos[12],
+        servo14_raw: servos[13],
+        servo15_raw: servos[14],
+        servo16_raw: servos[15],
+        servos,
+      };
+    }
+
+    case MAVLINK_MSG_ID.NAV_CONTROLLER_OUTPUT:
+      return {
+        nav_roll: getFloat32(0),
+        nav_pitch: getFloat32(4),
+        alt_error: getFloat32(8),
+        aspd_error: getFloat32(12),
+        xtrack_error: getFloat32(16),
+        nav_bearing: getInt16(20),
+        target_bearing: getInt16(22),
+        wp_dist: getUint16(24),
+      };
+
+    case MAVLINK_MSG_ID.POWER_STATUS: {
+      const vccMv = getUint16(0);
+      const vservoMv = getUint16(2);
+      return {
+        Vcc: vccMv / 1000, // Volts
+        Vservo: vservoMv / 1000, // Volts
+        vcc_mv: vccMv,
+        vservo_mv: vservoMv,
+        flags: getUint16(4),
+      };
+    }
+
+    case MAVLINK_MSG_ID.DISTANCE_SENSOR:
+      return {
+        time_boot_ms: getUint32(0),
+        min_distance: getUint16(4) / 100, // m
+        max_distance: getUint16(6) / 100, // m
+        current_distance: getUint16(8) / 100, // m
+        type: getUint8(10),
+        id: getUint8(11),
+        orientation: getUint8(12),
+        covariance: getUint8(13),
+        horizontal_fov: getFloat32(14),
+        vertical_fov: getFloat32(18),
+        signal_quality: getUint8(38),
+      };
+
+    case MAVLINK_MSG_ID.WIND:
+      return {
+        direction: getFloat32(0), // deg
+        speed: getFloat32(4), // m/s
+        speed_z: getFloat32(8), // m/s
+      };
+
+    case MAVLINK_MSG_ID.RANGEFINDER:
+      return {
+        distance: getFloat32(0), // m
+        voltage: getFloat32(4), // V
+      };
+
+    case MAVLINK_MSG_ID.EKF_STATUS_REPORT:
+      return {
+        velocity_variance: getFloat32(0),
+        pos_horiz_variance: getFloat32(4),
+        pos_vert_variance: getFloat32(8),
+        compass_variance: getFloat32(12),
+        terrain_alt_variance: getFloat32(16),
+        flags: getUint16(20),
+        airspeed_variance: getFloat32(22),
+      };
+
+    case MAVLINK_MSG_ID.RPM:
+      return {
+        rpm1: getFloat32(0),
+        rpm2: getFloat32(4),
+      };
+
+    case MAVLINK_MSG_ID.VIBRATION:
+      return {
+        time_usec: Number(getBigUint64(0)),
+        vibration_x: getFloat32(8),
+        vibration_y: getFloat32(12),
+        vibration_z: getFloat32(16),
+        clipping_0: getUint32(20),
+        clipping_1: getUint32(24),
+        clipping_2: getUint32(28),
+      };
+
+    case MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4: {
+      const voltage = [getUint16(0) / 100, getUint16(2) / 100, getUint16(4) / 100, getUint16(6) / 100];
+      const current = [getUint16(8) / 100, getUint16(10) / 100, getUint16(12) / 100, getUint16(14) / 100];
+      const totalcurrent = [getUint16(16), getUint16(18), getUint16(20), getUint16(22)];
+      const rpm = [getUint16(24), getUint16(26), getUint16(28), getUint16(30)];
+      const count = [getUint16(32), getUint16(34), getUint16(36), getUint16(38)];
+      const temperature = [getUint8(40), getUint8(41), getUint8(42), getUint8(43)];
+      return {
+        voltage,
+        current,
+        totalcurrent,
+        rpm,
+        count,
+        temperature,
+        rpm1: rpm[0],
+        rpm2: rpm[1],
+        rpm3: rpm[2],
+        rpm4: rpm[3],
+        temp1: temperature[0],
+        temp2: temperature[1],
+        temp3: temperature[2],
+        temp4: temperature[3],
+        curr1: current[0],
+        curr2: current[1],
+        curr3: current[2],
+        curr4: current[3],
+        volt1: voltage[0],
+        volt2: voltage[1],
+        volt3: voltage[2],
+        volt4: voltage[3],
+      };
+    }
+
     default:
       return { rawPayload: payload };
   }
