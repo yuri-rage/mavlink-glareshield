@@ -31,7 +31,6 @@ DEFAULT_ALLOWED_ORIGINS: list[Any] = [
     ),
     re.compile(r"^tauri://.*$"),
     re.compile(r"^https?://tauri\.localhost(:\d+)?$"),
-    "null",
     None,
 ]
 
@@ -308,6 +307,10 @@ class BridgeServer:
         username = str(cmd.get("username", "")).strip()
         password = str(cmd.get("password", "")).strip()
 
+        if port not in (2101, 2102, 2103, 2104, 2105) or not re.fullmatch(r"[A-Za-z0-9.-]+", host) \
+                or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", mountpoint):
+            await websocket.send(json.dumps({"type": "ntrip_error", "message": "Invalid NTRIP host, port or mountpoint"}))
+            return
         if not host or not mountpoint:
             await websocket.send(
                 json.dumps({"type": "ntrip_error", "message": "Missing host or mountpoint"})
@@ -652,6 +655,7 @@ class BridgeServer:
                     f_offset,
                 ) = struct.unpack("<HBBBBBBI", ftp_data[:12])
                 f_body = ftp_data[12 : 12 + f_size]
+                reply_seq = (f_seq + 1) & 0xFFFF
 
                 if f_opcode == 4:  # OpenFileRO
                     filename = f_body.decode("utf-8", errors="ignore").strip("\x00")
@@ -663,7 +667,7 @@ class BridgeServer:
                         self.ftp_files[sess_id] = buf
                         ack_payload = (
                             bytes([0, 1, 1])
-                            + struct.pack("<HBBBBBBI", f_seq, sess_id, 128, 4, 4, 0, 0, 0)
+                            + struct.pack("<HBBBBBBI", reply_seq, sess_id, 128, 4, 4, 0, 0, 0)
                             + struct.pack("<I", len(buf))
                         )
                         await self.broadcast(
@@ -705,7 +709,7 @@ class BridgeServer:
                         # Return Ack with file size
                         ack_payload = (
                             bytes([0, 1, 1])
-                            + struct.pack("<HBBBBBBI", f_seq, 1, 128, 4, 4, 0, 0, 0)
+                            + struct.pack("<HBBBBBBI", reply_seq, 1, 128, 4, 4, 0, 0, 0)
                             + struct.pack("<I", len(buf))
                         )
                         await self.broadcast(
@@ -743,7 +747,7 @@ class BridgeServer:
                         self.ftp_files[2] = bytes(buf)
                         ack_payload = (
                             bytes([0, 1, 1])
-                            + struct.pack("<HBBBBBBI", f_seq, 2, 128, 4, 4, 0, 0, 0)
+                            + struct.pack("<HBBBBBBI", reply_seq, 2, 128, 4, 4, 0, 0, 0)
                             + struct.pack("<I", len(buf))
                         )
                         await self.broadcast(
@@ -783,7 +787,7 @@ class BridgeServer:
                         self.ftp_files[3] = bytes(buf)
                         ack_payload = (
                             bytes([0, 1, 1])
-                            + struct.pack("<HBBBBBBI", f_seq, 3, 128, 4, 4, 0, 0, 0)
+                            + struct.pack("<HBBBBBBI", reply_seq, 3, 128, 4, 4, 0, 0, 0)
                             + struct.pack("<I", len(buf))
                         )
                         await self.broadcast(
@@ -820,7 +824,7 @@ class BridgeServer:
                         self.ftp_files[4] = bytes(buf)
                         ack_payload = (
                             bytes([0, 1, 1])
-                            + struct.pack("<HBBBBBBI", f_seq, 4, 128, 4, 4, 0, 0, 0)
+                            + struct.pack("<HBBBBBBI", reply_seq, 4, 128, 4, 4, 0, 0, 0)
                             + struct.pack("<I", len(buf))
                         )
                         await self.broadcast(
@@ -829,7 +833,7 @@ class BridgeServer:
                     else:
                         nack_payload = (
                             bytes([0, 1, 1])
-                            + struct.pack("<HBBBBBBI", f_seq, 0, 129, 1, 4, 0, 0, 0)
+                            + struct.pack("<HBBBBBBI", reply_seq, 0, 129, 1, 4, 0, 0, 0)
                             + bytes([2])
                         )
                         await self.broadcast(
@@ -847,7 +851,7 @@ class BridgeServer:
                             bytes([0, 1, 1])
                             + struct.pack(
                                 "<HBBBBBBI",
-                                f_seq,
+                                reply_seq,
                                 f_session,
                                 128,
                                 len(chunk),
@@ -866,7 +870,7 @@ class BridgeServer:
                     eof_payload = (
                         bytes([0, 1, 1])
                         + struct.pack(
-                            "<HBBBBBBI", f_seq, f_session, 129, 1, 15, 1, 0, curr_offset
+                            "<HBBBBBBI", reply_seq, f_session, 129, 1, 15, 1, 0, curr_offset
                         )
                         + bytes([6])
                     )
@@ -881,7 +885,7 @@ class BridgeServer:
                         bytes([0, 1, 1])
                         + struct.pack(
                             "<HBBBBBBI",
-                            f_seq,
+                            reply_seq,
                             f_session,
                             128,
                             len(chunk),
@@ -905,7 +909,7 @@ class BridgeServer:
                     self.ftp_files[sess_id] = self.mock_files[filename]
                     ack_payload = (
                         bytes([0, 1, 1])
-                        + struct.pack("<HBBBBBBI", f_seq, sess_id, 128, 0, 6, 0, 0, 0)
+                        + struct.pack("<HBBBBBBI", reply_seq, sess_id, 128, 0, 6, 0, 0, 0)
                     )
                     await self.broadcast(
                         self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
@@ -919,7 +923,7 @@ class BridgeServer:
                         buf[f_offset : f_offset + f_size] = f_body
                         ack_payload = (
                             bytes([0, 1, 1])
-                            + struct.pack("<HBBBBBBI", f_seq, f_session, 128, 0, 7, 0, 0, f_offset)
+                            + struct.pack("<HBBBBBBI", reply_seq, f_session, 128, 0, 7, 0, 0, f_offset)
                         )
                         await self.broadcast(
                             self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
@@ -927,7 +931,7 @@ class BridgeServer:
                     else:
                         nack_payload = (
                             bytes([0, 1, 1])
-                            + struct.pack("<HBBBBBBI", f_seq, f_session, 129, 1, 7, 0, 0, f_offset)
+                            + struct.pack("<HBBBBBBI", reply_seq, f_session, 129, 1, 7, 0, 0, f_offset)
                             + bytes([4])
                         )
                         await self.broadcast(
@@ -939,7 +943,7 @@ class BridgeServer:
                         self.ftp_files.clear()
                     ack_payload = (
                         bytes([0, 1, 1])
-                        + struct.pack("<HBBBBBBI", f_seq, 0, 128, 0, 2, 0, 0, 0)
+                        + struct.pack("<HBBBBBBI", reply_seq, 0, 128, 0, 2, 0, 0, 0)
                     )
                     await self.broadcast(
                         self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
@@ -949,7 +953,7 @@ class BridgeServer:
                     if hasattr(self, "ftp_files") and f_session in self.ftp_files:
                         self.ftp_files.pop(f_session, None)
                     ack_payload = bytes([0, 1, 1]) + struct.pack(
-                        "<HBBBBBBI", f_seq, f_session, 128, 0, 1, 0, 0, 0
+                        "<HBBBBBBI", reply_seq, f_session, 128, 0, 1, 0, 0, 0
                     )
                     await self.broadcast(
                         self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
@@ -1316,6 +1320,11 @@ def main():
         action="store_true",
         help="Allow WebSocket connections from any Origin (*)",
     )
+    parser.add_argument(
+        "--allow-null-origin",
+        action="store_true",
+        help="Allow 'Origin: null' header (needed when UI is opened via file:// URL)",
+    )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
         "--mock", action="store_true", help="Run simulated ArduPilot mock telemetry"
@@ -1345,6 +1354,8 @@ def main():
         target = args.serial
 
     allowed_origins = list(DEFAULT_ALLOWED_ORIGINS)
+    if args.allow_null_origin:
+        allowed_origins.append("null")
     if args.allow_all_origins:
         allowed_origins = ["*"]
     elif args.allowed_origins:
