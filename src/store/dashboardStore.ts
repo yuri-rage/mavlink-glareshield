@@ -48,18 +48,64 @@ const DEFAULT_PROFILE: DashboardProfile = {
     {
       id: 'custom-batt-voltage',
       name: 'Custom Bus Voltage',
-      description: 'Quick voltmeter for main propulsion rail',
+      description: 'Quick voltmeter for main propulsion rail with low-voltage alerts',
       category: 'telemetry',
       displayType: 'gauge-linear',
       binding: {
         messageName: 'SYS_STATUS',
         fieldName: 'voltage_battery',
         unit: 'V',
-        min: 10,
-        max: 18,
+        min: 12,
+        max: 17,
         decimals: 2,
+        warnThreshold: 14.4,
+        critThreshold: 13.8,
+        thresholdInvert: true,
       },
       colorScheme: 'green',
+    },
+    {
+      id: 'custom-rc-bars',
+      name: 'RC Input Channels 1–8',
+      description: 'Live PWM pulse width bars for radio channels 1–8',
+      category: 'telemetry',
+      displayType: 'multi-bar',
+      multiBarConfig: {
+        group: 'rc-8',
+      },
+      colorScheme: 'blue',
+    },
+    {
+      id: 'custom-wind-rose',
+      name: 'Wind Direction & Vector',
+      description: 'Real-time wind direction compass rose',
+      category: 'avionics',
+      displayType: 'compass-rose',
+      binding: {
+        messageName: 'WIND',
+        fieldName: 'direction',
+        unit: '°',
+        min: 0,
+        max: 360,
+        decimals: 0,
+      },
+      colorScheme: 'default',
+    },
+    {
+      id: 'custom-wp-speed-param',
+      name: 'Cruise / WP Speed Setter',
+      description: 'Adjust ArduPilot WPNAV_SPEED parameter in flight',
+      category: 'control',
+      displayType: 'param-control',
+      paramControl: {
+        paramId: 'WPNAV_SPEED',
+        unit: 'cm/s',
+        min: 100,
+        max: 2000,
+        step: 50,
+        confirmation: true,
+      },
+      colorScheme: 'blue',
     },
     {
       id: 'custom-rtl-btn',
@@ -82,14 +128,26 @@ const STORAGE_KEY = 'mavlink_glareshield_profile_v1';
 
 function loadInitialProfile(): DashboardProfile {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      return JSON.parse(saved);
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
     }
   } catch (e) {
     console.warn('Failed to load profile from localStorage:', e);
   }
   return DEFAULT_PROFILE;
+}
+
+function saveProfileToStorage(profile: DashboardProfile) {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+    }
+  } catch (e) {
+    console.warn('Failed to save profile to localStorage:', e);
+  }
 }
 
 interface DashboardState {
@@ -105,12 +163,14 @@ interface DashboardState {
   addTab: (title: string) => void;
   removeTab: (tabId: string) => void;
   renameTab: (tabId: string, newTitle: string) => void;
+  reorderTabs: (fromIndex: number, toIndex: number) => void;
 
   // Widgets in Active Tab
   addWidgetToActiveTab: (widgetId: string, colSpan?: number) => void;
   removeWidgetFromActiveTab: (instanceId: string) => void;
   updateWidgetColSpan: (instanceId: string, colSpan: number) => void;
   moveWidget: (instanceId: string, direction: 'up' | 'down') => void;
+  reorderWidgetsInActiveTab: (fromIndex: number, toIndex: number) => void;
 
   // Custom Widgets
   saveCustomWidget: (def: CustomWidgetDefinition) => void;
@@ -139,7 +199,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         { id, title: title.trim() || 'New View', widgets: [] },
       ];
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newProfile));
+      saveProfileToStorage(newProfile);
       return { profile: newProfile, activeTabId: id };
     });
   },
@@ -150,7 +210,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const newTabs = state.profile.tabs.filter((t) => t.id !== tabId);
       const newActive = state.activeTabId === tabId ? newTabs[0].id : state.activeTabId;
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newProfile));
+      saveProfileToStorage(newProfile);
       return { profile: newProfile, activeTabId: newActive };
     });
   },
@@ -159,7 +219,27 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set((state) => {
       const newTabs = state.profile.tabs.map((t) => (t.id === tabId ? { ...t, title: newTitle } : t));
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newProfile));
+      saveProfileToStorage(newProfile);
+      return { profile: newProfile };
+    });
+  },
+
+  reorderTabs: (fromIndex: number, toIndex: number) => {
+    set((state) => {
+      const tabs = [...state.profile.tabs];
+      if (
+        fromIndex < 0 ||
+        fromIndex >= tabs.length ||
+        toIndex < 0 ||
+        toIndex >= tabs.length ||
+        fromIndex === toIndex
+      ) {
+        return {};
+      }
+      const [moved] = tabs.splice(fromIndex, 1);
+      tabs.splice(toIndex, 0, moved);
+      const newProfile = { ...state.profile, tabs, updatedAt: new Date().toISOString() };
+      saveProfileToStorage(newProfile);
       return { profile: newProfile };
     });
   },
@@ -175,7 +255,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         return { ...tab, widgets: [...tab.widgets, newWidget] };
       });
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newProfile));
+      saveProfileToStorage(newProfile);
       return { profile: newProfile };
     });
   },
@@ -188,7 +268,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         return { ...tab, widgets: tab.widgets.filter((w) => w.instanceId !== instanceId) };
       });
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newProfile));
+      saveProfileToStorage(newProfile);
       return { profile: newProfile };
     });
   },
@@ -204,7 +284,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         };
       });
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newProfile));
+      saveProfileToStorage(newProfile);
       return { profile: newProfile };
     });
   },
@@ -227,7 +307,32 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         return { ...tab, widgets: newWidgets };
       });
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newProfile));
+      saveProfileToStorage(newProfile);
+      return { profile: newProfile };
+    });
+  },
+
+  reorderWidgetsInActiveTab: (fromIndex: number, toIndex: number) => {
+    const { activeTabId } = get();
+    set((state) => {
+      const newTabs = state.profile.tabs.map((tab) => {
+        if (tab.id !== activeTabId) return tab;
+        if (
+          fromIndex < 0 ||
+          fromIndex >= tab.widgets.length ||
+          toIndex < 0 ||
+          toIndex >= tab.widgets.length ||
+          fromIndex === toIndex
+        ) {
+          return tab;
+        }
+        const newWidgets = [...tab.widgets];
+        const [moved] = newWidgets.splice(fromIndex, 1);
+        newWidgets.splice(toIndex, 0, moved);
+        return { ...tab, widgets: newWidgets };
+      });
+      const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
+      saveProfileToStorage(newProfile);
       return { profile: newProfile };
     });
   },
@@ -246,7 +351,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         customWidgets: updatedCustom,
         updatedAt: new Date().toISOString(),
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newProfile));
+      saveProfileToStorage(newProfile);
       return { profile: newProfile };
     });
   },
@@ -254,12 +359,17 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   deleteCustomWidget: (widgetId: string) => {
     set((state) => {
       const updatedCustom = state.profile.customWidgets.filter((w) => w.id !== widgetId);
+      const updatedTabs = state.profile.tabs.map((t) => ({
+        ...t,
+        widgets: t.widgets.filter((w) => w.widgetId !== widgetId),
+      }));
       const newProfile = {
         ...state.profile,
+        tabs: updatedTabs,
         customWidgets: updatedCustom,
         updatedAt: new Date().toISOString(),
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newProfile));
+      saveProfileToStorage(newProfile);
       return { profile: newProfile };
     });
   },
@@ -280,7 +390,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             }
           });
         }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+        saveProfileToStorage(parsed);
         set({
           profile: parsed,
           activeTabId: parsed.tabs[0]?.id || 'tab-flight',
@@ -294,7 +404,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   resetToDefaults: () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_PROFILE));
+    saveProfileToStorage(DEFAULT_PROFILE);
     set({
       profile: DEFAULT_PROFILE,
       activeTabId: 'tab-flight',

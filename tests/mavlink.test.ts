@@ -1026,4 +1026,83 @@ if (Math.abs(decodedHighres.nz - 2.0) > 0.01) {
 }
 console.log('IMU and Nz load factor decoding verified successfully!');
 
+// 19. Test Extended Telemetry Store Slices, Custom Widget Value Extraction & Dashboard Reordering
+import { extractBoundValueFromState } from '../src/components/widgets/CustomWidgetRenderer.tsx';
+import { useDashboardStore } from '../src/store/dashboardStore.ts';
+
+// Test WIND (msg 168) -> store & custom widget binding
+const windPayload = new Uint8Array(12);
+const windDv = new DataView(windPayload.buffer);
+windDv.setFloat32(0, 275.0, true); // direction
+windDv.setFloat32(4, 8.5, true);   // speed
+windDv.setFloat32(8, -0.4, true);  // speed_z
+useTelemetryStore.getState().processPacket({
+  version: 2,
+  sequence: 10,
+  systemId: 1,
+  componentId: 1,
+  messageId: MAVLINK_MSG_ID.WIND,
+  payload: windPayload,
+  crc: 0,
+  raw: new Uint8Array(0),
+});
+if (useTelemetryStore.getState().wind.direction !== 275 || useTelemetryStore.getState().wind.speed !== 8.5) {
+  console.error('WIND telemetryStore update failed!', useTelemetryStore.getState().wind);
+  process.exit(1);
+}
+const boundWindDir = extractBoundValueFromState(
+  { messageName: 'WIND', fieldName: 'direction', decimals: 0 },
+  useTelemetryStore.getState()
+);
+if (boundWindDir !== '275') {
+  console.error('extractBoundValueFromState(WIND.direction) expected "275", got:', boundWindDir);
+  process.exit(1);
+}
+
+// Test RC_CHANNELS (msg 65) indexed channel extraction
+const rcPayload = new Uint8Array(42);
+const rcDv = new DataView(rcPayload.buffer);
+rcDv.setUint32(0, 5000, true);
+rcDv.setUint16(4, 1525, true); // chan1_raw
+rcDv.setUint16(8, 1850, true); // chan3_raw
+rcPayload[40] = 16; // chancount
+rcPayload[41] = 99; // rssi
+useTelemetryStore.getState().processPacket({
+  version: 2,
+  sequence: 11,
+  systemId: 1,
+  componentId: 1,
+  messageId: MAVLINK_MSG_ID.RC_CHANNELS,
+  payload: rcPayload,
+  crc: 0,
+  raw: new Uint8Array(0),
+});
+const boundRc3 = extractBoundValueFromState(
+  { messageName: 'RC_CHANNELS', fieldName: 'chan3_raw', decimals: 0 },
+  useTelemetryStore.getState()
+);
+if (boundRc3 !== '1850') {
+  console.error('extractBoundValueFromState(RC_CHANNELS.chan3_raw) expected "1850", got:', boundRc3);
+  process.exit(1);
+}
+
+// Test DashboardStore drag-and-drop reorderWidgetsInActiveTab & reorderTabs
+useDashboardStore.getState().resetToDefaults();
+const beforeWidgets = useDashboardStore.getState().profile.tabs[0].widgets.map((w) => w.instanceId);
+useDashboardStore.getState().reorderWidgetsInActiveTab(0, 2);
+const afterWidgets = useDashboardStore.getState().profile.tabs[0].widgets.map((w) => w.instanceId);
+if (afterWidgets[2] !== beforeWidgets[0] || afterWidgets[0] !== beforeWidgets[1]) {
+  console.error('reorderWidgetsInActiveTab failed!', { beforeWidgets, afterWidgets });
+  process.exit(1);
+}
+
+const beforeTabs = useDashboardStore.getState().profile.tabs.map((t) => t.id);
+useDashboardStore.getState().reorderTabs(0, 1);
+const afterTabs = useDashboardStore.getState().profile.tabs.map((t) => t.id);
+if (afterTabs[0] !== beforeTabs[1] || afterTabs[1] !== beforeTabs[0]) {
+  console.error('reorderTabs failed!', { beforeTabs, afterTabs });
+  process.exit(1);
+}
+console.log('Extended telemetry slices, custom widget bindings, and dashboard drag reordering verified!');
+
 console.log('All MAVLink protocol unit tests PASSED!');

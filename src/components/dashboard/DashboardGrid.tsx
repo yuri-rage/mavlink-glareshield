@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useDashboardStore } from '../../store/dashboardStore';
-import { PlacedWidget } from '../../types/widget';
+import { CustomWidgetDefinition, PlacedWidget } from '../../types/widget';
 import { GlareshieldWidget } from '../glareshield/GlareshieldWidget';
 import { HudWidget } from '../hud/HudWidget';
 import { MapWidget } from '../map/MapWidget';
@@ -17,17 +17,21 @@ import {
   Trash2,
   ArrowLeft,
   ArrowRight,
-  Maximize2,
-  Minimize2,
   Plus,
   X,
   Layers,
   Edit2,
   Check,
   Pencil,
+  GripVertical,
+  Sliders,
 } from 'lucide-react';
 
-export const DashboardGrid: React.FC = () => {
+interface DashboardGridProps {
+  onEditCustomWidget?: (widget: CustomWidgetDefinition) => void;
+}
+
+export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget }) => {
   const {
     profile,
     activeTabId,
@@ -37,9 +41,11 @@ export const DashboardGrid: React.FC = () => {
     addTab,
     removeTab,
     renameTab,
+    reorderTabs,
     removeWidgetFromActiveTab,
     updateWidgetColSpan,
     moveWidget,
+    reorderWidgetsInActiveTab,
   } = useDashboardStore();
 
   const [newTabTitle, setNewTabTitle] = useState('');
@@ -48,6 +54,14 @@ export const DashboardGrid: React.FC = () => {
   const [editTabTitle, setEditTabTitle] = useState('');
   const [confirmDeleteWidgetId, setConfirmDeleteWidgetId] = useState<string | null>(null);
   const [confirmDeleteTabId, setConfirmDeleteTabId] = useState<string | null>(null);
+
+  // Drag-and-drop state for widgets
+  const [draggedWidgetIdx, setDraggedWidgetIdx] = useState<number | null>(null);
+  const [dropTargetWidgetIdx, setDropTargetWidgetIdx] = useState<number | null>(null);
+
+  // Drag-and-drop state for tabs
+  const [draggedTabIdx, setDraggedTabIdx] = useState<number | null>(null);
+  const [dropTargetTabIdx, setDropTargetTabIdx] = useState<number | null>(null);
 
   const activeTab = profile.tabs.find((t) => t.id === activeTabId) || profile.tabs[0];
 
@@ -148,10 +162,11 @@ export const DashboardGrid: React.FC = () => {
       <div className="flex items-center justify-between border-b border-zinc-800 pb-2 gap-2">
         {/* Scrollable Tabs */}
         <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto min-w-0 flex-1 py-1">
-          {profile.tabs.map((tab) => {
+          {profile.tabs.map((tab, tabIdx) => {
             const isActive = tab.id === activeTab?.id;
             const isBeingRenamed = editingTabId === tab.id;
             const isConfirmingDelete = confirmDeleteTabId === tab.id;
+            const isTabDropTarget = dropTargetTabIdx === tabIdx && draggedTabIdx !== null && draggedTabIdx !== tabIdx;
 
             if (isConfirmingDelete) {
               return (
@@ -180,7 +195,40 @@ export const DashboardGrid: React.FC = () => {
             }
 
             return (
-              <div key={tab.id} className="relative flex items-center group shrink-0">
+              <div
+                key={tab.id}
+                draggable={isEditing && !isBeingRenamed}
+                onDragStart={(e) => {
+                  if (!isEditing) return;
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', `tab:${tabIdx}`);
+                  setDraggedTabIdx(tabIdx);
+                }}
+                onDragOver={(e) => {
+                  if (!isEditing || draggedTabIdx === null) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (dropTargetTabIdx !== tabIdx) {
+                    setDropTargetTabIdx(tabIdx);
+                  }
+                }}
+                onDrop={(e) => {
+                  if (!isEditing || draggedTabIdx === null) return;
+                  e.preventDefault();
+                  if (draggedTabIdx !== tabIdx) {
+                    reorderTabs(draggedTabIdx, tabIdx);
+                  }
+                  setDraggedTabIdx(null);
+                  setDropTargetTabIdx(null);
+                }}
+                onDragEnd={() => {
+                  setDraggedTabIdx(null);
+                  setDropTargetTabIdx(null);
+                }}
+                className={`relative flex items-center group shrink-0 rounded-lg transition-all ${
+                  isTabDropTarget ? 'ring-2 ring-sky-400 bg-sky-950/30' : ''
+                } ${draggedTabIdx === tabIdx ? 'opacity-50' : ''}`}
+              >
                 {isBeingRenamed ? (
                   <div className="flex items-center gap-1 bg-zinc-900 px-2 py-1 rounded-lg border border-sky-500">
                     <Input
@@ -211,8 +259,10 @@ export const DashboardGrid: React.FC = () => {
                       isActive
                         ? 'bg-zinc-800 text-sky-400 shadow-sm border border-zinc-700'
                         : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-                    }`}
+                    } ${isEditing ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                    title={isEditing ? 'Drag to reorder tab' : tab.title}
                   >
+                    {isEditing && <GripVertical className="h-3 w-3 text-zinc-500 -ml-1" />}
                     <span>{tab.title}</span>
                     <span className="text-[10px] text-zinc-500 font-mono">({tab.widgets.length})</span>
                   </button>
@@ -311,50 +361,98 @@ export const DashboardGrid: React.FC = () => {
           {activeTab.widgets.map((widget, idx) => {
             const colSpan = widget.colSpan || 6;
             const isConfirmingDeleteWidget = confirmDeleteWidgetId === widget.instanceId;
+            const customDef = profile.customWidgets.find((w) => w.id === widget.widgetId);
+            const isDropTarget =
+              dropTargetWidgetIdx === idx && draggedWidgetIdx !== null && draggedWidgetIdx !== idx;
+            const isBeingDragged = draggedWidgetIdx === idx;
 
             return (
               <div
                 key={widget.instanceId}
-                className={`${getColSpanClass(colSpan)} relative group transition-all flex flex-col h-full`}
+                draggable={isEditing}
+                onDragStart={(e) => {
+                  if (!isEditing) return;
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', widget.instanceId);
+                  setDraggedWidgetIdx(idx);
+                }}
+                onDragOver={(e) => {
+                  if (!isEditing || draggedWidgetIdx === null) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  if (dropTargetWidgetIdx !== idx) {
+                    setDropTargetWidgetIdx(idx);
+                  }
+                }}
+                onDrop={(e) => {
+                  if (!isEditing || draggedWidgetIdx === null) return;
+                  e.preventDefault();
+                  if (draggedWidgetIdx !== idx) {
+                    reorderWidgetsInActiveTab(draggedWidgetIdx, idx);
+                  }
+                  setDraggedWidgetIdx(null);
+                  setDropTargetWidgetIdx(null);
+                }}
+                onDragEnd={() => {
+                  setDraggedWidgetIdx(null);
+                  setDropTargetWidgetIdx(null);
+                }}
+                className={`${getColSpanClass(colSpan)} relative group transition-all flex flex-col h-full ${
+                  isBeingDragged ? 'opacity-40 scale-[0.99]' : ''
+                } ${isDropTarget ? 'ring-2 ring-sky-400 rounded-xl bg-sky-950/20' : ''}`}
               >
                 {/* Edit Overlay Toolbar when in Edit Mode */}
                 {isEditing && (
-                  <div className="mb-1.5 flex items-center justify-between bg-zinc-900 border border-zinc-700/80 rounded-lg px-2.5 py-1 text-xs text-zinc-300 shadow-md">
-                    <span className="font-sans text-[11px] text-sky-400 font-bold truncate max-w-[140px] sm:max-w-[200px]" title={getWidgetTitle(widget.widgetId)}>
-                      {getWidgetTitle(widget.widgetId)}
-                    </span>
+                  <div className="mb-1.5 flex items-center justify-between gap-1 bg-zinc-900 border border-zinc-700/80 rounded-lg px-2 py-1 text-xs text-zinc-300 shadow-md">
+                    <div
+                      className="flex items-center gap-1 min-w-0 cursor-grab active:cursor-grabbing"
+                      title="Drag card to reorder in grid"
+                    >
+                      <GripVertical className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+                      <span
+                        className="font-sans text-[11px] text-sky-400 font-bold truncate max-w-[110px] sm:max-w-[170px]"
+                        title={getWidgetTitle(widget.widgetId)}
+                      >
+                        {getWidgetTitle(widget.widgetId)}
+                      </span>
+                    </div>
 
-                    <div className="flex items-center gap-1.5">
-                      {/* Width toggles */}
-                      <button
-                        onClick={() => updateWidgetColSpan(widget.instanceId, 4)}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold ${
-                          colSpan === 4 ? 'bg-sky-500 text-white font-bold' : 'hover:bg-zinc-800'
-                        }`}
-                        title="1/3 Width"
-                      >
-                        1/3
-                      </button>
-                      <button
-                        onClick={() => updateWidgetColSpan(widget.instanceId, 6)}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold ${
-                          colSpan === 6 ? 'bg-sky-500 text-white font-bold' : 'hover:bg-zinc-800'
-                        }`}
-                        title="Half Width"
-                      >
-                        1/2
-                      </button>
-                      <button
-                        onClick={() => updateWidgetColSpan(widget.instanceId, 12)}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold ${
-                          colSpan === 12 ? 'bg-sky-500 text-white font-bold' : 'hover:bg-zinc-800'
-                        }`}
-                        title="Full Width"
-                      >
-                        Full
-                      </button>
+                    <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                      {/* Width toggles: 1/4, 1/3, 1/2, 2/3, Full */}
+                      {[
+                        { span: 3, label: '1/4', title: '1/4 Width (3 cols)' },
+                        { span: 4, label: '1/3', title: '1/3 Width (4 cols)' },
+                        { span: 6, label: '1/2', title: 'Half Width (6 cols)' },
+                        { span: 8, label: '2/3', title: '2/3 Width (8 cols)' },
+                        { span: 12, label: 'Full', title: 'Full Width (12 cols)' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.span}
+                          onClick={() => updateWidgetColSpan(widget.instanceId, opt.span)}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold transition-colors ${
+                            colSpan === opt.span ? 'bg-sky-500 text-white font-bold' : 'hover:bg-zinc-800 text-zinc-400'
+                          }`}
+                          title={opt.title}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
 
                       <div className="h-3 w-px bg-zinc-700 mx-0.5" />
+
+                      {/* Edit Custom Widget button */}
+                      {customDef && onEditCustomWidget && (
+                        <>
+                          <button
+                            onClick={() => onEditCustomWidget(customDef)}
+                            className="p-1 text-amber-400 hover:text-amber-300 flex items-center"
+                            title="Edit custom widget definition"
+                          >
+                            <Sliders className="h-3 w-3" />
+                          </button>
+                          <div className="h-3 w-px bg-zinc-700 mx-0.5" />
+                        </>
+                      )}
 
                       {/* Move buttons */}
                       <button
@@ -400,7 +498,7 @@ export const DashboardGrid: React.FC = () => {
                         <button
                           onClick={() => setConfirmDeleteWidgetId(widget.instanceId)}
                           className="p-1 text-red-400 hover:text-red-300"
-                          title="Delete widget"
+                          title="Remove widget from view"
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>
@@ -414,11 +512,12 @@ export const DashboardGrid: React.FC = () => {
                   {renderWidgetContent(widget)}
                   {isEditing && (
                     <div
-                      className="absolute inset-0 bg-zinc-950/40 backdrop-blur-[0.5px] rounded-xl z-20 cursor-not-allowed flex items-center justify-center pointer-events-auto select-none"
-                      title="Widget controls locked during layout editing"
+                      className="absolute inset-0 bg-zinc-950/40 backdrop-blur-[0.5px] rounded-xl z-20 cursor-grab active:cursor-grabbing flex items-center justify-center pointer-events-auto select-none"
+                      title="Drag to reorder widget — flight controls locked while editing"
                     >
-                      <span className="text-[11px] font-mono font-medium text-zinc-300 bg-zinc-900/90 px-2 py-0.5 rounded border border-zinc-700 shadow">
-                        Controls Locked
+                      <span className="text-[11px] font-mono font-medium text-zinc-200 bg-zinc-900/95 px-2.5 py-1 rounded-md border border-zinc-700 shadow flex items-center gap-1.5">
+                        <GripVertical className="h-3.5 w-3.5 text-sky-400" />
+                        {isDropTarget ? 'Drop Here to Swap' : 'Drag to Reorder · Controls Locked'}
                       </span>
                     </div>
                   )}
