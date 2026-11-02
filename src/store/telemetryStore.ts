@@ -673,7 +673,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
 
         case MAVLINK_MSG_ID.GPS_RAW_INT: {
           const rawYaw = data.raw_yaw ?? 0;
-          const hasYaw = Boolean(state.gps.hasYaw || (rawYaw > 0 && rawYaw < 36000));
+          const hasYaw = Boolean(state.gps.hasYaw || rawYaw > 0);
           const yaw = rawYaw === 65535 ? undefined : (hasYaw ? data.yaw : undefined);
           return {
             gps: {
@@ -693,7 +693,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
 
         case MAVLINK_MSG_ID.GPS2_RAW: {
           const rawYaw = data.raw_yaw ?? 0;
-          const hasYaw = Boolean(state.gps2?.hasYaw || (rawYaw > 0 && rawYaw < 36000));
+          const hasYaw = Boolean(state.gps2?.hasYaw || rawYaw > 0);
           const yaw = rawYaw === 65535 ? undefined : (hasYaw ? data.yaw : undefined);
           return {
             gps2: {

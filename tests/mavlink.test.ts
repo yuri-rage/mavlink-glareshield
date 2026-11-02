@@ -1215,6 +1215,33 @@ if (!gps2State || gps2State.fixType !== 6 || gps2State.fixLabel !== 'RTK Fixed' 
   process.exit(1);
 }
 
+// Test GPS2_RAW with yaw=65535 (configured in ArduPilot but uninitialized/searching)
+const uninitGps2Payload = new Uint8Array(37);
+const uninitGps2Dv = new DataView(uninitGps2Payload.buffer);
+uninitGps2Dv.setBigUint64(0, 3000n, true);
+uninitGps2Payload[32] = 3; // 3D Fix
+uninitGps2Payload[33] = 12; // 12 sats
+uninitGps2Dv.setUint16(35, 65535, true); // uninitialized yaw sentinel
+
+// Reset gps2 state to simulate a fresh connection to an uninitialized vehicle
+useTelemetryStore.setState({ gps2: null });
+useTelemetryStore.getState().processPacket({
+  version: 2,
+  sequence: 24,
+  systemId: 1,
+  componentId: 1,
+  messageId: MAVLINK_MSG_ID.GPS2_RAW,
+  payload: uninitGps2Payload,
+  crc: 0,
+  raw: new Uint8Array(0),
+});
+
+const uninitGps2State = useTelemetryStore.getState().gps2;
+if (!uninitGps2State || !uninitGps2State.hasYaw || uninitGps2State.yaw !== undefined) {
+  console.error('telemetryStore gps2 uninitialized yaw (65535) failed to register hasYaw=true and yaw=undefined!', uninitGps2State);
+  process.exit(1);
+}
+
 console.log('Dual GPS modules (GPS_RAW_INT & GPS2_RAW) and yaw latching verified successfully!');
 
 console.log('All MAVLink protocol unit tests PASSED!');
