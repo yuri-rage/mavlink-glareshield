@@ -13,12 +13,61 @@ interface CustomWidgetRendererProps {
   definition: CustomWidgetDefinition;
 }
 
+function extractBoundValueFromState(
+  binding: CustomWidgetDefinition['binding'],
+  state: any
+): number | string | null {
+  if (!binding) return null;
+  const { messageName, fieldName, multiplier = 1, decimals = 1 } = binding;
+  const msg = messageName.toUpperCase();
+
+  const fieldAliases: Record<string, string> = {
+    voltage_battery: 'voltage',
+    current_battery: 'current',
+    battery_remaining: 'remaining',
+    current_consumed: 'consumedMah',
+    satellites_visible: 'satellites',
+    eph: 'hdop',
+    epv: 'vdop',
+    vel: 'groundspeed',
+    relative_alt: 'relativeAlt',
+    roll_deg: 'rollDeg',
+    pitch_deg: 'pitchDeg',
+    yaw_deg: 'yawDeg',
+  };
+  const targetKey = fieldAliases[fieldName] || fieldName;
+
+  let slice: any = null;
+  if (msg === 'ATTITUDE') slice = state.attitude;
+  else if (msg === 'GLOBAL_POSITION_INT') slice = state.position;
+  else if (msg === 'VFR_HUD') slice = state.vfr;
+  else if (msg === 'SYS_STATUS' || msg === 'BATTERY_STATUS') slice = state.battery;
+  else if (msg === 'GPS_RAW_INT') slice = state.gps;
+  else if (msg === 'HEARTBEAT') slice = state.heartbeat;
+
+  if (!slice) return null;
+  const rawVal = slice[targetKey] ?? slice[fieldName];
+  if (rawVal === undefined || rawVal === null) return '--';
+
+  if (typeof rawVal === 'number') {
+    const transformed = rawVal * multiplier;
+    return decimals !== undefined ? transformed.toFixed(decimals) : transformed;
+  }
+  return rawVal;
+}
+
 export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ definition }) => {
-  const telemetry = useTelemetryStore();
+  const boundValue = useTelemetryStore((s) => extractBoundValueFromState(definition.binding, s));
+  const sysId = useTelemetryStore((s) => s.heartbeat.systemId || 1);
+  const compId = useTelemetryStore((s) => s.heartbeat.componentId || 1);
+
   const [toggleState, setToggleState] = useState(false);
   const [lastActionTime, setLastActionTime] = useState<number | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [sliderVal, setSliderVal] = useState<number>(definition.binding?.min ?? 0);
+  const [isConfirmingSlider, setIsConfirmingSlider] = useState(false);
+  const [isConfirmingToggle, setIsConfirmingToggle] = useState(false);
+  const [pendingToggleVal, setPendingToggleVal] = useState(false);
 
   // Register message rate subscription if bound to a telemetry stream
   useEffect(() => {
@@ -31,58 +80,6 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
       };
     }
   }, [definition.id, definition.binding?.messageName]);
-
-  // Extract raw value based on message & field binding
-  const extractBoundValue = (): number | string | null => {
-    if (!definition.binding) return null;
-    const { messageName, fieldName, multiplier = 1, decimals = 1 } = definition.binding;
-
-    let rawVal: any = null;
-    const msg = messageName.toUpperCase();
-
-    // Field aliases to map MAVLink protocol names to store properties
-    const fieldAliases: Record<string, string> = {
-      voltage_battery: 'voltage',
-      current_battery: 'current',
-      battery_remaining: 'remaining',
-      current_consumed: 'consumedMah',
-      satellites_visible: 'satellites',
-      eph: 'hdop',
-      epv: 'vdop',
-      vel: 'groundspeed',
-      relative_alt: 'relativeAlt',
-      roll_deg: 'rollDeg',
-      pitch_deg: 'pitchDeg',
-      yaw_deg: 'yawDeg',
-    };
-    const targetKey = fieldAliases[fieldName] || fieldName;
-
-    if (msg === 'ATTITUDE') {
-      rawVal = (telemetry.attitude as any)[targetKey] ?? (telemetry.attitude as any)[fieldName];
-    } else if (msg === 'GLOBAL_POSITION_INT') {
-      rawVal = (telemetry.position as any)[targetKey] ?? (telemetry.position as any)[fieldName];
-    } else if (msg === 'VFR_HUD') {
-      rawVal = (telemetry.vfr as any)[targetKey] ?? (telemetry.vfr as any)[fieldName];
-    } else if (msg === 'SYS_STATUS' || msg === 'BATTERY_STATUS') {
-      rawVal = (telemetry.battery as any)[targetKey] ?? (telemetry.battery as any)[fieldName];
-    } else if (msg === 'GPS_RAW_INT') {
-      rawVal = (telemetry.gps as any)[targetKey] ?? (telemetry.gps as any)[fieldName];
-    } else if (msg === 'HEARTBEAT') {
-      rawVal = (telemetry.heartbeat as any)[targetKey] ?? (telemetry.heartbeat as any)[fieldName];
-    }
-
-    if (rawVal === undefined || rawVal === null) return '--';
-
-    if (typeof rawVal === 'number') {
-      const transformed = rawVal * multiplier;
-      return decimals !== undefined ? transformed.toFixed(decimals) : transformed;
-    }
-
-    return rawVal;
-  };
-
-  const sysId = telemetry.heartbeat.systemId || 1;
-  const compId = telemetry.heartbeat.componentId || 1;
 
   const executeAction = () => {
     if (!definition.action) return;
@@ -107,20 +104,40 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
     executeAction();
   };
 
-  const handleToggle = () => {
-    const next = !toggleState;
+  const executeToggleAction = (next: boolean) => {
     setToggleState(next);
     if (definition.action) {
-      // param1 often toggles 0/1 in ArduPilot relay/servo commands
       const params = [...definition.action.params] as [number, number, number, number, number, number, number];
       params[0] = next ? 1 : 0;
       const encoder = mavlinkConnection.getEncoder();
       const cmd = encoder.createCommandLong(sysId, compId, definition.action.commandId, params);
       mavlinkConnection.send(cmd);
+      setLastActionTime(Date.now());
     }
   };
 
-  const boundValue = extractBoundValue();
+  const handleToggleClick = () => {
+    const next = !toggleState;
+    if (definition.action?.confirmation) {
+      setPendingToggleVal(next);
+      setIsConfirmingToggle(true);
+      return;
+    }
+    executeToggleAction(next);
+  };
+
+  const executeSliderAction = (val: number) => {
+    if (definition.action) {
+      const params = [...definition.action.params] as [number, number, number, number, number, number, number];
+      params[0] = val;
+      const encoder = mavlinkConnection.getEncoder();
+      const cmd = encoder.createCommandLong(sysId, compId, definition.action.commandId, params);
+      mavlinkConnection.send(cmd);
+      setLastActionTime(Date.now());
+    }
+    setIsConfirmingSlider(false);
+  };
+
   const unit = definition.binding?.unit ?? '';
   const min = definition.binding?.min ?? 0;
   const max = definition.binding?.max ?? 100;
@@ -224,15 +241,16 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
               max={max}
               step={(max - min) / 100 || 1}
               value={sliderVal}
-              onChange={(e) => setSliderVal(Number(e.target.value))}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setSliderVal(val);
+                if (definition.action?.confirmation) {
+                  setIsConfirmingSlider(true);
+                }
+              }}
               onPointerUp={() => {
-                if (definition.action) {
-                  const params = [...definition.action.params] as [number, number, number, number, number, number, number];
-                  params[0] = sliderVal;
-                  const encoder = mavlinkConnection.getEncoder();
-                  const cmd = encoder.createCommandLong(sysId, compId, definition.action.commandId, params);
-                  mavlinkConnection.send(cmd);
-                  setLastActionTime(Date.now());
+                if (!definition.action?.confirmation) {
+                  executeSliderAction(sliderVal);
                 }
               }}
               className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-sky-500"
@@ -241,6 +259,27 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
               <span>{min} {unit}</span>
               <span>{max} {unit}</span>
             </div>
+            {definition.action?.confirmation && isConfirmingSlider && (
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs h-7 gap-1"
+                  onClick={() => executeSliderAction(sliderVal)}
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Apply: {sliderVal} {unit}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs text-zinc-400 h-7"
+                  onClick={() => setIsConfirmingSlider(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
@@ -304,21 +343,51 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
         )}
 
         {definition.displayType === 'toggle-switch' && (
-          <div className="flex items-center justify-between py-1">
-            <div>
-              <span className="text-xs font-bold text-zinc-200 block">Switch State</span>
-              <span className="text-[10px] text-zinc-500 font-mono">
-                {toggleState ? 'ENGAGED (1)' : 'DISENGAGED (0)'}
-              </span>
+          <div className="space-y-2 py-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-zinc-200 block">Switch State</span>
+                <span className="text-[10px] text-zinc-500 font-mono">
+                  {toggleState ? 'ENGAGED (1)' : 'DISENGAGED (0)'}
+                </span>
+              </div>
+              <button
+                onClick={handleToggleClick}
+                className={`p-1 rounded-lg border transition-all ${
+                  toggleState ? 'border-sky-500 bg-sky-950/60 text-sky-400' : 'border-zinc-800 bg-zinc-900 text-zinc-500'
+                }`}
+              >
+                {toggleState ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
+              </button>
             </div>
-            <button
-              onClick={handleToggle}
-              className={`p-1 rounded-lg border transition-all ${
-                toggleState ? 'border-sky-500 bg-sky-950/60 text-sky-400' : 'border-zinc-800 bg-zinc-900 text-zinc-500'
-              }`}
-            >
-              {toggleState ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
-            </button>
+            {isConfirmingToggle && (
+              <div className="p-2 bg-amber-950/40 border border-amber-600/40 rounded space-y-1.5 text-xs">
+                <div className="font-bold text-amber-300 flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Confirm toggle to {pendingToggleVal ? 'ENGAGED' : 'DISENGAGED'}?
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs h-7"
+                    onClick={() => {
+                      executeToggleAction(pendingToggleVal);
+                      setIsConfirmingToggle(false);
+                    }}
+                  >
+                    Confirm Toggle
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs text-zinc-400 h-7"
+                    onClick={() => setIsConfirmingToggle(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

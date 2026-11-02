@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { mavlinkConnection } from '../../mavlink/connection';
@@ -31,11 +31,15 @@ import {
 } from 'lucide-react';
 
 export const GlareshieldWidget: React.FC = () => {
-  const { heartbeat, vfr, position, gps } = useTelemetryStore();
+  const heartbeat = useTelemetryStore((state) => state.heartbeat);
+  const vfr = useTelemetryStore((state) => state.vfr);
+  const position = useTelemetryStore((state) => state.position);
+  const gps = useTelemetryStore((state) => state.gps);
   const { formatSpeed, formatAltitude, altitudeMode, isImperial } = useUnitsStore();
   const [targetAlt, setTargetAlt] = useState<number>(20);
   const [targetSpeed, setTargetSpeed] = useState<number>(5);
   const [sliderValue, setSliderValue] = useState<number>(0);
+  const dragStartedFromLeft = useRef(false);
 
   const altStep = isImperial() ? 10 / 3.28084 : 5;
   const altStepDisplay = isImperial() ? '10ft' : '5m';
@@ -62,10 +66,34 @@ export const GlareshieldWidget: React.FC = () => {
     setSliderValue(0);
   };
 
-  const handleSliderRelease = () => {
-    if (sliderValue >= 90) {
-      handleArm(!heartbeat.isArmed);
+  const handlePointerDown = (e: React.PointerEvent<HTMLInputElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickPct = (e.clientX - rect.left) / rect.width;
+    // Require drag to initiate near the left handle (within first 25% of track)
+    if (clickPct <= 0.25) {
+      dragStartedFromLeft.current = true;
+    } else {
+      dragStartedFromLeft.current = false;
+      e.preventDefault();
     }
+  };
+
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (dragStartedFromLeft.current) {
+      setSliderValue(Number(e.target.value));
+    }
+  };
+
+  const handleSliderRelease = () => {
+    if (dragStartedFromLeft.current && sliderValue >= 90) {
+      // Send explicit ARM or DISARM command (never a toggle)
+      if (heartbeat.isArmed) {
+        handleArm(false); // Explicit DISARM
+      } else {
+        handleArm(true);  // Explicit ARM
+      }
+    }
+    dragStartedFromLeft.current = false;
     setSliderValue(0);
   };
 
@@ -85,9 +113,13 @@ export const GlareshieldWidget: React.FC = () => {
   };
 
   const handleSetAltitude = () => {
-    // Send guided altitude target with vehicle current coordinates
+    // Check for valid vehicle coordinates
     const lat = position.lat || 0;
     const lon = position.lon || 0;
+    if (lat === 0 && lon === 0) {
+      console.warn('Cannot send DO_REPOSITION without valid GPS coordinates');
+      return;
+    }
     const cmd = encoder.createDoReposition(sysId, compId, lat, lon, targetAlt);
     mavlinkConnection.send(cmd);
   };
@@ -138,16 +170,14 @@ export const GlareshieldWidget: React.FC = () => {
                 min="0"
                 max="100"
                 value={sliderValue}
-                onChange={(e) => setSliderValue(Number(e.target.value))}
+                onPointerDown={handlePointerDown}
+                onChange={handleSliderChange}
                 onPointerUp={handleSliderRelease}
+                onPointerCancel={handleSliderRelease}
                 onMouseUp={handleSliderRelease}
                 onTouchEnd={handleSliderRelease}
-                onKeyUp={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    handleSliderRelease();
-                  }
-                }}
-                className={`w-full h-8 rounded-lg appearance-none cursor-pointer transition-all ${
+                onKeyDown={(e) => e.preventDefault()}
+                className={`w-full h-8 rounded-lg appearance-none cursor-pointer transition-all select-none ${
                   heartbeat.isArmed
                     ? 'accent-red-500 bg-red-950/40 border border-red-800/60'
                     : 'accent-emerald-500 bg-emerald-950/40 border border-emerald-800/60'
@@ -271,7 +301,7 @@ export const GlareshieldWidget: React.FC = () => {
                   variant="outline"
                   size="sm"
                   onClick={triggerLand}
-                  className="flex-1 border-emerald-600/40 text-emerald-300 hover:bg-emerald-950/30 gap-1.5 font-bold h-11"
+                  className="flex-1 border-amber-600/40 text-amber-300 hover:bg-amber-950/30 gap-1.5 font-bold h-11"
                 >
                   <PlaneLanding className="h-4 w-4" />
                   Land
@@ -281,7 +311,7 @@ export const GlareshieldWidget: React.FC = () => {
                   variant="outline"
                   size="sm"
                   onClick={triggerTakeoff}
-                  className="flex-1 border-zinc-700 hover:bg-zinc-800 gap-1.5 font-bold h-11"
+                  className="flex-1 border-sky-600/40 text-sky-300 hover:bg-sky-950/30 gap-1.5 font-bold h-11"
                 >
                   <PlaneTakeoff className="h-4 w-4 text-sky-400" />
                   Takeoff
@@ -299,16 +329,13 @@ export const GlareshieldWidget: React.FC = () => {
               <button
                 key={mode}
                 onClick={() => handleSetMode(mode)}
-                className={`py-2.5 px-2 rounded-lg border text-sm font-bold font-mono transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
+                className={`py-2 px-2 rounded-lg border text-xs font-bold font-mono transition-all text-center flex items-center justify-center ${
                   isActive
                     ? 'bg-sky-500 text-white border-sky-400 shadow-md ring-1 ring-sky-300'
                     : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white'
                 }`}
               >
                 <span className="tracking-wide leading-tight">{label}</span>
-                <span className={`text-[10px] font-mono ${isActive ? 'text-sky-100' : 'text-zinc-500'}`}>
-                  M{mode}
-                </span>
               </button>
             );
           })}
@@ -488,7 +515,7 @@ export const GlareshieldWidget: React.FC = () => {
                 <Button
                   variant="default"
                   size="sm"
-                  className="h-8 px-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white ml-0.5"
+                  className="h-8 px-2.5 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white ml-0.5"
                   onClick={() => handleSetSpeed()}
                 >
                   Set Spd

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useDashboardStore } from '../../store/dashboardStore';
+import { DashboardProfile } from '../../types/widget';
 import { Modal } from '../ui/modal';
 import { Button } from '../ui/button';
-import { Download, Upload, RotateCcw, Copy, Check } from 'lucide-react';
+import { Download, Upload, RotateCcw, Copy, Check, AlertTriangle, Layers } from 'lucide-react';
 
 interface ProfileManagerModalProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
   const [jsonText, setJsonText] = useState('');
   const [copied, setCopied] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [pendingProfile, setPendingProfile] = useState<DashboardProfile | null>(null);
 
   const handleDownload = () => {
     const jsonStr = exportProfileJson();
@@ -40,32 +42,50 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
     reader.onload = (event) => {
       const content = event.target?.result as string;
       if (content) {
-        const success = importProfileJson(content);
-        if (success) {
-          setImportStatus('Profile imported successfully!');
-          setTimeout(() => {
+        try {
+          const parsed = JSON.parse(content) as DashboardProfile;
+          if (parsed && Array.isArray(parsed.tabs)) {
+            setPendingProfile(parsed);
             setImportStatus(null);
-            onClose();
-          }, 1000);
-        } else {
-          setImportStatus('Invalid profile format.');
+          } else {
+            setImportStatus('Invalid profile format: missing tabs array.');
+          }
+        } catch {
+          setImportStatus('Invalid JSON syntax.');
         }
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleTextImport = () => {
     if (!jsonText.trim()) return;
-    const success = importProfileJson(jsonText.trim());
+    try {
+      const parsed = JSON.parse(jsonText.trim()) as DashboardProfile;
+      if (parsed && Array.isArray(parsed.tabs)) {
+        setPendingProfile(parsed);
+        setImportStatus(null);
+      } else {
+        setImportStatus('Invalid JSON profile format.');
+      }
+    } catch {
+      setImportStatus('Invalid JSON syntax.');
+    }
+  };
+
+  const confirmApplyProfile = () => {
+    if (!pendingProfile) return;
+    const success = importProfileJson(JSON.stringify(pendingProfile));
     if (success) {
       setImportStatus('Profile imported successfully!');
       setTimeout(() => {
         setImportStatus(null);
+        setPendingProfile(null);
         onClose();
       }, 1000);
     } else {
-      setImportStatus('Invalid JSON profile format.');
+      setImportStatus('Failed to apply profile.');
     }
   };
 
@@ -117,6 +137,67 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
             </Button>
           </div>
         </div>
+
+        {/* Import Preview Confirmation */}
+        {pendingProfile && (
+          <div className="p-4 bg-zinc-900 border border-sky-500/50 rounded-xl space-y-3">
+            <div className="flex items-center gap-2 text-sky-400 font-bold text-sm">
+              <Layers className="h-4 w-4" />
+              <span>Import Profile Preview: {pendingProfile.name || 'Untitled Profile'}</span>
+            </div>
+
+            <div className="text-xs text-zinc-300 space-y-1.5 font-mono">
+              <div><b className="text-zinc-400">Version:</b> {pendingProfile.version || '1.0.0'}</div>
+              <div>
+                <b className="text-zinc-400">Tabs ({pendingProfile.tabs.length}):</b>{' '}
+                {pendingProfile.tabs.map((t) => t.title).join(', ')}
+              </div>
+              <div>
+                <b className="text-zinc-400">Custom Widgets:</b> {pendingProfile.customWidgets?.length || 0}
+              </div>
+
+              {pendingProfile.customWidgets?.some((w) => !!w.action) && (
+                <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded mt-2 space-y-1 text-amber-200">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                    <AlertTriangle className="h-4 w-4" />
+                    Contains Action Commands:
+                  </div>
+                  <ul className="list-disc list-inside text-[11px] text-zinc-300 space-y-0.5">
+                    {pendingProfile.customWidgets
+                      .filter((w) => !!w.action)
+                      .map((w) => (
+                        <li key={w.id}>
+                          <b>{w.name}</b>: {w.action?.label} (MAV_CMD {w.action?.commandId})
+                        </li>
+                      ))}
+                  </ul>
+                  <div className="text-[11px] text-amber-400 mt-1">
+                    * Confirmation is enforced on all imported actions to safeguard vehicle flight.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={confirmApplyProfile}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+              >
+                Confirm & Apply Profile
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPendingProfile(null)}
+                className="text-zinc-400"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Import Section */}
         <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">

@@ -272,6 +272,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     try {
       const parsed = JSON.parse(jsonStr) as DashboardProfile;
       if (parsed && Array.isArray(parsed.tabs)) {
+        // Enforce confirmation on any imported custom widget actions for safety
+        if (Array.isArray(parsed.customWidgets)) {
+          parsed.customWidgets.forEach((w) => {
+            if (w.action) {
+              w.action.confirmation = true;
+            }
+          });
+        }
         localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
         set({
           profile: parsed,
