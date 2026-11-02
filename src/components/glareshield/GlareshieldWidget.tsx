@@ -329,13 +329,13 @@ export const GlareshieldWidget: React.FC = () => {
               <button
                 key={mode}
                 onClick={() => handleSetMode(mode)}
-                className={`py-2 px-2 rounded-lg border text-xs font-bold font-mono transition-all text-center flex items-center justify-center ${
+                className={`py-2 px-2 rounded-lg border text-[13px] sm:text-sm font-bold font-sans transition-all text-center flex items-center justify-center ${
                   isActive
                     ? 'bg-sky-500 text-white border-sky-400 shadow-md ring-1 ring-sky-300'
                     : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white'
                 }`}
               >
-                <span className="tracking-wide leading-tight">{label}</span>
+                <span className="tracking-normal leading-tight">{label}</span>
               </button>
             );
           })}

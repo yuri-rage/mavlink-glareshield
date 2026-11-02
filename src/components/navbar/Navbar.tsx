@@ -376,7 +376,7 @@ export const Navbar: React.FC = () => {
             <div className="relative shrink-0" ref={modeMenuRef}>
               <Badge
                 variant="info"
-                className={`h-7 px-2 sm:px-2.5 text-xs font-mono font-semibold gap-1 sm:gap-1.5 cursor-pointer select-none transition-all shadow-sm rounded-lg flex items-center ${
+                className={`h-7 px-2 sm:px-2.5 text-[13px] font-sans font-bold gap-1 sm:gap-1.5 cursor-pointer select-none transition-all shadow-sm rounded-lg flex items-center ${
                   isModeMenuOpen ? 'ring-2 ring-sky-400 bg-sky-950/80' : 'hover:brightness-110'
                 }`}
                 onClick={() => {
@@ -408,7 +408,7 @@ export const Navbar: React.FC = () => {
                             handleSetMode(m.mode);
                             setIsModeMenuOpen(false);
                           }}
-                          className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs font-mono font-medium flex items-center justify-between transition-colors ${
+                          className={`w-full px-2.5 py-1.5 rounded-lg text-left text-[13px] font-sans font-semibold flex items-center justify-between transition-colors ${
                             isActive
                               ? 'bg-sky-500 text-white font-bold shadow-sm'
                               : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'
