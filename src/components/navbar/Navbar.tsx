@@ -26,13 +26,16 @@ import { BandwidthProfile } from '../../mavlink/rateManager';
 import { getVehicleCategory, getVehicleCategoryLabel, getVehicleFlightModes } from '../../mavlink/messages';
 
 export const Navbar: React.FC = () => {
-  const { url, status, bandwidthProfile, stats, setUrl, setBandwidthProfile, connect, disconnect } =
+  const { url, status, bandwidthProfile, stats, setUrl, setBandwidthProfile, gcsSystemId, setGcsSystemId, connect, disconnect } =
     useConnectionStore();
-  const { heartbeat, firmwareVersion, firmwareRaw } = useTelemetryStore();
+  const heartbeat = useTelemetryStore((state) => state.heartbeat);
+  const firmwareVersion = useTelemetryStore((state) => state.firmwareVersion);
+  const firmwareRaw = useTelemetryStore((state) => state.firmwareRaw);
   const { system: unitSystem, setSystem: setUnitSystem, altitudeMode, setAltitudeMode } = useUnitsStore();
 
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [inputUrl, setInputUrl] = useState(url);
+  const [inputGcsSysId, setInputGcsSysId] = useState(gcsSystemId);
 
   // Dropdown states for Arm & Mode flyouts
   const [isArmMenuOpen, setIsArmMenuOpen] = useState(false);
@@ -78,12 +81,14 @@ export const Navbar: React.FC = () => {
 
   const openConnectModal = () => {
     setInputUrl(url);
+    setInputGcsSysId(gcsSystemId);
     setIsConnectModalOpen(true);
   };
 
   const handleConnectSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setUrl(inputUrl);
+    setGcsSystemId(inputGcsSysId);
     connect();
     setIsConnectModalOpen(false);
   };
@@ -118,36 +123,36 @@ export const Navbar: React.FC = () => {
         return (
           <Badge
             variant="success"
-            className="h-7 px-2.5 text-xs font-mono font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center hover:bg-emerald-950/80 transition-colors shadow-sm"
+            className="h-7 px-2 sm:px-2.5 text-xs font-mono font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center hover:bg-emerald-950/80 transition-colors shadow-sm"
             onClick={openConnectModal}
             title={`Connected: ${url} (click for Link & Page Configuration)`}
           >
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            <span>Connected</span>
+            <span className="hidden sm:inline">Connected</span>
           </Badge>
         );
       case 'connecting':
         return (
           <Badge
             variant="warning"
-            className="h-7 px-2.5 text-xs font-mono font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center shadow-sm"
+            className="h-7 px-2 sm:px-2.5 text-xs font-mono font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center shadow-sm"
             onClick={openConnectModal}
             title="Connecting to MAVLink endpoint (click for Link & Page Configuration)..."
           >
             <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping shrink-0" />
-            <span>Connecting...</span>
+            <span className="hidden sm:inline">Connecting...</span>
           </Badge>
         );
       case 'error':
         return (
           <Badge
             variant="destructive"
-            className="h-7 px-2.5 text-xs font-mono font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center shadow-sm"
+            className="h-7 px-2 sm:px-2.5 text-xs font-mono font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center shadow-sm"
             onClick={openConnectModal}
             title="Connection error (click for Link & Page Configuration)"
           >
             <WifiOff className="h-3.5 w-3.5 shrink-0" />
-            <span>Link Error</span>
+            <span className="hidden sm:inline">Link Error</span>
           </Badge>
         );
       default:
@@ -156,7 +161,7 @@ export const Navbar: React.FC = () => {
             variant="default"
             size="sm"
             onClick={openConnectModal}
-            className="h-7 px-2.5 text-xs font-mono font-semibold bg-sky-500 hover:bg-sky-600 text-white gap-1.5 rounded-lg flex items-center shadow-sm"
+            className="h-7 px-2 sm:px-2.5 text-xs font-mono font-semibold bg-sky-500 hover:bg-sky-600 text-white gap-1.5 rounded-lg flex items-center shadow-sm"
             title="Connect to MAVLink endpoint & open Page Configuration"
           >
             <WifiOff className="h-3.5 w-3.5 shrink-0" />
@@ -180,7 +185,7 @@ export const Navbar: React.FC = () => {
               />
             </div>
             <div>
-              <span className="font-bold text-sm sm:text-base tracking-tight text-zinc-100 hidden xs:inline">
+              <span className="font-bold text-sm sm:text-base tracking-tight text-zinc-100 hidden sm:inline">
                 GLARESHIELD
               </span>
               <div className="text-xs sm:text-[13px] text-sky-300 flex items-center gap-1.5 flex-wrap sm:flex-nowrap font-mono font-medium leading-tight">
@@ -190,7 +195,7 @@ export const Navbar: React.FC = () => {
                     <span className="tracking-tight">{vehicleCategoryLabel}</span>
                     {firmwareVersion && (
                       <span
-                        className="text-[10px] sm:text-[11px] text-zinc-400 font-mono font-normal tracking-tight"
+                        className="text-[10px] sm:text-[11px] text-zinc-400 font-mono font-normal tracking-tight hidden md:inline"
                         title={firmwareRaw || `Firmware: ${firmwareVersion}`}
                       >
                         {firmwareVersion}
@@ -421,17 +426,17 @@ export const Navbar: React.FC = () => {
         </div>
 
         {/* Right: Telemetry Rate & Connection Status */}
-        <div className="flex items-center gap-2 sm:gap-2.5 justify-end ml-auto">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 justify-end ml-auto shrink-0">
           {/* Link Rate Stats (Adjacent to Connection Button) */}
           {status === 'connected' && (
             <div
-              className="h-7 flex items-center gap-1.5 sm:gap-2 text-xs font-mono font-medium text-zinc-400 border border-zinc-800 rounded-lg px-2.5 bg-zinc-900/60"
+              className="h-7 hidden sm:flex items-center gap-1.5 sm:gap-2 text-xs font-mono font-medium text-zinc-400 border border-zinc-800 rounded-lg px-2.5 bg-zinc-900/60"
               title={`Telemetry Link: ${stats.packetsPerSecond} packets/sec, ${(stats.bytesReceived / 1024).toFixed(1)} KB received total`}
             >
               <Activity className="h-3.5 w-3.5 text-sky-400 shrink-0" />
               <span>{stats.packetsPerSecond} pkt/s</span>
-              <span className="text-zinc-600 hidden xs:inline">•</span>
-              <span className="hidden xs:inline">{(stats.bytesReceived / 1024).toFixed(0)} KB in</span>
+              <span className="text-zinc-600 hidden md:inline">•</span>
+              <span className="hidden md:inline">{(stats.bytesReceived / 1024).toFixed(0)} KB in</span>
             </div>
           )}
 
@@ -459,6 +464,21 @@ export const Navbar: React.FC = () => {
             />
             <p className="text-[11px] text-zinc-500">
               Default companion bridge endpoint is <code className="text-sky-400">ws://localhost:56781</code>. Saved automatically for page reloads.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-zinc-300">GCS System ID</label>
+            <Input
+              type="number"
+              min="1"
+              max="255"
+              value={inputGcsSysId}
+              onChange={(e) => setInputGcsSysId(Number(e.target.value))}
+              className="font-mono text-xs"
+            />
+            <p className="text-[11px] text-zinc-500">
+              Default is <code className="text-sky-400">255</code> (matches ArduPilot <code className="text-zinc-300">SYSID_MYGCS</code>). Use 254 if connecting simultaneously alongside Mission Planner on 255.
             </p>
           </div>
 
