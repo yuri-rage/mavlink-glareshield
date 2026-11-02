@@ -71,10 +71,17 @@ export class MavlinkParser {
         const crcOffset = offset + 10 + payloadLen;
         const packetCrc = this.buffer[crcOffset] | (this.buffer[crcOffset + 1] << 8);
 
-        const crcExtra = MAVLINK_MESSAGE_CRC_EXTRA[msgid] ?? 0;
+        const crcExtra = MAVLINK_MESSAGE_CRC_EXTRA[msgid];
+        if (crcExtra === undefined) {
+          // Unknown message ID cannot be verified against CRC-X25 seed.
+          // Advance 1 byte and continue hunting for a valid frame header (matches pymavlink standard)
+          offset++;
+          continue;
+        }
+
         const expectedCrc = calculateCrc(this.buffer, offset + 1, 9 + payloadLen, crcExtra);
 
-        if (packetCrc === expectedCrc || crcExtra === 0) {
+        if (packetCrc === expectedCrc) {
           const payload = this.buffer.slice(offset + 10, offset + 10 + payloadLen);
           const raw = this.buffer.slice(offset, offset + totalLen);
 
@@ -112,10 +119,15 @@ export class MavlinkParser {
         const crcOffset = offset + 6 + payloadLen;
         const packetCrc = this.buffer[crcOffset] | (this.buffer[crcOffset + 1] << 8);
 
-        const crcExtra = MAVLINK_MESSAGE_CRC_EXTRA[msgid] ?? 0;
+        const crcExtra = MAVLINK_MESSAGE_CRC_EXTRA[msgid];
+        if (crcExtra === undefined) {
+          offset++;
+          continue;
+        }
+
         const expectedCrc = calculateCrc(this.buffer, offset + 1, 5 + payloadLen, crcExtra);
 
-        if (packetCrc === expectedCrc || crcExtra === 0) {
+        if (packetCrc === expectedCrc) {
           const payload = this.buffer.slice(offset + 6, offset + 6 + payloadLen);
           const raw = this.buffer.slice(offset, offset + totalLen);
 
@@ -276,14 +288,12 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
 
     case MAVLINK_MSG_ID.VFR_HUD: {
       const rawHeading = getInt16(16);
-      let rawThrottle = getInt16(18);
+      const rawThrottle = getInt16(18);
+      // Valid MAVLink throttle is percentage (-100 to 100% for reverse/forward).
+      // Sentinel -1 or -32768 indicates unmeasured.
       let throttle = 0;
-      // Handle sentinel / unmeasured values (-1 or UINT16_MAX)
       if (rawThrottle === -1 || rawThrottle === -32768) {
         throttle = 0;
-      } else if (rawThrottle > 100 && rawThrottle <= 1000) {
-        // Some flight stacks report per-mille (0-1000)
-        throttle = Math.round(rawThrottle / 10);
       } else if (rawThrottle >= -100 && rawThrottle <= 100) {
         throttle = rawThrottle;
       }

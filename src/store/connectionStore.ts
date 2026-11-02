@@ -4,7 +4,15 @@ import { messageRateManager, BandwidthProfile } from '../mavlink/rateManager';
 
 const STORAGE_KEY = 'mavlink_glareshield_ws_url';
 const STORAGE_KEY_PROFILE = 'mavlink_glareshield_bandwidth_profile';
-export const DEFAULT_WS_URL = 'ws://10.69.69.213:56781';
+export function getDefaultWsUrl(): string {
+  if (typeof window !== 'undefined' && window.location) {
+    const host = window.location.hostname || 'localhost';
+    return `ws://${host}:56781`;
+  }
+  return 'ws://localhost:56781';
+}
+
+export const DEFAULT_WS_URL = getDefaultWsUrl();
 
 function getStoredUrl(): string {
   try {
@@ -17,15 +25,15 @@ function getStoredUrl(): string {
   } catch (e) {
     console.warn('Failed to read stored WebSocket URL:', e);
   }
-  return DEFAULT_WS_URL;
+  return getDefaultWsUrl();
 }
 
 function getStoredBandwidthProfile(): BandwidthProfile {
   try {
     if (typeof localStorage !== 'undefined') {
       const saved = localStorage.getItem(STORAGE_KEY_PROFILE);
-      if (saved && (saved === 'low' || saved === 'standard' || saved === 'high' || saved === 'wifi')) {
-        return saved as BandwidthProfile;
+      if (saved === 'low' || saved === 'standard' || saved === 'high') {
+        return saved;
       }
     }
   } catch (e) {
@@ -36,7 +44,7 @@ function getStoredBandwidthProfile(): BandwidthProfile {
 
 export function normalizeWsUrl(input: string): string {
   let url = input.trim();
-  if (!url) return DEFAULT_WS_URL;
+  if (!url) return getDefaultWsUrl();
   if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
     url = `ws://${url}`;
   }

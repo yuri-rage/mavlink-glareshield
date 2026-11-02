@@ -1,5 +1,7 @@
 import { MavlinkParser, MavlinkPacket } from './parser';
 import { MavlinkEncoder } from './encoder';
+import { messageRateManager } from './rateManager';
+import { useTelemetryStore } from '../store/telemetryStore';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -13,6 +15,14 @@ export interface ConnectionStats {
 
 export type PacketCallback = (packet: MavlinkPacket) => void;
 export type StatusCallback = (status: ConnectionStatus, error?: string) => void;
+
+export function getDefaultWsUrl(): string {
+  if (typeof window !== 'undefined' && window.location) {
+    const host = window.location.hostname || 'localhost';
+    return `ws://${host}:56781`;
+  }
+  return 'ws://localhost:56781';
+}
 
 export class MavlinkConnection {
   private ws: WebSocket | null = null;
@@ -37,7 +47,7 @@ export class MavlinkConnection {
   };
   private lastPacketCount = 0;
 
-  constructor(url = 'ws://10.69.69.213:56781') {
+  constructor(url = getDefaultWsUrl()) {
     this.url = url;
   }
 
@@ -84,24 +94,41 @@ export class MavlinkConnection {
       return;
     }
 
+    // Clean up any existing socket listeners so old events can never affect the new connection
+    if (this.ws) {
+      const prevWs = this.ws;
+      this.ws = null;
+      prevWs.onopen = null;
+      prevWs.onmessage = null;
+      prevWs.onerror = null;
+      prevWs.onclose = null;
+      try {
+        prevWs.close();
+      } catch {}
+    }
+
     this.shouldReconnect = true;
     this.setStatus('connecting');
 
     try {
-      this.ws = new WebSocket(this.url);
-      this.ws.binaryType = 'arraybuffer';
+      const socket = new WebSocket(this.url);
+      this.ws = socket;
+      socket.binaryType = 'arraybuffer';
 
-      this.ws.onopen = () => {
+      socket.onopen = () => {
+        if (this.ws !== socket) return;
         this.setStatus('connected');
         this.startHeartbeat();
         this.startStats();
+        messageRateManager.resetCache();
         try {
           const req = this.encoder.createRequestAutopilotVersion();
           this.send(req);
         } catch {}
       };
 
-      this.ws.onmessage = (event: MessageEvent) => {
+      socket.onmessage = (event: MessageEvent) => {
+        if (this.ws !== socket) return;
         if (event.data instanceof ArrayBuffer) {
           const chunk = new Uint8Array(event.data);
           this.stats.bytesReceived += chunk.length;
@@ -121,12 +148,14 @@ export class MavlinkConnection {
         }
       };
 
-      this.ws.onerror = (err) => {
+      socket.onerror = (err) => {
+        if (this.ws !== socket) return;
         console.warn('WebSocket connection error:', err);
         this.setStatus('error', 'WebSocket error occurred');
       };
 
-      this.ws.onclose = () => {
+      socket.onclose = () => {
+        if (this.ws !== socket) return;
         this.cleanup();
         this.setStatus('disconnected');
         if (this.shouldReconnect) {
@@ -145,10 +174,15 @@ export class MavlinkConnection {
     this.shouldReconnect = false;
     this.cleanup();
     if (this.ws) {
-      try {
-        this.ws.close();
-      } catch {}
+      const socket = this.ws;
       this.ws = null;
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
+      try {
+        socket.close();
+      } catch {}
     }
     this.setStatus('disconnected');
   }
