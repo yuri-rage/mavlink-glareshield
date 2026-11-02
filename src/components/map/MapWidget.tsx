@@ -194,13 +194,15 @@ export const MapWidget: React.FC = () => {
       case 'street':
         return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
-          maxZoom: 19,
+          maxNativeZoom: 19,
+          maxZoom: 22,
         });
       case 'satellite':
       default:
         return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
           attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA',
-          maxZoom: 19,
+          maxNativeZoom: 19,
+          maxZoom: 22,
         });
     }
   };
@@ -215,6 +217,7 @@ export const MapWidget: React.FC = () => {
     const map = L.map(mapContainerRef.current, {
       center: [initialLat, initialLon],
       zoom: 17,
+      maxZoom: 22,
       zoomControl: false,
       scrollWheelZoom: 'center',
       touchZoom: 'center',
