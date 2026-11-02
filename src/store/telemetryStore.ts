@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { MAVLINK_MSG_ID, getVehicleModeName, extractFirmwareVersion, isVehicleAutopilotHeartbeat } from '../mavlink/messages';
+import { MAVLINK_MSG_ID, getVehicleModeName, extractFirmwareVersion, isVehicleAutopilotHeartbeat, getMavCmdName } from '../mavlink/messages';
 import { decodePayload, MavlinkPacket } from '../mavlink/parser';
 import { mavlinkConnection } from '../mavlink/connection';
 import { messageRateManager } from '../mavlink/rateManager';
@@ -432,6 +432,27 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         }
 
         case MAVLINK_MSG_ID.GLOBAL_POSITION_INT: {
+          let updatedTrace = state.flightTrace;
+          if (data.lat !== 0 || data.lon !== 0) {
+            const trace = state.flightTrace;
+            let shouldAdd = true;
+            if (trace.length > 0) {
+              const last = trace[trace.length - 1];
+              const dLat = Math.abs(last[0] - data.lat);
+              const dLon = Math.abs(last[1] - data.lon);
+              // ~1.5 meters movement threshold
+              if (dLat < 0.000015 && dLon < 0.000015) {
+                shouldAdd = false;
+              }
+            }
+            if (shouldAdd) {
+              updatedTrace =
+                trace.length >= 5000
+                  ? [...trace.slice(trace.length - 4999), [data.lat, data.lon] as [number, number]]
+                  : [...trace, [data.lat, data.lon] as [number, number]];
+            }
+          }
+
           return {
             position: {
               lat: data.lat,
@@ -443,6 +464,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
               vz: data.vz,
               hdg: data.hdg,
             },
+            ...(updatedTrace !== state.flightTrace ? { flightTrace: updatedTrace } : {}),
           };
         }
 
@@ -635,6 +657,12 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         }
 
         case MAVLINK_MSG_ID.COMMAND_ACK: {
+          const pending = pendingCommands.get(data.command);
+          if (pending) {
+            clearTimeout(pending.timer);
+            pendingCommands.delete(data.command);
+          }
+          const cmdName = getMavCmdName(data.command);
           const resultText = COMMAND_ACK_RESULTS[data.result] ?? `CODE_${data.result}`;
           const isError = data.result !== 0 && data.result !== 5; // not ACCEPTED or IN_PROGRESS
           const ackMsg: StatusMessage | null = isError ? {
@@ -642,7 +670,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
             time: new Date().toLocaleTimeString('en-GB', { hour12: false }),
             severity: data.result === 1 ? 4 : 3, // WARNING or ERROR
             severityLabel: data.result === 1 ? 'WARNING' : 'ERROR',
-            text: `CMD ${data.command} ${resultText}${data.result_param2 ? ` (${data.result_param2})` : ''}`,
+            text: `CMD ${cmdName}: ${resultText}${data.result_param2 ? ` (${data.result_param2})` : ''}`,
           } : null;
 
           return {
@@ -666,6 +694,55 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
 // Wire up global packet listener
 mavlinkConnection.onPacket((packet) => {
   useTelemetryStore.getState().processPacket(packet);
+});
+
+// Automatic command timeout tracking (5s timeout for commands missing COMMAND_ACK)
+interface PendingCommand {
+  commandId: number;
+  cmdName: string;
+  sentAt: number;
+  timer: any;
+}
+const pendingCommands = new Map<number, PendingCommand>();
+
+mavlinkConnection.onSend((data) => {
+  if (data.length >= 40 && data[0] === 0xFD) {
+    const msgId = data[7] | (data[8] << 8) | (data[9] << 16);
+    if (msgId === MAVLINK_MSG_ID.COMMAND_LONG || msgId === MAVLINK_MSG_ID.COMMAND_INT) {
+      const cmdId = data[38] | (data[39] << 8);
+      const cmdName = getMavCmdName(cmdId);
+      const existing = pendingCommands.get(cmdId);
+      if (existing) clearTimeout(existing.timer);
+
+      const timer = setTimeout(() => {
+        pendingCommands.delete(cmdId);
+        const now = Date.now();
+        const timeoutMsg: StatusMessage = {
+          id: `${now}-${Math.random()}`,
+          time: new Date().toLocaleTimeString('en-GB', { hour12: false }),
+          severity: 4, // WARNING
+          severityLabel: 'WARNING',
+          text: `CMD ${cmdName}: NO ACK (TIMEOUT)`,
+        };
+        useTelemetryStore.setState((s) => ({
+          lastCommandAck: {
+            command: cmdId,
+            result: -1,
+            resultText: 'TIMEOUT',
+            time: now,
+          },
+          statusMessages: [timeoutMsg, ...s.statusMessages.slice(0, 99)],
+        }));
+      }, 5000);
+
+      pendingCommands.set(cmdId, {
+        commandId: cmdId,
+        cmdName,
+        sentAt: Date.now(),
+        timer,
+      });
+    }
+  }
 });
 
 // Auto-persist waypoints, fences, and rally points across page reloads
