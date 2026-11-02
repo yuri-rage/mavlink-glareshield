@@ -65,18 +65,23 @@ function lerpAngle(current: number, target: number, t: number): number {
 
 type MapLayerType = 'satellite' | 'street';
 
+interface GpsFix {
+  t: number;
+  lat: number;
+  lon: number;
+  yaw: number;
+}
+
 export const MapWidget: React.FC = () => {
-  const {
-    heartbeat,
-    position,
-    attitude,
-    missionWaypoints,
-    fencePoints,
-    rallyPoints,
-    flightTrace,
-    addTracePoint,
-    clearTrace,
-  } = useTelemetryStore();
+  const heartbeat = useTelemetryStore((s) => s.heartbeat);
+  const position = useTelemetryStore((s) => s.position);
+  const attitude = useTelemetryStore((s) => s.attitude);
+  const missionWaypoints = useTelemetryStore((s) => s.missionWaypoints);
+  const fencePoints = useTelemetryStore((s) => s.fencePoints);
+  const rallyPoints = useTelemetryStore((s) => s.rallyPoints);
+  const flightTrace = useTelemetryStore((s) => s.flightTrace);
+  const clearTrace = useTelemetryStore((s) => s.clearTrace);
+
   const { formatAltitude, altitudeMode } = useUnitsStore();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -88,9 +93,10 @@ export const MapWidget: React.FC = () => {
   const fenceLayersRef = useRef<L.Layer[]>([]);
   const rallyMarkersRef = useRef<L.Marker[]>([]);
 
-  // Telemetry target & high-performance display animation refs
-  const targetPosRef = useRef<{ lat: number; lon: number; yaw: number }>({ lat: 0, lon: 0, yaw: 0 });
+  // GPS fixes buffer for linear interpolation (played back 1 fix-interval late)
+  const fixesRef = useRef<GpsFix[]>([]);
   const displayPosRef = useRef<{ lat: number; lon: number; yaw: number } | null>(null);
+  const remainderRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const followVehicleRef = useRef<boolean>(true);
   const isInteractingRef = useRef<boolean>(false);
   const isFlyingToRef = useRef<boolean>(false);
@@ -127,6 +133,31 @@ export const MapWidget: React.FC = () => {
       messageRateManager.unregisterRequirement('map-pos');
     };
   }, []);
+
+  // Invalidate map size on container resize
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+    const ro = new ResizeObserver(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    });
+    ro.observe(mapContainerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // Scroll and touch zoom centering during follow
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    if (followVehicle) {
+      map.options.scrollWheelZoom = 'center';
+      map.options.touchZoom = 'center';
+    } else {
+      map.options.scrollWheelZoom = true;
+      map.options.touchZoom = true;
+    }
+  }, [followVehicle]);
 
   // Request waypoints, fences, and rally points from ArduPilot
   const handleFetchMission = () => {
@@ -184,6 +215,8 @@ export const MapWidget: React.FC = () => {
       center: [initialLat, initialLon],
       zoom: 17,
       zoomControl: false,
+      scrollWheelZoom: 'center',
+      touchZoom: 'center',
     });
 
     // Default to Google Satellite imagery
@@ -229,11 +262,11 @@ export const MapWidget: React.FC = () => {
       isInteractingRef.current = false;
     });
 
-    // Vehicle Marker with custom rotating SVG
+    // Vehicle Marker with custom rotating SVG (scoped to marker element without CSS transition delay)
     const vehicleIcon = L.divIcon({
       className: 'vehicle-marker-icon',
       html: `
-        <div id="vehicle-icon-div" style="transform: rotate(${attitude.yawDeg}deg); transition: transform 0.2s linear; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));">
+        <div class="vehicle-icon-rotator" style="transform: rotate(${attitude.yawDeg}deg); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));">
           ${renderVehicleSvg(heartbeat.type)}
         </div>
       `,
@@ -292,15 +325,25 @@ export const MapWidget: React.FC = () => {
     followVehicleRef.current = followVehicle;
   }, [followVehicle]);
 
-  // Ingest raw telemetry updates into high-rate target ref
+  // Buffer incoming GPS fixes for linear interpolation
   useEffect(() => {
     if (position.lat === 0 && position.lon === 0) return;
 
-    targetPosRef.current = {
+    const now = performance.now();
+    const fix: GpsFix = {
+      t: now,
       lat: position.lat,
       lon: position.lon,
       yaw: attitude.yawDeg,
     };
+
+    const fixes = fixesRef.current;
+    if (fixes.length > 0 && fixes[fixes.length - 1].t === now) {
+      fixes[fixes.length - 1] = fix;
+    } else {
+      fixes.push(fix);
+      if (fixes.length > 4) fixes.shift();
+    }
 
     // Instant initialization on first received point
     if (!displayPosRef.current) {
@@ -315,11 +358,9 @@ export const MapWidget: React.FC = () => {
     }
   }, [position.lat, position.lon, attitude.yawDeg]);
 
-  // Silky-smooth 60/120fps continuous interpolation and scale-invariant camera gimbal
-  // Eliminates jello effect by moving marker and camera in the exact same render frame
+  // Linear interpolation played back one fix-interval late, camera locked to marker
   useEffect(() => {
     let animId: number;
-    let lastTime = performance.now();
 
     const animate = (now: number) => {
       animId = requestAnimationFrame(animate);
@@ -328,61 +369,62 @@ export const MapWidget: React.FC = () => {
       const marker = vehicleMarkerRef.current;
       if (!map || !marker) return;
 
-      const target = targetPosRef.current;
-      if (target.lat === 0 && target.lon === 0) return;
+      const fixes = fixesRef.current;
+      if (fixes.length === 0) return;
 
-      if (!displayPosRef.current) {
-        displayPosRef.current = { ...target };
+      let curLat = fixes[fixes.length - 1].lat;
+      let curLon = fixes[fixes.length - 1].lon;
+      let curYaw = fixes[fixes.length - 1].yaw;
+
+      if (fixes.length >= 2) {
+        const p0 = fixes[fixes.length - 2];
+        const p1 = fixes[fixes.length - 1];
+        const fixDt = p1.t - p0.t;
+        if (fixDt > 10) {
+          // Play back one fix-interval late (steady, even motion)
+          const u = Math.min(Math.max((now - p1.t) / fixDt, 0.0), 1.0);
+          curLat = p0.lat + (p1.lat - p0.lat) * u;
+          curLon = p0.lon + (p1.lon - p0.lon) * u;
+          curYaw = lerpAngle(p0.yaw, p1.yaw, u);
+        }
       }
 
-      const dt = Math.min((now - lastTime) / 1000, 0.1);
-      lastTime = now;
+      displayPosRef.current = { lat: curLat, lon: curLon, yaw: curYaw };
 
-      // Frame-rate independent exponential smoothing
-      // At 60fps dt~0.016, lerpRate~0.22 (smoothly bridges 5-10Hz telemetry without delay)
-      const lerpRate = 1 - Math.exp(-dt * 15);
-      const cur = displayPosRef.current;
-
-      cur.lat += (target.lat - cur.lat) * lerpRate;
-      cur.lon += (target.lon - cur.lon) * lerpRate;
-      cur.yaw = lerpAngle(cur.yaw, target.yaw, lerpRate);
-
-      const latLng: [number, number] = [cur.lat, cur.lon];
+      const latLng: [number, number] = [curLat, curLon];
       marker.setLatLng(latLng);
 
-      const iconDiv = document.getElementById('vehicle-icon-div');
-      if (iconDiv) {
-        iconDiv.style.transform = `rotate(${cur.yaw.toFixed(1)}deg)`;
+      const iconEl = marker.getElement()?.querySelector('.vehicle-icon-rotator') as HTMLElement | null;
+      if (iconEl) {
+        iconEl.style.transform = `rotate(${curYaw.toFixed(1)}deg)`;
       }
 
-      // Append to persistent flight trace if vehicle moved
-      if (cur.lat !== 0 || cur.lon !== 0) {
-        addTracePoint(cur.lat, cur.lon);
-      }
-
-      // Smooth camera follow without jello effect or animation thrashing
+      // Camera locked to marker with fractional remainder accumulation
       if (followVehicleRef.current && !isInteractingRef.current) {
         const centerPoint = map.getSize().divideBy(2);
         const vehiclePoint = map.latLngToContainerPoint(latLng);
         const dx = vehiclePoint.x - centerPoint.x;
         const dy = vehiclePoint.y - centerPoint.y;
-        const pixelDist = Math.sqrt(dx * dx + dy * dy);
+        const pixelDist = Math.hypot(dx, dy);
 
-        // Scale-invariant pixel deadband:
-        // Ignore < 2.0 screen pixels of drift (eliminates stationary sensor noise at any zoom level)
-        if (pixelDist >= 2.0) {
-          if (pixelDist > 180 && !isFlyingToRef.current) {
-            // Far off-screen: initiate smooth fly-to
-            isFlyingToRef.current = true;
-            map.panTo(latLng, { animate: true, duration: 0.4 });
-            map.once('moveend', () => {
-              isFlyingToRef.current = false;
-            });
-          } else if (!isFlyingToRef.current) {
-            // Close tracking gimbal: smooth non-animated sub-pixel panBy
-            // Critical damping factor ensures camera glides with the vehicle without oscillation or jello
-            const panFactor = 1 - Math.exp(-dt * 10);
-            map.panBy([dx * panFactor, dy * panFactor], { animate: false });
+        if (pixelDist > 180 && !isFlyingToRef.current) {
+          isFlyingToRef.current = true;
+          map.panTo(latLng, { animate: true, duration: 0.4 });
+          map.once('moveend', () => {
+            isFlyingToRef.current = false;
+            remainderRef.current = { x: 0, y: 0 };
+          });
+        } else if (!isFlyingToRef.current) {
+          remainderRef.current.x += dx;
+          remainderRef.current.y += dy;
+          const stepX = Math.round(remainderRef.current.x);
+          const stepY = Math.round(remainderRef.current.y);
+
+          // Only call panBy on non-zero steps to avoid 60fps tile recalculation
+          if (stepX !== 0 || stepY !== 0) {
+            remainderRef.current.x -= stepX;
+            remainderRef.current.y -= stepY;
+            map.panBy([stepX, stepY], { animate: false });
           }
         }
       }
@@ -400,7 +442,7 @@ export const MapWidget: React.FC = () => {
     const vehicleIcon = L.divIcon({
       className: 'vehicle-marker-icon',
       html: `
-        <div id="vehicle-icon-div" style="transform: rotate(${attitude.yawDeg}deg); transition: transform 0.2s linear; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));">
+        <div class="vehicle-icon-rotator" style="transform: rotate(${attitude.yawDeg}deg); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));">
           ${renderVehicleSvg(heartbeat.type)}
         </div>
       `,
@@ -568,7 +610,7 @@ export const MapWidget: React.FC = () => {
         fenceLayersRef.current.push(marker);
       }
     });
-  }, [fencePoints, missionWaypoints, position.lat, position.lon]);
+  }, [fencePoints, missionWaypoints]);
 
   // Update rally points rendering
   useEffect(() => {
@@ -609,7 +651,7 @@ export const MapWidget: React.FC = () => {
   }, [rallyPoints]);
 
   return (
-    <Card className="border-zinc-800 bg-zinc-950/90 shadow-lg overflow-hidden flex flex-col h-full min-h-[300px]">
+    <Card className="border-zinc-800 bg-zinc-950/90 shadow-lg overflow-hidden flex flex-col h-full min-h-[350px] lg:min-h-[480px]">
       <CardHeader className="py-1.5 px-2.5 sm:px-3 bg-zinc-900/60 border-b border-zinc-800">
         <div className="flex flex-wrap items-center justify-between gap-1.5">
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
@@ -685,7 +727,8 @@ export const MapWidget: React.FC = () => {
               onClick={() => {
                 setFollowVehicle(true);
                 followVehicleRef.current = true;
-                const target = displayPosRef.current ?? targetPosRef.current;
+                const lastFix = fixesRef.current[fixesRef.current.length - 1];
+                const target = displayPosRef.current ?? (lastFix ? { lat: lastFix.lat, lon: lastFix.lon } : { lat: position.lat, lon: position.lon });
                 if (mapInstanceRef.current && (target.lat !== 0 || target.lon !== 0)) {
                   isFlyingToRef.current = true;
                   mapInstanceRef.current.panTo([target.lat, target.lon], {
@@ -754,11 +797,11 @@ export const MapWidget: React.FC = () => {
         </div>
       )}
 
-      <CardContent className="p-0 flex-1 relative min-h-[280px]">
-        <div ref={mapContainerRef} className="w-full h-full min-h-[280px] z-0" />
+      <CardContent className="p-0 flex-1 relative min-h-[300px] h-full">
+        <div ref={mapContainerRef} className="w-full h-full min-h-[300px] z-0" />
 
-        {/* GPS Coordinate readout HUD overlay in bottom-left */}
-        <div className="absolute bottom-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] font-mono text-zinc-300 flex items-center gap-3 pointer-events-none">
+        {/* GPS Coordinate readout HUD overlay in top-left (decoupled from bottom Leaflet attribution) */}
+        <div className="absolute top-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] font-mono text-zinc-300 flex items-center gap-3 pointer-events-none shadow-md">
           <span>Lat: <b className="text-sky-400">{position.lat.toFixed(6)}</b></span>
           <span>Lon: <b className="text-sky-400">{position.lon.toFixed(6)}</b></span>
           <span>Alt: <b className="text-emerald-400">{formatAltitude(altitudeMode === 'msl' ? (position.alt || position.relativeAlt) : position.relativeAlt).full} {altitudeMode.toUpperCase()}</b></span>
