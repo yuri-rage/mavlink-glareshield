@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -12,6 +12,10 @@ export const StatusTextConsoleWidget: React.FC = () => {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
+  const prevSortOrderRef = useRef(sortOrder);
+
   const getSeverityBadgeVariant = (sev: number) => {
     if (sev <= 2) return 'destructive'; // Emergency, Alert, Critical
     if (sev <= 4) return 'warning'; // Error, Warning
@@ -24,6 +28,28 @@ export const StatusTextConsoleWidget: React.FC = () => {
     : statusMessages.filter((m) => m.severity <= filterSeverity);
 
   const displayed = sortOrder === 'newest' ? filtered : [...filtered].reverse();
+
+  const handleScroll = () => {
+    if (!scrollContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 30;
+  };
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const sortOrderChanged = prevSortOrderRef.current !== sortOrder;
+    prevSortOrderRef.current = sortOrder;
+
+    if (sortOrder === 'oldest') {
+      if (sortOrderChanged || isAtBottomRef.current) {
+        container.scrollTop = container.scrollHeight;
+      }
+    } else if (sortOrderChanged) {
+      container.scrollTop = 0;
+    }
+  }, [displayed.length, sortOrder]);
 
   return (
     <Card className="border-zinc-800 bg-zinc-950/90 shadow-md flex flex-col h-full min-h-[300px]">
@@ -99,7 +125,11 @@ export const StatusTextConsoleWidget: React.FC = () => {
         </div>
 
         {/* Message Log Box */}
-        <div className="flex-1 bg-black/60 rounded-xl border border-zinc-850 p-1.5 font-mono text-xs overflow-y-auto max-h-[260px] space-y-0.5 select-text">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 bg-black/60 rounded-xl border border-zinc-850 p-1.5 font-mono text-xs overflow-y-auto max-h-[260px] space-y-0.5 select-text"
+        >
           {displayed.length === 0 ? (
             <div className="text-zinc-600 text-center py-8 italic">
               No STATUSTEXT messages received yet.
