@@ -1684,4 +1684,109 @@ async function testMissionUploadFallback() {
 
 await testMissionUploadFallback();
 
+// 28. Test RTCM3 Stream Parser, CRC24Q, NMEA GGA Generator, and MAVLink Injection
+import {
+  calculateCrc24q,
+  generateNmeaGga,
+  RtcmFrameParser,
+  rtcmInjector,
+} from '../src/mavlink/rtcmInjector.ts';
+
+// 28a. Test CRC24Q and Frame Assembly
+// Create synthetic RTCM 1005 (Base Station ARP): payload length 19 bytes
+const arpPayload = new Uint8Array(19);
+// Message number 1005 (0x03ED) in first 12 bits:
+// byte 0: 0x3E, byte 1: 0xD0 (0x3ED = 1005)
+arpPayload[0] = 0x3e;
+arpPayload[1] = 0xd0;
+
+const frameHeader = new Uint8Array(3);
+frameHeader[0] = 0xd3;
+frameHeader[1] = (19 >> 8) & 0x03;
+frameHeader[2] = 19 & 0xff;
+
+const rawFrameWithoutCrc = new Uint8Array(3 + 19);
+rawFrameWithoutCrc.set(frameHeader, 0);
+rawFrameWithoutCrc.set(arpPayload, 3);
+
+const computedCrc = calculateCrc24q(rawFrameWithoutCrc, rawFrameWithoutCrc.length);
+
+const validRtcmFrame = new Uint8Array(3 + 19 + 3);
+validRtcmFrame.set(rawFrameWithoutCrc, 0);
+validRtcmFrame[22] = (computedCrc >> 16) & 0xff;
+validRtcmFrame[23] = (computedCrc >> 8) & 0xff;
+validRtcmFrame[24] = computedCrc & 0xff;
+
+const rtcmParser = new RtcmFrameParser();
+// Feed garbled noise followed by valid RTCM frame
+const noisyStream = new Uint8Array([0x00, 0xff, 0x12, 0xd3, 0x00, 0x01, ...validRtcmFrame]);
+const parseResult = rtcmParser.append(noisyStream);
+if (parseResult.frames.length !== 1 || parseResult.msgTypes[0] !== 1005) {
+  console.error('RtcmFrameParser failed to extract RTCM 1005 frame from noisy stream!', parseResult);
+  process.exit(1);
+}
+console.log('RTCM 1005 frame parser & CRC24Q verification PASSED!');
+
+// 28b. Test NMEA GGA Generation
+const ggaSentence = generateNmeaGga(37.7749, -122.4194, 25.5);
+if (!ggaSentence.startsWith('$GPGGA,') || !ggaSentence.includes(',3746.4940,N,12225.1640,W,') || !ggaSentence.endsWith('\r\n')) {
+  console.error('generateNmeaGga produced invalid NMEA sentence:', ggaSentence);
+  process.exit(1);
+}
+console.log('generateNmeaGga VRS NMEA sentence PASSED!');
+
+// 28c. Test RTCM Frame Fragmentation in rtcmInjector
+const sentMavlinkPackets: Uint8Array[] = [];
+const origSend = mavlinkConnection.send.bind(mavlinkConnection);
+(mavlinkConnection as any).send = (data: Uint8Array) => {
+  sentMavlinkPackets.push(data);
+};
+
+try {
+  // Test 1: Single small frame (25 bytes) <= 180 bytes
+  rtcmInjector.injectRtcmFrame(validRtcmFrame, 1005);
+  if (sentMavlinkPackets.length !== 1) {
+    console.error('Expected 1 MAVLink packet for small RTCM frame, got:', sentMavlinkPackets.length);
+    process.exit(1);
+  }
+  const smallPkt = new MavlinkParser().parse(sentMavlinkPackets[0])[0];
+  const smallRtcmDecoded = decodePayload(MAVLINK_MSG_ID.GPS_RTCM_DATA, smallPkt.payload);
+  // Unfragmented: bit 0 of flags should be 0
+  if ((smallRtcmDecoded.flags & 1) !== 0 || smallRtcmDecoded.len !== 25) {
+    console.error('Unfragmented RTCM flags/len incorrect:', smallRtcmDecoded);
+    process.exit(1);
+  }
+
+  // Test 2: Large frame (> 180 bytes, e.g. 250 bytes)
+  sentMavlinkPackets.length = 0;
+  const largeRtcmFrame = new Uint8Array(250);
+  largeRtcmFrame.fill(0xaa);
+  rtcmInjector.injectRtcmFrame(largeRtcmFrame, 1077); // GPS MSM7
+
+  if (sentMavlinkPackets.length !== 2) {
+    console.error('Expected 2 MAVLink fragments for 250-byte RTCM frame, got:', sentMavlinkPackets.length);
+    process.exit(1);
+  }
+
+  const frag0 = decodePayload(MAVLINK_MSG_ID.GPS_RTCM_DATA, new MavlinkParser().parse(sentMavlinkPackets[0])[0].payload);
+  const frag1 = decodePayload(MAVLINK_MSG_ID.GPS_RTCM_DATA, new MavlinkParser().parse(sentMavlinkPackets[1])[0].payload);
+
+  // Both should have fragmented bit (bit 0 = 1)
+  if ((frag0.flags & 1) !== 1 || (frag1.flags & 1) !== 1) {
+    console.error('Fragmented packets must have bit 0 set in flags!');
+    process.exit(1);
+  }
+  // frag0 should have fragment ID 0; frag1 should have fragment ID 1
+  const frag0Id = (frag0.flags >> 1) & 0x03;
+  const frag1Id = (frag1.flags >> 1) & 0x03;
+  if (frag0Id !== 0 || frag1Id !== 1 || frag0.len !== 180 || frag1.len !== 70) {
+    console.error('RTCM fragment IDs or lengths incorrect:', { frag0Id, frag1Id, len0: frag0.len, len1: frag1.len });
+    process.exit(1);
+  }
+  console.log('RTCM3 fragmentation and GPS_RTCM_DATA injection PASSED!');
+} finally {
+  (mavlinkConnection as any).send = origSend;
+  rtcmInjector.stopRateMeter();
+}
+
 console.log('All MAVLink protocol unit tests PASSED!');

@@ -110,6 +110,14 @@ const BUILT_IN_CATALOG = [
     icon: Sliders,
     defaultSpan: 6,
   },
+  {
+    id: 'built-in-ntrip',
+    name: 'RTK / NTRIP Correction Injector',
+    category: 'avionics',
+    description: 'Stream RTCM3 corrections from an NTRIP caster or USB serial base station and inject into vehicle GPS.',
+    icon: Satellite,
+    defaultSpan: 6,
+  },
 ];
 
 export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({

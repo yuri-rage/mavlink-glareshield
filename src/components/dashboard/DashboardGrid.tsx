@@ -10,6 +10,7 @@ import { VfrHudWidget } from '../widgets/VfrHudWidget';
 import { StatusTextConsoleWidget } from '../widgets/StatusTextConsoleWidget';
 import { ParametersWidget } from '../widgets/ParametersWidget';
 import { TelemetryChartsWidget } from '../widgets/TelemetryChartsWidget';
+import { NtripWidget } from '../widgets/NtripWidget';
 import { CustomWidgetRenderer } from '../widgets/CustomWidgetRenderer';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { Button } from '../ui/button';
@@ -124,6 +125,8 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
         return <ParametersWidget />;
       case 'built-in-charts':
         return <TelemetryChartsWidget />;
+      case 'built-in-ntrip':
+        return <NtripWidget />;
       default: {
         // Look up custom widget definition
         const customDef = profile.customWidgets.find((w) => w.id === widgetId);

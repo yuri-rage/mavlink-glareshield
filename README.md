@@ -31,6 +31,10 @@ Designed to remove the "glare" from more fully featured GCS applications and foc
 - **Heads-Up Display (HUD) & Tactical Map**:
   - Canvas artificial horizon with pitch ladder, roll arc, airspeed, altitude, and heading tapes.
   - Leaflet-based map with configurable aspect ratios (4:3, 16:9, or full), high-zoom map tile overzoom (up to level 22), vehicle trail, mission waypoints, polygon fences, rally points, and follow mode.
+  - Drag-and-drop mission, geofence, and rally file upload directly onto the map with MAVFTP and sequential item-by-item fallback (supports `.waypoints`, `.fence`, `.rally`, `.plan`, and binary `.dat`).
+- **RTK / NTRIP & Base Station Correction Injection**:
+  - Built-in RTCM3 injector widget supporting both NTRIP casters (with automatic NMEA GGA VRS position feedback) and direct USB serial base stations via the Web Serial API.
+  - Real-time RTCM3 frame extraction, QualComm CRC24Q verification, message type detection, fragmentation, and MAVLink `GPS_RTCM_DATA` (Msg 233) injection.
 - **Flight & System Telemetry Widgets**:
   - GNSS / GPS monitor supporting dual-module setups (GPS1 / GPS2 fix badges), satellite counts, HDOP, speed, and dual-antenna yaw.
   - Battery monitor with pack voltage, current, capacity remaining, and individual cell voltages.
