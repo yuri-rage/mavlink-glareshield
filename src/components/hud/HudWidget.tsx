@@ -256,33 +256,28 @@ export const HudWidget: React.FC = () => {
       ctx.setLineDash([]);
     }
 
-    // Center circle (5px radius)
+    // Center circle (5px radius, open center without dot)
     ctx.beginPath();
     ctx.arc(fpmX, fpmY, 5, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Left wing (10px wide)
+    // Left wing / leg (7px wide)
     ctx.beginPath();
     ctx.moveTo(fpmX - 5, fpmY);
-    ctx.lineTo(fpmX - 15, fpmY);
+    ctx.lineTo(fpmX - 12, fpmY);
     ctx.stroke();
 
-    // Right wing (10px wide)
+    // Right wing / leg (7px wide)
     ctx.beginPath();
     ctx.moveTo(fpmX + 5, fpmY);
-    ctx.lineTo(fpmX + 15, fpmY);
+    ctx.lineTo(fpmX + 12, fpmY);
     ctx.stroke();
 
-    // Top vertical fin (6px tall)
+    // Top vertical fin (5px tall)
     ctx.beginPath();
     ctx.moveTo(fpmX, fpmY - 5);
-    ctx.lineTo(fpmX, fpmY - 11);
+    ctx.lineTo(fpmX, fpmY - 10);
     ctx.stroke();
-
-    // Center precision pip
-    ctx.beginPath();
-    ctx.arc(fpmX, fpmY, 1.2, 0, Math.PI * 2);
-    ctx.fill();
 
     ctx.restore();
 
