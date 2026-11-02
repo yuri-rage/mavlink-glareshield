@@ -110,7 +110,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       case 'built-in-pfd':
         return <HudWidget />;
       case 'built-in-map':
-        return <MapWidget />;
+        return <MapWidget colSpan={placed.colSpan ?? 6} />;
       case 'built-in-battery-card':
         return <BatteryWidget />;
       case 'built-in-gps-card':

@@ -73,7 +73,11 @@ interface GpsFix {
   yaw: number;
 }
 
-export const MapWidget: React.FC = () => {
+interface MapWidgetProps {
+  colSpan?: number;
+}
+
+export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const heartbeat = useTelemetryStore((s) => s.heartbeat);
   const position = useTelemetryStore((s) => s.position);
   const attitude = useTelemetryStore((s) => s.attitude);
@@ -82,6 +86,26 @@ export const MapWidget: React.FC = () => {
   const rallyPoints = useTelemetryStore((s) => s.rallyPoints);
   const flightTrace = useTelemetryStore((s) => s.flightTrace);
   const clearTrace = useTelemetryStore((s) => s.clearTrace);
+
+  const isFullWidth = colSpan === 12;
+  const [aspectRatio, setAspectRatio] = useState<'4:3' | '16:9'>(() => {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const saved = localStorage.getItem('mavlink_glareshield_map_aspect');
+        if (saved === '16:9' || saved === '4:3') return saved;
+      }
+    } catch {}
+    return '4:3';
+  });
+
+  const handleAspectChange = (aspect: '4:3' | '16:9') => {
+    setAspectRatio(aspect);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('mavlink_glareshield_map_aspect', aspect);
+      }
+    } catch {}
+  };
 
   const { formatAltitude, altitudeMode } = useUnitsStore();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -669,8 +693,14 @@ export const MapWidget: React.FC = () => {
     });
   }, [rallyPoints]);
 
+  const aspectClass = isFullWidth
+    ? (aspectRatio === '4:3'
+        ? 'aspect-[16/9] md:aspect-[4/3] min-h-[440px] max-h-[82vh]'
+        : 'aspect-[16/9] min-h-[440px] max-h-[82vh]')
+    : 'h-full min-h-[350px] lg:min-h-[480px]';
+
   return (
-    <Card className="border-zinc-800 bg-zinc-950/90 shadow-lg overflow-hidden flex flex-col h-full min-h-[350px] lg:min-h-[480px]">
+    <Card className={`border-zinc-800 bg-zinc-950/90 shadow-lg overflow-hidden flex flex-col w-full ${aspectClass}`}>
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <div className="flex flex-wrap items-center justify-between gap-1.5">
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
@@ -702,6 +732,34 @@ export const MapWidget: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 ml-auto">
+            {/* Aspect Ratio Selector when in full-width mode */}
+            {isFullWidth && (
+              <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-[10px] font-sans font-medium">
+                <button
+                  onClick={() => handleAspectChange('4:3')}
+                  className={`px-1.5 py-0.5 rounded transition-colors ${
+                    aspectRatio === '4:3'
+                      ? 'bg-zinc-800 text-sky-400 font-bold shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                  title="4:3 Square Tactical Aspect Ratio"
+                >
+                  4:3
+                </button>
+                <button
+                  onClick={() => handleAspectChange('16:9')}
+                  className={`px-1.5 py-0.5 rounded transition-colors ${
+                    aspectRatio === '16:9'
+                      ? 'bg-zinc-800 text-sky-400 font-bold shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                  title="16:9 Widescreen Aspect Ratio"
+                >
+                  16:9
+                </button>
+              </div>
+            )}
+
             {/* Map Imagery Selector (Satellite / Streets) */}
             <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-[10px] font-sans font-medium">
               <button
@@ -816,7 +874,7 @@ export const MapWidget: React.FC = () => {
         </div>
       )}
 
-      <CardContent className="p-0 flex-1 relative min-h-[300px] h-full">
+      <CardContent className="p-0 flex-1 relative min-h-[300px] h-full overflow-hidden">
         <div ref={mapContainerRef} className="w-full h-full min-h-[300px] z-0" />
 
         {/* GPS Coordinate readout HUD overlay in top-left (decoupled from bottom Leaflet attribution) */}
