@@ -2,11 +2,11 @@ import React, { useEffect } from 'react';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { MAVLINK_MSG_ID } from '../../mavlink/messages';
-import { Card, CardContent } from '../ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Battery, Zap, Activity } from 'lucide-react';
 
 export const BatteryWidget: React.FC = () => {
-  const { battery } = useTelemetryStore();
+  const battery = useTelemetryStore((state) => state.battery);
 
   useEffect(() => {
     messageRateManager.registerRequirement('battery-sys', MAVLINK_MSG_ID.SYS_STATUS);
@@ -24,14 +24,13 @@ export const BatteryWidget: React.FC = () => {
   };
 
   return (
-    <Card className="border-zinc-800 bg-zinc-950/90 shadow-md">
-      <CardContent className="p-3 space-y-2.5">
-        {/* Top Mini Header: Remaining Gauge & Consumed */}
+    <Card className="h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
+      <CardHeader className="py-2.5 px-4 bg-zinc-900/60 border-b border-zinc-800">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-zinc-400 text-xs font-bold uppercase tracking-wider">
-            <Battery className="h-4 w-4 text-emerald-400" />
-            <span>Battery</span>
-          </div>
+          <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
+            <Battery className="h-3.5 w-3.5 text-emerald-400" />
+            Battery
+          </CardTitle>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-zinc-500 font-mono">
               {battery.consumedMah > 0 ? `${battery.consumedMah} mAh` : ''}
@@ -45,6 +44,8 @@ export const BatteryWidget: React.FC = () => {
             </span>
           </div>
         </div>
+      </CardHeader>
+      <CardContent className="p-3 space-y-2.5 flex-1 flex flex-col justify-between">
 
         {/* Voltage & Current large metrics */}
         <div className="grid grid-cols-2 gap-2">

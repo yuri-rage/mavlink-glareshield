@@ -3,12 +3,13 @@ import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { MAVLINK_MSG_ID } from '../../mavlink/messages';
-import { Card, CardContent } from '../ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Satellite } from 'lucide-react';
 
 export const GpsWidget: React.FC = () => {
-  const { gps, position } = useTelemetryStore();
+  const gps = useTelemetryStore((state) => state.gps);
+  const position = useTelemetryStore((state) => state.position);
   const { formatSpeed, formatAltitude, altitudeMode } = useUnitsStore();
 
   useEffect(() => {
@@ -32,18 +33,19 @@ export const GpsWidget: React.FC = () => {
   const altFormatted = formatAltitude(rawAlt);
 
   return (
-    <Card className="border-zinc-800 bg-zinc-950/90 shadow-md">
-      <CardContent className="p-3 space-y-2.5">
-        {/* Top Mini Header */}
+    <Card className="h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
+      <CardHeader className="py-2.5 px-4 bg-zinc-900/60 border-b border-zinc-800">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-zinc-400 text-xs font-bold uppercase tracking-wider">
-            <Satellite className="h-4 w-4 text-sky-400" />
-            <span>GNSS / GPS</span>
-          </div>
+          <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
+            <Satellite className="h-3.5 w-3.5 text-sky-400" />
+            GNSS / GPS
+          </CardTitle>
           <Badge variant={getFixBadgeVariant(gps.fixType)} className="font-mono text-[10px] px-2 py-0.5">
             {gps.fixLabel}
           </Badge>
         </div>
+      </CardHeader>
+      <CardContent className="p-3 space-y-2.5 flex-1 flex flex-col justify-between">
 
         {/* Metric stats grid */}
         <div className="grid grid-cols-3 gap-2">

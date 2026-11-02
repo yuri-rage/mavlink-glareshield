@@ -6,7 +6,8 @@ import { Badge } from '../ui/badge';
 import { Terminal, Trash2, Volume2, VolumeX, AlertTriangle, Info } from 'lucide-react';
 
 export const StatusTextConsoleWidget: React.FC = () => {
-  const { statusMessages, clearMessages } = useTelemetryStore();
+  const statusMessages = useTelemetryStore((state) => state.statusMessages);
+  const clearMessages = useTelemetryStore((state) => state.clearMessages);
   const [filterSeverity, setFilterSeverity] = useState<number | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
 

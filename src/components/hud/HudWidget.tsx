@@ -3,10 +3,16 @@ import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { MAVLINK_MSG_ID } from '../../mavlink/messages';
-import { Card, CardContent } from '../ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
+import { Compass } from 'lucide-react';
 
 export const HudWidget: React.FC = () => {
-  const { attitude, vfr, position, missionWaypoints, currentWaypointSeq, imu } = useTelemetryStore();
+  const attitude = useTelemetryStore((state) => state.attitude);
+  const vfr = useTelemetryStore((state) => state.vfr);
+  const position = useTelemetryStore((state) => state.position);
+  const missionWaypoints = useTelemetryStore((state) => state.missionWaypoints);
+  const currentWaypointSeq = useTelemetryStore((state) => state.currentWaypointSeq);
+  const imu = useTelemetryStore((state) => state.imu);
   const { formatSpeed, formatAltitude, formatClimb, system: unitSystem, altitudeMode } = useUnitsStore();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -534,8 +540,17 @@ export const HudWidget: React.FC = () => {
   }, [attitude, vfr, position, missionWaypoints, currentWaypointSeq, imu, unitSystem, altitudeMode, formatSpeed, formatAltitude, formatClimb]);
 
   return (
-    <Card className="border-zinc-800 bg-zinc-950 shadow-lg overflow-hidden flex flex-col items-center">
-      <CardContent className="p-0 flex-1 relative w-full aspect-[4/3] sm:aspect-[1.15/1] min-h-[340px] sm:min-h-[400px] max-h-[580px]">
+    <Card className="h-full border-zinc-800 bg-zinc-950 shadow-lg overflow-hidden flex flex-col">
+      <CardHeader className="py-2.5 px-4 bg-zinc-900/60 border-b border-zinc-800 flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
+          <Compass className="h-3.5 w-3.5 text-sky-400" />
+          Heads-Up Display (HUD)
+        </CardTitle>
+        <span className="text-[10px] font-mono text-zinc-500 uppercase">
+          {altitudeMode.toUpperCase()} • {unitSystem.toUpperCase()}
+        </span>
+      </CardHeader>
+      <CardContent className="p-0 flex-1 relative w-full flex items-center justify-center min-h-[340px]">
         <canvas ref={canvasRef} className="w-full h-full block" />
       </CardContent>
     </Card>
