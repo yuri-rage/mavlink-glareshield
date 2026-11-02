@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { MAVLINK_MSG_ID, getVehicleModeName, extractFirmwareVersion, isVehicleAutopilotHeartbeat, getMavCmdName } from '../mavlink/messages';
+import { MAVLINK_MSG_ID, getVehicleModeName, extractFirmwareVersion, isVehicleAutopilotHeartbeat, getMavCmdName, MAV_CMD } from '../mavlink/messages';
 import { decodePayload, MavlinkPacket } from '../mavlink/parser';
 import { mavlinkConnection } from '../mavlink/connection';
 import { messageRateManager } from '../mavlink/rateManager';
@@ -736,11 +736,15 @@ mavlinkConnection.onSend((data) => {
       const timer = setTimeout(() => {
         pendingCommands.delete(cmdId);
         const now = Date.now();
+        const isHousekeeping =
+          cmdId === MAV_CMD.SET_MESSAGE_INTERVAL ||
+          cmdId === MAV_CMD.REQUEST_MESSAGE ||
+          cmdId === MAV_CMD.REQUEST_AUTOPILOT_CAPABILITIES;
         const timeoutMsg: StatusMessage = {
           id: `${now}-${Math.random()}`,
           time: new Date().toLocaleTimeString('en-GB', { hour12: false }),
-          severity: 4, // WARNING
-          severityLabel: 'WARNING',
+          severity: isHousekeeping ? 6 : 4, // INFO for background housekeeping, WARNING for user commands
+          severityLabel: isHousekeeping ? 'INFO' : 'WARNING',
           text: `CMD ${cmdName}: NO ACK (TIMEOUT)`,
         };
         useTelemetryStore.setState((s) => ({

@@ -224,6 +224,11 @@ class BridgeServer:
                     txt_bytes = f"Flight mode set to {mode_name}".encode('ascii')[:50].ljust(50, b'\x00')
                     await self.broadcast(self.encoder.pack(MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes))
 
+                else:
+                    # Acknowledge other commands (housekeeping, message intervals, capabilities, etc.)
+                    ack_payload = struct.pack("<HBBIBB", cmd, 0, 0, 0, 1, 1) # 0 = MAV_RESULT_ACCEPTED
+                    await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
+
             elif msgid == MSG_PARAM_REQUEST_LIST:
                 print("[MOCK] Received PARAM_REQUEST_LIST. Streaming sample parameters...")
                 sample_params = [

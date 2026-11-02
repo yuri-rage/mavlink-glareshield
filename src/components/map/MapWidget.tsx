@@ -344,12 +344,6 @@ export const MapWidget: React.FC = () => {
     const fixes = fixesRef.current;
     if (fixes.length > 0) {
       const prev = fixes[fixes.length - 1];
-      if (prev.lat === position.lat && prev.lon === position.lon) {
-        // Stationary: keep fix timestamp current so resume uses the true GPS fix interval
-        prev.t = now;
-        prev.timeBootMs = position.timeBootMs;
-        return;
-      }
       // If gap exceeds 1.0s (telemetry dropout or link loss), reset history and snap immediately
       const gapMs = (fix.timeBootMs > 0 && prev.timeBootMs > 0)
         ? (fix.timeBootMs - prev.timeBootMs)

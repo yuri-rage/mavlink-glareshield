@@ -83,10 +83,16 @@ def run(speed_px_s: float, gps_hz: float, secs: float = 10.0, mode: str = "shipp
     }
 
 
-def run_stop_and_move(speed_px_s: float = 15.9, gps_hz: float = 3.0, handle_gap: bool = True) -> dict[str, str]:
+def run_stop_and_move(
+    speed_px_s: float = 15.9,
+    gps_hz: float = 3.0,
+    mode: str = "push",  # "push" (shipped), "mutate" (in-place stationary refresh), "unhandled"
+    stop_t: float = 3.15,  # Stop between fixes to uncover mid-interval transition jumps
+    resume_t: float = 8.15,
+) -> dict[str, str]:
     """
-    Simulate a vehicle cruising for 3s, hovering stationary for 5s (3s-8s),
-    then resuming flight from 8s-12s.
+    Simulate a vehicle cruising, stopping between GPS fix boundaries, hovering stationary,
+    then resuming flight.
     """
     t = 0.0
     fixes: list[tuple[float, float, float]] = []  # (t_arrival, time_boot_ms, x)
@@ -94,57 +100,72 @@ def run_stop_and_move(speed_px_s: float = 15.9, gps_hz: float = 3.0, handle_gap:
     marker = cam = 0.0
     prev_marker = 0.0
     frame_vels: list[float] = []
+    backward_jumps_m: list[float] = []
 
     while t < 12.0:
-        if t < 3.0:
+        if t < stop_t:
             true_x = speed_px_s * t
-        elif t < 8.0:
-            true_x = speed_px_s * 3.0
+        elif t < resume_t:
+            true_x = speed_px_s * stop_t
         else:
-            true_x = speed_px_s * 3.0 + speed_px_s * (t - 8.0)
+            true_x = speed_px_s * stop_t + speed_px_s * (t - resume_t)
 
         # GPS fix delivery (every 1/gps_hz from autopilot with incrementing time_boot_ms)
         if t >= next_fix - 1e-9:
             time_boot_ms = t * 1000.0
-            if fixes and abs(true_x - fixes[-1][2]) < 1e-6:
-                if handle_gap:
-                    # Shipped behavior: update timestamp on stationary fixes
-                    fixes[-1] = (t, time_boot_ms, true_x)
+            if fixes and abs(true_x - fixes[-1][2]) < 1e-6 and mode == "mutate":
+                # Legacy stationary branch: update timestamp on stationary fixes in-place
+                fixes[-1] = (t, time_boot_ms, true_x)
             else:
+                # Shipped: push every fix normally into buffer
                 fixes.append((t, time_boot_ms, true_x))
             next_fix += 1.0 / gps_hz
 
         if len(fixes) >= 2:
             (t0, boot0, x0), (t1, boot1, x1) = fixes[-2], fixes[-1]
-            boot_dt = (boot1 - boot0) / 1000.0
-            fix_dt = boot_dt if 0.010 <= boot_dt <= 1.0 else (t1 - t0)
-            if handle_gap and fix_dt > 1.0:
-                marker = x1
-            elif fix_dt > 1e-6:
-                u = min(max((t - t1) / fix_dt, 0.0), 1.0)
-                marker = x0 + (x1 - x0) * u
+            if mode == "unhandled":
+                fix_dt = t1 - t0
+                if fix_dt > 1e-6:
+                    u = min(max((t - t1) / fix_dt, 0.0), 1.0)
+                    marker = x0 + (x1 - x0) * u
+                else:
+                    marker = x1
             else:
-                marker = x1
+                boot_dt = (boot1 - boot0) / 1000.0
+                fix_dt = boot_dt if 0.010 <= boot_dt <= 1.0 else (t1 - t0)
+                if fix_dt > 1.0:
+                    marker = x1
+                elif fix_dt > 1e-6:
+                    u = min(max((t - t1) / fix_dt, 0.0), 1.0)
+                    marker = x0 + (x1 - x0) * u
+                else:
+                    marker = x1
         elif fixes:
             marker = fixes[-1][2]
 
         step = round(marker - cam)
         cam += step
 
+        step_m = (marker - prev_marker) / speed_px_s * 15.0
+        if t > stop_t and t < resume_t and step_m < -0.01:
+            backward_jumps_m.append(abs(step_m))
+
         if t > 0.1:
             frame_vels.append((marker - prev_marker) * FPS)
         prev_marker = marker
         t += DT
 
-    # Velocity and single-frame jump around resume window (7.8s to 9.0s)
-    idx_start = int(7.8 * FPS)
-    idx_end = int(9.0 * FPS)
+    # Velocity and single-frame jump around resume window
+    idx_start = int((resume_t - 0.2) * FPS)
+    idx_end = int((resume_t + 1.0) * FPS)
     resume_window = frame_vels[idx_start:idx_end]
     max_frame_step_m = max(resume_window) / FPS / speed_px_s * 15.0
 
     return {
         "max_resume_step_m": f"{max_frame_step_m:4.2f} m",
         "normal_frame_step_m": f"{15.0 / FPS:4.2f} m",
+        "backward_jumps_count": f"{len(backward_jumps_m)}",
+        "max_backward_jump_m": f"{max(backward_jumps_m) if backward_jumps_m else 0.0:4.2f} m",
     }
 
 
@@ -158,8 +179,10 @@ if __name__ == "__main__":
             for k in leg:
                 print(f"   {k:34s} legacy: {leg[k]!s:26s} shipped: {shp[k]}")
 
-    print("\n=== Stop-and-Move Transition Simulation (3s cruise -> 5s hover -> resume) ===")
-    res_unhandled = run_stop_and_move(handle_gap=False)
-    res_shipped = run_stop_and_move(handle_gap=True)
-    print(f"Unhandled gap: max single-frame step on resume: {res_unhandled['max_resume_step_m']} (crawl then jump)")
-    print(f"Shipped gap:   max single-frame step on resume: {res_shipped['max_resume_step_m']} (normal: {res_shipped['normal_frame_step_m']})")
+    print("\n=== Stop-and-Move Transition Simulation (stop between fixes at 3.15s -> hover -> resume at 8.15s) ===")
+    res_mutate = run_stop_and_move(mode="mutate")
+    res_shipped = run_stop_and_move(mode="push")
+    res_unhandled = run_stop_and_move(mode="unhandled")
+    print(f"Mutate stationary: backward jumps: {res_mutate['backward_jumps_count']} (largest: {res_mutate['max_backward_jump_m']}), resume step: {res_mutate['max_resume_step_m']}")
+    print(f"Shipped push:      backward jumps: {res_shipped['backward_jumps_count']} (largest: {res_shipped['max_backward_jump_m']}), resume step: {res_shipped['max_resume_step_m']} (normal: {res_shipped['normal_frame_step_m']})")
+    print(f"Unhandled gap:     backward jumps: {res_unhandled['backward_jumps_count']}, resume step: {res_unhandled['max_resume_step_m']} (crawl then jump)")
