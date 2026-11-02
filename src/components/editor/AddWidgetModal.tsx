@@ -136,10 +136,55 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
       try {
         const parsed = JSON.parse(event.target?.result as string) as CustomWidgetDefinition;
         if (parsed.id && parsed.name && parsed.displayType) {
-          // If the widget defines an action, enforce confirmation for flight safety
+          const VALID_DISPLAY_TYPES = new Set<WidgetDisplayType>([
+            'stat-card',
+            'gauge-radial',
+            'gauge-linear',
+            'indicator-led',
+            'toggle-switch',
+            'action-button',
+            'slider-control',
+            'text-display',
+            'multi-bar',
+            'param-control',
+            'compass-rose',
+            'sparkline',
+          ]);
+          const VALID_MULTI_BAR_GROUPS = new Set([
+            'rc-8', 'servo-8', 'esc-rpm', 'esc-temp', 'esc-current',
+            'vibration-xyz', 'ekf-variances', 'battery-cells',
+          ]);
+
+          if (!VALID_DISPLAY_TYPES.has(parsed.displayType)) {
+            alert(`Invalid custom widget displayType: ${parsed.displayType}`);
+            return;
+          }
+
+          if (parsed.displayType === 'multi-bar') {
+            if (!parsed.multiBarConfig || !VALID_MULTI_BAR_GROUPS.has(parsed.multiBarConfig.group)) {
+              parsed.multiBarConfig = { group: 'rc-8' };
+            }
+          }
+
+          // Check if ID collides with built-in or existing custom widgets
+          const existingIds = new Set([
+            ...BUILT_IN_CATALOG.map((b) => b.id),
+            ...useDashboardStore.getState().profile.customWidgets.map((c) => c.id),
+          ]);
+          if (existingIds.has(parsed.id)) {
+            const freshId = `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+            console.warn(`[Widget Import] ID "${parsed.id}" collides with existing widget. Reassigned to fresh ID "${freshId}".`);
+            parsed.id = freshId;
+          }
+
+          // If the widget defines an action or paramControl, enforce confirmation for flight safety
           if (parsed.action) {
             parsed.action.confirmation = true;
           }
+          if (parsed.paramControl) {
+            parsed.paramControl.confirmation = true;
+          }
+
           setPendingImportWidget(parsed);
         } else {
           alert('Invalid custom widget format: missing id, name, or displayType.');
@@ -182,7 +227,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                   <div>Unit: {pendingImportWidget.binding.unit || 'none'}</div>
                 </div>
               )}
-              {pendingImportWidget.action ? (
+              {pendingImportWidget.action && (
                 <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded mt-2 space-y-1 text-amber-200">
                   <div className="font-bold flex items-center gap-1.5 text-amber-300">
                     <AlertTriangle className="h-4 w-4" />
@@ -195,8 +240,27 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                     * Confirmation is enforced on imported actions to prevent accidental autopilot commands.
                   </div>
                 </div>
-              ) : (
-                <div className="text-zinc-500 italic mt-1">No autopilot actions configured (read-only instrument).</div>
+              )}
+              {pendingImportWidget.paramControl && (
+                <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded mt-2 space-y-1 text-amber-200">
+                  <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                    <AlertTriangle className="h-4 w-4" />
+                    Autopilot Parameter Control:
+                  </div>
+                  <div>Target Parameter: <b className="text-zinc-100 font-mono">{pendingImportWidget.paramControl.paramId}</b></div>
+                  {pendingImportWidget.paramControl.min !== undefined && pendingImportWidget.paramControl.max !== undefined && (
+                    <div>Allowed Range: <b className="text-zinc-100 font-mono">[{pendingImportWidget.paramControl.min}, {pendingImportWidget.paramControl.max}] {pendingImportWidget.paramControl.unit || ''}</b></div>
+                  )}
+                  {pendingImportWidget.paramControl.options && pendingImportWidget.paramControl.options.length > 0 && (
+                    <div>Options: <b className="text-zinc-100 font-mono">{pendingImportWidget.paramControl.options.map((o) => `${o.label}:${o.value}`).join(', ')}</b></div>
+                  )}
+                  <div className="text-[11px] text-amber-400 mt-1">
+                    * Confirmation is enforced on imported parameter controls to prevent unintended vehicle configuration changes.
+                  </div>
+                </div>
+              )}
+              {!pendingImportWidget.action && !pendingImportWidget.paramControl && (
+                <div className="text-zinc-500 italic mt-1">No autopilot actions or parameter controls (read-only instrument).</div>
               )}
             </div>
 

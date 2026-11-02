@@ -176,6 +176,7 @@ export function packFtpMessage(
 export class MavFtpClient {
   private seq = 0;
   private currentAbort: (() => void) | null = null;
+  private queueGeneration = 0;
   private transferQueue: Promise<any> = Promise.resolve();
 
   private nextSeq(): number {
@@ -185,17 +186,20 @@ export class MavFtpClient {
   }
 
   /**
-   * Aborts any currently executing MAVFTP transfer.
+   * Aborts any currently executing MAVFTP transfer and cancels pending queued transfers.
+   * Returns true if an active transfer was aborted.
    */
   public abortCurrent(): boolean {
+    const hadActive = Boolean(this.currentAbort);
+    this.queueGeneration++;
+    this.transferQueue = Promise.resolve();
     if (this.currentAbort) {
-      console.log('[MAVFTP] Aborting active file transfer...');
+      console.log('[MAVFTP] Aborting active file transfer and clearing queue...');
       const abortFn = this.currentAbort;
       this.currentAbort = null;
       abortFn();
-      return true;
     }
-    return false;
+    return hadActive;
   }
 
   /**
@@ -213,9 +217,22 @@ export class MavFtpClient {
     timeoutMs = 1500,
     onProgress?: (bytesReceived: number, totalBytes: number) => void
   ): Promise<Uint8Array | null> {
+    const generation = this.queueGeneration;
     const nextTransfer = this.transferQueue.then(
-      () => this.executeReadFile(targetSys, targetComp, filePath, chunkSize, timeoutMs, onProgress),
-      () => this.executeReadFile(targetSys, targetComp, filePath, chunkSize, timeoutMs, onProgress)
+      () => {
+        if (this.queueGeneration !== generation) {
+          console.log(`[MAVFTP] Queued transfer of ${filePath} was cancelled.`);
+          return null;
+        }
+        return this.executeReadFile(targetSys, targetComp, filePath, chunkSize, timeoutMs, onProgress);
+      },
+      () => {
+        if (this.queueGeneration !== generation) {
+          console.log(`[MAVFTP] Queued transfer of ${filePath} was cancelled.`);
+          return null;
+        }
+        return this.executeReadFile(targetSys, targetComp, filePath, chunkSize, timeoutMs, onProgress);
+      }
     );
     this.transferQueue = nextTransfer.catch(() => null);
     return nextTransfer;

@@ -142,6 +142,24 @@
    }
   },
   {
+   "name": "GPS_RAW_INT with due north yaw (36000)",
+   "msgid": 24,
+   "hex": "fd34000000010118000040e201000000000008fe8316304808b7c8af00005500780008025046030e0000000000000000000000000000000000000000a08c36a5",
+   "expect": {
+    "yaw": 0,
+    "raw_yaw": 36000
+   }
+  },
+  {
+   "name": "GPS_RAW_INT with unavailable yaw (0)",
+   "msgid": 24,
+   "hex": "fd1e000000010118000040e201000000000008fe8316304808b7c8af00005500780008025046030ea11c",
+   "expect": {
+    "yaw": null,
+    "raw_yaw": 0
+   }
+  },
+  {
    "name": "GPS_RAW_INT RTK fixed, unknown DOP/vel/cog",
    "msgid": 24,
    "hex": "fd1e00000001011800000100000000000000010000000200000003000000ffffffffffffffff061ed125",
@@ -171,6 +189,24 @@
     "satellites_visible": 18,
     "yaw": 120.3,
     "raw_yaw": 12030
+   }
+  },
+  {
+   "name": "GPS2_RAW with due north yaw (36000)",
+   "msgid": 124,
+   "hex": "fd2500000001017c0000f1fb09000000000008fe8316304808b7c8af00000000000041005f0003025046061200a08c2eff",
+   "expect": {
+    "yaw": 0,
+    "raw_yaw": 36000
+   }
+  },
+  {
+   "name": "GPS2_RAW with uninitialized yaw (65535)",
+   "msgid": 124,
+   "hex": "fd2500000001017c0000f1fb09000000000008fe8316304808b7c8af00000000000041005f0003025046061200ffffa6ec",
+   "expect": {
+    "yaw": null,
+    "raw_yaw": 65535
    }
   },
   {

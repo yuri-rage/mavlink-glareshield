@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import { DashboardProfile, DashboardTab, PlacedWidget, CustomWidgetDefinition } from '../types/widget';
+import {
+  DashboardProfile,
+  DashboardTab,
+  PlacedWidget,
+  CustomWidgetDefinition,
+  WidgetDisplayType,
+  MultiBarGroupType,
+} from '../types/widget';
 
 const DEFAULT_PROFILE: DashboardProfile = {
   version: '1.0.0',
@@ -382,11 +389,47 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     try {
       const parsed = JSON.parse(jsonStr) as DashboardProfile;
       if (parsed && Array.isArray(parsed.tabs)) {
-        // Enforce confirmation on any imported custom widget actions for safety
+        // Enforce confirmation and validate any imported custom widget actions and param controls for safety
         if (Array.isArray(parsed.customWidgets)) {
+          const VALID_DISPLAY_TYPES = new Set<WidgetDisplayType>([
+            'stat-card',
+            'gauge-radial',
+            'gauge-linear',
+            'indicator-led',
+            'toggle-switch',
+            'action-button',
+            'slider-control',
+            'text-display',
+            'multi-bar',
+            'param-control',
+            'compass-rose',
+            'sparkline',
+          ]);
+          const VALID_MULTI_BAR_GROUPS = new Set<MultiBarGroupType>([
+            'rc-8',
+            'servo-8',
+            'esc-rpm',
+            'esc-temp',
+            'esc-current',
+            'vibration-xyz',
+            'ekf-variances',
+            'battery-cells',
+          ]);
+
           parsed.customWidgets.forEach((w) => {
+            if (!VALID_DISPLAY_TYPES.has(w.displayType)) {
+              w.displayType = 'stat-card';
+            }
+            if (w.displayType === 'multi-bar') {
+              if (!w.multiBarConfig || !VALID_MULTI_BAR_GROUPS.has(w.multiBarConfig.group)) {
+                w.multiBarConfig = { group: 'rc-8' };
+              }
+            }
             if (w.action) {
               w.action.confirmation = true;
+            }
+            if (w.paramControl) {
+              w.paramControl.confirmation = true;
             }
           });
         }

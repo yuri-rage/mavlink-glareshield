@@ -103,12 +103,20 @@ export function extractBoundValueFromState(
   } else if (msg === 'RAW_IMU' || msg === 'SCALED_IMU' || msg === 'HIGHRES_IMU') {
     rawVal = state.imu?.[targetKey] ?? state.imu?.[fieldName];
   } else if (msg === 'RC_CHANNELS' || msg === 'RC_CHANNELS_RAW') {
+    if (fieldName === 'rssi') {
+      const rssi = state.rc?.rssi;
+      return (rssi === 255 || rssi === undefined) ? '--' : String(rssi);
+    }
     const chanMatch = fieldName.match(/^chan(\d+)_raw$/);
     if (chanMatch) {
       const idx = parseInt(chanMatch[1], 10) - 1;
-      rawVal = state.rc?.channels?.[idx];
+      const chancount = state.rc?.chancount ?? 18;
+      if (idx >= chancount) return '--';
+      const val = state.rc?.channels?.[idx];
+      return (val === 65535 || val === undefined) ? '--' : String(val);
     } else {
       rawVal = state.rc?.[targetKey] ?? state.rc?.[fieldName];
+      if (fieldName === 'rssi' && (rawVal === 255 || rawVal === undefined)) return '--';
     }
   } else if (msg === 'SERVO_OUTPUT_RAW') {
     const srvMatch = fieldName.match(/^servo(\d+)_raw$/);
@@ -163,6 +171,7 @@ interface MultiBarItem {
   min: number;
   max: number;
   unit: string;
+  displayValue?: string;
   warnAbove?: number;
   critAbove?: number;
 }
@@ -171,23 +180,35 @@ function extractMultiBarItems(group: MultiBarGroupType, state: any): MultiBarIte
   switch (group) {
     case 'rc-8': {
       const ch = state.rc?.channels ?? [];
-      return Array.from({ length: 8 }, (_, i) => ({
-        label: `CH${i + 1}`,
-        value: ch[i] ?? 1500,
-        min: 1000,
-        max: 2000,
-        unit: 'µs',
-      }));
+      const chancount = state.rc?.chancount ?? 8;
+      const count = Math.max(0, Math.min(8, chancount));
+      return Array.from({ length: count }, (_, i) => {
+        const val = ch[i];
+        const isUnused = val === 65535 || val === undefined;
+        return {
+          label: `CH${i + 1}`,
+          value: isUnused ? 0 : val,
+          min: 1000,
+          max: 2000,
+          unit: 'µs',
+          displayValue: isUnused ? '--' : `${val} µs`,
+        };
+      });
     }
     case 'servo-8': {
       const sv = state.servo?.servos ?? [];
-      return Array.from({ length: 8 }, (_, i) => ({
-        label: `S${i + 1}`,
-        value: sv[i] ?? 1100,
-        min: 1000,
-        max: 2000,
-        unit: 'µs',
-      }));
+      return Array.from({ length: 8 }, (_, i) => {
+        const val = sv[i];
+        const isUnused = val === 0 || val === 65535 || val === undefined;
+        return {
+          label: `S${i + 1}`,
+          value: isUnused ? 0 : val,
+          min: 1000,
+          max: 2000,
+          unit: 'µs',
+          displayValue: isUnused ? '--' : `${val} µs`,
+        };
+      });
     }
     case 'esc-rpm': {
       const rpm = state.esc?.rpm ?? [0, 0, 0, 0];
@@ -255,6 +276,8 @@ function extractMultiBarItems(group: MultiBarGroupType, state: any): MultiBarIte
         unit: 'V',
       }));
     }
+    default:
+      return [];
   }
 }
 
@@ -293,7 +316,15 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
   // Parameter control state
   const [paramInputVal, setParamInputVal] = useState<string>('');
   const [isConfirmingParam, setIsConfirmingParam] = useState(false);
-  const [paramSentTime, setParamSentTime] = useState<number | null>(null);
+  const [paramStatusMsg, setParamStatusMsg] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>(null);
+  const pendingParamWriteRef = useRef<{ value: number; time: number } | null>(null);
+
+  // Auto-request parameter from vehicle on mount if not loaded
+  useEffect(() => {
+    if (definition.displayType === 'param-control' && paramEntry === undefined) {
+      handleRequestParam();
+    }
+  }, [definition.displayType, paramId, paramEntry]);
 
   // Sync parameter input when vehicle parameter arrives
   useEffect(() => {
@@ -301,6 +332,35 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
       setParamInputVal(String(Number(paramEntry.value.toFixed(4))));
     }
   }, [paramEntry, paramInputVal]);
+
+  // Detect vehicle parameter echo confirmation
+  useEffect(() => {
+    if (pendingParamWriteRef.current && paramEntry !== undefined) {
+      const diff = Math.abs(paramEntry.value - pendingParamWriteRef.current.value);
+      if (diff < 0.0001) {
+        setParamStatusMsg({
+          type: 'success',
+          text: `✓ Confirmed on vehicle: ${paramId} = ${Number(paramEntry.value.toFixed(4))} at ${new Date().toLocaleTimeString()}`,
+        });
+        pendingParamWriteRef.current = null;
+      }
+    }
+  }, [paramEntry, paramId]);
+
+  // Timeout watcher for parameter write
+  useEffect(() => {
+    if (!paramStatusMsg || paramStatusMsg.type !== 'info') return;
+    const timer = setTimeout(() => {
+      if (pendingParamWriteRef.current) {
+        setParamStatusMsg({
+          type: 'error',
+          text: `No confirmation echo received for ${paramId}. Autopilot may have rejected value or timed out.`,
+        });
+        pendingParamWriteRef.current = null;
+      }
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [paramStatusMsg, paramId]);
 
   // Sparkline history buffer
   const sparkHistoryRef = useRef<number[]>([]);
@@ -418,11 +478,37 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
     mavlinkConnection.send(encoder.createParamRequestRead(sysId, compId, -1, paramId));
   };
 
-  const executeParamSet = (val: number) => {
+  const executeParamSet = (rawVal: number) => {
+    // 1. Enforce min/max clamping
+    let val = rawVal;
+    if (definition.paramControl?.min !== undefined && val < definition.paramControl.min) {
+      val = definition.paramControl.min;
+    }
+    if (definition.paramControl?.max !== undefined && val > definition.paramControl.max) {
+      val = definition.paramControl.max;
+    }
+    setParamInputVal(String(val));
+
+    // 2. Refuse to write until parameter's real type is known
+    if (paramEntry === undefined || paramEntry.type === undefined) {
+      handleRequestParam();
+      setParamStatusMsg({
+        type: 'error',
+        text: `Cannot write: parameter type for ${paramId} is unknown. Requesting from autopilot...`,
+      });
+      setIsConfirmingParam(false);
+      return;
+    }
+
+    // 3. Send PARAM_SET with known real type
     const encoder = mavlinkConnection.getEncoder();
-    const pType = paramEntry?.type || 9;
+    const pType = paramEntry.type;
     mavlinkConnection.send(encoder.createParamSet(sysId, compId, paramId, val, pType));
-    setParamSentTime(Date.now());
+    pendingParamWriteRef.current = { value: val, time: Date.now() };
+    setParamStatusMsg({
+      type: 'info',
+      text: `PARAM_SET sent for ${paramId} = ${val}... awaiting vehicle confirmation echo`,
+    });
     setIsConfirmingParam(false);
   };
 
@@ -623,12 +709,15 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
         {definition.displayType === 'multi-bar' && (
           <div className="space-y-1.5 py-0.5">
             {multiBarItems.map((item) => {
+              const isUnused = item.displayValue === '--';
               const barPct =
-                item.max > item.min
-                  ? Math.max(0, Math.min(100, ((item.value - item.min) / (item.max - item.min)) * 100))
-                  : 0;
-              const isCrit = item.critAbove !== undefined && item.value >= item.critAbove;
-              const isWarn = !isCrit && item.warnAbove !== undefined && item.value >= item.warnAbove;
+                isUnused || item.value === 0
+                  ? 0
+                  : item.max > item.min
+                    ? Math.max(0, Math.min(100, ((item.value - item.min) / (item.max - item.min)) * 100))
+                    : 0;
+              const isCrit = !isUnused && item.critAbove !== undefined && item.value >= item.critAbove;
+              const isWarn = !isUnused && !isCrit && item.warnAbove !== undefined && item.value >= item.warnAbove;
               const barColor = isCrit
                 ? 'bg-red-500'
                 : isWarn
@@ -640,7 +729,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                   <div className="flex justify-between items-center text-[10px] font-mono">
                     <span className="text-zinc-400 font-semibold">{item.label}</span>
                     <span className={isCrit ? 'text-red-400 font-bold' : isWarn ? 'text-amber-300 font-bold' : 'text-zinc-200'}>
-                      {item.value} {item.unit}
+                      {item.displayValue ?? `${item.value} ${item.unit}`.trim()}
                     </span>
                   </div>
                   <div className="w-full bg-zinc-900 h-2 rounded overflow-hidden border border-zinc-800/80 relative">
@@ -786,10 +875,14 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                   onClick={() => {
                     const num = parseFloat(paramInputVal);
                     if (isNaN(num)) return;
+                    let clamped = num;
+                    if (definition.paramControl?.min !== undefined && clamped < definition.paramControl.min) clamped = definition.paramControl.min;
+                    if (definition.paramControl?.max !== undefined && clamped > definition.paramControl.max) clamped = definition.paramControl.max;
+                    setParamInputVal(String(clamped));
                     if (definition.paramControl?.confirmation) {
                       setIsConfirmingParam(true);
                     } else {
-                      executeParamSet(num);
+                      executeParamSet(clamped);
                     }
                   }}
                 >
@@ -815,10 +908,14 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                   onClick={() => {
                     const num = parseFloat(paramInputVal);
                     if (isNaN(num)) return;
+                    let clamped = num;
+                    if (definition.paramControl?.min !== undefined && clamped < definition.paramControl.min) clamped = definition.paramControl.min;
+                    if (definition.paramControl?.max !== undefined && clamped > definition.paramControl.max) clamped = definition.paramControl.max;
+                    setParamInputVal(String(clamped));
                     if (definition.paramControl?.confirmation) {
                       setIsConfirmingParam(true);
                     } else {
-                      executeParamSet(num);
+                      executeParamSet(clamped);
                     }
                   }}
                 >
@@ -829,30 +926,45 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
             )}
 
             {isConfirmingParam && (
-              <div className="flex items-center gap-2 pt-0.5">
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs h-7 gap-1"
-                  onClick={() => executeParamSet(parseFloat(paramInputVal))}
-                >
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  Write {paramId} = {paramInputVal}?
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-xs text-zinc-400 h-7"
-                  onClick={() => setIsConfirmingParam(false)}
-                >
-                  Cancel
-                </Button>
+              <div className="space-y-1 pt-0.5">
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs h-7 gap-1"
+                    onClick={() => executeParamSet(parseFloat(paramInputVal))}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Write {paramId} = {paramInputVal}?
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs text-zinc-400 h-7"
+                    onClick={() => setIsConfirmingParam(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                {paramEntry === undefined && (
+                  <span className="text-red-400 block text-[10px] text-center font-mono">
+                    * Parameter type not yet loaded from autopilot. Will fetch type first.
+                  </span>
+                )}
               </div>
             )}
 
-            {paramSentTime && (
-              <p className="text-[10px] text-emerald-400 font-mono text-center">
-                PARAM_SET sent at {new Date(paramSentTime).toLocaleTimeString()}
+            {paramStatusMsg && (
+              <p
+                className={`text-[10px] font-mono text-center px-1.5 py-0.5 rounded ${
+                  paramStatusMsg.type === 'success'
+                    ? 'text-emerald-400 bg-emerald-950/40 border border-emerald-800/40'
+                    : paramStatusMsg.type === 'error'
+                    ? 'text-red-400 bg-red-950/40 border border-red-800/40'
+                    : 'text-amber-400 bg-amber-950/40 border border-amber-800/40 animate-pulse'
+                }`}
+              >
+                {paramStatusMsg.text}
               </p>
             )}
           </div>

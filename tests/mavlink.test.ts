@@ -1157,8 +1157,8 @@ if (!gpsState.hasYaw || Math.abs((gpsState.yaw ?? 0) - 245.5) > 0.01) {
   process.exit(1);
 }
 
-// Now simulate vehicle turning North (yaw = 0): hasYaw must remain true
-testGpsDv1.setUint16(50, 0, true);
+// Now simulate vehicle turning North (yaw = 36000 cdeg = 360 deg = 0 deg North):
+testGpsDv1.setUint16(50, 36000, true);
 useTelemetryStore.getState().processPacket({
   version: 2,
   sequence: 22,
@@ -1171,7 +1171,26 @@ useTelemetryStore.getState().processPacket({
 });
 gpsState = useTelemetryStore.getState().gps;
 if (!gpsState.hasYaw || gpsState.yaw !== 0) {
-  console.error('GPS_RAW_INT should retain hasYaw=true even when yaw reaches 0 deg (North)!', gpsState);
+  console.error('GPS_RAW_INT with raw_yaw=36000 should decode to 0 deg North with hasYaw=true!', gpsState);
+  process.exit(1);
+}
+
+// Now simulate losing yaw solution (yaw = 0 = unavailable in MAVLink spec):
+// hasYaw must remain true (configured), but yaw must be undefined (showing '--' in UI, not 0 deg North!)
+testGpsDv1.setUint16(50, 0, true);
+useTelemetryStore.getState().processPacket({
+  version: 2,
+  sequence: 23,
+  systemId: 1,
+  componentId: 1,
+  messageId: MAVLINK_MSG_ID.GPS_RAW_INT,
+  payload: testGpsPayload1,
+  crc: 0,
+  raw: new Uint8Array(0),
+});
+gpsState = useTelemetryStore.getState().gps;
+if (!gpsState.hasYaw || gpsState.yaw !== undefined) {
+  console.error('GPS_RAW_INT with raw_yaw=0 must map to undefined yaw (unavailable), not 0 deg!', gpsState);
   process.exit(1);
 }
 
@@ -1306,5 +1325,166 @@ if (msgs.length !== 3 || msgs[0].count !== 1 || msgs[2].count !== 3) {
 }
 
 console.log('Consecutive identical STATUSTEXT message grouping and counter verification PASSED!');
+
+// 22. Test Multi-Port SERVO_OUTPUT_RAW handling and prevention of servo 1-8 flickering
+const testServoPort0Payload = new Uint8Array(37);
+const testServoPort0Dv = new DataView(testServoPort0Payload.buffer);
+testServoPort0Dv.setUint32(0, 1000, true);
+for (let i = 0; i < 8; i++) {
+  testServoPort0Dv.setUint16(4 + i * 2, 1000 + (i + 1) * 100, true); // 1100 .. 1800 for servos 1-8
+}
+testServoPort0Payload[20] = 0; // port 0
+for (let i = 0; i < 8; i++) {
+  testServoPort0Dv.setUint16(21 + i * 2, 1850 + i * 10, true); // servos 9-16
+}
+
+useTelemetryStore.getState().processPacket({
+  version: 2 as const,
+  sequence: 40,
+  systemId: 1,
+  componentId: 1,
+  messageId: MAVLINK_MSG_ID.SERVO_OUTPUT_RAW,
+  payload: testServoPort0Payload,
+  crc: 0,
+  raw: new Uint8Array(0),
+});
+
+let servoState = useTelemetryStore.getState().servo;
+if (servoState.servos[0] !== 1100 || servoState.servos[7] !== 1800 || !servoState.ports[0]) {
+  console.error('SERVO_OUTPUT_RAW: port 0 initial populate failed!', servoState);
+  process.exit(1);
+}
+
+// Now send port 1 (servos 17-32)
+const testServoPort1Payload = new Uint8Array(37);
+const testServoPort1Dv = new DataView(testServoPort1Payload.buffer);
+testServoPort1Dv.setUint32(0, 1020, true);
+for (let i = 0; i < 8; i++) {
+  testServoPort1Dv.setUint16(4 + i * 2, 2100 + i * 10, true); // servos 17-24
+}
+testServoPort1Payload[20] = 1; // port 1
+for (let i = 0; i < 8; i++) {
+  testServoPort1Dv.setUint16(21 + i * 2, 2200 + i * 10, true); // servos 25-32
+}
+
+useTelemetryStore.getState().processPacket({
+  version: 2 as const,
+  sequence: 41,
+  systemId: 1,
+  componentId: 1,
+  messageId: MAVLINK_MSG_ID.SERVO_OUTPUT_RAW,
+  payload: testServoPort1Payload,
+  crc: 0,
+  raw: new Uint8Array(0),
+});
+
+servoState = useTelemetryStore.getState().servo;
+// Servos 1-8 MUST remain 1100..1800 from port 0 (NO flickering!), and ports[1] must be recorded
+if (servoState.servos[0] !== 1100 || servoState.servos[7] !== 1800) {
+  console.error('SERVO_OUTPUT_RAW: port 1 arrival caused servos 1-8 to flicker/overwrite!', servoState);
+  process.exit(1);
+}
+if (!servoState.ports[0] || !servoState.ports[1] || servoState.servos[16] !== 2100) {
+  console.error('SERVO_OUTPUT_RAW: port keying or high channel merge failed!', servoState);
+  process.exit(1);
+}
+console.log('Multi-port SERVO_OUTPUT_RAW non-flicker and port keying PASSED!');
+
+// 23. Test DISTANCE_SENSOR Orientation Filtering (only downward orientation 25 belongs in rangefinder)
+useTelemetryStore.setState({
+  rangefinder: {
+    distance: 3.2,
+    voltage: 0,
+    minDistance: 0.2,
+    maxDistance: 10.0,
+    signalQuality: 100,
+  },
+});
+
+// Send forward-facing proximity sensor: orientation = 0, distance = 0.8m
+const testDistSensorFwd = new Uint8Array(39);
+const testDistSensorFwdDv = new DataView(testDistSensorFwd.buffer);
+testDistSensorFwdDv.setUint16(4, 20, true); // min 0.2m
+testDistSensorFwdDv.setUint16(6, 400, true); // max 4.0m
+testDistSensorFwdDv.setUint16(8, 80, true); // dist 0.8m
+testDistSensorFwd[12] = 0; // orientation 0 (forward facing)
+testDistSensorFwd[38] = 90; // signal_quality
+
+useTelemetryStore.getState().processPacket({
+  version: 2 as const,
+  sequence: 50,
+  systemId: 1,
+  componentId: 1,
+  messageId: MAVLINK_MSG_ID.DISTANCE_SENSOR,
+  payload: testDistSensorFwd,
+  crc: 0,
+  raw: new Uint8Array(0),
+});
+
+let rfState = useTelemetryStore.getState().rangefinder;
+if (rfState.distance !== 3.2) {
+  console.error('DISTANCE_SENSOR: forward sensor (orientation 0) incorrectly overwrote downward rangefinder!', rfState);
+  process.exit(1);
+}
+
+// Send downward-facing sensor: orientation = 25 (MAV_SENSOR_ROTATION_PITCH_270), distance = 2.5m
+const testDistSensorDown = new Uint8Array(39);
+const testDistSensorDownDv = new DataView(testDistSensorDown.buffer);
+testDistSensorDownDv.setUint16(4, 20, true); // min 0.2m
+testDistSensorDownDv.setUint16(6, 1200, true); // max 12.0m
+testDistSensorDownDv.setUint16(8, 250, true); // dist 2.5m
+testDistSensorDown[12] = 25; // orientation 25 (downward)
+testDistSensorDown[38] = 95; // signal_quality
+
+useTelemetryStore.getState().processPacket({
+  version: 2 as const,
+  sequence: 51,
+  systemId: 1,
+  componentId: 1,
+  messageId: MAVLINK_MSG_ID.DISTANCE_SENSOR,
+  payload: testDistSensorDown,
+  crc: 0,
+  raw: new Uint8Array(0),
+});
+
+rfState = useTelemetryStore.getState().rangefinder;
+if (rfState.distance !== 2.5 || rfState.maxDistance !== 12.0) {
+  console.error('DISTANCE_SENSOR: downward sensor (orientation 25) failed to update rangefinder!', rfState);
+  process.exit(1);
+}
+console.log('DISTANCE_SENSOR downward orientation filtering PASSED!');
+
+// 24. Test MavFtpClient Queue Cancellation on abortCurrent()
+async function testFtpQueueCancel() {
+  const { mavFtpClient } = await import('../src/mavlink/ftp');
+  let secondRan = false;
+
+  // Queue first read
+  const p1 = mavFtpClient.readFile(1, 1, '@PARAM/first.pck', 239, 5000);
+  // Wait a tick for first read to begin executing and register currentAbort
+  await new Promise((r) => setTimeout(r, 10));
+
+  // Queue second read while first is active
+  const p2 = mavFtpClient.readFile(1, 1, '@PARAM/second.pck', 239, 5000).then((res) => {
+    if (res !== null) secondRan = true;
+    return res;
+  });
+
+  // Now abort
+  const aborted = mavFtpClient.abortCurrent();
+  if (!aborted) {
+    console.error('MavFtpClient abortCurrent failed to report active transfer aborted!');
+    process.exit(1);
+  }
+
+  const [res1, res2] = await Promise.all([p1, p2]);
+  if (res1 !== null || res2 !== null || secondRan) {
+    console.error('MavFtpClient cancel failed: queued transfer ran after cancel!', { res1, res2, secondRan });
+    process.exit(1);
+  }
+  console.log('MavFtpClient queue cancellation on abortCurrent PASSED!');
+}
+
+await testFtpQueueCancel();
 
 console.log('All MAVLink protocol unit tests PASSED!');

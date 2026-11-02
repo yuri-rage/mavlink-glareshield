@@ -7,9 +7,13 @@ import { CustomWidgetCreatorModal } from './components/editor/CustomWidgetCreato
 import { ProfileManagerModal } from './components/editor/ProfileManagerModal';
 import { useConnectionStore } from './store/connectionStore';
 import { CustomWidgetDefinition } from './types/widget';
+import { useAudioAlertListener } from './lib/audioAlerts';
 
 export const App: React.FC = () => {
   const { connect } = useConnectionStore();
+
+  // Global audio alerts listener active across all tabs
+  useAudioAlertListener();
 
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
   const [isWidgetCreatorOpen, setIsWidgetCreatorOpen] = useState(false);

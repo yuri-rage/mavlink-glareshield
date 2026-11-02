@@ -95,7 +95,8 @@ export interface VehicleRC {
 
 export interface VehicleServo {
   port: number;
-  servos: number[]; // up to 16 servo outputs (PWM us)
+  ports: Record<number, number[]>;
+  servos: number[]; // up to 32 servo outputs (PWM us)
 }
 
 export interface VehicleNavController {
@@ -478,6 +479,9 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   },
   servo: {
     port: 0,
+    ports: {
+      0: [1100, 1100, 1100, 1100, 1500, 1500, 1500, 1500, 0, 0, 0, 0, 0, 0, 0, 0],
+    },
     servos: [1100, 1100, 1100, 1100, 1500, 1500, 1500, 1500, 0, 0, 0, 0, 0, 0, 0, 0],
   },
   navController: {
@@ -770,7 +774,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         case MAVLINK_MSG_ID.RC_CHANNELS: {
           return {
             rc: {
-              chancount: data.chancount || 18,
+              chancount: data.chancount !== undefined ? data.chancount : 18,
               rssi: data.rssi,
               channels: data.channels,
             },
@@ -792,10 +796,21 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         }
 
         case MAVLINK_MSG_ID.SERVO_OUTPUT_RAW: {
+          const port = data.port ?? 0;
+          const ports = {
+            ...(state.servo.ports ?? {}),
+            [port]: data.servos,
+          };
+          const baseIndex = port * 16;
+          const merged = [...(state.servo.servos ?? [])];
+          for (let i = 0; i < data.servos.length; i++) {
+            merged[baseIndex + i] = data.servos[i];
+          }
           return {
             servo: {
-              port: data.port,
-              servos: data.servos,
+              port,
+              ports,
+              servos: merged,
             },
           };
         }
@@ -846,6 +861,10 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         }
 
         case MAVLINK_MSG_ID.DISTANCE_SENSOR: {
+          // Only downward-facing readings (orientation 25 = MAV_SENSOR_ROTATION_PITCH_270) belong in rangefinder
+          if (data.orientation !== 25) {
+            return state;
+          }
           return {
             rangefinder: {
               ...state.rangefinder,

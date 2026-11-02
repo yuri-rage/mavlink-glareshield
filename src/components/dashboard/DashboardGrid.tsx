@@ -11,6 +11,7 @@ import { StatusTextConsoleWidget } from '../widgets/StatusTextConsoleWidget';
 import { ParametersWidget } from '../widgets/ParametersWidget';
 import { TelemetryChartsWidget } from '../widgets/TelemetryChartsWidget';
 import { CustomWidgetRenderer } from '../widgets/CustomWidgetRenderer';
+import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import {
@@ -509,7 +510,9 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
 
                 {/* Render the actual widget with edit-lock protection */}
                 <div className={`h-full flex flex-col relative ${isEditing ? 'ring-1 ring-dashed ring-zinc-700 rounded-xl' : ''}`}>
-                  {renderWidgetContent(widget)}
+                  <ErrorBoundary fallbackTitle={getWidgetTitle(widget.widgetId)}>
+                    {renderWidgetContent(widget)}
+                  </ErrorBoundary>
                   {isEditing && (
                     <div
                       className="absolute inset-0 bg-zinc-950/40 backdrop-blur-[0.5px] rounded-xl z-20 cursor-grab active:cursor-grabbing flex items-center justify-center pointer-events-auto select-none"

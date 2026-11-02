@@ -275,7 +275,14 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
       };
     }
 
-    case MAVLINK_MSG_ID.GPS_RAW_INT:
+    case MAVLINK_MSG_ID.GPS_RAW_INT: {
+      const rawYaw = getUint16(50);
+      const yaw =
+        rawYaw === 36000
+          ? 0
+          : rawYaw > 0 && rawYaw < 36000
+          ? rawYaw / 100
+          : undefined;
       return {
         time_usec: Number(getBigUint64(0)),
         lat: getInt32(8) / 1e7,
@@ -287,11 +294,19 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         cog: getUint16(26) === 65535 ? 0 : getUint16(26) / 100, // Course over ground deg
         fix_type: getUint8(28),
         satellites_visible: getUint8(29),
-        yaw: getUint16(50) === 65535 ? 0 : getUint16(50) / 100, // cdeg to deg (0 if not configured/sentinel)
-        raw_yaw: getUint16(50),
+        yaw,
+        raw_yaw: rawYaw,
       };
+    }
 
-    case MAVLINK_MSG_ID.GPS2_RAW:
+    case MAVLINK_MSG_ID.GPS2_RAW: {
+      const rawYaw = getUint16(35);
+      const yaw =
+        rawYaw === 36000
+          ? 0
+          : rawYaw > 0 && rawYaw < 36000
+          ? rawYaw / 100
+          : undefined;
       return {
         time_usec: Number(getBigUint64(0)),
         lat: getInt32(8) / 1e7,
@@ -305,9 +320,10 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         fix_type: getUint8(32),
         satellites_visible: getUint8(33),
         dgps_numch: getUint8(34),
-        yaw: getUint16(35) === 65535 ? 0 : getUint16(35) / 100, // cdeg to deg
-        raw_yaw: getUint16(35),
+        yaw,
+        raw_yaw: rawYaw,
       };
+    }
 
     case MAVLINK_MSG_ID.VFR_HUD: {
       const rawHeading = getInt16(16);
