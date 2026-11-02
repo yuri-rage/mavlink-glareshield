@@ -1,61 +1,48 @@
-# MAVLink Glareshield 🛸
+# MAVLink Glareshield
 
-A modern, mobile-friendly, widget-based web application for bidirectional ArduPilot control and telemetry over WebSocket. Styled with the clean aesthetic of **shadcn/ui**, it features interactive avionics, an Autopilot Glareshield control panel, a tactical navigation map, dynamic bandwidth negotiation, and a declarative JSON custom widget engine.
+A widget-based web application for bidirectional ArduPilot control and telemetry over WebSocket. Features a main dashboard panel, heads-up display (HUD), tactical map, dynamic bandwidth negotiation, and a declarative JSON custom widget engine.
+
+Designed to remove the "glare" from more fully featured GCS applications and focus on core display elements with a high degree of flexibility and user customization options.
 
 ---
 
-## ✨ Features
+## Features
 
-- **Bidirectional MAVLink v2/v1 & MAVFTP Acceleration**:
-  - Direct raw binary framing and parsing in the browser via TypeScript.
-  - Supports ArduPilot Mega (Copter, Plane, Rover) dialect.
-  - **High-Speed MAVFTP**: Attempts MAVFTP (`FILE_TRANSFER_PROTOCOL` msg 110) first for both `@PARAM/param.pck` (compressed parameters) and `mission.dat` (waypoints), downloading in seconds. Automatically and seamlessly falls back to legacy streaming (`PARAM_REQUEST_LIST` and sequential `MISSION_REQUEST_LIST`) if MAVFTP is unavailable or times out.
+- **MAVLink v2/v1 & MAVFTP Engine**:
+  - In-browser binary framing, parsing, and CRC verification in TypeScript.
+  - ArduPilot Mega (Copter, Plane, Rover) dialect support with vehicle lock-on.
+  - High-speed MAVFTP for parameters (`@PARAM/param.pck`) and missions (`mission.dat`), with automatic fallback to legacy parameter and mission streaming.
   - Periodic GCS heartbeat broadcast with automatic reconnection.
-- **Autopilot Glareshield & Flight Controls**:
-  - Safety slide-to-confirm Arm / Disarm interlock.
-  - Flight mode switcher (Loiter, RTL, Auto, Guided, FBWA, Cruise, Stabilize, Land).
-  - Target Altitude and Speed adjusters with direct Guided commands.
+- **Autopilot Glareshield & Controls**:
+  - Slide-and-release confirmation to Arm / Disarm.
+  - Mode switcher (Loiter, RTL, Auto, Guided, FBWA, Cruise, Stabilize, Land).
+  - Target altitude and speed adjusters via `DO_REPOSITION` and `DO_CHANGE_SPEED`.
   - Quick action buttons (RTL, Pause/Loiter, Land, Takeoff).
-- **Tactical Navigation Map (Leaflet)**:
-  - Real-time vehicle marker with heading orientation vector and position trail.
-  - Live mission waypoint fetcher (`MISSION_REQUEST_LIST` / `MISSION_ITEM_INT`) displaying planned routes.
-  - Center/Follow vehicle toggle.
-- **Primary Flight Display (PFD)**:
-  - High-performance HTML5 Canvas artificial horizon with pitch ladder and roll arc.
-  - Dynamic airspeed and altitude indicator tapes.
-  - Heading tape readout.
+- **Heads-Up Display (HUD) & Tactical Map**:
+  - Canvas artificial horizon with pitch ladder, roll arc, airspeed, altitude, and heading tapes.
+  - Leaflet-based map with vehicle trail, mission waypoints, fences, and follow mode.
 - **Dynamic Bandwidth Management**:
-  - Automatically queries active dashboard widgets and requests `MAV_CMD_SET_MESSAGE_INTERVAL` only for rendered data.
-  - Bandwidth profiles:
-    - **SiK / Low Bandwidth (57600 baud)**: Clamped rates (max 4Hz) to protect serial radios.
-    - **Standard (115200 baud)**: Balanced telemetry (max 10Hz).
-    - **High Speed (WiFi / Ethernet)**: High-rate telemetry (up to 25Hz).
-- **Declarative Custom Widgets (JSON-Driven)**:
-  - Define custom telemetry instruments (stat cards, horizontal gauges, LED indicators, switches, action buttons) via pure JSON schema.
-  - Visual In-App Widget Builder.
-  - Upload or download `.widget.json` files.
-- **User-Editable Multi-Tab Dashboard**:
-  - Edit mode allowing users to resize (1/3, 1/2, Full width), reorder, add, or remove widgets.
-  - Create and manage custom dashboard tabs (e.g. *Flight Deck*, *Tactical Map*, *Instruments*, *Console*).
-  - Complete layout profile export and import via JSON.
-- **Lightweight Companion Bridge**:
-  - Standalone Python script (`bridge/bridge.py`) bridging UDP (SITL `14550`), TCP (`5760`), or Serial (`/dev/ttyUSB0`) to raw WebSockets.
-  - Built-in `--mock` simulator for offline development without needing physical hardware or SITL.
+  - Requests message intervals via `MAV_CMD_SET_MESSAGE_INTERVAL` only for widgets on screen.
+  - Bandwidth profiles: Low (SiK 57600 baud), Standard (115200 baud), and High (WiFi/Ethernet).
+- **Custom Widget Engine**:
+  - Declarative JSON widgets (stat cards, gauges, LED indicators, switches, action buttons with confirmation).
+  - Multi-tab customizable dashboard with layout persistence.
+- **Companion Bridge**:
+  - Python bridge (`bridge/bridge.py`) for UDP (SITL `14550`), TCP (`5760`), or Serial (`/dev/ttyUSB0`) to WebSockets.
+  - Built-in `--mock` mode for offline testing.
 
 ---
 
-## 🚀 Quickstart
+## Quickstart
 
 ### 1. Requirements
-If using Nix/NixOS, run `nix-shell` (or `direnv allow`) which provides Node.js, Python 3, and `websockets`. Otherwise ensure:
-- Node.js 18+ & npm
-- Python 3.8+ with `pip install websockets pyserial` (for the bridge)
+- Node.js 18+ and npm
+- Python 3.8+ with `websockets` and `pyserial` (or use `nix-shell` / `direnv`)
 
 ### 2. Start the Telemetry Bridge
-You can run the built-in simulated ArduPilot mock telemetry or connect to SITL / a serial radio:
 
 ```bash
-# Option A: Start in simulated mock mode (no ArduPilot needed)
+# Option A: Start simulated mock telemetry
 python3 bridge/bridge.py --mock
 
 # Option B: Connect to ArduPilot SITL over UDP
@@ -64,23 +51,22 @@ python3 bridge/bridge.py --udp 127.0.0.1:14550
 # Option C: Connect to physical telemetry radio over Serial
 python3 bridge/bridge.py --serial /dev/ttyUSB0:57600
 ```
-The bridge runs on `ws://0.0.0.0:56781`.
+By default, the bridge listens on `ws://127.0.0.1:56781`.
 
-### 3. Start the Web App
-In a new terminal:
+### 3. Start the Web Application
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000` in your browser. The app will automatically connect to `ws://localhost:56781` (and will remember any custom host or port entered in Link Settings across page reloads).
+Open `http://localhost:3000` in your browser. The application connects automatically to `ws://localhost:56781` (custom endpoints entered in Link Settings are saved to localStorage).
 
 ---
 
-## 🛠 Custom Widget JSON Specification
+## Custom Widget Specification
 
-Custom widgets are declarative and safe to share without arbitrary code execution:
+Custom widgets are declarative JSON definitions safe from arbitrary code execution:
 
 ```json
 {
@@ -99,7 +85,7 @@ Custom widgets are declarative and safe to share without arbitrary code executio
 }
 ```
 
-Or for a command trigger button:
+Action buttons enforce confirmation on execution:
 
 ```json
 {
@@ -110,25 +96,22 @@ Or for a command trigger button:
   "action": {
     "label": "Execute Return to Launch",
     "commandId": 20,
-    "params": [0, 0, 0, 0, 0, 0, 0]
+    "params": [0, 0, 0, 0, 0, 0, 0],
+    "confirmation": true
   }
 }
 ```
 
 ---
 
-## 🧪 Testing
-
-Run both the core MAVLink engine unit tests and the `pymavlink` golden vector validation suite:
+## Testing & Build
 
 ```bash
+# Run unit tests and pymavlink golden vector validation
 npm test
-```
 
-For advanced testing workflows (e.g. regenerating golden vectors or running live mock telemetry validation against `bridge/bridge.py`), see [tests/README.md](file:///home/yuri/Projects/mavlink-glareshield/tests/README.md).
-
-Build production bundle:
-
-```bash
+# Build production bundle
 npm run build
 ```
+
+For advanced testing workflows (e.g. regenerating golden vectors or running mock bridge telemetry validation), see [tests/README.md](tests/README.md).
