@@ -224,9 +224,6 @@ export const MapWidget: React.FC = () => {
     tileLayer.addTo(map);
     activeTileLayerRef.current = tileLayer;
 
-    // Zoom control in bottom right
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
-
     // Custom map panes for strict z-index layering (ensures trace and vehicle are never obscured)
     map.createPane('fencesPane');
     map.getPane('fencesPane')!.style.zIndex = '410';
