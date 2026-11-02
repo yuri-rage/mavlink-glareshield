@@ -5,26 +5,26 @@ import { messageRateManager } from '../../mavlink/rateManager';
 import { MAVLINK_MSG_ID } from '../../mavlink/messages';
 import { Card, CardContent } from '../ui/card';
 
-export const PfdWidget: React.FC = () => {
+export const HudWidget: React.FC = () => {
   const { attitude, vfr, position, missionWaypoints, currentWaypointSeq, imu } = useTelemetryStore();
   const { formatSpeed, formatAltitude, formatClimb, system: unitSystem, altitudeMode } = useUnitsStore();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Register subscription for high-frequency attitude, VFR, and IMU
   useEffect(() => {
-    messageRateManager.registerRequirement('pfd-attitude', MAVLINK_MSG_ID.ATTITUDE);
-    messageRateManager.registerRequirement('pfd-vfr', MAVLINK_MSG_ID.VFR_HUD);
-    messageRateManager.registerRequirement('pfd-pos', MAVLINK_MSG_ID.GLOBAL_POSITION_INT);
-    messageRateManager.registerRequirement('pfd-imu', MAVLINK_MSG_ID.RAW_IMU);
-    messageRateManager.registerRequirement('pfd-scaled-imu', MAVLINK_MSG_ID.SCALED_IMU);
-    messageRateManager.registerRequirement('pfd-highres-imu', MAVLINK_MSG_ID.HIGHRES_IMU);
+    messageRateManager.registerRequirement('hud-attitude', MAVLINK_MSG_ID.ATTITUDE);
+    messageRateManager.registerRequirement('hud-vfr', MAVLINK_MSG_ID.VFR_HUD);
+    messageRateManager.registerRequirement('hud-pos', MAVLINK_MSG_ID.GLOBAL_POSITION_INT);
+    messageRateManager.registerRequirement('hud-imu', MAVLINK_MSG_ID.RAW_IMU);
+    messageRateManager.registerRequirement('hud-scaled-imu', MAVLINK_MSG_ID.SCALED_IMU);
+    messageRateManager.registerRequirement('hud-highres-imu', MAVLINK_MSG_ID.HIGHRES_IMU);
     return () => {
-      messageRateManager.unregisterRequirement('pfd-attitude');
-      messageRateManager.unregisterRequirement('pfd-vfr');
-      messageRateManager.unregisterRequirement('pfd-pos');
-      messageRateManager.unregisterRequirement('pfd-imu');
-      messageRateManager.unregisterRequirement('pfd-scaled-imu');
-      messageRateManager.unregisterRequirement('pfd-highres-imu');
+      messageRateManager.unregisterRequirement('hud-attitude');
+      messageRateManager.unregisterRequirement('hud-vfr');
+      messageRateManager.unregisterRequirement('hud-pos');
+      messageRateManager.unregisterRequirement('hud-imu');
+      messageRateManager.unregisterRequirement('hud-scaled-imu');
+      messageRateManager.unregisterRequirement('hud-highres-imu');
     };
   }, []);
 

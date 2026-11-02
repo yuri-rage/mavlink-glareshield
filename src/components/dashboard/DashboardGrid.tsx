@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { PlacedWidget } from '../../types/widget';
 import { GlareshieldWidget } from '../glareshield/GlareshieldWidget';
-import { PfdWidget } from '../pfd/PfdWidget';
+import { HudWidget } from '../hud/HudWidget';
 import { MapWidget } from '../map/MapWidget';
 import { BatteryWidget } from '../widgets/BatteryWidget';
 import { GpsWidget } from '../widgets/GpsWidget';
@@ -72,8 +72,9 @@ export const DashboardGrid: React.FC = () => {
     switch (widgetId) {
       case 'built-in-glareshield':
         return <GlareshieldWidget />;
+      case 'built-in-hud':
       case 'built-in-pfd':
-        return <PfdWidget />;
+        return <HudWidget />;
       case 'built-in-map':
         return <MapWidget />;
       case 'built-in-battery-card':

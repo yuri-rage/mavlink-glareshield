@@ -44,10 +44,10 @@ const BUILT_IN_CATALOG = [
     defaultSpan: 12,
   },
   {
-    id: 'built-in-pfd',
-    name: 'Primary Flight Display (PFD)',
+    id: 'built-in-hud',
+    name: 'Heads-Up Display (HUD)',
     category: 'avionics',
-    description: 'Artificial horizon, pitch ladder, roll arc, altitude/airspeed ladders, and heading tape.',
+    description: 'Collimated artificial horizon, pitch ladder, roll arc, altitude/airspeed tapes, and waypoint counter.',
     icon: Compass,
     defaultSpan: 6,
   },

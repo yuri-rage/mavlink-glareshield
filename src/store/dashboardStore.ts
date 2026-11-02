@@ -11,7 +11,7 @@ const DEFAULT_PROFILE: DashboardProfile = {
       title: 'Flight Deck',
       widgets: [
         { instanceId: 'w-glareshield', widgetId: 'built-in-glareshield', colSpan: 12 },
-        { instanceId: 'w-pfd', widgetId: 'built-in-pfd', colSpan: 6 },
+        { instanceId: 'w-hud', widgetId: 'built-in-hud', colSpan: 6 },
         { instanceId: 'w-map-flight', widgetId: 'built-in-map', colSpan: 6 },
         { instanceId: 'w-vfr', widgetId: 'built-in-vfr-hud', colSpan: 4 },
         { instanceId: 'w-battery', widgetId: 'built-in-battery-card', colSpan: 4 },
