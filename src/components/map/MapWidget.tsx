@@ -7,7 +7,7 @@ import { MAVLINK_MSG_ID, getVehicleCategory } from '../../mavlink/messages';
 import { Card, CardHeader, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { RefreshCw, Crosshair, Maximize2, Shield, Flag, X, Eraser } from 'lucide-react';
+import { RefreshCw, Crosshair, Maximize2, Shield, Flag, X, Eraser, Upload } from 'lucide-react';
 import L from 'leaflet';
 
 function renderVehicleSvg(type: number): string {
@@ -128,6 +128,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
   const [followVehicle, setFollowVehicle] = useState(true);
   const [mapLayer, setMapLayer] = useState<MapLayerType>('satellite');
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [missionStatus, setMissionStatus] = useState<MissionManagerStatus>({
     isFetching: false,
     method: 'idle',
@@ -136,6 +138,30 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     rallyCount: 0,
     message: '',
   });
+
+  const handleFileDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = new Uint8Array(arrayBuffer);
+      const result = await missionManager.uploadFile(file.name, buffer);
+      if (!result.success && result.error) {
+        setUploadError(result.error);
+        setTimeout(() => setUploadError(null), 6000);
+      }
+    } catch (err: any) {
+      console.error('Failed to process dropped file:', err);
+      setUploadError(err?.message || 'Failed to read dropped file');
+      setTimeout(() => setUploadError(null), 6000);
+    }
+  };
 
   // Track waypoint/mission download state
   useEffect(() => {
@@ -863,19 +889,68 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       </CardHeader>
 
       {/* Progress / Status banner */}
-      {missionStatus.message && (
+      {(missionStatus.message || uploadError) && (
         <div className="bg-zinc-900/90 border-b border-zinc-800 px-4 py-1 text-[11px] font-mono flex items-center justify-between">
-          <span className={missionStatus.isFetching ? 'text-amber-400 animate-pulse font-medium' : 'text-emerald-400'}>
-            {missionStatus.message}
+          <span
+            className={
+              uploadError
+                ? 'text-red-400 font-medium'
+                : missionStatus.isFetching || missionStatus.isUploading
+                ? 'text-amber-400 animate-pulse font-medium'
+                : 'text-emerald-400'
+            }
+          >
+            {uploadError || missionStatus.message}
           </span>
-          {missionStatus.isFetching && missionStatus.method === 'ftp' && (
+          {!uploadError && (missionStatus.isFetching || missionStatus.isUploading) && missionStatus.method === 'ftp' && (
             <span className="text-[10px] text-sky-400 font-bold ml-2">MAVFTP</span>
+          )}
+          {!uploadError && (missionStatus.isFetching || missionStatus.isUploading) && missionStatus.method === 'legacy' && (
+            <span className="text-[10px] text-purple-400 font-bold ml-2">ITEM-BY-ITEM</span>
           )}
         </div>
       )}
 
-      <CardContent className="p-0 flex-1 relative min-h-[300px] h-full overflow-hidden">
+      <CardContent
+        className="p-0 flex-1 relative min-h-[300px] h-full overflow-hidden"
+        onDragEnter={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDraggingOver(true);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDraggingOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setIsDraggingOver(false);
+        }}
+        onDrop={handleFileDrop}
+      >
         <div ref={mapContainerRef} className="w-full h-full min-h-[300px] z-0" />
+
+        {/* Drag and Drop Upload Overlay */}
+        {isDraggingOver && (
+          <div className="absolute inset-0 z-[500] bg-zinc-950/85 backdrop-blur-sm border-2 border-dashed border-sky-400 rounded-lg flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-150 pointer-events-none">
+            <div className="p-4 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-400 mb-3 animate-bounce">
+              <Upload className="h-8 w-8" />
+            </div>
+            <div className="text-base font-bold text-white mb-1">
+              Drop Mission, Geofence, or Rally Point File
+            </div>
+            <div className="text-xs text-zinc-400 max-w-sm">
+              Supports <span className="text-sky-300 font-mono">.waypoints</span>,{' '}
+              <span className="text-sky-300 font-mono">.fence</span>,{' '}
+              <span className="text-sky-300 font-mono">.rally</span>,{' '}
+              <span className="text-sky-300 font-mono">.plan</span>, or binary{' '}
+              <span className="text-sky-300 font-mono">.dat</span>. Automatically uploads via high-speed MAVFTP with item-by-item fallback.
+            </div>
+          </div>
+        )}
 
         {/* GPS Coordinate readout HUD overlay in top-left (decoupled from bottom Leaflet attribution) */}
         <div className="absolute top-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] font-mono text-zinc-300 flex items-center gap-3 pointer-events-none shadow-md">

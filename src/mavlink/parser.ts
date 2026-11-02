@@ -435,6 +435,15 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         seq: getUint16(0),
       };
 
+    case MAVLINK_MSG_ID.MISSION_REQUEST:
+    case MAVLINK_MSG_ID.MISSION_REQUEST_INT:
+      return {
+        seq: getUint16(0),
+        target_system: getUint8(2),
+        target_component: getUint8(3),
+        mission_type: getUint8(4),
+      };
+
     case MAVLINK_MSG_ID.MISSION_COUNT:
       return {
         count: getUint16(0),
@@ -698,6 +707,15 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         volt2: voltage[1],
         volt3: voltage[2],
         volt4: voltage[3],
+      };
+    }
+
+    case MAVLINK_MSG_ID.GPS_RTCM_DATA: {
+      const len = getUint8(1);
+      return {
+        flags: getUint8(0),
+        len,
+        data: payload.subarray(2, 2 + Math.min(len, 180)),
       };
     }
 

@@ -1,6 +1,22 @@
 import { MAVLINK_MSG_ID, MAVLINK_MESSAGE_CRC_EXTRA, MAV_CMD } from './messages';
 import { calculateCrc } from './parser';
 
+export interface MissionItemIntData {
+  seq: number;
+  command: number;
+  frame?: number;
+  current?: number | boolean;
+  autocontinue?: number | boolean;
+  param1?: number;
+  param2?: number;
+  param3?: number;
+  param4?: number;
+  x?: number; // lat in degrees
+  y?: number; // lon in degrees
+  z?: number; // alt in meters
+  mission_type?: number;
+}
+
 export class MavlinkEncoder {
   private sequence = 0;
   private systemId: number;
@@ -270,5 +286,48 @@ export class MavlinkEncoder {
     payload[2] = type; // 0 = MAV_MISSION_ACCEPTED
     payload[3] = missionType;
     return this.packV2(MAVLINK_MSG_ID.MISSION_ACK, payload);
+  }
+
+  // Create MISSION_COUNT (Msg ID 44)
+  public createMissionCount(targetSystem = 1, targetComponent = 1, count: number, missionType = 0): Uint8Array {
+    const payload = new Uint8Array(5);
+    const view = new DataView(payload.buffer);
+    view.setUint16(0, count, true);
+    payload[2] = targetSystem;
+    payload[3] = targetComponent;
+    payload[4] = missionType;
+    return this.packV2(MAVLINK_MSG_ID.MISSION_COUNT, payload);
+  }
+
+  // Create MISSION_ITEM_INT (Msg ID 73)
+  public createMissionItemInt(targetSystem: number, targetComponent: number, item: MissionItemIntData): Uint8Array {
+    const payload = new Uint8Array(38);
+    const view = new DataView(payload.buffer);
+    view.setFloat32(0, item.param1 ?? 0, true);
+    view.setFloat32(4, item.param2 ?? 0, true);
+    view.setFloat32(8, item.param3 ?? 0, true);
+    view.setFloat32(12, item.param4 ?? 0, true);
+    view.setInt32(16, Math.round((item.x ?? 0) * 1e7), true);
+    view.setInt32(20, Math.round((item.y ?? 0) * 1e7), true);
+    view.setFloat32(24, item.z ?? 0, true);
+    view.setUint16(28, item.seq, true);
+    view.setUint16(30, item.command, true);
+    payload[32] = targetSystem;
+    payload[33] = targetComponent;
+    payload[34] = item.frame ?? 3; // 3 = MAV_FRAME_GLOBAL_RELATIVE_ALT
+    payload[35] = typeof item.current === 'boolean' ? (item.current ? 1 : 0) : (item.current ?? 0);
+    payload[36] = typeof item.autocontinue === 'boolean' ? (item.autocontinue ? 1 : 0) : (item.autocontinue ?? 1);
+    payload[37] = item.mission_type ?? 0;
+    return this.packV2(MAVLINK_MSG_ID.MISSION_ITEM_INT, payload);
+  }
+
+  // Inject GPS RTCM Data (Msg ID 233)
+  public createGpsRtcmData(flags: number, data: Uint8Array): Uint8Array {
+    const len = Math.min(data.length, 180);
+    const payload = new Uint8Array(2 + len);
+    payload[0] = flags;
+    payload[1] = len;
+    payload.set(data.subarray(0, len), 2);
+    return this.packV2(MAVLINK_MSG_ID.GPS_RTCM_DATA, payload);
   }
 }

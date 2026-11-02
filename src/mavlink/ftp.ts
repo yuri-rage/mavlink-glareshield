@@ -546,6 +546,229 @@ export class MavFtpClient {
       openFile();
     });
   }
+
+  /**
+   * Writes an entire file using high-speed MAVFTP (e.g. '@MISSION/mission.dat').
+   * Uses CreateFile (opcode 6), sends data in chunks with WriteFile (opcode 7),
+   * and terminates the session cleanly.
+   * Returns true on success, or false if MAVFTP fails or is rejected.
+   */
+  public writeFile(
+    targetSys?: number,
+    targetComp?: number,
+    filePath = '@MISSION/mission.dat',
+    data: Uint8Array = new Uint8Array(0),
+    chunkSize = 239,
+    timeoutMs = 1500,
+    onProgress?: (bytesWritten: number, totalBytes: number) => void
+  ): Promise<boolean> {
+    const generation = this.queueGeneration;
+    const nextTransfer = this.transferQueue.then(
+      () => {
+        if (this.queueGeneration !== generation) {
+          console.log(`[MAVFTP] Queued write of ${filePath} was cancelled.`);
+          return false;
+        }
+        return this.executeWriteFile(targetSys, targetComp, filePath, data, chunkSize, timeoutMs, onProgress);
+      },
+      () => {
+        if (this.queueGeneration !== generation) {
+          console.log(`[MAVFTP] Queued write of ${filePath} was cancelled.`);
+          return false;
+        }
+        return this.executeWriteFile(targetSys, targetComp, filePath, data, chunkSize, timeoutMs, onProgress);
+      }
+    );
+    this.transferQueue = nextTransfer.catch(() => false);
+    return nextTransfer;
+  }
+
+  private async executeWriteFile(
+    targetSys?: number,
+    targetComp?: number,
+    filePath = '@MISSION/mission.dat',
+    data: Uint8Array = new Uint8Array(0),
+    chunkSize = 239,
+    timeoutMs = 1500,
+    onProgress?: (bytesWritten: number, totalBytes: number) => void
+  ): Promise<boolean> {
+    const hb = useTelemetryStore.getState().heartbeat;
+    const sysId = targetSys ?? (hb.systemId > 0 ? hb.systemId : 1);
+    const compId = targetComp ?? (hb.componentId > 0 ? hb.componentId : 1);
+
+    return new Promise((resolve) => {
+      let isDone = false;
+      let session = 0;
+      let fileCreated = false;
+      let currentOffset = 0;
+      let stepTimer: any = null;
+      let retryCount = 0;
+
+      this.currentAbort = () => {
+        if (isDone) return;
+        console.log(`[MAVFTP] Write of ${filePath} was cancelled.`);
+        finish(false);
+      };
+
+      const finish = (success: boolean) => {
+        if (isDone) return;
+        isDone = true;
+        this.currentAbort = null;
+        if (stepTimer) clearTimeout(stepTimer);
+        unsubscribe();
+
+        if (success && onProgress) {
+          onProgress(data.length, data.length);
+        }
+
+        if (fileCreated) {
+          fileCreated = false;
+          const term = packFtpMessage(
+            sysId,
+            compId,
+            this.nextSeq(),
+            session,
+            FTP_OPCODE.TerminateSession,
+            0,
+            0
+          );
+          mavlinkConnection.send(term);
+          setTimeout(() => resolve(success), 60);
+        } else {
+          resolve(success);
+        }
+      };
+
+      const setStepTimeout = (action: () => void, ms = timeoutMs) => {
+        if (stepTimer) clearTimeout(stepTimer);
+        stepTimer = setTimeout(() => {
+          if (isDone) return;
+          if (retryCount < 3) {
+            retryCount++;
+            console.log(`[MAVFTP] Inactivity timeout on write ${filePath} at offset ${currentOffset} (retry ${retryCount})...`);
+            action();
+          } else {
+            console.warn(`[MAVFTP] Timeout writing ${filePath}, falling back...`);
+            finish(false);
+          }
+        }, ms);
+      };
+
+      const sendChunk = (offset: number) => {
+        if (isDone) return;
+        const remaining = data.length - offset;
+        if (remaining <= 0) {
+          console.log(`[MAVFTP] Successfully wrote all ${data.length} bytes to ${filePath}.`);
+          finish(true);
+          return;
+        }
+
+        const len = Math.min(remaining, chunkSize);
+        const chunk = data.subarray(offset, offset + len);
+
+        const writeMsg = packFtpMessage(
+          sysId,
+          compId,
+          this.nextSeq(),
+          session,
+          FTP_OPCODE.WriteFile,
+          len,
+          offset,
+          chunk
+        );
+        mavlinkConnection.send(writeMsg);
+        setStepTimeout(() => sendChunk(offset));
+      };
+
+      const unsubscribe = mavlinkConnection.onPacket((packet: MavlinkPacket) => {
+        if (isDone) return;
+        if (packet.messageId !== MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL) return;
+
+        const ftp = parseFtpPayload(packet.payload);
+        if (!ftp) return;
+
+        // Phase 1: Waiting for CreateFile ACK/NACK
+        if (!fileCreated) {
+          if (ftp.req_opcode !== FTP_OPCODE.CreateFile) return;
+
+          if (ftp.opcode === FTP_OPCODE.Nack) {
+            const errCode = ftp.data[0];
+            console.warn(`[MAVFTP] CreateFile Nack for ${filePath} (code=${errCode}), falling back...`);
+            finish(false);
+            return;
+          }
+
+          if (ftp.opcode === FTP_OPCODE.Ack) {
+            if (stepTimer) clearTimeout(stepTimer);
+            retryCount = 0;
+            session = ftp.session;
+            fileCreated = true;
+            console.log(`[MAVFTP] CreateFile succeeded for ${filePath}. Session: ${session}`);
+
+            if (data.length === 0) {
+              finish(true);
+              return;
+            }
+
+            sendChunk(0);
+            return;
+          }
+          return;
+        }
+
+        // Phase 2: Writing chunks
+        if (ftp.session !== session) return;
+        if (ftp.req_opcode !== FTP_OPCODE.WriteFile) return;
+
+        if (ftp.opcode === FTP_OPCODE.Nack) {
+          const errCode = ftp.data[0];
+          console.warn(`[MAVFTP] WriteFile Nack for ${filePath} at offset ${currentOffset} (code=${errCode}), falling back...`);
+          finish(false);
+          return;
+        }
+
+        if (ftp.opcode === FTP_OPCODE.Ack) {
+          retryCount = 0;
+          const chunkSizeSent = Math.min(data.length - currentOffset, chunkSize);
+          currentOffset += chunkSizeSent;
+
+          if (onProgress) {
+            onProgress(Math.min(currentOffset, data.length), data.length);
+          }
+
+          if (currentOffset >= data.length) {
+            console.log(`[MAVFTP] Completed writing ${filePath} (${data.length} bytes).`);
+            finish(true);
+          } else {
+            sendChunk(currentOffset);
+          }
+        }
+      });
+
+      // Step 1: Create file
+      const createFile = () => {
+        const pathBytes = new TextEncoder().encode(filePath);
+        const pathWithNull = new Uint8Array(pathBytes.length + 1);
+        pathWithNull.set(pathBytes);
+        pathWithNull[pathBytes.length] = 0;
+
+        const createMsg = packFtpMessage(
+          sysId,
+          compId,
+          this.nextSeq(),
+          0,
+          FTP_OPCODE.CreateFile,
+          pathBytes.length,
+          0,
+          pathWithNull
+        );
+        mavlinkConnection.send(createMsg);
+        setStepTimeout(() => createFile());
+      };
+
+      createFile();
+    });
+  }
 }
 
 export const mavFtpClient = new MavFtpClient();

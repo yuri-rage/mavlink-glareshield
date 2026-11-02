@@ -2,15 +2,24 @@ import { mavlinkConnection } from './connection';
 import { MAVLINK_MSG_ID } from './messages';
 import { decodePayload, MavlinkPacket } from './parser';
 import { mavFtpClient } from './ftp';
+import { MissionItemIntData } from './encoder';
+import { parseDroppedMissionFile, packDatFile, MissionFileType } from './missionFileParser';
 import { useTelemetryStore, MissionWaypoint, FencePoint, RallyPoint } from '../store/telemetryStore';
 
 export interface MissionManagerStatus {
   isFetching: boolean;
+  isUploading?: boolean;
   method: 'idle' | 'ftp' | 'legacy';
   waypointCount: number;
   fenceCount: number;
   rallyCount: number;
   message?: string;
+  uploadProgress?: {
+    type: MissionFileType;
+    current: number;
+    total: number;
+    method: 'ftp' | 'legacy';
+  };
 }
 
 export class MissionManager {
@@ -68,6 +77,359 @@ export class MissionManager {
   private notify() {
     this.listeners.forEach((l) => l(this.status.isFetching, this.status.waypointCount, this.status.method, this.status));
     this.statusListeners.forEach((l) => l(this.status));
+  }
+
+  /**
+   * Universal sequential MAVLink Mission protocol uploader for a specific mission_type.
+   * missionType: 0 = Waypoints, 1 = Geofence, 2 = Rally points.
+   */
+  public uploadLegacyItems(
+    missionType: number,
+    items: MissionItemIntData[],
+    targetSys: number,
+    targetComp: number,
+    timeoutMs = 2000,
+    onProgress?: (sent: number, total: number) => void
+  ): Promise<boolean> {
+    if (this.isCancelled) return Promise.resolve(false);
+
+    return new Promise((resolve) => {
+      let isDone = false;
+      let retryCount = 0;
+      let timer: any = null;
+      const encoder = mavlinkConnection.getEncoder();
+
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        unsubscribe();
+      };
+
+      const finish = (success: boolean) => {
+        if (isDone) return;
+        isDone = true;
+        this.legacyAbort = null;
+        cleanup();
+        resolve(success);
+      };
+
+      this.legacyAbort = () => {
+        if (isDone) return;
+        console.log(`[MissionManager] Legacy upload for type=${missionType} cancelled.`);
+        finish(false);
+      };
+
+      const setTimer = (fn: () => void, ms = timeoutMs) => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          if (isDone) return;
+          if (retryCount < 3) {
+            retryCount++;
+            console.log(`[MissionManager] Retrying legacy upload for type=${missionType} (attempt ${retryCount + 1})...`);
+            fn();
+          } else {
+            console.warn(`[MissionManager] Timeout waiting for legacy upload type=${missionType}.`);
+            finish(false);
+          }
+        }, ms);
+      };
+
+      const sendItem = (seq: number) => {
+        if (isDone) return;
+        const item = items.find((it) => it.seq === seq) || items[seq];
+        if (!item) {
+          console.warn(`[MissionManager] Requested item seq ${seq} not found in upload list (size ${items.length}).`);
+          finish(false);
+          return;
+        }
+
+        const itemPacket = encoder.createMissionItemInt(targetSys, targetComp, {
+          ...item,
+          seq,
+          mission_type: missionType,
+        });
+        mavlinkConnection.send(itemPacket);
+        if (onProgress) {
+          onProgress(seq + 1, items.length);
+        }
+        setTimer(() => sendItem(seq));
+      };
+
+      const sendCount = () => {
+        const countPacket = encoder.createMissionCount(targetSys, targetComp, items.length, missionType);
+        mavlinkConnection.send(countPacket);
+        setTimer(sendCount);
+      };
+
+      const unsubscribe = mavlinkConnection.onPacket((packet: MavlinkPacket) => {
+        if (isDone) return;
+
+        if (
+          packet.messageId === MAVLINK_MSG_ID.MISSION_REQUEST_INT ||
+          packet.messageId === MAVLINK_MSG_ID.MISSION_REQUEST
+        ) {
+          const data = decodePayload(packet.messageId, packet.payload);
+          const packetType = data.mission_type ?? 0;
+          if (packetType !== missionType) return;
+
+          retryCount = 0;
+          const reqSeq = data.seq;
+          sendItem(reqSeq);
+        } else if (packet.messageId === MAVLINK_MSG_ID.MISSION_ACK) {
+          const data = decodePayload(packet.messageId, packet.payload);
+          const packetType = data.mission_type ?? 0;
+          if (packetType !== missionType) return;
+
+          retryCount = 0;
+          if (data.type === 0) {
+            console.log(`[MissionManager] Vehicle accepted all ${items.length} items for mission_type=${missionType}!`);
+            finish(true);
+          } else {
+            console.warn(`[MissionManager] Vehicle rejected mission upload for type=${missionType} with ACK code ${data.type}`);
+            finish(false);
+          }
+        }
+      });
+
+      sendCount();
+    });
+  }
+
+  /**
+   * Uploads dropped file (mission, fence, or rally) via MAVFTP with item-by-item fallback.
+   */
+  public async uploadFile(
+    filename: string,
+    buffer: Uint8Array,
+    targetSys?: number,
+    targetComp?: number
+  ): Promise<{ success: boolean; type: MissionFileType; count: number; method: 'ftp' | 'legacy'; error?: string }> {
+    const parsed = parseDroppedMissionFile(filename, buffer);
+    if (!parsed || parsed.items.length === 0) {
+      return {
+        success: false,
+        type: 'mission',
+        count: 0,
+        method: 'idle' as any,
+        error: 'Unable to parse file. Format not recognized or empty.',
+      };
+    }
+
+    const hb = useTelemetryStore.getState().heartbeat;
+    const sysId = targetSys ?? (hb.systemId > 0 ? hb.systemId : 1);
+    const compId = targetComp ?? (hb.componentId > 0 ? hb.componentId : 1);
+
+    this.targetSys = sysId;
+    this.targetComp = compId;
+    this.isCancelled = false;
+    const typeName = parsed.type === 'mission' ? 'Mission' : parsed.type === 'fence' ? 'Geofence' : 'Rally points';
+    const ftpPath = parsed.type === 'mission' ? '@MISSION/mission.dat' : parsed.type === 'fence' ? '@MISSION/fence.dat' : '@MISSION/rally.dat';
+
+    this.setStatus({
+      isUploading: true,
+      method: 'ftp',
+      message: `Uploading ${typeName} (${parsed.items.length} items) via MAVFTP...`,
+      uploadProgress: {
+        type: parsed.type,
+        current: 0,
+        total: parsed.items.length,
+        method: 'ftp',
+      },
+    });
+
+    // 1. Try fast MAVFTP
+    let ftpSuccess = false;
+    const datBuffer = parsed.rawDat || packDatFile(parsed.items, parsed.missionType);
+
+    try {
+      console.log(`[MissionManager] Attempting MAVFTP upload to ${ftpPath} (${datBuffer.length} bytes)...`);
+      ftpSuccess = await mavFtpClient.writeFile(
+        sysId,
+        compId,
+        ftpPath,
+        datBuffer,
+        239,
+        1500,
+        (written, total) => {
+          const pct = total > 0 ? Math.round((written / total) * 100) : 0;
+          this.setStatus({
+            message: `MAVFTP Upload: ${(written / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} KB (${pct}%)`,
+          });
+        }
+      );
+    } catch (err) {
+      console.warn(`[MissionManager] MAVFTP upload failed with exception:`, err);
+      ftpSuccess = false;
+    }
+
+    if (ftpSuccess) {
+      console.log(`[MissionManager] MAVFTP upload to ${ftpPath} succeeded!`);
+      this.setStatus({
+        isUploading: false,
+        method: 'idle',
+        message: `${typeName} (${parsed.items.length} items) uploaded via MAVFTP successfully!`,
+        uploadProgress: undefined,
+      });
+
+      // Update store state with newly uploaded items
+      if (parsed.type === 'mission') {
+        const wps: MissionWaypoint[] = parsed.items.map((it) => ({
+          seq: it.seq,
+          command: it.command,
+          lat: it.x ?? 0,
+          lon: it.y ?? 0,
+          alt: it.z ?? 0,
+          current: Boolean(it.current),
+          frame: it.frame ?? 3,
+          param1: it.param1,
+          param2: it.param2,
+          param3: it.param3,
+          param4: it.param4,
+        }));
+        useTelemetryStore.setState({ missionWaypoints: wps });
+      } else if (parsed.type === 'fence') {
+        const fps: FencePoint[] = parsed.items.map((it) => {
+          const isCircle = it.command === 5004 || it.command === 5005 || (it.command === 5003 && (it.param1 ?? 0) > 0);
+          const isInclusion = it.command === 5001 || it.command === 5005 || (it.command === 5003 && (it.param1 ?? 0) > 0);
+          return {
+            seq: it.seq,
+            command: it.command,
+            lat: it.x ?? 0,
+            lon: it.y ?? 0,
+            alt: it.z ?? 0,
+            param1: it.param1,
+            vertexCount: !isCircle ? Math.round(it.param1 ?? 0) : undefined,
+            radius: isCircle ? it.param1 : undefined,
+            inclusion: isInclusion,
+          };
+        });
+        useTelemetryStore.setState({ fencePoints: fps });
+      } else if (parsed.type === 'rally') {
+        const rps: RallyPoint[] = parsed.items.map((it) => ({
+          seq: it.seq,
+          lat: it.x ?? 0,
+          lon: it.y ?? 0,
+          alt: it.z ?? 0,
+        }));
+        useTelemetryStore.setState({ rallyPoints: rps });
+      }
+
+      return {
+        success: true,
+        type: parsed.type,
+        count: parsed.items.length,
+        method: 'ftp',
+      };
+    }
+
+    // 2. Fall back to MAVLink item-by-item protocol
+    console.warn(`[MissionManager] MAVFTP upload unavailable or rejected, falling back to legacy item-by-item stream...`);
+    this.setStatus({
+      isUploading: true,
+      method: 'legacy',
+      message: `Uploading ${typeName} via MAVLink item-by-item (0 / ${parsed.items.length})...`,
+      uploadProgress: {
+        type: parsed.type,
+        current: 0,
+        total: parsed.items.length,
+        method: 'legacy',
+      },
+    });
+
+    const legacySuccess = await this.uploadLegacyItems(
+      parsed.missionType,
+      parsed.items,
+      sysId,
+      compId,
+      2000,
+      (sent, total) => {
+        this.setStatus({
+          message: `Uploading ${typeName} item-by-item: ${sent} / ${total}`,
+          uploadProgress: {
+            type: parsed.type,
+            current: sent,
+            total,
+            method: 'legacy',
+          },
+        });
+      }
+    );
+
+    if (legacySuccess) {
+      console.log(`[MissionManager] Legacy item-by-item upload for ${typeName} completed successfully!`);
+      this.setStatus({
+        isUploading: false,
+        method: 'idle',
+        message: `${typeName} (${parsed.items.length} items) uploaded successfully via MAVLink item-by-item!`,
+        uploadProgress: undefined,
+      });
+
+      // Update store state
+      if (parsed.type === 'mission') {
+        const wps: MissionWaypoint[] = parsed.items.map((it) => ({
+          seq: it.seq,
+          command: it.command,
+          lat: it.x ?? 0,
+          lon: it.y ?? 0,
+          alt: it.z ?? 0,
+          current: Boolean(it.current),
+          frame: it.frame ?? 3,
+          param1: it.param1,
+          param2: it.param2,
+          param3: it.param3,
+          param4: it.param4,
+        }));
+        useTelemetryStore.setState({ missionWaypoints: wps });
+      } else if (parsed.type === 'fence') {
+        const fps: FencePoint[] = parsed.items.map((it) => {
+          const isCircle = it.command === 5004 || it.command === 5005 || (it.command === 5003 && (it.param1 ?? 0) > 0);
+          const isInclusion = it.command === 5001 || it.command === 5005 || (it.command === 5003 && (it.param1 ?? 0) > 0);
+          return {
+            seq: it.seq,
+            command: it.command,
+            lat: it.x ?? 0,
+            lon: it.y ?? 0,
+            alt: it.z ?? 0,
+            param1: it.param1,
+            vertexCount: !isCircle ? Math.round(it.param1 ?? 0) : undefined,
+            radius: isCircle ? it.param1 : undefined,
+            inclusion: isInclusion,
+          };
+        });
+        useTelemetryStore.setState({ fencePoints: fps });
+      } else if (parsed.type === 'rally') {
+        const rps: RallyPoint[] = parsed.items.map((it) => ({
+          seq: it.seq,
+          lat: it.x ?? 0,
+          lon: it.y ?? 0,
+          alt: it.z ?? 0,
+        }));
+        useTelemetryStore.setState({ rallyPoints: rps });
+      }
+
+      return {
+        success: true,
+        type: parsed.type,
+        count: parsed.items.length,
+        method: 'legacy',
+      };
+    }
+
+    const errMsg = `Failed to upload ${typeName} to vehicle. Vehicle did not acknowledge transfer.`;
+    console.error(`[MissionManager] ${errMsg}`);
+    this.setStatus({
+      isUploading: false,
+      method: 'idle',
+      message: errMsg,
+      uploadProgress: undefined,
+    });
+
+    return {
+      success: false,
+      type: parsed.type,
+      count: parsed.items.length,
+      method: 'legacy',
+      error: errMsg,
+    };
   }
 
   /**

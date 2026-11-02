@@ -1487,4 +1487,201 @@ async function testFtpQueueCancel() {
 
 await testFtpQueueCancel();
 
+// 25. Test Mission File Packing, Parsing, and Drop Handling
+import { packDatFile, parseDroppedMissionFile, parseQgcWplText, parseQgcPlanJson } from '../src/mavlink/missionFileParser.ts';
+
+// Test 25a: packDatFile roundtrip with unpackMissionDat
+const testWps = [
+  { seq: 0, command: 16, x: 37.7749, y: -122.4194, z: 10, current: 1, frame: 0, param1: 0, param2: 0, param3: 0, param4: 0, mission_type: 0 },
+  { seq: 1, command: 16, x: 37.7760, y: -122.4180, z: 50, current: 0, frame: 3, param1: 0, param2: 0, param3: 0, param4: 0, mission_type: 0 },
+];
+const packedDat = packDatFile(testWps, 0);
+const unpackedDat = missionManager.unpackMissionDat(packedDat);
+if (!unpackedDat || unpackedDat.length !== 2 || Math.abs(unpackedDat[1].lat - 37.7760) > 0.0001 || unpackedDat[1].alt !== 50) {
+  console.error('packDatFile -> unpackMissionDat roundtrip failed!', unpackedDat);
+  process.exit(1);
+}
+console.log('packDatFile roundtrip with unpackMissionDat PASSED!');
+
+// Test 25b: QGC WPL 110 text parsing
+const sampleWplText = `QGC WPL 110
+0\t1\t0\t16\t0\t0\t0\t0\t37.774900\t-122.419400\t10.000000\t1
+1\t0\t3\t16\t0\t0\t0\t0\t37.776000\t-122.418000\t50.000000\t1
+2\t0\t3\t20\t0\t0\t0\t0\t0.000000\t0.000000\t0.000000\t1`;
+
+const parsedWpl = parseDroppedMissionFile('flight_plan.waypoints', new TextEncoder().encode(sampleWplText));
+if (!parsedWpl || parsedWpl.type !== 'mission' || parsedWpl.items.length !== 3 || parsedWpl.items[1].command !== 16) {
+  console.error('parseDroppedMissionFile failed on QGC WPL text!', parsedWpl);
+  process.exit(1);
+}
+console.log('QGC WPL 110 text parsing PASSED!');
+
+// Test 25c: QGC Fence file parsing
+const sampleFenceText = `QGC WPL 110
+0\t0\t0\t5001\t4\t0\t0\t0\t37.775000\t-122.420000\t0.000000\t1
+1\t0\t0\t5001\t4\t0\t0\t0\t37.775000\t-122.418000\t0.000000\t1
+2\t0\t0\t5001\t4\t0\t0\t0\t37.773000\t-122.418000\t0.000000\t1
+3\t0\t0\t5001\t4\t0\t0\t0\t37.773000\t-122.420000\t0.000000\t1`;
+
+const parsedFence = parseDroppedMissionFile('boundary.fence', new TextEncoder().encode(sampleFenceText));
+if (!parsedFence || parsedFence.type !== 'fence' || parsedFence.items.length !== 4 || parsedFence.missionType !== 1) {
+  console.error('parseDroppedMissionFile failed on fence text!', parsedFence);
+  process.exit(1);
+}
+console.log('QGC Fence file parsing PASSED!');
+
+// Test 25d: QGC Plan JSON format parsing
+const samplePlanJson = JSON.stringify({
+  fileType: 'Plan',
+  version: 1,
+  mission: {
+    plannedHomePosition: [37.7749, -122.4194, 15],
+    items: [
+      { command: 16, frame: 3, autoContinue: true, params: [0, 0, 0, 0, 37.78, -122.41, 60] },
+      { command: 20, frame: 2, autoContinue: true, params: [0, 0, 0, 0, 0, 0, 0] },
+    ],
+  },
+});
+const parsedPlan = parseDroppedMissionFile('survey.plan', new TextEncoder().encode(samplePlanJson));
+if (!parsedPlan || parsedPlan.type !== 'mission' || parsedPlan.items.length !== 3 || Math.abs(parsedPlan.items[1].x! - 37.78) > 0.001) {
+  console.error('parseDroppedMissionFile failed on QGC plan JSON!', parsedPlan);
+  process.exit(1);
+}
+console.log('QGC Plan JSON parsing PASSED!');
+
+// 26. Test GPS_RTCM_DATA and Mission Upload Encoder Methods
+const rtcmData = new Uint8Array([0xd3, 0x00, 0x04, 0x41, 0x10, 0x00]);
+const rtcmPacket = encoder.createGpsRtcmData(0x08, rtcmData);
+const parsedRtcm = parser.parse(rtcmPacket);
+if (parsedRtcm.length !== 1 || parsedRtcm[0].messageId !== MAVLINK_MSG_ID.GPS_RTCM_DATA) {
+  console.error('Failed to parse GPS_RTCM_DATA packet!', parsedRtcm);
+  process.exit(1);
+}
+const decodedRtcm = decodePayload(MAVLINK_MSG_ID.GPS_RTCM_DATA, parsedRtcm[0].payload);
+if (decodedRtcm.flags !== 0x08 || decodedRtcm.len !== 6 || decodedRtcm.data.length !== 6 || decodedRtcm.data[0] !== 0xd3) {
+  console.error('Decoded GPS_RTCM_DATA mismatch!', decodedRtcm);
+  process.exit(1);
+}
+console.log('GPS_RTCM_DATA encode and decode PASSED!');
+
+// Test createMissionCount and createMissionItemInt
+const encCountPacket = encoder.createMissionCount(1, 1, 5, 1);
+const parsedEncCount = parser.parse(encCountPacket);
+const decodedEncCount = decodePayload(MAVLINK_MSG_ID.MISSION_COUNT, parsedEncCount[0].payload);
+if (decodedEncCount.count !== 5 || decodedEncCount.mission_type !== 1) {
+  console.error('createMissionCount payload mismatch!', decodedEncCount);
+  process.exit(1);
+}
+
+const encItemPacket = encoder.createMissionItemInt(1, 1, {
+  seq: 2,
+  command: 16,
+  frame: 3,
+  current: 0,
+  autocontinue: 1,
+  x: 37.7749,
+  y: -122.4194,
+  z: 100,
+  mission_type: 0,
+});
+const parsedEncItem = parser.parse(encItemPacket);
+const decodedEncItem = decodePayload(MAVLINK_MSG_ID.MISSION_ITEM_INT, parsedEncItem[0].payload);
+if (decodedEncItem.seq !== 2 || decodedEncItem.command !== 16 || Math.abs(decodedEncItem.x - 37.7749) > 0.0001 || decodedEncItem.z !== 100) {
+  console.error('createMissionItemInt payload mismatch!', decodedEncItem);
+  process.exit(1);
+}
+console.log('createMissionCount & createMissionItemInt PASSED!');
+
+// 27. Test MissionManager uploadFile with MAVFTP failure and item-by-item fallback
+import { mavlinkConnection } from '../src/mavlink/connection.ts';
+
+async function testMissionUploadFallback() {
+  const originalSend = mavlinkConnection.send.bind(mavlinkConnection);
+  let step = 0;
+
+  const emitPacket = (pktBytes: Uint8Array) => {
+    const packets = new MavlinkParser().parse(pktBytes);
+    for (const pkt of packets) {
+      for (const listener of (mavlinkConnection as any).packetListeners) {
+        listener(pkt);
+      }
+    }
+  };
+
+  // Intercept outbound MAVLink traffic to simulate vehicle replies
+  (mavlinkConnection as any).send = (data: Uint8Array) => {
+    const packets = new MavlinkParser().parse(data);
+    for (const pkt of packets) {
+      if (pkt.messageId === MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL) {
+        // Step 1: Vehicle NACKs CreateFile to simulate vehicle without MAVFTP mission support
+        const nackPayload = new Uint8Array(254);
+        nackPayload[1] = 255; // target system (GCS)
+        nackPayload[2] = 190; // target component (GCS)
+        const dv = new DataView(nackPayload.buffer, 3, 251);
+        dv.setUint16(0, 1, true); // seq
+        dv.setUint8(2, 0); // session
+        dv.setUint8(3, 129); // NACK opcode
+        dv.setUint8(4, 1); // size
+        dv.setUint8(5, FTP_OPCODE.CreateFile); // req_opcode
+        nackPayload[15] = 1; // FAIL error code
+        const nackPkt = encoder.packV2(MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL, nackPayload);
+        setTimeout(() => {
+          emitPacket(nackPkt);
+        }, 10);
+      } else if (pkt.messageId === MAVLINK_MSG_ID.MISSION_COUNT) {
+        // Step 2: Vehicle replies to MISSION_COUNT with MISSION_REQUEST_INT for seq 0
+        const req0Payload = new Uint8Array(5);
+        const req0Dv = new DataView(req0Payload.buffer);
+        req0Dv.setUint16(0, 0, true); // seq 0
+        req0Payload[2] = 255;
+        req0Payload[3] = 190;
+        req0Payload[4] = 0; // mission_type
+        const req0Pkt = encoder.packV2(MAVLINK_MSG_ID.MISSION_REQUEST_INT, req0Payload);
+        setTimeout(() => {
+          emitPacket(req0Pkt);
+        }, 10);
+      } else if (pkt.messageId === MAVLINK_MSG_ID.MISSION_ITEM_INT) {
+        const itemData = decodePayload(MAVLINK_MSG_ID.MISSION_ITEM_INT, pkt.payload);
+        if (itemData.seq === 0) {
+          // Request seq 1
+          const req1Payload = new Uint8Array(5);
+          const req1Dv = new DataView(req1Payload.buffer);
+          req1Dv.setUint16(0, 1, true); // seq 1
+          req1Payload[2] = 255;
+          req1Payload[3] = 190;
+          req1Payload[4] = 0;
+          const req1Pkt = encoder.packV2(MAVLINK_MSG_ID.MISSION_REQUEST_INT, req1Payload);
+          setTimeout(() => {
+            emitPacket(req1Pkt);
+          }, 10);
+        } else if (itemData.seq === 1) {
+          // Send MISSION_ACK
+          const ackPayload = new Uint8Array(4);
+          ackPayload[0] = 255;
+          ackPayload[1] = 190;
+          ackPayload[2] = 0; // MAV_MISSION_ACCEPTED
+          ackPayload[3] = 0; // mission_type = 0
+          const ackPkt = encoder.packV2(MAVLINK_MSG_ID.MISSION_ACK, ackPayload);
+          setTimeout(() => {
+            emitPacket(ackPkt);
+          }, 10);
+        }
+      }
+    }
+  };
+
+  try {
+    const uploadResult = await missionManager.uploadFile('sample.waypoints', new TextEncoder().encode(sampleWplText.split('\n').slice(0, 3).join('\n')));
+    if (!uploadResult.success || uploadResult.method !== 'legacy' || uploadResult.count !== 2) {
+      console.error('uploadFile fallback to legacy item-by-item failed!', uploadResult);
+      process.exit(1);
+    }
+    console.log('uploadFile MAVFTP -> item-by-item fallback PASSED!');
+  } finally {
+    (mavlinkConnection as any).send = originalSend;
+  }
+}
+
+await testMissionUploadFallback();
+
 console.log('All MAVLink protocol unit tests PASSED!');
