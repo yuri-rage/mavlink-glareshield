@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTelemetryStore } from '../../store/telemetryStore';
-import { useUnitsStore } from '../../store/unitsStore';
+import { useUnitsStore, UnitSystem } from '../../store/unitsStore';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { Card, CardContent } from '../ui/card';
@@ -31,12 +31,38 @@ import {
   Zap,
 } from 'lucide-react';
 
+function toActiveUnits(speedMs: number, system: UnitSystem): number {
+  switch (system) {
+    case 'ms':
+      return speedMs;
+    case 'kmh':
+      return speedMs * 3.6;
+    case 'mph':
+      return speedMs * 2.23693629;
+    case 'kts':
+      return speedMs * 1.94384449;
+  }
+}
+
+function fromActiveUnitsToMs(speedActive: number, system: UnitSystem): number {
+  switch (system) {
+    case 'ms':
+      return speedActive;
+    case 'kmh':
+      return speedActive / 3.6;
+    case 'mph':
+      return speedActive / 2.23693629;
+    case 'kts':
+      return speedActive / 1.94384449;
+  }
+}
+
 export const GlareshieldWidget: React.FC = () => {
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
   const vfr = useTelemetryStore((state) => state.vfr);
   const gps = useTelemetryStore((state) => state.gps);
-  const { formatSpeed } = useUnitsStore();
-  const [targetSpeed, setTargetSpeed] = useState<number>(5);
+  const { formatSpeed, system } = useUnitsStore();
+  const [manualTargetSpeed, setManualTargetSpeed] = useState<number | null>(null);
   const [sliderValue, setSliderValue] = useState<number>(0);
   const dragStartedFromLeft = useRef(false);
 
@@ -96,13 +122,27 @@ export const GlareshieldWidget: React.FC = () => {
     mavlinkConnection.send(cmd);
   };
 
-  const handleSetSpeed = (customSpeed?: number) => {
-    const speed = customSpeed ?? targetSpeed;
-    if (customSpeed !== undefined) {
-      setTargetSpeed(customSpeed);
+  const activeUnit = system === 'ms' ? 'm/s' : system === 'kmh' ? 'km/h' : system === 'mph' ? 'mph' : 'kts';
+  const defaultSpeedMs = category === 'plane' ? 15 : category === 'rover' ? 2 : category === 'sub' ? 1 : 5;
+  const liveSpeedMs = vfr.groundspeed >= 0.5 ? vfr.groundspeed : defaultSpeedMs;
+  const autoTargetInActive = Math.round(toActiveUnits(liveSpeedMs, system));
+  const currentTargetSpeed = manualTargetSpeed ?? autoTargetInActive;
+
+  const handleStepSpeed = (delta: number) => {
+    setManualTargetSpeed(Math.max(1, currentTargetSpeed + delta));
+  };
+
+  const handleResetToLiveSpeed = () => {
+    setManualTargetSpeed(null);
+  };
+
+  const handleSetSpeed = (customSpeedMs?: number) => {
+    const speedMs = customSpeedMs !== undefined ? customSpeedMs : fromActiveUnitsToMs(currentTargetSpeed, system);
+    if (customSpeedMs !== undefined) {
+      setManualTargetSpeed(Math.round(toActiveUnits(customSpeedMs, system)));
     }
     // MAV_CMD_DO_CHANGE_SPEED: param1 = type (0=airspeed, 1=groundspeed), param2 = speed (m/s)
-    const cmd = encoder.createCommandLong(sysId, compId, MAV_CMD.DO_CHANGE_SPEED, [1, speed, -1, 0, 0, 0, 0]);
+    const cmd = encoder.createCommandLong(sysId, compId, MAV_CMD.DO_CHANGE_SPEED, [1, speedMs, -1, 0, 0, 0, 0]);
     mavlinkConnection.send(cmd);
   };
 
@@ -334,11 +374,27 @@ export const GlareshieldWidget: React.FC = () => {
                     <Gauge className="h-4 w-4" />
                   </div>
                   <div>
-                    <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">Target Speed</span>
-                    <span className="text-lg font-mono font-bold text-zinc-100">{formatSpeed(targetSpeed).full}</span>
-                    <span className="text-[10px] text-zinc-500 font-mono ml-1.5 truncate">
-                      (Cur: {formatSpeed(vfr.groundspeed).full})
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">Target Speed</span>
+                      {manualTargetSpeed !== null && (
+                        <button
+                          type="button"
+                          onClick={handleResetToLiveSpeed}
+                          title="Reset to follow vehicle speed"
+                          className="text-zinc-500 hover:text-sky-400 p-0.5 rounded transition-colors"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-baseline gap-1.5 mt-0.5">
+                      <span className="text-lg font-mono font-bold text-zinc-100">
+                        {currentTargetSpeed} <span className="text-xs font-normal text-zinc-400">{activeUnit}</span>
+                      </span>
+                      <span className="text-[10px] text-zinc-500 font-mono truncate">
+                        (Cur: {formatSpeed(vfr.groundspeed).full})
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -346,18 +402,20 @@ export const GlareshieldWidget: React.FC = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 w-8 p-0 font-bold text-sm"
-                    onClick={() => setTargetSpeed((prev) => Math.max(0.5, Number((prev - 0.5).toFixed(1))))}
+                    className="h-8 px-2 font-bold text-xs"
+                    onClick={() => handleStepSpeed(-1)}
+                    title={`Decrease speed by 1 ${activeUnit}`}
                   >
-                    -0.5
+                    -1
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 w-8 p-0 font-bold text-sm"
-                    onClick={() => setTargetSpeed((prev) => Number((prev + 0.5).toFixed(1)))}
+                    className="h-8 px-2 font-bold text-xs"
+                    onClick={() => handleStepSpeed(1)}
+                    title={`Increase speed by 1 ${activeUnit}`}
                   >
-                    +0.5
+                    +1
                   </Button>
                   <Button
                     variant="default"
@@ -373,19 +431,23 @@ export const GlareshieldWidget: React.FC = () => {
               {/* Speed Preset Quick Chips */}
               <div className="flex items-center gap-1.5 pt-1 border-t border-zinc-800/40">
                 <span className="text-[10px] text-zinc-500 font-sans">Presets:</span>
-                {[0.5, 1.0, 2.0, 3.0, 5.0].map((spd) => (
-                  <button
-                    key={spd}
-                    onClick={() => handleSetSpeed(spd)}
-                    className={`px-2 py-0.5 rounded text-[11px] font-sans font-semibold transition-colors border ${
-                      targetSpeed === spd
-                        ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300'
-                        : 'bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:text-zinc-200'
-                    }`}
-                  >
-                    {spd}m/s
-                  </button>
-                ))}
+                {[0.5, 1.0, 2.0, 3.0, 5.0].map((spdMs) => {
+                  const spdActive = Math.round(toActiveUnits(spdMs, system));
+                  const isCurrent = currentTargetSpeed === spdActive;
+                  return (
+                    <button
+                      key={spdMs}
+                      onClick={() => handleSetSpeed(spdMs)}
+                      className={`px-2 py-0.5 rounded text-[11px] font-sans font-semibold transition-colors border ${
+                        isCurrent
+                          ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300'
+                          : 'bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      {spdActive} {activeUnit}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -417,16 +479,32 @@ export const GlareshieldWidget: React.FC = () => {
           <div className="pt-1 border-t border-zinc-800/60">
             {/* Target Speed Stepper (Safe in-mode speed adjustment via DO_CHANGE_SPEED) */}
             <div className="flex items-center justify-between bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 min-w-0">
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
                 <div className="p-2 rounded-lg bg-emerald-950/40 text-emerald-400 shrink-0">
                   <Gauge className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
-                  <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">Target Speed</span>
-                  <span className="text-lg font-mono font-bold text-zinc-100">{formatSpeed(targetSpeed).full}</span>
-                  <span className="text-[10px] text-zinc-500 font-mono ml-1.5 truncate">
-                    (Cur: {formatSpeed(vfr.groundspeed).full})
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">Target Speed</span>
+                    {manualTargetSpeed !== null && (
+                      <button
+                        type="button"
+                        onClick={handleResetToLiveSpeed}
+                        title="Reset to follow vehicle speed"
+                        className="text-zinc-500 hover:text-sky-400 p-0.5 rounded transition-colors"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-baseline gap-1.5 mt-0.5">
+                    <span className="text-lg font-mono font-bold text-zinc-100">
+                      {currentTargetSpeed} <span className="text-xs font-normal text-zinc-400">{activeUnit}</span>
+                    </span>
+                    <span className="text-[10px] text-zinc-500 font-mono truncate">
+                      (Cur: {formatSpeed(vfr.groundspeed).full})
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -434,16 +512,18 @@ export const GlareshieldWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 w-8 p-0 font-bold text-sm"
-                  onClick={() => setTargetSpeed((prev) => Math.max(1, prev - 1))}
+                  className="h-8 px-2 font-bold text-xs"
+                  onClick={() => handleStepSpeed(-1)}
+                  title={`Decrease speed by 1 ${activeUnit}`}
                 >
                   -1
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 w-8 p-0 font-bold text-sm"
-                  onClick={() => setTargetSpeed((prev) => prev + 1)}
+                  className="h-8 px-2 font-bold text-xs"
+                  onClick={() => handleStepSpeed(1)}
+                  title={`Increase speed by 1 ${activeUnit}`}
                 >
                   +1
                 </Button>
