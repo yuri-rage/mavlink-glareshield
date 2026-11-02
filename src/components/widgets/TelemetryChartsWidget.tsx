@@ -25,8 +25,8 @@ export const TelemetryChartsWidget: React.FC = () => {
   const formattedData = history.map((p) => ({
     ...p,
     timeStr: new Date(p.time).toLocaleTimeString('en-GB', { hour12: false }),
-    dispAltitude: formatAltitude(p.altitude).value,
-    dispSpeed: formatSpeed(p.groundspeed).value,
+    dispAltitude: Number(formatAltitude(p.altitude).value),
+    dispSpeed: Number(formatSpeed(p.groundspeed).value),
   }));
 
   return (
