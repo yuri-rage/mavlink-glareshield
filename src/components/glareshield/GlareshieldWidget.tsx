@@ -1,0 +1,486 @@
+import React, { useState, useEffect } from 'react';
+import { useTelemetryStore } from '../../store/telemetryStore';
+import { useUnitsStore } from '../../store/unitsStore';
+import { mavlinkConnection } from '../../mavlink/connection';
+import { messageRateManager } from '../../mavlink/rateManager';
+import { Card, CardContent } from '../ui/card';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import {
+  MAV_CMD,
+  MAVLINK_MSG_ID,
+  getVehicleCategory,
+  getVehicleFlightModes,
+} from '../../mavlink/messages';
+import {
+  Shield,
+  ShieldAlert,
+  Compass,
+  ArrowUp,
+  Gauge,
+  Navigation,
+  Anchor,
+  PlaneLanding,
+  PlaneTakeoff,
+  CircleStop,
+  Play,
+  RotateCcw,
+  Sliders,
+  Radio,
+  Car,
+} from 'lucide-react';
+
+export const GlareshieldWidget: React.FC = () => {
+  const { heartbeat, vfr, position, gps } = useTelemetryStore();
+  const { formatSpeed, formatAltitude, altitudeMode, system: unitSystem } = useUnitsStore();
+  const [targetAlt, setTargetAlt] = useState<number>(20);
+  const [targetSpeed, setTargetSpeed] = useState<number>(5);
+  const [sliderValue, setSliderValue] = useState<number>(0);
+
+  useEffect(() => {
+    messageRateManager.registerRequirement('glareshield-vfr', MAVLINK_MSG_ID.VFR_HUD);
+    messageRateManager.registerRequirement('glareshield-pos', MAVLINK_MSG_ID.GLOBAL_POSITION_INT);
+    return () => {
+      messageRateManager.unregisterRequirement('glareshield-vfr');
+      messageRateManager.unregisterRequirement('glareshield-pos');
+    };
+  }, []);
+
+  const encoder = mavlinkConnection.getEncoder();
+  const category = getVehicleCategory(heartbeat.type);
+  const commonModes = getVehicleFlightModes(heartbeat.type);
+
+  const handleArmToggle = (arm: boolean) => {
+    const cmd = encoder.createArmDisarm(1, 1, arm);
+    mavlinkConnection.send(cmd);
+    setSliderValue(0);
+  };
+
+  const handleSetMode = (modeNum: number) => {
+    const cmd = encoder.createSetMode(1, 1, modeNum);
+    mavlinkConnection.send(cmd);
+  };
+
+  const handleSetSpeed = (customSpeed?: number) => {
+    const speed = customSpeed ?? targetSpeed;
+    if (customSpeed !== undefined) {
+      setTargetSpeed(customSpeed);
+    }
+    // MAV_CMD_DO_CHANGE_SPEED: param1 = type (0=airspeed, 1=groundspeed), param2 = speed (m/s)
+    const cmd = encoder.createCommandLong(1, 1, MAV_CMD.DO_CHANGE_SPEED, [1, speed, -1, 0, 0, 0, 0]);
+    mavlinkConnection.send(cmd);
+  };
+
+  const handleSetAltitude = () => {
+    // Send guided altitude target or DO_REPOSITION
+    const cmd = encoder.createCommandLong(1, 1, 192, [-1, 0, 0, 0, 0, 0, targetAlt]); // MAV_CMD_DO_REPOSITION
+    mavlinkConnection.send(cmd);
+  };
+
+  const triggerRTL = () => {
+    if (category === 'rover') {
+      handleSetMode(11); // Rover RTL
+    } else if (category === 'plane') {
+      handleSetMode(11); // Plane RTL
+    } else {
+      const cmd = encoder.createCommandLong(1, 1, MAV_CMD.NAV_RETURN_TO_LAUNCH);
+      mavlinkConnection.send(cmd);
+    }
+  };
+
+  const triggerLand = () => {
+    const cmd = encoder.createCommandLong(1, 1, MAV_CMD.NAV_LAND);
+    mavlinkConnection.send(cmd);
+  };
+
+  const triggerTakeoff = () => {
+    const cmd = encoder.createCommandLong(1, 1, MAV_CMD.NAV_TAKEOFF, [0, 0, 0, 0, 0, 0, 10]); // 10m takeoff
+    mavlinkConnection.send(cmd);
+  };
+
+  return (
+    <Card className="border-sky-500/20 bg-zinc-950/90 shadow-xl overflow-hidden">
+      <CardContent className="p-3 sm:p-4 space-y-4">
+        {/* Top Control Bar: Arming Slider & Emergency Action Buttons */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+          {/* Arm / Disarm Interlock */}
+          <div className="md:col-span-5 bg-zinc-900/80 border border-zinc-800 rounded-xl p-2.5">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                {heartbeat.isArmed ? (
+                  <ShieldAlert className="h-4 w-4 text-red-400" />
+                ) : (
+                  <Shield className="h-4 w-4 text-emerald-400" />
+                )}
+                Safety Master: {heartbeat.isArmed ? 'ARMED (Motors Live)' : 'DISARMED'}
+              </span>
+              <span className="text-[10px] text-zinc-500 font-mono">Slide to switch</span>
+            </div>
+
+            <div className="relative flex items-center">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={sliderValue}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setSliderValue(val);
+                  if (val >= 95) {
+                    handleArmToggle(!heartbeat.isArmed);
+                  }
+                }}
+                onMouseUp={() => setSliderValue(0)}
+                onTouchEnd={() => setSliderValue(0)}
+                className={`w-full h-8 rounded-lg appearance-none cursor-pointer transition-all ${
+                  heartbeat.isArmed
+                    ? 'accent-red-500 bg-red-950/40 border border-red-800/60'
+                    : 'accent-emerald-500 bg-emerald-950/40 border border-emerald-800/60'
+                }`}
+              />
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-xs font-bold uppercase tracking-wider text-zinc-200">
+                {heartbeat.isArmed ? 'Slide Right to DISARM' : 'Slide Right to ARM MOTORS'}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Actions Bar - Vehicle Category Specific */}
+          <div className="md:col-span-7 flex flex-wrap sm:flex-nowrap items-center gap-2">
+            {category === 'rover' ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={triggerRTL}
+                  className="flex-1 border-amber-600/40 text-amber-300 hover:bg-amber-950/30 gap-1.5 font-bold h-11"
+                >
+                  <Navigation className="h-4 w-4" />
+                  RTL (Home)
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSetMode(4)} // Rover HOLD mode
+                  className="flex-1 border-rose-600/60 text-rose-300 hover:bg-rose-950/40 gap-1.5 font-bold h-11"
+                >
+                  <CircleStop className="h-4 w-4 text-rose-400" />
+                  Hold (Stop)
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSetMode(5)} // Rover LOITER
+                  className="flex-1 border-sky-600/40 text-sky-300 hover:bg-sky-950/30 gap-1.5 font-bold h-11"
+                >
+                  <Anchor className="h-4 w-4" />
+                  Loiter
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSetMode(10)} // Rover AUTO mode
+                  className="flex-1 border-emerald-600/40 text-emerald-300 hover:bg-emerald-950/30 gap-1.5 font-bold h-11"
+                >
+                  <Play className="h-4 w-4 text-emerald-400" />
+                  Auto (Start)
+                </Button>
+              </>
+            ) : category === 'sub' ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSetMode(9)} // ArduSub SURFACE
+                  className="flex-1 border-amber-600/40 text-amber-300 hover:bg-amber-950/30 gap-1.5 font-bold h-11"
+                >
+                  <ArrowUp className="h-4 w-4" />
+                  Surface
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSetMode(16)} // ArduSub POSHOLD
+                  className="flex-1 border-sky-600/40 text-sky-300 hover:bg-sky-950/30 gap-1.5 font-bold h-11"
+                >
+                  <Anchor className="h-4 w-4" />
+                  PosHold
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSetMode(2)} // ArduSub ALT_HOLD (Depth hold)
+                  className="flex-1 border-emerald-600/40 text-emerald-300 hover:bg-emerald-950/30 gap-1.5 font-bold h-11"
+                >
+                  <Sliders className="h-4 w-4" />
+                  Depth Hold
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSetMode(19)} // ArduSub MANUAL
+                  className="flex-1 border-zinc-700 hover:bg-zinc-800 gap-1.5 font-bold h-11"
+                >
+                  <Radio className="h-4 w-4 text-sky-400" />
+                  Manual
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={triggerRTL}
+                  className="flex-1 border-amber-600/40 text-amber-300 hover:bg-amber-950/30 gap-1.5 font-bold h-11"
+                >
+                  <Navigation className="h-4 w-4" />
+                  RTL (Home)
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSetMode(category === 'plane' ? 12 : 5)} // Loiter
+                  className="flex-1 border-sky-600/40 text-sky-300 hover:bg-sky-950/30 gap-1.5 font-bold h-11"
+                >
+                  <Anchor className="h-4 w-4" />
+                  Pause / Loiter
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={triggerLand}
+                  className="flex-1 border-emerald-600/40 text-emerald-300 hover:bg-emerald-950/30 gap-1.5 font-bold h-11"
+                >
+                  <PlaneLanding className="h-4 w-4" />
+                  Land
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={triggerTakeoff}
+                  className="flex-1 border-zinc-700 hover:bg-zinc-800 gap-1.5 font-bold h-11"
+                >
+                  <PlaneTakeoff className="h-4 w-4 text-sky-400" />
+                  Takeoff
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Flight Mode Selector Buttons */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 sm:gap-2">
+          {commonModes.map(({ label, mode }) => {
+            const isActive = heartbeat.customMode === mode;
+            return (
+              <button
+                key={mode}
+                onClick={() => handleSetMode(mode)}
+                className={`py-2.5 px-2 rounded-lg border text-sm font-bold font-mono transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
+                  isActive
+                    ? 'bg-sky-500 text-white border-sky-400 shadow-md ring-1 ring-sky-300'
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                }`}
+              >
+                <span className="tracking-wide leading-tight">{label}</span>
+                <span className={`text-[10px] font-mono ${isActive ? 'text-sky-100' : 'text-zinc-500'}`}>
+                  M{mode}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Bottom Section: Autopilot Targets (Vehicle-Specific Guidance) */}
+        {category === 'rover' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-zinc-800/60">
+            {/* Target Speed Stepper + Speed Presets for Rover */}
+            <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-emerald-950/40 text-emerald-400">
+                    <Gauge className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">Target Speed</span>
+                    <span className="text-lg font-mono font-bold text-zinc-100">{formatSpeed(targetSpeed).full}</span>
+                    <span className="text-[10px] text-zinc-500 font-mono ml-1.5 truncate">
+                      (Cur: {formatSpeed(vfr.groundspeed).full})
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0 font-bold text-sm"
+                    onClick={() => setTargetSpeed((prev) => Math.max(0.5, Number((prev - 0.5).toFixed(1))))}
+                  >
+                    -0.5
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0 font-bold text-sm"
+                    onClick={() => setTargetSpeed((prev) => Number((prev + 0.5).toFixed(1)))}
+                  >
+                    +0.5
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="h-8 px-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white ml-1"
+                    onClick={() => handleSetSpeed()}
+                  >
+                    Set Spd
+                  </Button>
+                </div>
+              </div>
+
+              {/* Speed Preset Quick Chips */}
+              <div className="flex items-center gap-1.5 pt-1 border-t border-zinc-800/40">
+                <span className="text-[10px] text-zinc-500 font-mono">Presets:</span>
+                {[0.5, 1.0, 2.0, 3.0, 5.0].map((spd) => (
+                  <button
+                    key={spd}
+                    onClick={() => handleSetSpeed(spd)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono font-medium transition-colors border ${
+                      targetSpeed === spd
+                        ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300'
+                        : 'bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    {spd}m/s
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Rover Drive Status Overview */}
+            <div className="flex items-center justify-between bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5">
+              <div className="grid grid-cols-3 gap-2 w-full text-center">
+                <div className="p-1.5 bg-zinc-950/60 rounded-lg border border-zinc-800">
+                  <span className="text-[9px] text-zinc-500 uppercase font-bold block">Throttle</span>
+                  <span className="text-base font-mono font-bold text-zinc-200">
+                    {vfr.throttle}%
+                  </span>
+                </div>
+                <div className="p-1.5 bg-zinc-950/60 rounded-lg border border-zinc-800">
+                  <span className="text-[9px] text-zinc-500 uppercase font-bold block">Heading</span>
+                  <span className="text-base font-mono font-bold text-zinc-200">
+                    {vfr.heading}°
+                  </span>
+                </div>
+                <div className="p-1.5 bg-zinc-950/60 rounded-lg border border-zinc-800">
+                  <span className="text-[9px] text-zinc-500 uppercase font-bold block">GPS Fix</span>
+                  <span className="text-sm sm:text-base font-mono font-bold text-emerald-400 truncate block">
+                    {gps.fixLabel}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1 border-t border-zinc-800/60">
+            {/* Target Altitude / Depth Stepper */}
+            <div className="flex items-center justify-between bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-2 rounded-lg bg-sky-950/40 text-sky-400 shrink-0">
+                  <ArrowUp className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">
+                    {category === 'sub' ? 'Target Depth' : 'Target Altitude'}
+                  </span>
+                  <span className="text-lg font-mono font-bold text-zinc-100">{formatAltitude(targetAlt).full}</span>
+                  <span className="text-[10px] text-zinc-500 font-mono ml-1.5 truncate">
+                    (Cur: {formatAltitude(altitudeMode === 'msl' ? (position.alt || position.relativeAlt) : position.relativeAlt).full} {altitudeMode.toUpperCase()})
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0 font-bold text-sm"
+                  onClick={() => setTargetAlt((prev) => Math.max(1, prev - 5))}
+                >
+                  -5
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0 font-bold text-sm"
+                  onClick={() => setTargetAlt((prev) => prev + 5)}
+                >
+                  +5
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-8 px-2.5 text-xs font-bold bg-sky-500 hover:bg-sky-600 text-white ml-0.5"
+                  onClick={handleSetAltitude}
+                >
+                  {category === 'sub' ? 'Set Depth' : 'Set Alt'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Target Speed Stepper */}
+            <div className="flex items-center justify-between bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-2 rounded-lg bg-emerald-950/40 text-emerald-400 shrink-0">
+                  <Gauge className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[10px] text-zinc-400 font-bold uppercase block truncate">Target Speed</span>
+                  <span className="text-lg font-mono font-bold text-zinc-100">{formatSpeed(targetSpeed).full}</span>
+                  <span className="text-[10px] text-zinc-500 font-mono ml-1.5 truncate">
+                    (Cur: {formatSpeed(vfr.groundspeed).full})
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0 font-bold text-sm"
+                  onClick={() => setTargetSpeed((prev) => Math.max(1, prev - 1))}
+                >
+                  -1
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0 font-bold text-sm"
+                  onClick={() => setTargetSpeed((prev) => prev + 1)}
+                >
+                  +1
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-8 px-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white ml-0.5"
+                  onClick={() => handleSetSpeed()}
+                >
+                  Set Spd
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};

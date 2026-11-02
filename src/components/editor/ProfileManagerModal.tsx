@@ -1,0 +1,189 @@
+import React, { useState } from 'react';
+import { useDashboardStore } from '../../store/dashboardStore';
+import { Modal } from '../ui/modal';
+import { Button } from '../ui/button';
+import { Download, Upload, RotateCcw, Copy, Check } from 'lucide-react';
+
+interface ProfileManagerModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen, onClose }) => {
+  const { profile, exportProfileJson, importProfileJson, resetToDefaults } = useDashboardStore();
+  const [jsonText, setJsonText] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+
+  const handleDownload = () => {
+    const jsonStr = exportProfileJson();
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mavlink-glareshield-profile-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(exportProfileJson());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        const success = importProfileJson(content);
+        if (success) {
+          setImportStatus('Profile imported successfully!');
+          setTimeout(() => {
+            setImportStatus(null);
+            onClose();
+          }, 1000);
+        } else {
+          setImportStatus('Invalid profile format.');
+        }
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleTextImport = () => {
+    if (!jsonText.trim()) return;
+    const success = importProfileJson(jsonText.trim());
+    if (success) {
+      setImportStatus('Profile imported successfully!');
+      setTimeout(() => {
+        setImportStatus(null);
+        onClose();
+      }, 1000);
+    } else {
+      setImportStatus('Invalid JSON profile format.');
+    }
+  };
+
+  const handleReset = () => {
+    if (confirm('Are you sure you want to reset your layout and widgets to default?')) {
+      resetToDefaults();
+      onClose();
+    }
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Layout Profile & Backup Manager"
+      description="Export your customized tabs, widgets, and layout configuration or import an existing profile."
+    >
+      <div className="space-y-4">
+        {/* Export / Download Section */}
+        <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+              Export Active Profile
+            </span>
+            <span className="text-[10px] text-zinc-500 font-mono">
+              {profile.tabs.length} tabs • {profile.customWidgets.length} custom widgets
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleDownload}
+              className="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold gap-1.5 h-8 text-xs"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download .json Profile
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopy}
+              className="h-8 px-3 text-xs border-zinc-700 gap-1"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
+        </div>
+
+        {/* Import Section */}
+        <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 block">
+            Import Profile (.json)
+          </span>
+
+          <label className="block">
+            <input
+              type="file"
+              accept=".json"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              className="w-full gap-1.5 h-9 border-dashed border-zinc-700 text-zinc-300 pointer-events-none"
+            >
+              <Upload className="h-4 w-4 text-emerald-400" />
+              Choose JSON File to Import
+            </Button>
+          </label>
+
+          <textarea
+            placeholder="Or paste JSON profile text here..."
+            value={jsonText}
+            onChange={(e) => setJsonText(e.target.value)}
+            className="w-full h-20 rounded-lg border border-zinc-800 bg-zinc-950 p-2 font-mono text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+          />
+
+          {jsonText.trim() && (
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleTextImport}
+              className="w-full h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              Apply Pasted Profile
+            </Button>
+          )}
+
+          {importStatus && (
+            <p className="text-xs text-center font-bold text-sky-400 animate-pulse">
+              {importStatus}
+            </p>
+          )}
+        </div>
+
+        {/* Reset to Factory Defaults */}
+        <div className="pt-1 flex items-center justify-between border-t border-zinc-800">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleReset}
+            className="text-red-400 hover:text-red-300 hover:bg-red-950/30 gap-1.5 text-xs"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reset to Default Layout
+          </Button>
+
+          <Button variant="ghost" size="sm" onClick={onClose} className="text-xs">
+            Done
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+};
