@@ -190,6 +190,7 @@ export class MavFtpClient {
   private seq = 0;
   private currentAbort: (() => void) | null = null;
   private queueGeneration = 0;
+  private activeTransferId = 0;
   private transferQueue: Promise<any> = Promise.resolve();
 
   private nextSeq(): number {
@@ -275,6 +276,7 @@ export class MavFtpClient {
     timeoutMs = 1500,
     onProgress?: (bytesReceived: number, totalBytes: number) => void,
   ): Promise<Uint8Array | null> {
+    this.activeTransferId++;
     const hb = useTelemetryStore.getState().heartbeat;
     const sysId = targetSys ?? hb.systemId ?? 1;
     const compId = targetComp ?? hb.componentId ?? 1;
@@ -692,6 +694,7 @@ export class MavFtpClient {
     timeoutMs = 1500,
     onProgress?: (bytesWritten: number, totalBytes: number) => void,
   ): Promise<boolean> {
+    const transferId = ++this.activeTransferId;
     const hb = useTelemetryStore.getState().heartbeat;
     const sysId = targetSys ?? (hb.systemId > 0 ? hb.systemId : 1);
     const compId = targetComp ?? (hb.componentId > 0 ? hb.componentId : 1);
@@ -716,9 +719,14 @@ export class MavFtpClient {
         if (isDone) return;
         isDone = true;
         if (!success) {
+          const currentId = transferId;
           const term = packFtpMessage(sysId, compId, this.nextSeq(), session, FTP_OPCODE.TerminateSession, 0, 0);
           mavlinkConnection.send(term);
-          setTimeout(() => mavlinkConnection.send(packFtpMessage(sysId, compId, this.nextSeq(), session, FTP_OPCODE.TerminateSession, 0, 0)), timeoutMs);
+          setTimeout(() => {
+            if (this.activeTransferId === currentId && !this.currentAbort) {
+              mavlinkConnection.send(packFtpMessage(sysId, compId, this.nextSeq(), session, FTP_OPCODE.TerminateSession, 0, 0));
+            }
+          }, timeoutMs);
         }
         this.currentAbort = null;
         if (stepTimer) clearTimeout(stepTimer);

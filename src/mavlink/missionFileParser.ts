@@ -140,6 +140,13 @@ export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; item
         const ap = rawItem.landingApproachCoordinate ?? rawItem.loiterCoordinate;
         const ld = rawItem.landCoordinate;
         const out: any[] = [{ command: 189, frame: 2, autoContinue: true, params: [0, 0, 0, 0, 0, 0, 0] }];
+        if (rawItem.stopTakingPhotos !== false) {
+          out.push({ command: 206, frame: 2, autoContinue: true, params: [0, 0, 0, 0, 0, 0, 0] });
+          out.push({ command: 2001, frame: 2, autoContinue: true, params: [0, 0, 0, 0, 0, 0, 0] });
+        }
+        if (rawItem.stopTakingVideo !== false && rawItem.stopVideoPhotos !== false && rawItem.stopVideo !== false) {
+          out.push({ command: 2501, frame: 2, autoContinue: true, params: [0, 0, 0, 0, 0, 0, 0] });
+        }
         if (rawItem.useDoChangeSpeed) out.push({ command: 178, frame: 2, autoContinue: true, params: [0, rawItem.finalApproachSpeed, -1, 0, 0, 0, 0] });
         out.push(rawItem.useLoiterToAlt !== false
           ? { command: 31, frame, autoContinue: true, params: [1, (rawItem.loiterClockwise === false ? -1 : 1) * rawItem.loiterRadius, 0, 1, ap[0], ap[1], ap[2]] }

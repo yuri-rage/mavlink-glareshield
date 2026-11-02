@@ -102,6 +102,22 @@ for (const [type, landCmd, opts, label] of [
     ok, error ?? `commands: ${cmds.join(',')}`);
 }
 
+{
+  // QGC defaults: stopTakingPhotos = true, stopTakingVideo = true
+  // Emits DO_LAND_START (189), DO_SET_CAM_TRIGG_DIST (206), IMAGE_STOP_CAPTURE (2001), VIDEO_STOP_CAPTURE (2501), LOITER_TO_ALT (31), LAND (21)
+  const defaultPattern = {
+    type: 'ComplexItem', complexItemType: 'fwLandingPattern', version: 2,
+    landCoordinate: LAND, landingApproachCoordinate: APPROACH,
+    altitudesAreRelative: true, loiterRadius: 75, loiterClockwise: true, useLoiterToAlt: true,
+  };
+  const { result, error } = parsePlan(plan([WP(37.776, -122.418, 50), defaultPattern]));
+  const items = missionItems(result);
+  const cmds = items.map((i) => i.command);
+  const ok = !error && cmds.slice(-6).join(',') === '189,206,2001,2501,31,21';
+  check('QGC fwLandingPattern with default camera stops emits 189,206,2001,2501,31,21',
+    ok, error ?? `commands: ${cmds.join(',')}`);
+}
+
 // ------------------------------------------------------------------------------------------------
 // B. RTCM: every fragmented frame must be completable by ArduPilot
 //    (fragment ids 0-3; completion is signalled by a fragment shorter than 180 bytes)

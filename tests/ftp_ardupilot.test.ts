@@ -258,12 +258,19 @@ for (const loss of [0.1, 0.2]) {
   check(`${loss * 100}% loss: at least ${floor}/${runs} uploads succeed`, succeeded >= floor, `${succeeded}/${runs}`);
 }
 
-// 5. Vehicle rejects a chunk: the upload fails AND the session is closed so the next FTP op works.
+// 5. Vehicle rejects a chunk: the upload fails AND the session is closed so the next FTP op works without stray Terminate.
 {
-  const sim = new ArduPilotFtpSim({ nakWrite: (r) => r.offset === 239 * 2 });
-  const ok = await upload(sim, DATA);
-  await sleep(TIMEOUT_MS);
+  const file = Uint8Array.from({ length: 1000 }, (_, i) => (i * 7 + 3) & 0xff);
+  const sim = new ArduPilotFtpSim({
+    nakWrite: (r) => r.offset === 239 * 2,
+    files: { '@PARAM/param.pck': file },
+  });
+  sim.install();
+  const ok = await mavFtpClient.writeFile(1, 1, PATH, DATA, 239, TIMEOUT_MS);
   check('WriteFile NAK: upload reports failure', ok === false);
+  // Start the next transfer immediately to verify that stray TerminateSession does not kill it
+  const got = await mavFtpClient.readFile(1, 1, '@PARAM/param.pck', 239, TIMEOUT_MS);
+  check('immediate read after failed write completes without stray Terminate interference', same(got, file));
   check('WriteFile NAK: session closed so later transfers are not blocked', sim.fd === null);
 }
 
