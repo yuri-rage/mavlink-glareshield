@@ -715,6 +715,11 @@ export class MavFtpClient {
       const finish = (success: boolean) => {
         if (isDone) return;
         isDone = true;
+        if (!success) {
+          const term = packFtpMessage(sysId, compId, this.nextSeq(), session, FTP_OPCODE.TerminateSession, 0, 0);
+          mavlinkConnection.send(term);
+          setTimeout(() => mavlinkConnection.send(packFtpMessage(sysId, compId, this.nextSeq(), session, FTP_OPCODE.TerminateSession, 0, 0)), timeoutMs);
+        }
         this.currentAbort = null;
         if (stepTimer) clearTimeout(stepTimer);
         unsubscribe();
@@ -744,9 +749,9 @@ export class MavFtpClient {
         }, ms);
       };
 
-      const sendTerminate = () => {
+      const sendTerminate = (retrySeq?: number) => {
         if (isDone) return;
-        const seq = this.nextSeq();
+        const seq = retrySeq ?? this.nextSeq();
         activeExpectedSeq = seq;
         const term = packFtpMessage(
           sysId,
@@ -758,10 +763,10 @@ export class MavFtpClient {
           0,
         );
         mavlinkConnection.send(term);
-        setStepTimeout(() => sendTerminate());
+        setStepTimeout(() => sendTerminate(seq));
       };
 
-      const sendChunk = (offset: number) => {
+      const sendChunk = (offset: number, retrySeq?: number) => {
         if (isDone) return;
         const remaining = data.length - offset;
         if (remaining <= 0) {
@@ -775,7 +780,7 @@ export class MavFtpClient {
 
         const len = Math.min(remaining, chunkSize);
         const chunk = data.subarray(offset, offset + len);
-        const seq = this.nextSeq();
+        const seq = retrySeq ?? this.nextSeq();
         activeExpectedSeq = seq;
 
         const writeMsg = packFtpMessage(
@@ -789,7 +794,7 @@ export class MavFtpClient {
           chunk,
         );
         mavlinkConnection.send(writeMsg);
-        setStepTimeout(() => sendChunk(offset));
+        setStepTimeout(() => sendChunk(offset, seq));
       };
 
       const unsubscribe = mavlinkConnection.onPacket(
@@ -802,7 +807,7 @@ export class MavFtpClient {
           if (!ftp) return;
 
           // Sequence number match: strictly drop stale/duplicate ACKs from older requests
-          if (activeExpectedSeq >= 0 && ftp.seq !== activeExpectedSeq) {
+          if (activeExpectedSeq >= 0 && ftp.seq !== ((activeExpectedSeq + 1) & 0xffff)) {
             return;
           }
 
@@ -908,13 +913,13 @@ export class MavFtpClient {
       );
 
       // Step 1: Create file
-      const createFile = () => {
+      const createFile = (retrySeq?: number) => {
         const pathBytes = new TextEncoder().encode(filePath);
         const pathWithNull = new Uint8Array(pathBytes.length + 1);
         pathWithNull.set(pathBytes);
         pathWithNull[pathBytes.length] = 0;
 
-        const seq = this.nextSeq();
+        const seq = retrySeq ?? this.nextSeq();
         activeExpectedSeq = seq;
 
         const createMsg = packFtpMessage(
@@ -928,49 +933,16 @@ export class MavFtpClient {
           pathWithNull,
         );
         mavlinkConnection.send(createMsg);
-        setStepTimeout(() => createFile());
+        setStepTimeout(() => createFile(seq));
       };
 
       createFile();
     });
 
-    const success = await writePromise;
-    if (!success) return false;
-
-    // Phase 4: Read back file and verify contents byte-for-byte to guard against corrupt uploads
-    try {
-      console.log(
-        `[MAVFTP] Verifying upload for ${filePath} (${data.length} bytes)...`,
-      );
-      const readBack = await this.executeReadFile(
-        sysId,
-        compId,
-        filePath,
-        chunkSize,
-        timeoutMs,
-      );
-      if (!readBack || readBack.length !== data.length) {
-        console.warn(
-          `[MAVFTP] Verification failed for ${filePath}: read ${readBack?.length ?? 0} bytes, expected ${data.length}`,
-        );
-        return false;
-      }
-      for (let i = 0; i < data.length; i++) {
-        if (readBack[i] !== data[i]) {
-          console.warn(
-            `[MAVFTP] Verification failed for ${filePath}: byte mismatch at offset ${i}`,
-          );
-          return false;
-        }
-      }
-      console.log(
-        `[MAVFTP] Verification succeeded: ${filePath} matches 100% byte-for-byte.`,
-      );
-      return true;
-    } catch (err) {
-      console.warn(`[MAVFTP] Verification read-back failed with error:`, err);
-      return false;
-    }
+    // ArduPilot validates and commits the upload when the session is closed (AP_Filesystem_Mission::close()
+    // NAKs TerminateSession on a bad file), so the Terminate ACK is the commit result. A byte-for-byte
+    // read-back cannot be used: the vehicle regenerates mission.dat (seq, current, autocontinue, alt in cm).
+    return writePromise;
   }
 }
 
