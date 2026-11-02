@@ -21,6 +21,7 @@ import {
   ChevronDown,
   Check,
   AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { BandwidthProfile } from '../../mavlink/rateManager';
 import { getVehicleCategory, getVehicleCategoryLabel, getVehicleFlightModes } from '../../mavlink/messages';
@@ -190,22 +191,28 @@ export const Navbar: React.FC = () => {
               </span>
               <div className="flex items-center gap-1 sm:gap-1.5 leading-none mt-0.5">
                 {status === 'connected' ? (
-                  <>
-                    {getVehicleIcon('h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0')}
-                    <div className="flex items-baseline gap-1 sm:gap-1.5 min-w-0">
-                      <span className="text-xs text-sky-300 font-sans font-medium tracking-tight max-w-[42px] xs:max-w-[60px] sm:max-w-none truncate">
-                        {vehicleCategoryLabel}
-                      </span>
-                      {firmwareVersion && (
-                        <span
-                          className="text-[11px] text-zinc-400 font-sans font-normal tracking-tight hidden md:inline"
-                          title={firmwareRaw || `Firmware: ${firmwareVersion}`}
-                        >
-                          {firmwareVersion}
+                  heartbeat.lastHeartbeatTime > 0 ? (
+                    <>
+                      {getVehicleIcon('h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0')}
+                      <div className="flex items-baseline gap-1 sm:gap-1.5 min-w-0">
+                        <span className="text-xs text-sky-300 font-sans font-medium tracking-tight max-w-[42px] xs:max-w-[60px] sm:max-w-none truncate">
+                          {vehicleCategoryLabel}
                         </span>
-                      )}
+                        {firmwareVersion && (
+                          <span
+                            className="text-[11px] text-zinc-400 font-sans font-normal tracking-tight hidden md:inline"
+                            title={firmwareRaw || `Firmware: ${firmwareVersion}`}
+                          >
+                            {firmwareVersion}
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center py-0.5" title="Connecting to vehicle...">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400 shrink-0" />
                     </div>
-                  </>
+                  )
                 ) : (
                   <span className="text-zinc-500 text-xs font-sans">Standby</span>
                 )}
@@ -213,10 +220,12 @@ export const Navbar: React.FC = () => {
             </div>
           </div>
 
-          <div className="h-5 w-px bg-zinc-800 hidden sm:block" />
+          {status === 'connected' && heartbeat.lastHeartbeatTime > 0 && (
+            <div className="h-5 w-px bg-zinc-800 hidden sm:block" />
+          )}
 
           {/* Arm Status Pill (Left of Mode) with Dropdown Flyout */}
-          {status === 'connected' && (
+          {status === 'connected' && heartbeat.lastHeartbeatTime > 0 && (
             <div className="relative shrink-0" ref={armMenuRef}>
               <Badge
                 variant={heartbeat.isArmed ? 'destructive' : 'secondary'}
@@ -376,7 +385,7 @@ export const Navbar: React.FC = () => {
           )}
 
           {/* Mode Badge (Right of Arm) with Dropdown Flyout */}
-          {status === 'connected' && (
+          {status === 'connected' && heartbeat.lastHeartbeatTime > 0 && (
             <div className="relative shrink-0" ref={modeMenuRef}>
               <Badge
                 variant="info"

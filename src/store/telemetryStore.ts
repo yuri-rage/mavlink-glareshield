@@ -251,8 +251,8 @@ const initialNav = loadInitialNavCache();
 
 export const useTelemetryStore = create<TelemetryState>((set) => ({
   heartbeat: {
-    type: 2,
-    autopilot: 3,
+    type: 0,
+    autopilot: 0,
     baseMode: 0,
     customMode: 0,
     modeName: 'DISCONNECTED',
@@ -697,6 +697,22 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
 // Wire up global packet listener
 mavlinkConnection.onPacket((packet) => {
   useTelemetryStore.getState().processPacket(packet);
+});
+
+// Reset vehicle heartbeat state when disconnected
+mavlinkConnection.onStatus((status) => {
+  if (status === 'disconnected') {
+    useTelemetryStore.setState((state) => ({
+      heartbeat: {
+        ...state.heartbeat,
+        type: 0,
+        autopilot: 0,
+        modeName: 'DISCONNECTED',
+        isArmed: false,
+        lastHeartbeatTime: 0,
+      },
+    }));
+  }
 });
 
 // Automatic command timeout tracking (5s timeout for commands missing COMMAND_ACK)
