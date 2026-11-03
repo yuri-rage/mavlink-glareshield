@@ -171,6 +171,7 @@ export interface VehiclePressure {
 export interface StatusMessage {
   id: string;
   time: string;
+  timestamp?: number;
   severity: number;
   severityLabel: string;
   text: string;
@@ -232,7 +233,7 @@ export interface CommandFeedbackInfo {
   cmdName: string;
   label: string;
   targetKey?: string;
-  status: 'pending' | 'accepted' | 'denied' | 'timeout';
+  status: 'pending' | 'accepted' | 'denied' | 'timeout' | 'failed';
   result?: number;
   resultText?: string;
   reason?: string;
@@ -407,7 +408,8 @@ const SENSOR_SUBSYSTEM_CHECKS: { mask: number; label: string }[] = [
   { mask: 0x20, label: 'GPS' },
   { mask: 0x10000, label: 'RC Input' },
   { mask: 0x200000, label: 'AHRS' },
-  { mask: 0x1000000, label: 'Terrain' },
+  { mask: 0x400000, label: 'Terrain' },
+  { mask: 0x1000000, label: 'Logging' },
   { mask: 0x2000000, label: 'Battery' },
 ];
 
@@ -433,12 +435,19 @@ export function evaluatePreArmReadiness(
 
   const seenErrors = new Set<string>();
   const activePreArmErrors: string[] = [];
+  const now = Date.now();
   for (const msg of statusMessages) {
-    if (/^(PreArm:|Arm:)/i.test(msg.text.trim())) {
-      const cleaned = msg.text.trim();
-      if (!seenErrors.has(cleaned)) {
-        seenErrors.add(cleaned);
-        activePreArmErrors.push(cleaned);
+    // Age out PreArm messages older than 30 seconds
+    if (msg.timestamp && now - msg.timestamp > 30000) continue;
+    const txt = msg.text.trim();
+    if (/^(PreArm:|Arm:)/i.test(txt)) {
+      // Ignore positive / clearance checks
+      if (/PreArm:\s*(Passed|All checks passing|OK|Healthy|Good)/i.test(txt)) {
+        continue;
+      }
+      if (!seenErrors.has(txt)) {
+        seenErrors.add(txt);
+        activePreArmErrors.push(txt);
       }
       if (activePreArmErrors.length >= 6) break;
     }
@@ -481,6 +490,7 @@ export function appendStatusMessage(
     const updated: StatusMessage = {
       ...first,
       time,
+      timestamp: now,
       count: (first.count ?? 1) + 1,
     };
     return [updated, ...existing.slice(1)];
@@ -488,6 +498,7 @@ export function appendStatusMessage(
   const newMsg: StatusMessage = {
     id: `${now}-${Math.random()}`,
     time,
+    timestamp: now,
     severity: msg.severity,
     severityLabel: msg.severityLabel,
     text: msg.text,
@@ -1539,27 +1550,6 @@ mavlinkConnection.onPacket((packet) => {
   useTelemetryStore.getState().processPacket(packet);
 });
 
-// Reset vehicle heartbeat state when disconnected
-mavlinkConnection.onStatus((status) => {
-  if (status === 'disconnected') {
-    lastVersionPollTime = 0;
-    versionPollAttempts = 0;
-    useTelemetryStore.setState((state) => ({
-      firmwareVersion: null,
-      firmwareRaw: undefined,
-      armedStartedAt: null,
-      heartbeat: {
-        ...state.heartbeat,
-        type: 0,
-        autopilot: 0,
-        modeName: 'DISCONNECTED',
-        isArmed: false,
-        lastHeartbeatTime: 0,
-      },
-    }));
-  }
-});
-
 // Automatic command timeout tracking (5s timeout for commands missing COMMAND_ACK)
 interface PendingCommand {
   id: number;
@@ -1580,20 +1570,117 @@ let pendingSendMeta: {
   resolve?: (ack: CommandAckInfo) => void;
 } | null = null;
 
+// Reset vehicle heartbeat state when disconnected
+mavlinkConnection.onStatus((status) => {
+  if (status === 'disconnected') {
+    lastVersionPollTime = 0;
+    versionPollAttempts = 0;
+    const now = Date.now();
+
+    // Settle all in-flight pending commands immediately with NOT_SENT
+    for (const [cmdId, list] of pendingCommands.entries()) {
+      for (const item of list) {
+        clearTimeout(item.timer);
+        if (item.resolve) {
+          item.resolve({
+            command: cmdId,
+            result: -2,
+            resultText: 'NOT_SENT',
+            time: now,
+          });
+        }
+      }
+    }
+    pendingCommands.clear();
+
+    const isManual = mavlinkConnection.isManualDisconnect;
+
+    useTelemetryStore.setState((state) => ({
+      firmwareVersion: null,
+      firmwareRaw: undefined,
+      armedStartedAt: null,
+      ...(isManual ? { hasConnectedInSession: false } : {}),
+      commandFeedback:
+        state.commandFeedback?.status === 'pending'
+          ? {
+              ...state.commandFeedback,
+              status: 'failed',
+              result: -2,
+              resultText: 'NOT_SENT',
+              reason: 'Connection disconnected',
+              time: now,
+            }
+          : state.commandFeedback,
+      heartbeat: {
+        ...state.heartbeat,
+        type: 0,
+        autopilot: 0,
+        modeName: 'DISCONNECTED',
+        isArmed: false,
+        lastHeartbeatTime: 0,
+      },
+    }));
+  }
+});
+
 export function sendTrackedCommand(
   packet: Uint8Array,
   meta?: { label?: string; targetKey?: string }
 ): Promise<CommandAckInfo> {
   return new Promise<CommandAckInfo>((resolve) => {
+    let cmdId = 0;
+    if (packet.length >= 12 && packet[0] === 0xFD) {
+      const payloadLen = packet[1];
+      const msgId = packet[7] | (packet[8] << 8) | (packet[9] << 16);
+      if (msgId === MAVLINK_MSG_ID.COMMAND_LONG || msgId === MAVLINK_MSG_ID.COMMAND_INT) {
+        const b0 = payloadLen > 28 && packet.length > 38 ? packet[38] : 0;
+        const b1 = payloadLen > 29 && packet.length > 39 ? packet[39] : 0;
+        cmdId = b0 | (b1 << 8);
+      }
+    }
+    const cmdName = getMavCmdName(cmdId);
+
     pendingSendMeta = {
       label: meta?.label,
       targetKey: meta?.targetKey,
       resolve,
     };
+    let sent = false;
     try {
-      mavlinkConnection.send(packet);
+      sent = mavlinkConnection.send(packet);
+    } catch {
+      sent = false;
     } finally {
-      pendingSendMeta = null;
+      if (!sent) {
+        pendingSendMeta = null;
+      }
+    }
+
+    if (!sent) {
+      const now = Date.now();
+      const notSentAck: CommandAckInfo = {
+        command: cmdId,
+        result: -2,
+        resultText: 'NOT_SENT',
+        time: now,
+      };
+      if (meta?.label || cmdId !== 0) {
+        useTelemetryStore.setState({
+          commandFeedback: {
+            id: nextPendingId++,
+            command: cmdId,
+            cmdName,
+            label: meta?.label ?? cmdName,
+            targetKey: meta?.targetKey,
+            status: 'failed',
+            result: -2,
+            resultText: 'NOT_SENT',
+            reason: 'Link disconnected (packet not sent)',
+            time: now,
+          },
+        });
+      }
+      resolve(notSentAck);
     }
   });
 }

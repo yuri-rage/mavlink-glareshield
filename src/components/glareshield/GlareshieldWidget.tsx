@@ -104,14 +104,17 @@ export const GlareshieldWidget: React.FC = () => {
   const category = getVehicleCategory(heartbeat.type);
   const commonModes = getVehicleFlightModes(heartbeat.type);
   const guidedModeNum = getGuidedModeNum(heartbeat.type);
+  const targetTakeoffModeNum = category === 'plane' ? 13 : guidedModeNum;
+  const targetTakeoffModeLabel = category === 'plane' ? 'TAKEOFF' : 'GUIDED';
 
   const isVehicleConnected =
     heartbeat.lastHeartbeatTime > 0 &&
     heartbeat.modeName !== 'DISCONNECTED' &&
     nowMs - heartbeat.lastHeartbeatTime <= 3500;
 
-  const isInGuided = isVehicleConnected && heartbeat.customMode === guidedModeNum;
-  const isTakeoffReady = isInGuided && heartbeat.isArmed;
+  const isInTakeoffMode = isVehicleConnected && heartbeat.customMode === targetTakeoffModeNum;
+  const isTakeoffReady = isInTakeoffMode && heartbeat.isArmed;
+  const armedBySequenceRef = useRef<boolean>(false);
 
   const sysId = heartbeat.systemId || 1;
   const compId = heartbeat.componentId || 1;
@@ -248,6 +251,10 @@ export const GlareshieldWidget: React.FC = () => {
   };
 
   const triggerTakeoff = (altM = takeoffAltMeters) => {
+    if (category === 'plane') {
+      handleSetMode(13, 'Switch to TAKEOFF mode', 'takeoff');
+      return;
+    }
     const safeAlt = Math.max(1, Math.min(500, altM));
     const dispAlt = altUnit === 'ft' ? `${Math.round(safeAlt * 3.28084)} ft` : `${safeAlt.toFixed(0)} m`;
     const cmd = encoder.createCommandLong(sysId, compId, MAV_CMD.NAV_TAKEOFF, [0, 0, 0, 0, 0, 0, safeAlt]);
@@ -259,73 +266,114 @@ export const GlareshieldWidget: React.FC = () => {
 
   const runAutoTakeoffSequence = async () => {
     abortAutoSeqRef.current = false;
+    armedBySequenceRef.current = false;
     setAutoSeqError(null);
     const safeAlt = Math.max(1, Math.min(500, takeoffAltMeters));
     const dispAlt = altUnit === 'ft' ? `${Math.round(safeAlt * 3.28084)} ft` : `${safeAlt.toFixed(0)} m`;
 
+    const safetyDisarmIfArmedBySeq = async () => {
+      if (armedBySequenceRef.current) {
+        try {
+          const disarmCmd = encoder.createArmDisarm(sysId, compId, false, true);
+          await sendTrackedCommand(disarmCmd, {
+            label: 'Takeoff Failure: Safety Disarm',
+            targetKey: 'arm',
+          });
+        } catch {}
+        armedBySequenceRef.current = false;
+      }
+    };
+
     try {
-      // Step 1: Switch to GUIDED if not already in GUIDED
+      // Step 1: Switch to TAKEOFF mode (Plane) or GUIDED mode (Copter/Rover/Sub)
       const st1 = useTelemetryStore.getState();
-      if (st1.heartbeat.customMode !== guidedModeNum) {
-        setAutoSeqStep('Step 1/3: Switching to GUIDED mode…');
+      if (st1.heartbeat.customMode !== targetTakeoffModeNum) {
+        setAutoSeqStep(`Step 1/${category === 'plane' ? '2' : '3'}: Switching to ${targetTakeoffModeLabel} mode…`);
         const modeAck = await sendTrackedCommand(
-          encoder.createSetMode(sysId, compId, guidedModeNum),
-          { label: 'Auto-Takeoff: Switch to GUIDED', targetKey: 'takeoff' }
+          encoder.createSetMode(sysId, compId, targetTakeoffModeNum),
+          { label: `Auto-Takeoff: Switch to ${targetTakeoffModeLabel}`, targetKey: 'takeoff' }
         );
-        if (abortAutoSeqRef.current) return;
+        if (abortAutoSeqRef.current) {
+          await safetyDisarmIfArmedBySeq();
+          return;
+        }
         if (modeAck.result !== 0 && modeAck.result !== 5) {
           setAutoSeqError(
-            `Mode switch to GUIDED rejected (${modeAck.resultText})${modeAck.reason ? `: ${modeAck.reason}` : ''}`
+            `Mode switch to ${targetTakeoffModeLabel} rejected (${modeAck.resultText})${modeAck.reason ? `: ${modeAck.reason}` : ''}`
           );
           setAutoSeqStep(null);
+          await safetyDisarmIfArmedBySeq();
           return;
         }
         await new Promise((r) => setTimeout(r, 350));
       }
 
-      if (abortAutoSeqRef.current) return;
+      if (abortAutoSeqRef.current) {
+        await safetyDisarmIfArmedBySeq();
+        return;
+      }
 
       // Step 2: Arm motors if not already armed
       const st2 = useTelemetryStore.getState();
       if (!st2.heartbeat.isArmed) {
-        setAutoSeqStep('Step 2/3: Arming motors…');
+        setAutoSeqStep(`Step 2/${category === 'plane' ? '2' : '3'}: Arming motors…`);
         const armAck = await sendTrackedCommand(
           encoder.createArmDisarm(sysId, compId, true),
           { label: 'Auto-Takeoff: Arm Motors', targetKey: 'takeoff' }
         );
-        if (abortAutoSeqRef.current) return;
+        if (abortAutoSeqRef.current) {
+          await safetyDisarmIfArmedBySeq();
+          return;
+        }
         if (armAck.result !== 0 && armAck.result !== 5) {
           setAutoSeqError(
             `Arming rejected (${armAck.resultText})${armAck.reason ? `: ${armAck.reason}` : ''}`
           );
           setAutoSeqStep(null);
+          await safetyDisarmIfArmedBySeq();
           return;
         }
+        // Vehicle was successfully armed by this sequence
+        armedBySequenceRef.current = true;
         await new Promise((r) => setTimeout(r, 450));
       }
 
-      if (abortAutoSeqRef.current) return;
-
-      // Step 3: Send NAV_TAKEOFF
-      setAutoSeqStep(`Step 3/3: Commanding Takeoff to ${dispAlt}…`);
-      const toAck = await sendTrackedCommand(
-        encoder.createCommandLong(sysId, compId, MAV_CMD.NAV_TAKEOFF, [0, 0, 0, 0, 0, 0, safeAlt]),
-        { label: `Takeoff (${dispAlt})`, targetKey: 'takeoff' }
-      );
-      if (abortAutoSeqRef.current) return;
-      if (toAck.result !== 0 && toAck.result !== 5) {
-        setAutoSeqError(
-          `Takeoff rejected (${toAck.resultText})${toAck.reason ? `: ${toAck.reason}` : ''}`
-        );
-        setAutoSeqStep(null);
+      if (abortAutoSeqRef.current) {
+        await safetyDisarmIfArmedBySeq();
         return;
+      }
+
+      // For standard fixed-wing planes, switching to TAKEOFF mode (13) and arming completes takeoff readiness.
+      // ArduPlane rejects NAV_TAKEOFF in GUIDED with FAILED unless it is a QuadPlane.
+      if (category !== 'plane') {
+        // Step 3: Send NAV_TAKEOFF (Copter/VTOL)
+        setAutoSeqStep(`Step 3/3: Commanding Takeoff to ${dispAlt}…`);
+        const toAck = await sendTrackedCommand(
+          encoder.createCommandLong(sysId, compId, MAV_CMD.NAV_TAKEOFF, [0, 0, 0, 0, 0, 0, safeAlt]),
+          { label: `Takeoff (${dispAlt})`, targetKey: 'takeoff' }
+        );
+        if (abortAutoSeqRef.current) {
+          await safetyDisarmIfArmedBySeq();
+          return;
+        }
+        if (toAck.result !== 0 && toAck.result !== 5) {
+          setAutoSeqError(
+            `Takeoff rejected (${toAck.resultText})${toAck.reason ? `: ${toAck.reason}` : ''}`
+          );
+          setAutoSeqStep(null);
+          // Crucial safety rule: if sequence armed the vehicle and takeoff command failed, disarm immediately!
+          await safetyDisarmIfArmedBySeq();
+          return;
+        }
       }
 
       setAutoSeqStep(null);
       setShowTakeoffPanel(false);
+      armedBySequenceRef.current = false;
     } catch (e: any) {
       setAutoSeqError(String(e?.message ?? e));
       setAutoSeqStep(null);
+      await safetyDisarmIfArmedBySeq();
     }
   };
 
@@ -333,8 +381,18 @@ export const GlareshieldWidget: React.FC = () => {
     abortAutoSeqRef.current = true;
     setAutoSeqStep(null);
     setAutoSeqError('Takeoff sequence aborted by operator.');
-    // Switch to Loiter/Hold to arrest climb if already airborne
-    handleSetMode(category === 'plane' ? 12 : 5, 'Abort Takeoff (Loiter)', 'loiter');
+    if (armedBySequenceRef.current) {
+      // Disarm if we armed the vehicle during this sequence on the ground
+      const disarmCmd = encoder.createArmDisarm(sysId, compId, false, true);
+      void sendTrackedCommand(disarmCmd, {
+        label: 'Auto-Takeoff Abort: Safety Disarm',
+        targetKey: 'arm',
+      });
+      armedBySequenceRef.current = false;
+    } else {
+      // Switch to Loiter/Hold to arrest climb if already airborne
+      handleSetMode(category === 'plane' ? 12 : 5, 'Abort Takeoff (Loiter)', 'loiter');
+    }
   };
 
   const displayTakeoffAlt =
@@ -349,19 +407,19 @@ export const GlareshieldWidget: React.FC = () => {
   };
 
   return (
-    <Card className="border-sky-500/20 bg-zinc-950/90 shadow-xl overflow-hidden">
-      <CardContent className="p-2.5 sm:p-4 space-y-3">
-        {/* Inline Command Feedback Banner (#1) */}
+    <Card className="border-sky-500/20 bg-zinc-950/90 shadow-xl overflow-hidden relative">
+      <CardContent className="p-2.5 sm:p-4 space-y-3 relative">
+        {/* Inline Command Feedback Banner - absolute overlay so it does NOT shift layout */}
         {commandFeedback && (
           <div
             role="status"
             aria-live="polite"
-            className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs font-sans transition-all ${
+            className={`absolute top-2 left-2.5 right-2.5 sm:top-2.5 sm:left-4 sm:right-4 z-30 flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs font-sans shadow-xl backdrop-blur-md transition-all ${
               commandFeedback.status === 'pending'
-                ? 'bg-sky-950/60 border-sky-700/60 text-sky-200'
+                ? 'bg-sky-950/95 border-sky-700/80 text-sky-200'
                 : commandFeedback.status === 'accepted'
-                  ? 'bg-emerald-950/60 border-emerald-700/60 text-emerald-200'
-                  : 'bg-rose-950/75 border-rose-600/70 text-rose-100'
+                  ? 'bg-emerald-950/95 border-emerald-700/80 text-emerald-200'
+                  : 'bg-rose-950/95 border-rose-600/80 text-rose-100'
             }`}
           >
             <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -718,26 +776,26 @@ export const GlareshieldWidget: React.FC = () => {
                 </div>
               </div>
 
-              {/* Readiness Checklist: GUIDED + ARMED */}
+              {/* Readiness Checklist: Mode + ARMED */}
               <div className="md:col-span-4 bg-zinc-950/70 border border-zinc-800 rounded-lg p-2.5 space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-1.5">
-                    {isInGuided ? (
+                    {isInTakeoffMode ? (
                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                     ) : (
                       <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                     )}
-                    <span className={isInGuided ? 'text-emerald-300 font-semibold' : 'text-amber-200'}>
-                      1. Flight Mode: GUIDED
+                    <span className={isInTakeoffMode ? 'text-emerald-300 font-semibold' : 'text-amber-200'}>
+                      1. Flight Mode: {targetTakeoffModeLabel}
                     </span>
                   </span>
-                  {!isInGuided && (
+                  {!isInTakeoffMode && (
                     <button
                       type="button"
-                      onClick={() => handleSetMode(guidedModeNum, 'Switch to GUIDED', 'takeoff-guided')}
+                      onClick={() => handleSetMode(targetTakeoffModeNum, `Switch to ${targetTakeoffModeLabel}`, 'takeoff-mode')}
                       className="px-2 py-0.5 rounded bg-sky-600/30 hover:bg-sky-600/50 border border-sky-500/50 text-sky-200 text-[10px] font-bold uppercase"
                     >
-                      Switch to GUIDED
+                      Switch to {targetTakeoffModeLabel}
                     </button>
                   )}
                 </div>
@@ -785,12 +843,18 @@ export const GlareshieldWidget: React.FC = () => {
                       disabled={!isVehicleConnected}
                       onClick={runAutoTakeoffSequence}
                       className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold h-9 text-xs gap-1.5"
-                      title="Automatically switches to GUIDED, arms motors, and commands takeoff after verifying each ACK"
+                      title={
+                        category === 'plane'
+                          ? 'Switches to TAKEOFF mode and arms motors for launch'
+                          : 'Automatically switches to GUIDED, arms motors, and commands takeoff after verifying each ACK'
+                      }
                     >
                       <PlaneTakeoff className="h-3.5 w-3.5" />
                       {isTakeoffReady
-                        ? `Takeoff to ${displayTakeoffAlt} ${altUnit}`
-                        : `Auto: GUIDED → Arm → Takeoff (${displayTakeoffAlt}${altUnit})`}
+                        ? category === 'plane'
+                          ? 'Ready for Launch'
+                          : `Takeoff to ${displayTakeoffAlt} ${altUnit}`
+                        : `Auto: ${targetTakeoffModeLabel} → Arm${category === 'plane' ? '' : ` → Takeoff (${displayTakeoffAlt}${altUnit})`}`}
                     </Button>
                     {!isTakeoffReady && (
                       <Button
@@ -799,9 +863,13 @@ export const GlareshieldWidget: React.FC = () => {
                         disabled={!isVehicleConnected}
                         onClick={() => triggerTakeoff(takeoffAltMeters)}
                         className="w-full border-zinc-700 text-zinc-300 hover:bg-zinc-800 h-7 text-[11px]"
-                        title="Send raw MAV_CMD_NAV_TAKEOFF without switching mode or arming first"
+                        title={
+                          category === 'plane'
+                            ? 'Switch to TAKEOFF mode'
+                            : 'Send raw MAV_CMD_NAV_TAKEOFF without switching mode or arming first'
+                        }
                       >
-                        Send NAV_TAKEOFF Only
+                        {category === 'plane' ? 'TAKEOFF Mode Only' : 'Send NAV_TAKEOFF Only'}
                       </Button>
                     )}
                   </>
