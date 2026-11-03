@@ -36,6 +36,7 @@ import {
   VolumeX,
   Milestone,
   RefreshCw,
+  Info,
 } from 'lucide-react';
 import { BandwidthProfile } from '../../mavlink/rateManager';
 import { getVehicleCategory, getVehicleCategoryLabel, getVehicleFlightModes } from '../../mavlink/messages';
@@ -50,8 +51,19 @@ function formatDurationClock(totalMs: number): string {
 }
 
 export const Navbar: React.FC = () => {
-  const { url, status, bandwidthProfile, stats, setUrl, setBandwidthProfile, gcsSystemId, setGcsSystemId, connect, disconnect } =
-    useConnectionStore();
+  const {
+    url,
+    status,
+    errorMessage,
+    bandwidthProfile,
+    stats,
+    setUrl,
+    setBandwidthProfile,
+    gcsSystemId,
+    setGcsSystemId,
+    connect,
+    disconnect,
+  } = useConnectionStore();
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
   const battery = useTelemetryStore((state) => state.battery);
   const gps = useTelemetryStore((state) => state.gps);
@@ -1044,6 +1056,32 @@ export const Navbar: React.FC = () => {
             <p className="text-[11px] text-zinc-500">
               Default companion bridge endpoint is <code className="text-sky-400">ws://localhost:56781</code>. Saved automatically for page reloads.
             </p>
+
+            {typeof window !== 'undefined' && window.location.protocol === 'https:' && inputUrl.trim().startsWith('ws://') && (
+              <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-950/25 text-amber-200 text-xs space-y-1 mt-2">
+                <div className="font-semibold flex items-center gap-1.5 text-amber-300">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  HTTPS Mixed Content Restriction
+                </div>
+                <p className="text-[11px] text-zinc-300 leading-relaxed">
+                  You are loading Glareshield over HTTPS. Browsers strictly block unencrypted <code className="text-amber-300">ws://</code> connections as Mixed Active Content.
+                </p>
+                <div className="text-[11px] text-zinc-400 space-y-0.5 pt-0.5">
+                  <div>• <strong>Secure:</strong> Use <code className="text-emerald-400">wss://</code> (e.g. bridge with <code className="text-zinc-300">--ssl-cert</code> or reverse proxy).</div>
+                  <div>• <strong>Firefox:</strong> In <code className="text-zinc-300">about:config</code>, set <code className="text-zinc-300">network.websocket.allowInsecureFromHTTPS</code> to <code className="text-zinc-300">true</code>.</div>
+                </div>
+              </div>
+            )}
+
+            {errorMessage && (
+              <div className="p-2.5 rounded-lg border border-red-500/30 bg-red-950/25 text-red-300 text-xs flex items-start gap-2 mt-2">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-400 mt-0.5" />
+                <div className="text-[11px] leading-relaxed">
+                  <span className="font-semibold text-red-300">Link Error: </span>
+                  {errorMessage}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">

@@ -184,7 +184,14 @@ export class MavlinkConnection {
       socket.onerror = (err) => {
         if (this.ws !== socket) return;
         console.warn('WebSocket connection error:', err);
-        this.setStatus('error', 'WebSocket error occurred');
+        const isMixedContent =
+          typeof window !== 'undefined' &&
+          window.location.protocol === 'https:' &&
+          this.url.startsWith('ws://');
+        const errMsg = isMixedContent
+          ? 'Mixed Content: HTTPS pages block unencrypted ws://. Use wss:// or permit insecure WebSockets.'
+          : 'WebSocket error occurred';
+        this.setStatus('error', errMsg);
       };
 
       socket.onclose = () => {
@@ -193,13 +200,27 @@ export class MavlinkConnection {
         this.cleanup();
         this.setStatus('disconnected');
         if (this.shouldReconnect && !this.isReconnectPaused) {
-          this.reconnectTimeout = setTimeout(() => this.connect(), 2000);
+          const isMixedContent =
+            typeof window !== 'undefined' &&
+            window.location.protocol === 'https:' &&
+            this.url.startsWith('ws://');
+          // If blocked by browser mixed content, back off to 10s to avoid spamming the console
+          const delay = isMixedContent ? 10000 : 2000;
+          this.reconnectTimeout = setTimeout(() => this.connect(), delay);
         }
       };
     } catch (e: any) {
-      this.setStatus('error', e?.message || 'Failed to connect');
+      const isMixedContent =
+        typeof window !== 'undefined' &&
+        window.location.protocol === 'https:' &&
+        this.url.startsWith('ws://');
+      const msg = isMixedContent
+        ? 'Mixed Content: HTTPS pages block unencrypted ws://. Use wss:// or permit insecure WebSockets.'
+        : e?.message || 'Failed to connect';
+      this.setStatus('error', msg);
       if (this.shouldReconnect && !this.isReconnectPaused) {
-        this.reconnectTimeout = setTimeout(() => this.connect(), 3000);
+        const delay = isMixedContent ? 10000 : 3000;
+        this.reconnectTimeout = setTimeout(() => this.connect(), delay);
       }
     }
   }

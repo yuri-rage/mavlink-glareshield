@@ -130,6 +130,14 @@ async def main(url):
     )
     r = await handshake(url, "http://localhost:3000")
     check("Origin http://localhost:3000 is accepted (control)", r == "accepted", r)
+    r = await handshake(url, "https://glareshield.yurirage.com")
+    check(
+        "Origin https://glareshield.yurirage.com is accepted",
+        r == "accepted",
+        r,
+    )
+    r = await handshake(url, "https://my-branch.pages.dev")
+    check("Origin https://my-branch.pages.dev is accepted", r == "accepted", r)
 
     # 4: NTRIP client as a relay to an arbitrary local port
     port = free_port()

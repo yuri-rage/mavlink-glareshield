@@ -15,9 +15,11 @@ Usage:
 import argparse
 import asyncio
 import base64
+import http
 import json
 import math
 import re
+import ssl
 import struct
 import time
 from typing import Any, cast
@@ -29,6 +31,8 @@ DEFAULT_ALLOWED_ORIGINS: list[Any] = [
     re.compile(
         r"^https?://(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$"
     ),
+    re.compile(r"^https?://([a-zA-Z0-9-]+\.)*yurirage\.com(:\d+)?$"),
+    re.compile(r"^https?://([a-zA-Z0-9-]+\.)*pages\.dev(:\d+)?$"),
     re.compile(r"^tauri://.*$"),
     re.compile(r"^https?://tauri\.localhost(:\d+)?$"),
     None,
@@ -197,6 +201,7 @@ class BridgeServer:
         mode: str,
         target: str,
         allowed_origins: list[Any] | None = None,
+        ssl_context: ssl.SSLContext | None = None,
     ):
         self.host = host
         self.port = port
@@ -205,6 +210,7 @@ class BridgeServer:
         self.allowed_origins = (
             allowed_origins if allowed_origins is not None else DEFAULT_ALLOWED_ORIGINS
         )
+        self.ssl_context = ssl_context
         self.clients: set[Any] = set()
         self.client_sessions: dict[Any, ClientSession] = {}
         self.encoder = MavlinkV2Encoder(sysid=1, compid=1)
@@ -1435,17 +1441,44 @@ class BridgeServer:
                 print(f"[SERIAL] Connection error ({e}), retrying in 2s...")
                 await asyncio.sleep(2)
 
+    def process_request(self, connection: Any, request: Any) -> Any:
+        origin = request.headers.get("Origin")
+        if not self.allowed_origins or "*" in self.allowed_origins:
+            return None
+        for pattern in self.allowed_origins:
+            if pattern is None and origin is None:
+                return None
+            if pattern is not None and origin is not None:
+                if hasattr(pattern, "match") and pattern.match(origin):
+                    return None
+                if pattern == origin:
+                    return None
+        print(f"[SECURITY] Refused WebSocket connection from Origin: {origin}")
+        print(
+            f'           To permit this, restart bridge with: --allow-origin "{origin}" or --allow-all-origins'
+        )
+        return connection.respond(
+            http.HTTPStatus.FORBIDDEN,
+            f"Origin {origin} not allowed by MAVLink bridge security policy.\n",
+        )
+
     async def run(self):
         origins_arg = (
             None
             if (self.allowed_origins and "*" in self.allowed_origins)
             else self.allowed_origins
         )
+        proto = "wss" if self.ssl_context else "ws"
         await websockets.serve(
-            self.ws_handler, self.host, self.port, origins=origins_arg
+            self.ws_handler,
+            self.host,
+            self.port,
+            origins=origins_arg,
+            ssl=self.ssl_context,
+            process_request=self.process_request,
         )
         print("============================================================")
-        print(f" MAVLink Glareshield Bridge running on ws://{self.host}:{self.port}")
+        print(f" MAVLink Glareshield Bridge running on {proto}://{self.host}:{self.port}")
         print(
             f" Mode: {self.mode.upper()} {f'-> {self.target}' if self.target else ''}"
         )
@@ -1486,6 +1519,16 @@ def main():
         action="store_true",
         help="Allow 'Origin: null' header (needed when UI is opened via file:// URL)",
     )
+    parser.add_argument(
+        "--ssl-cert",
+        type=str,
+        help="Path to SSL certificate (.pem/.crt) to serve over wss://",
+    )
+    parser.add_argument(
+        "--ssl-key",
+        type=str,
+        help="Path to SSL private key (.key) to serve over wss://",
+    )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
         "--mock", action="store_true", help="Run simulated ArduPilot mock telemetry"
@@ -1525,8 +1568,22 @@ def main():
         else:
             allowed_origins.extend(args.allowed_origins)
 
+    ssl_context = None
+    if args.ssl_cert and args.ssl_key:
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_context.load_cert_chain(args.ssl_cert, keyfile=args.ssl_key)
+    elif args.ssl_cert or args.ssl_key:
+        parser.error(
+            "Both --ssl-cert and --ssl-key must be provided together to enable TLS/SSL."
+        )
+
     server = BridgeServer(
-        args.host, args.port, mode, target, allowed_origins=allowed_origins
+        args.host,
+        args.port,
+        mode,
+        target,
+        allowed_origins=allowed_origins,
+        ssl_context=ssl_context,
     )
     try:
         asyncio.run(server.run())

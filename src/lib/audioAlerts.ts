@@ -34,15 +34,34 @@ const pendingWorkerRequests = new Map<
   }
 >();
 let prewarmStarted = false;
+let hasUserInteracted = false;
 
-function getSharedAudioContext(): AudioContext | null {
+if (typeof window !== 'undefined') {
+  const onUserGesture = () => {
+    hasUserInteracted = true;
+    if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+    window.removeEventListener('pointerdown', onUserGesture, true);
+    window.removeEventListener('keydown', onUserGesture, true);
+    window.removeEventListener('touchstart', onUserGesture, true);
+  };
+  window.addEventListener('pointerdown', onUserGesture, { capture: true, once: true });
+  window.addEventListener('keydown', onUserGesture, { capture: true, once: true });
+  window.addEventListener('touchstart', onUserGesture, { capture: true, once: true });
+}
+
+function getSharedAudioContext(allowResume = false): AudioContext | null {
   if (typeof window === 'undefined') return null;
   const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
   if (!AudioCtxClass) return null;
   if (!sharedAudioCtx) {
     sharedAudioCtx = new AudioCtxClass();
   }
-  if (sharedAudioCtx.state === 'suspended') {
+  const canResume =
+    hasUserInteracted ||
+    (typeof navigator !== 'undefined' && (navigator as any).userActivation?.hasBeenActive);
+  if (sharedAudioCtx.state === 'suspended' && (allowResume || canResume)) {
     sharedAudioCtx.resume().catch(() => {});
   }
   return sharedAudioCtx;
@@ -237,7 +256,7 @@ async function prewarmCoreCallouts() {
     if (audioBufferCache.has(phrase)) continue;
     try {
       const wavBuf = await synthesizeViaWorker(phrase, 12000);
-      const ctx = getSharedAudioContext();
+      const ctx = getSharedAudioContext(false);
       if (ctx) {
         const decoded = await ctx.decodeAudioData(wavBuf.slice(0));
         cacheAudioBuffer(phrase, decoded);
