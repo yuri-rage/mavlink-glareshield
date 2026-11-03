@@ -33,4 +33,8 @@ __pycache__/
 *$py.class
 *.tsbuildinfo
 
+# Local TLS certs
+certs/
+*.pem
+
 TODO*

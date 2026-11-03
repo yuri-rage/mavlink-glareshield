@@ -61,12 +61,32 @@ Designed to remove the "glare" from more fully featured GCS applications and foc
 
 ### 2. Start the Telemetry Bridge
 
+#### Using Docker (Recommended)
+
+```bash
+# Start with Docker Compose (auto-generates TLS certificates for wss://)
+docker compose up -d
+
+# View bridge logs
+docker compose logs -f
+```
+
+Configure settings directly in [`docker-compose.yml`](docker-compose.yml) or run via Docker CLI (LAN IP is automatically detected for TLS):
+```bash
+docker run -d --restart unless-stopped --net=host \
+  -e AUTO_TLS=true \
+  -v ./certs:/certs \
+  yurirage/mavlink-glareshield-bridge:latest
+```
+
+#### Running Directly with Python
+
 ```bash
 # Option A: Start simulated mock telemetry
 python3 bridge/bridge.py --mock
 
-# Option B: Connect to ArduPilot SITL over UDP
-python3 bridge/bridge.py --udp 127.0.0.1:14550
+# Option B: Connect to ArduPilot SITL or broadcast vehicle over UDP
+python3 bridge/bridge.py --udp 0.0.0.0:14550
 
 # Option C: Connect to physical telemetry radio over Serial
 python3 bridge/bridge.py --serial /dev/ttyUSB0:57600

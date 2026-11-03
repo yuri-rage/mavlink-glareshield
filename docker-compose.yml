@@ -1,0 +1,37 @@
+services:
+  bridge:
+    image: ${DOCKER_IMAGE:-yurirage/mavlink-glareshield-bridge:latest}
+    build:
+      context: ./bridge
+      dockerfile: Dockerfile
+    container_name: glareshield-bridge
+    restart: unless-stopped
+    # On Linux, host network mode is recommended so UDP broadcast packets (14550)
+    # can be received from vehicles without being blocked by Docker NAT bridges.
+    network_mode: host
+
+    # If running on macOS or Windows (where host networking has limitations),
+    # comment out 'network_mode: host' and uncomment the ports block below:
+    # ports:
+    #   - "56781:56781/tcp"
+    #   - "14550:14550/udp"
+
+    environment:
+      # Mode: udp | tcp | serial | mock
+      - MODE=udp
+      # Telemetry target:
+      - TARGET=0.0.0.0:14550
+      # Automatically generate self-signed TLS certificates for wss:// (LAN IP auto-detected)
+      - AUTO_TLS=true
+      # Optional: Override certificate Common Name (defaults to auto-detected LAN IP / hostname)
+      # - CERT_CN=192.168.1.69
+      # Optional: Allowed origins (comma-separated). Default allowlist includes *.yurirage.com, localhost, etc.
+      # - ALLOW_ORIGINS=https://glareshield.yurirage.com,https://my-domain.com
+
+    volumes:
+      # Mount directory to persist generated TLS certificates across restarts
+      - ./certs:/certs
+
+    # If using physical telemetry radio over USB serial (e.g. SiK radio), uncomment below:
+    # devices:
+    #   - /dev/ttyUSB0:/dev/ttyUSB0

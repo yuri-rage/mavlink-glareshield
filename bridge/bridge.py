@@ -19,6 +19,7 @@ import http
 import json
 import math
 import re
+import socket
 import ssl
 import struct
 import time
@@ -429,8 +430,11 @@ class BridgeServer:
                 pass
 
     def send_to_vehicle(self, data: bytes):
-        if self.mode == "udp" and self.transport:
-            cast(Any, self.transport).sendto(data, self.udp_target)
+        if self.mode == "udp" and self.transport and self.udp_target:
+            try:
+                cast(Any, self.transport).sendto(data, self.udp_target)
+            except OSError:
+                pass
         elif self.mode == "tcp" and self.transport:
             cast(Any, self.transport).write(data)
         elif self.mode == "serial" and self.serial_conn:
@@ -1371,30 +1375,73 @@ class BridgeServer:
         class UdpProtocol(asyncio.DatagramProtocol):
             def __init__(self, server):
                 self.server = server
+                self.first_packet = True
 
             def datagram_received(self, data, addr):
+                if self.first_packet:
+                    self.first_packet = False
+                    print(
+                        f"[UDP] Ingesting telemetry from {addr[0]}:{addr[1]} ({len(data)} bytes). Forwarding to {len(self.server.clients)} web clients."
+                    )
                 self.server.udp_target = addr
                 asyncio.create_task(self.server.broadcast(data))
 
             def error_received(self, exc):
                 print(f"[UDP] Error: {exc}")
 
-        self.udp_target = (target_ip, target_port)
+        self.udp_target = (
+            None
+            if target_ip in ("0.0.0.0", "localhost", "127.0.0.1")
+            else (target_ip, target_port)
+        )
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, "SO_REUSEPORT"):
+            try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except OSError:
+                pass
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
         try:
+            sock.bind(("0.0.0.0", target_port))
             transport, _ = await loop.create_datagram_endpoint(
-                lambda: UdpProtocol(self), local_addr=("0.0.0.0", target_port)
+                lambda: UdpProtocol(self), sock=sock
             )
             self.transport = transport
             print(
-                f"[UDP] Listening on 0.0.0.0:{target_port}, target {target_ip}:{target_port}"
+                f"[UDP] Listening on 0.0.0.0:{target_port} (awaiting vehicle packets, target: {target_ip}:{target_port})"
             )
-        except Exception:  # noqa: BLE001
-            # Fallback if port already in use (e.g., connect mode)
-            transport, _ = await loop.create_datagram_endpoint(
-                lambda: UdpProtocol(self), remote_addr=(target_ip, target_port)
-            )
-            self.transport = transport
-            print(f"[UDP] Connected to {target_ip}:{target_port}")
+        except OSError as e:
+            sock.close()
+            if target_ip not in ("0.0.0.0", "localhost", "127.0.0.1"):
+                try:
+                    transport, _ = await loop.create_datagram_endpoint(
+                        lambda: UdpProtocol(self), remote_addr=(target_ip, target_port)
+                    )
+                    self.transport = transport
+                    print(f"[UDP] Connected to remote target {target_ip}:{target_port}")
+                    return
+                except OSError as ex:
+                    print(
+                        f"[UDP ERROR] Could not connect to {target_ip}:{target_port}: {ex}"
+                    )
+                    return
+
+            print("============================================================")
+            print(f"[UDP ERROR] Could not bind to 0.0.0.0:{target_port}: {e}")
+            print(f"            Port {target_port} is already in use by another application.")
+            print("============================================================")
+            print(" Note: UDP ports cannot be shared by multiple programs simultaneously.")
+            print(" If Mission Planner or QGroundControl is already connected to port 14550:")
+            print("   1. Mission Planner automatically hosts its own WebSocket on port 56781!")
+            print("      Connect Glareshield directly to ws://localhost:56781 without running bridge.py.")
+            print("   2. To run bridge.py alongside Mission Planner, forward MAVLink in Mission Planner:")
+            print("      Press Ctrl+F -> 'Mavlink' -> Forward to UDP port 14551, then run:")
+            print("      python3 bridge.py --udp 127.0.0.1:14551")
+            print("   3. Or disconnect/close Mission Planner so bridge.py can bind to port 14550.")
+            print("============================================================")
 
     async def setup_tcp(self):
         parts = self.target.split(":")

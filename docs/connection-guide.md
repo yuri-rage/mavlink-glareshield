@@ -33,23 +33,50 @@ Choose the setup that best fits your environment below.
 
 Configuring encrypted WebSockets (`wss://`) is the most robust, permanent solution. It works across all browsers (Chrome, Firefox, Safari, Edge) and mobile devices without requiring users to alter browser settings or flags.
 
-### 1. Generate SSL Certificates on your Bridge Machine
+### Method A: Automated Setup with Docker Compose (Zero Configuration)
 
-Run this one-liner on the machine running `bridge.py` (replace `192.168.1.69` with your machine's IP or hostname):
+If you use Docker, certificate generation, renewal, and LAN IP detection are completely automated without editing any config files:
+
+1. Start the container:
+   ```bash
+   docker compose up -d
+   ```
+2. Check the logs:
+   ```bash
+   docker compose logs
+   ```
+   The container automatically detects your host's primary LAN IP (e.g. `192.168.1.69`) and hostname, generates a 2048-bit RSA TLS certificate with all IP/DNS Subject Alternative Names (`subjectAltName`) in `./certs/`, and prints your direct connection URL:
+   ```text
+   ============================================================
+    MAVLink Glareshield Bridge Container
+    Mode:       udp (0.0.0.0:14550)
+    Protocol:   wss://0.0.0.0:56781
+    TLS Active: true
+    Connect at: wss://192.168.1.69:56781/
+   ============================================================
+   ```
+   If your machine changes networks or receives a new DHCP address, the container detects the change on restart and automatically re-issues a matching certificate.
+
+### Method B: Manual Python & OpenSSL Setup
+
+#### 1. Generate SSL Certificates on your Bridge Machine
+
+Run this command on the machine running `bridge.py` (replace `192.168.1.69` with your machine's IP or hostname):
 
 ```bash
 openssl req -x509 -newkey rsa:2048 -nodes \
   -keyout key.pem -out cert.pem -days 365 \
-  -subj "/CN=192.168.1.69"
+  -subj "/CN=192.168.1.69" \
+  -addext "subjectAltName=IP:192.168.1.69,DNS:localhost,IP:127.0.0.1"
 ```
 
-### 2. Start the Bridge with TLS
+#### 2. Start the Bridge with TLS
 
 Pass `--ssl-cert` and `--ssl-key` to `bridge.py`:
 
 ```bash
-# Example with UDP (SITL):
-python3 bridge/bridge.py --host 0.0.0.0 --port 56781 --udp 127.0.0.1:14550 \
+# Example with UDP (SITL or live broadcast):
+python3 bridge/bridge.py --host 0.0.0.0 --port 56781 --udp 0.0.0.0:14550 \
   --ssl-cert cert.pem --ssl-key key.pem
 
 # Example with physical telemetry radio (Serial):
@@ -64,7 +91,7 @@ The console will confirm:
 ============================================================
 ```
 
-### 3. Trust the Self-Signed Certificate in Browser (First Time Only)
+### Trusting the Self-Signed Certificate in Browser (First Time Only)
 
 Because the certificate is self-signed, your browser needs one-time confirmation:
 1. Open a new tab and navigate directly to:
@@ -204,5 +231,6 @@ If an unauthorized origin attempts to connect, the bridge prints:
 | :--- | :--- | :--- |
 | **"The connection to ws://... was interrupted while the page was loading"** | Browser Mixed Content policy blocking `ws://` from an `https://` site. | See [Option 1](#option-1-native-tls--wss-recommended-for-all-browsers--mobile) for `wss://` or [Option 2 / 3](#option-2-firefox-configuration-fastest-for-desktop-testing) for browser overrides. |
 | **Bridge console shows `Refused WebSocket connection from Origin`** | Host domain not in bridge allowlist. | Pass `--allow-origin "https://yourdomain.com"` or `--allow-all-origins` to `bridge.py`. |
+| **Bridge connected, but 0 pkts/s and no telemetry received over UDP** | Host firewall blocking inbound UDP port 14550. | On Linux/NixOS, ensure port 14550/udp is allowed in your firewall (e.g. `sudo iptables -I INPUT -p udp --dport 14550 -j ACCEPT` or `sudo ufw allow 14550/udp`). |
 | **"WebSocket connection failed" / Connection timed out** | Bridge is only bound to `127.0.0.1`. | Restart the bridge with `--host 0.0.0.0` so it listens on all network interfaces. |
 | **"An AudioContext was prevented from starting automatically"** | Browser autoplay policy requiring gesture. | Click or tap anywhere in the application window to unlock audio callouts. |
