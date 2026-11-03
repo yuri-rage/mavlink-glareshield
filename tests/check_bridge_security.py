@@ -136,8 +136,26 @@ async def main(url):
         r == "accepted",
         r,
     )
-    r = await handshake(url, "https://my-branch.pages.dev")
-    check("Origin https://my-branch.pages.dev is accepted", r == "accepted", r)
+    r = await handshake(url, "https://other.yurirage.com")
+    check(
+        "Origin https://other.yurirage.com is refused",
+        r.startswith("rejected"),
+        r,
+    )
+    r = await handshake(url, "https://glareshield.pages.dev")
+    check("Origin https://glareshield.pages.dev is accepted", r == "accepted", r)
+    r = await handshake(url, "https://my-branch.glareshield.pages.dev")
+    check(
+        "Origin https://my-branch.glareshield.pages.dev is accepted",
+        r == "accepted",
+        r,
+    )
+    r = await handshake(url, "https://anything-i-deploy.pages.dev")
+    check(
+        "Origin https://anything-i-deploy.pages.dev is refused",
+        r.startswith("rejected"),
+        r,
+    )
 
     # 4: NTRIP client as a relay to an arbitrary local port
     port = free_port()

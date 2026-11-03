@@ -32,8 +32,8 @@ DEFAULT_ALLOWED_ORIGINS: list[Any] = [
     re.compile(
         r"^https?://(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$"
     ),
-    re.compile(r"^https?://([a-zA-Z0-9-]+\.)*yurirage\.com(:\d+)?$"),
-    re.compile(r"^https?://([a-zA-Z0-9-]+\.)*pages\.dev(:\d+)?$"),
+    re.compile(r"^https://glareshield\.yurirage\.com(:\d+)?$"),
+    re.compile(r"^https://([a-z0-9-]+\.)?glareshield\.pages\.dev(:\d+)?$"),
     re.compile(r"^tauri://.*$"),
     re.compile(r"^https?://tauri\.localhost(:\d+)?$"),
     None,
@@ -1396,12 +1396,6 @@ class BridgeServer:
         )
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        if hasattr(socket, "SO_REUSEPORT"):
-            try:
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-            except OSError:
-                pass
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
         try:
@@ -1439,7 +1433,8 @@ class BridgeServer:
             print("      Connect Glareshield directly to ws://localhost:56781 without running bridge.py.")
             print("   2. To run bridge.py alongside Mission Planner, forward MAVLink in Mission Planner:")
             print("      Press Ctrl+F -> 'Mavlink' -> Forward to UDP port 14551, then run:")
-            print("      python3 bridge.py --udp 127.0.0.1:14551")
+            print("      python3 bridge.py --port 56782 --udp 127.0.0.1:14551")
+            print("      (and connect Glareshield to ws://localhost:56782, as Mission Planner uses 56781)")
             print("   3. Or disconnect/close Mission Planner so bridge.py can bind to port 14550.")
             print("============================================================")
 
