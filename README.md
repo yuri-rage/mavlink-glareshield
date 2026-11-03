@@ -63,15 +63,24 @@ Designed to remove the "glare" from more fully featured GCS applications and foc
 
 #### Using Docker (Recommended)
 
+Docker provides zero-configuration setup for standard MAVLink UDP broadcast (port 14550) with automated TLS certificate generation for `wss://`.
+
+To run standalone without cloning the entire repository:
 ```bash
-# Start with Docker Compose (auto-generates TLS certificates for wss://)
+# 1. Download docker-compose.yml into a dedicated folder
+mkdir -p glareshield-bridge && cd glareshield-bridge
+curl -O https://raw.githubusercontent.com/yuri-rage/mavlink-glareshield/master/docker-compose.yml
+
+# 2. (Optional) Edit docker-compose.yml for TCP or Serial telemetry (see Connection Guide)
+
+# 3. Start the container from within that directory
 docker compose up -d
 
-# View bridge logs
+# View bridge logs and connection URL
 docker compose logs -f
 ```
 
-Configure settings directly in [`docker-compose.yml`](docker-compose.yml) or run via Docker CLI (LAN IP is automatically detected for TLS):
+Configure settings directly in [`docker-compose.yml`](docker-compose.yml) (e.g. `MODE=tcp` or `MODE=serial` with USB device mapping; see the [Connection Guide](docs/connection-guide.md#method-a-automated-setup-with-docker-compose) for examples) or run via Docker CLI (LAN IP is automatically detected for TLS):
 ```bash
 docker run -d --restart unless-stopped --net=host \
   -e AUTO_TLS=true \

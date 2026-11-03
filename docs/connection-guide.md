@@ -37,31 +37,79 @@ Choose the setup that best fits your environment below.
 
 Configuring encrypted WebSockets (`wss://`) provides an encrypted telemetry transport. Note that when using self-signed certificates, client devices must perform a one-time trust/acceptance step.
 
-### Method A: Automated Setup with Docker Compose (Zero Configuration)
+### Method A: Automated Setup with Docker Compose
 
-If you use Docker, certificate generation and LAN IP detection are automated:
+Running the bridge in Docker automates TLS certificate generation and host LAN IP detection.
 
-1. Start the container:
-   ```bash
-   docker compose up -d
-   ```
-2. Check the logs:
-   ```bash
-   docker compose logs
-   ```
-   The container automatically detects your host's network interfaces and hostname via the kernel, generates a 2048-bit RSA TLS certificate with all IP/DNS Subject Alternative Names (`subjectAltName`) into `./certs/`, and prints your direct connection URL:
-   ```text
-   ============================================================
-    MAVLink Glareshield Bridge Container
-    Mode:       udp (0.0.0.0:14550)
-    Protocol:   wss://0.0.0.0:56781
-    TLS Active: true
-    Connect at: wss://192.168.1.69:56781/
-   ============================================================
-   ```
+> [!NOTE]
+> **Zero-Configuration Scope**:
+> Docker Compose provides an out-of-the-box **zero-configuration** experience when connecting to telemetry via standard **UDP broadcast** (`0.0.0.0:14550`), which is used by ArduPilot/PX4 SITL and most network telemetry radios. If you need to connect over **TCP** or **USB Serial**, a quick edit to `docker-compose.yml` is required as shown below.
 
-3. Authorize the certificate on each client browser/device:
-   Before connecting in Glareshield over `wss://`, follow the one-time [Client Certificate Acceptance steps](#trusting-the-self-signed-certificate-on-clients-first-time-only) below to open `https://<ip>:56781` in a browser tab and accept the self-signed certificate.
+#### 1. Download `docker-compose.yml`
+
+You do not need to clone the entire repository to run the bridge. Create a dedicated directory on your bridge machine, download `docker-compose.yml`, and ensure you run all `docker compose` commands from within that directory (so Docker can locate the compose file and manage the `./certs` volume):
+
+```bash
+mkdir -p glareshield-bridge && cd glareshield-bridge
+curl -O https://raw.githubusercontent.com/yuri-rage/mavlink-glareshield/master/docker-compose.yml
+```
+
+#### 2. Configure Telemetry Transport (If Not Using Default UDP Broadcast)
+
+If your setup matches the default UDP broadcast on port 14550, you can skip this step. Otherwise, open `docker-compose.yml` in an editor:
+
+- **TCP Telemetry** (e.g. companion computer, SITL TCP, or wireless router):
+  ```yaml
+  environment:
+    - MODE=tcp
+    - TARGET=192.168.1.50:5760   # Replace with vehicle/router IP and port
+    - AUTO_TLS=true
+  ```
+
+- **Serial Telemetry** (e.g. SiK telemetry radio, USB FTDI, or Pixhawk USB):
+  1. Set `MODE=serial` and specify the device path and baud rate in `TARGET`:
+     ```yaml
+     environment:
+       - MODE=serial
+       - TARGET=/dev/ttyUSB0:57600  # or /dev/ttyACM0:115200
+       - AUTO_TLS=true
+     ```
+  2. Map the physical USB device into the container by uncommenting the `devices:` block:
+     ```yaml
+     devices:
+       - /dev/ttyUSB0:/dev/ttyUSB0
+     ```
+  > [!TIP]
+  > The container startup script automatically detects the host GID of your serial device (matching Debian/Ubuntu `dialout` GID 20, Fedora GID 18, Arch `uucp` GID 14, etc.) and grants proper permissions before dropping to the unprivileged `glareshield` user.
+
+#### 3. Start the Container
+
+From within the directory containing `docker-compose.yml`:
+
+```bash
+docker compose up -d
+```
+
+#### 4. Check Bridge Logs
+
+```bash
+docker compose logs
+```
+
+The container automatically detects your host's network interfaces and hostname via the kernel, generates a 2048-bit RSA TLS certificate with all IP/DNS Subject Alternative Names (`subjectAltName`) into `./certs/`, and prints your direct connection URL:
+```text
+============================================================
+ MAVLink Glareshield Bridge Container
+ Mode:       udp (0.0.0.0:14550)
+ Protocol:   wss://0.0.0.0:56781
+ TLS Active: true
+ Connect at: wss://192.168.1.69:56781/
+============================================================
+```
+
+#### 5. Authorize the Certificate on Each Client Browser / Device
+
+Before connecting in Glareshield over `wss://`, follow the one-time [Client Certificate Acceptance steps](#trusting-the-self-signed-certificate-on-clients-first-time-only) below to open `https://<ip>:56781` in a browser tab and accept the self-signed certificate.
 
 > [!NOTE]
 > **Docker Desktop & Field Networks**:
