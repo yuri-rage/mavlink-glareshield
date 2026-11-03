@@ -36,6 +36,7 @@ export class MavlinkConnection {
 
   private status: ConnectionStatus = 'disconnected';
   private shouldReconnect = true;
+  public isManualDisconnect = false;
   private isReconnectPaused = false;
   private reconnectTimeout: any = null;
   private heartbeatInterval: any = null;
@@ -113,6 +114,7 @@ export class MavlinkConnection {
   }
 
   public connect() {
+    this.isManualDisconnect = false;
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -225,6 +227,7 @@ export class MavlinkConnection {
   }
 
   public disconnect() {
+    this.isManualDisconnect = true;
     this.shouldReconnect = false;
     this.cleanup();
     if (this.ws) {

@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import { create } from 'zustand';
 import { useTelemetryStore } from '../store/telemetryStore';
+import { mavlinkConnection } from '../mavlink/connection';
 
 export const STORAGE_KEY_SOUND = 'mavlink_glareshield_sound_enabled';
 export const STORAGE_KEY_VOICE = 'mavlink_glareshield_voice_enabled';
@@ -577,20 +578,22 @@ export function useAudioAlertListener() {
       return;
     }
 
+    // Synchronize initial state on reconnect without false "Motors armed" or mode callout
+    if (prevModeRef.current === 'DISCONNECTED') {
+      prevModeRef.current = heartbeat.modeName;
+      prevArmedRef.current = heartbeat.isArmed;
+      return;
+    }
+
     if (prevArmedRef.current !== heartbeat.isArmed) {
       prevArmedRef.current = heartbeat.isArmed;
       playAlertChime(heartbeat.isArmed ? 3 : 4);
       speakCallout(heartbeat.isArmed ? 'Motors armed' : 'Motors disarmed', true);
     }
 
-    if (
-      prevModeRef.current !== heartbeat.modeName &&
-      prevModeRef.current !== 'DISCONNECTED'
-    ) {
+    if (prevModeRef.current !== heartbeat.modeName) {
       prevModeRef.current = heartbeat.modeName;
       speakCallout(`Flight mode ${heartbeat.modeName}`);
-    } else {
-      prevModeRef.current = heartbeat.modeName;
     }
   }, [heartbeat.modeName, heartbeat.isArmed, heartbeat.lastHeartbeatTime]);
 
@@ -653,7 +656,10 @@ export function useAudioAlertListener() {
 
     const interval = setInterval(() => {
       const st = useTelemetryStore.getState();
-      if (!st.hasConnectedInSession) return;
+      if (!st.hasConnectedInSession || mavlinkConnection.isManualDisconnect) {
+        prevLinkLostRef.current = false;
+        return;
+      }
       const lastHb = st.heartbeat.lastHeartbeatTime;
       const isLost = lastHb === 0 || Date.now() - lastHb > 3500;
 
