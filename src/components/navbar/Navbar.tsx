@@ -191,11 +191,18 @@ export const Navbar: React.FC = () => {
 
   const handleConnectSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (status === 'connected') return;
     setUrl(inputUrl);
     setGcsSystemId(inputGcsSysId);
     setIsConnectModalOpen(false);
     mavlinkConnection.resumeReconnect();
     connect();
+  };
+
+  const handleDisconnect = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    disconnect();
   };
 
   const handleClearStorage = (e?: React.MouseEvent) => {
@@ -703,118 +710,9 @@ export const Navbar: React.FC = () => {
           </div>
         )}
 
-        {/* Persistent Global Telemetry Status Strip (Rank 1, Rank 2, Rank 3) */}
-        <div className="border-t border-zinc-800/80 bg-zinc-900/70 px-2.5 sm:px-6 py-1 flex items-center justify-between gap-2 text-[11px] font-mono overflow-x-auto no-scrollbar">
-          <div className="flex items-center gap-3 sm:gap-5 shrink-0">
-            {/* Battery Pill */}
-            <div
-              className="flex items-center gap-1.5"
-              title="Pack Voltage & Remaining Capacity"
-            >
-              <BatteryCharging
-                className={`h-3.5 w-3.5 shrink-0 ${
-                  !isHeartbeatActive || battery.voltage <= 0
-                    ? 'text-zinc-500'
-                    : battery.remaining <= 15
-                      ? 'text-red-400 animate-pulse'
-                      : battery.remaining <= 25
-                        ? 'text-amber-400'
-                        : 'text-emerald-400'
-                }`}
-              />
-              <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">BAT</span>
-              <span
-                className={`font-bold ${
-                  !isHeartbeatActive || battery.voltage <= 0
-                    ? 'text-zinc-500'
-                    : battery.remaining <= 15
-                      ? 'text-red-300'
-                      : battery.remaining <= 25
-                        ? 'text-amber-300'
-                        : 'text-zinc-100'
-                }`}
-              >
-                {isHeartbeatActive && battery.voltage > 0
-                  ? `${battery.voltage.toFixed(1)}V · ${battery.remaining}%`
-                  : '--'}
-              </span>
-            </div>
-
-            <span className="text-zinc-700">|</span>
-
-            {/* GNSS Pill */}
-            <div className="flex items-center gap-1.5" title="GNSS Fix & Visible Satellites">
-              <Satellite
-                className={`h-3.5 w-3.5 shrink-0 ${
-                  !isHeartbeatActive
-                    ? 'text-zinc-500'
-                    : gps.fixType >= 3
-                      ? 'text-emerald-400'
-                      : 'text-amber-400'
-                }`}
-              />
-              <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">GPS</span>
-              <span className="font-bold text-zinc-100">
-                {isHeartbeatActive ? `${gps.fixLabel} (${gps.satellites})` : '--'}
-              </span>
-            </div>
-
-            <span className="text-zinc-700">|</span>
-
-            {/* Altitude & Speed Pill */}
-            <div className="flex items-center gap-1.5" title="Active Altitude & Speed">
-              <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">
-                {altitudeMode.toUpperCase()}
-              </span>
-              <span className="font-bold text-sky-300">
-                {isHeartbeatActive ? formatAltitude(activeAltMeters).full : '--'}
-              </span>
-              <span className="text-zinc-600">·</span>
-              <span className="font-bold text-emerald-300">
-                {isHeartbeatActive ? formatSpeed(activeSpeedMs).full : '--'}
-              </span>
-            </div>
-
-            <span className="text-zinc-700">|</span>
-
-            {/* Home Distance & Bearing Pill (Rank 1) */}
-            <div
-              className="flex items-center gap-1.5"
-              title={
-                homePosition.source !== 'none'
-                  ? `Home (${homePosition.source.toUpperCase()}): ${homePosition.lat.toFixed(5)}, ${homePosition.lon.toFixed(5)}`
-                  : 'Home Position not yet received'
-              }
-            >
-              <Home
-                className={`h-3.5 w-3.5 shrink-0 ${
-                  homePosition.source !== 'none' ? 'text-amber-400' : 'text-zinc-500'
-                }`}
-              />
-              <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">HOME</span>
-              <span className="font-bold text-zinc-100">
-                {isHeartbeatActive && homePosition.distanceM !== null
-                  ? formatHomeVector(homePosition.bearingDeg, homePosition.distanceM)
-                  : homePosition.source !== 'none'
-                    ? 'SET'
-                    : '--'}
-              </span>
-            </div>
-
-            <span className="text-zinc-700 hidden sm:inline">|</span>
-
-            {/* Flight Time Pill */}
-            <div
-              className="hidden sm:flex items-center gap-1.5"
-              title="Cumulative Armed Flight Time"
-            >
-              <Clock className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-              <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">FLT</span>
-              <span className="font-bold text-zinc-200">{formatDurationClock(totalArmedMs)}</span>
-            </div>
-          </div>
-
-          {/* Right side of Global Strip: Pre-Arm & Subsystem Health Pill + Popover (Rank 3) */}
+        {/* Persistent Global Telemetry Status Strip (Health First, Battery, GPS, Alt/Spd, Home, Flight Time) */}
+        <div className="border-t border-zinc-800/80 bg-zinc-900/70 px-2.5 sm:px-6 py-1 flex items-center gap-3 sm:gap-5 text-[11px] font-mono overflow-x-auto no-scrollbar">
+          {/* Pre-Arm & Subsystem Health Pill + Popover (Rank 3 - first on mobile for immediate visibility) */}
           <div className="relative shrink-0" ref={preArmMenuRef}>
             <button
               type="button"
@@ -852,7 +750,7 @@ export const Navbar: React.FC = () => {
             </button>
 
             {isPreArmMenuOpen && (
-              <div className="fixed sm:absolute right-2 sm:right-0 mt-1.5 w-80 rounded-xl bg-zinc-900/95 border border-zinc-700 shadow-2xl backdrop-blur-md p-3 z-50 text-xs font-sans space-y-2.5">
+              <div className="fixed sm:absolute left-2 sm:left-0 mt-1.5 w-80 rounded-xl bg-zinc-900/95 border border-zinc-700 shadow-2xl backdrop-blur-md p-3 z-50 text-xs font-sans space-y-2.5">
                 <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                   <span className="font-bold uppercase tracking-wider text-zinc-200 flex items-center gap-1.5">
                     {preArm.isReady ? (
@@ -949,6 +847,115 @@ export const Navbar: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+
+          <span className="text-zinc-700">|</span>
+
+          {/* Battery Pill */}
+          <div
+            className="flex items-center gap-1.5 shrink-0"
+            title="Pack Voltage & Remaining Capacity"
+          >
+            <BatteryCharging
+              className={`h-3.5 w-3.5 shrink-0 ${
+                !isHeartbeatActive || battery.voltage <= 0
+                  ? 'text-zinc-500'
+                  : battery.remaining <= 15
+                    ? 'text-red-400 animate-pulse'
+                    : battery.remaining <= 25
+                      ? 'text-amber-400'
+                      : 'text-emerald-400'
+              }`}
+            />
+            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">BAT</span>
+            <span
+              className={`font-bold ${
+                !isHeartbeatActive || battery.voltage <= 0
+                  ? 'text-zinc-500'
+                  : battery.remaining <= 15
+                    ? 'text-red-300'
+                    : battery.remaining <= 25
+                      ? 'text-amber-300'
+                      : 'text-zinc-100'
+              }`}
+            >
+              {isHeartbeatActive && battery.voltage > 0
+                ? `${battery.voltage.toFixed(1)}V · ${battery.remaining}%`
+                : '--'}
+            </span>
+          </div>
+
+          <span className="text-zinc-700">|</span>
+
+          {/* GNSS Pill */}
+          <div className="flex items-center gap-1.5 shrink-0" title="GNSS Fix & Visible Satellites">
+            <Satellite
+              className={`h-3.5 w-3.5 shrink-0 ${
+                !isHeartbeatActive
+                  ? 'text-zinc-500'
+                  : gps.fixType >= 3
+                    ? 'text-emerald-400'
+                    : 'text-amber-400'
+              }`}
+            />
+            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">GPS</span>
+            <span className="font-bold text-zinc-100">
+              {isHeartbeatActive ? `${gps.fixLabel} (${gps.satellites})` : '--'}
+            </span>
+          </div>
+
+          <span className="text-zinc-700">|</span>
+
+          {/* Altitude & Speed Pill */}
+          <div className="flex items-center gap-1.5 shrink-0" title="Active Altitude & Speed">
+            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">
+              {altitudeMode.toUpperCase()}
+            </span>
+            <span className="font-bold text-sky-300">
+              {isHeartbeatActive ? formatAltitude(activeAltMeters).full : '--'}
+            </span>
+            <span className="text-zinc-600">·</span>
+            <span className="font-bold text-emerald-300">
+              {isHeartbeatActive ? formatSpeed(activeSpeedMs).full : '--'}
+            </span>
+          </div>
+
+          <span className="text-zinc-700">|</span>
+
+          {/* Home Distance & Bearing Pill (Rank 1) */}
+          <div
+            className="flex items-center gap-1.5 shrink-0"
+            title={
+              homePosition.source !== 'none'
+                ? `Home (${homePosition.source.toUpperCase()}): ${homePosition.lat.toFixed(5)}, ${homePosition.lon.toFixed(5)}`
+                : 'Home Position not yet received'
+            }
+          >
+            <Home
+              className={`h-3.5 w-3.5 shrink-0 ${
+                homePosition.source !== 'none' ? 'text-amber-400' : 'text-zinc-500'
+              }`}
+            />
+            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">HOME</span>
+            <span className="font-bold text-zinc-100">
+              {isHeartbeatActive && homePosition.distanceM !== null
+                ? formatHomeVector(homePosition.bearingDeg, homePosition.distanceM)
+                : homePosition.source !== 'none'
+                  ? 'SET'
+                  : '--'}
+            </span>
+          </div>
+
+          <span className="text-zinc-700 hidden sm:inline">|</span>
+
+          {/* Flight Time Pill */}
+          <div
+            className="hidden sm:flex items-center gap-1.5 shrink-0"
+            title="Cumulative Armed Flight Time"
+          >
+            <Clock className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">FLT</span>
+            <span className="font-bold text-zinc-200">{formatDurationClock(totalArmedMs)}</span>
           </div>
         </div>
       </header>
@@ -1189,11 +1196,23 @@ export const Navbar: React.FC = () => {
 
           <div className="flex items-center justify-between pt-2">
             {status === 'connected' ? (
-              <Button type="button" variant="destructive" size="sm" onClick={disconnect}>
+              <Button
+                key="btn-disconnect-link"
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={handleDisconnect}
+              >
                 Disconnect Link
               </Button>
             ) : (
-              <Button type="submit" variant="default" size="sm" className="bg-sky-500 hover:bg-sky-600 text-white">
+              <Button
+                key="btn-connect-now"
+                type="submit"
+                variant="default"
+                size="sm"
+                className="bg-sky-500 hover:bg-sky-600 text-white"
+              >
                 Connect Now
               </Button>
             )}
