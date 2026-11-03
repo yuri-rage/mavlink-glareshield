@@ -48,6 +48,8 @@ interface UnitsState {
   formatAltitude: (m: number) => { value: string; unit: string; full: string };
   formatClimb: (m_s: number) => { value: string; unit: string; full: string };
   formatDistance: (m: number) => { value: string; unit: string; full: string };
+  formatHomeVector: (bearingDeg: number | null, distanceM: number | null) => string;
+  formatCrosstrack: (m: number) => { value: string; unit: string; full: string };
 }
 
 export const useUnitsStore = create<UnitsState>((set, get) => ({
@@ -128,27 +130,57 @@ export const useUnitsStore = create<UnitsState>((set, get) => ({
 
   formatDistance: (m: number) => {
     const sys = get().system;
+    const safeM = isNaN(m) || m < 0 ? 0 : m;
+    if (sys === 'ms') {
+      const val = Math.round(safeM).toString();
+      return { value: val, unit: 'M', full: `${val} M` };
+    }
+    if (sys === 'kmh') {
+      if (safeM < 1000) {
+        const val = Math.round(safeM).toString();
+        return { value: val, unit: 'M', full: `${val} M` };
+      }
+      const val = (safeM / 1000).toFixed(1);
+      return { value: val, unit: 'KM', full: `${val} KM` };
+    }
     if (sys === 'mph') {
-      if (m < 1609.34) {
-        const ft = Math.round(m * 3.28084);
-        return { value: ft.toString(), unit: 'ft', full: `${ft} ft` };
+      const ft = safeM * 3.28084;
+      if (ft < 1000) {
+        const val = Math.round(ft).toString();
+        return { value: val, unit: 'FT', full: `${val} FT` };
       }
-      const mi = (m / 1609.34).toFixed(2);
-      return { value: mi, unit: 'mi', full: `${mi} mi` };
+      const val = (safeM / 1609.344).toFixed(1);
+      return { value: val, unit: 'MI', full: `${val} MI` };
     }
-    if (sys === 'kts') {
-      if (m < 1852) {
-        const ft = Math.round(m * 3.28084);
-        return { value: ft.toString(), unit: 'ft', full: `${ft} ft` };
-      }
-      const nm = (m / 1852).toFixed(2);
-      return { value: nm, unit: 'nm', full: `${nm} nm` };
+    // kts
+    const ft = safeM * 3.28084;
+    if (ft < 1000) {
+      const val = Math.round(ft).toString();
+      return { value: val, unit: 'FT', full: `${val} FT` };
     }
-    if (m < 1000) {
-      const val = Math.round(m).toString();
-      return { value: val, unit: 'm', full: `${val} m` };
+    const val = (safeM / 1852).toFixed(1);
+    return { value: val, unit: 'NM', full: `${val} NM` };
+  },
+
+  formatHomeVector: (bearingDeg: number | null, distanceM: number | null) => {
+    if (distanceM === null || isNaN(distanceM)) return 'H ---°/--';
+    const brg = Math.round(((bearingDeg ?? 0) % 360 + 360)) % 360;
+    const brgStr = `${brg.toString().padStart(3, '0')}°`;
+    const distStr = get().formatDistance(distanceM).full;
+    return `H ${brgStr}/${distStr}`;
+  },
+
+  formatCrosstrack: (m: number) => {
+    const isImp = get().isImperial();
+    let safeM = isNaN(m) ? 0 : m;
+    if (Math.abs(safeM) < 0.05) safeM = 0;
+    if (isImp) {
+      const ft = safeM * 3.28084;
+      const roundedFt = Math.abs(ft) < 0.05 ? 0 : ft;
+      const val = Math.abs(roundedFt) >= 100 ? Math.round(roundedFt).toString() : roundedFt.toFixed(1);
+      return { value: val, unit: 'ft', full: `${val} ft` };
     }
-    const km = (m / 1000).toFixed(2);
-    return { value: km, unit: 'km', full: `${km} km` };
+    const val = Math.abs(safeM) >= 100 ? Math.round(safeM).toString() : safeM.toFixed(1);
+    return { value: val, unit: 'm', full: `${val} m` };
   },
 }));

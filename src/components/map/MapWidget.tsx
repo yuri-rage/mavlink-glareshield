@@ -1,16 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useTelemetryStore } from '../../store/telemetryStore';
+import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { missionManager, MissionManagerStatus, groupFencePolygons } from '../../mavlink/missionManager';
-import { MAVLINK_MSG_ID, getVehicleCategory } from '../../mavlink/messages';
+import { mavlinkConnection } from '../../mavlink/connection';
+import { MAVLINK_MSG_ID, getVehicleCategory, getGuidedModeNum } from '../../mavlink/messages';
 import { Card, CardHeader, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Modal } from '../ui/modal';
+import { Input } from '../ui/input';
 import { parseDroppedMissionFile, ParsedMissionFile } from '../../mavlink/missionFileParser';
 import { MissionItemIntData } from '../../mavlink/encoder';
-import { RefreshCw, Crosshair, Maximize2, Shield, Flag, X, Eraser, Upload, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Crosshair, Maximize2, Shield, Flag, X, Eraser, Upload, AlertTriangle, Navigation, Home } from 'lucide-react';
 import L from 'leaflet';
 
 function renderVehicleSvg(type: number): string {
@@ -82,14 +84,22 @@ interface MapWidgetProps {
 
 export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const heartbeat = useTelemetryStore((s) => s.heartbeat);
+  const connected = heartbeat.lastHeartbeatTime > 0 && heartbeat.modeName !== 'DISCONNECTED';
+  const hasConnectedInSession = useTelemetryStore((s) => s.hasConnectedInSession);
   const position = useTelemetryStore((s) => s.position);
   const attitude = useTelemetryStore((s) => s.attitude);
+  const vfr = useTelemetryStore((s) => s.vfr);
+  const navController = useTelemetryStore((s) => s.navController);
+  const homePosition = useTelemetryStore((s) => s.homePosition);
+  const currentWaypointSeq = useTelemetryStore((s) => s.currentWaypointSeq);
   const missionWaypoints = useTelemetryStore((s) => s.missionWaypoints);
   const fencePoints = useTelemetryStore((s) => s.fencePoints);
   const rallyPoints = useTelemetryStore((s) => s.rallyPoints);
   const flightTrace = useTelemetryStore((s) => s.flightTrace);
   const clearTrace = useTelemetryStore((s) => s.clearTrace);
   const baseStationPosition = useTelemetryStore((s) => s.baseStationPosition);
+
+  const hasValidPosition = (position.lat !== 0 || position.lon !== 0) && (connected || hasConnectedInSession);
 
   const isFullWidth = colSpan === 12;
   const [aspectRatio, setAspectRatio] = useState<'4:3' | '16:9' | '1:1'>(() => {
@@ -111,7 +121,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     } catch {}
   };
 
-  const { formatAltitude, altitudeMode } = useUnitsStore();
+  const { formatAltitude, altitudeMode, formatDistance, formatHomeVector, formatCrosstrack } = useUnitsStore();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const activeTileLayerRef = useRef<L.TileLayer | null>(null);
@@ -122,6 +132,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const fenceLayersRef = useRef<L.Layer[]>([]);
   const rallyMarkersRef = useRef<L.Marker[]>([]);
   const baseMarkerRef = useRef<L.Marker | null>(null);
+  const homeMarkerRef = useRef<L.Marker | null>(null);
+  const flyToMarkerRef = useRef<L.Marker | null>(null);
+  const flyToLineRef = useRef<L.Polyline | null>(null);
+  const flyToModeRef = useRef<boolean>(false);
 
   // GPS fixes buffer for linear interpolation (played back 1 fix-interval late)
   const fixesRef = useRef<GpsFix[]>([]);
@@ -142,6 +156,16 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   } | null>(null);
   const previewLayersRef = useRef<L.Layer[]>([]);
 
+  // Fly-To-Here (DO_REPOSITION) state
+  const [flyToMode, setFlyToMode] = useState(false);
+  const [pendingFlyTo, setPendingFlyTo] = useState<{ lat: number; lon: number } | null>(null);
+  const [flyToAltInput, setFlyToAltInput] = useState<string>('20');
+  const [activeFlyToTarget, setActiveFlyToTarget] = useState<{ lat: number; lon: number; alt: number } | null>(null);
+
+  useEffect(() => {
+    flyToModeRef.current = flyToMode;
+  }, [flyToMode]);
+
   const [missionStatus, setMissionStatus] = useState<MissionManagerStatus>({
     isFetching: false,
     method: 'idle',
@@ -150,6 +174,68 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     rallyCount: 0,
     message: '',
   });
+
+  // Responsive header badge visibility to keep top bar on a single row
+  const [hideBadges, setHideBadges] = useState(false);
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const rightControlsRef = useRef<HTMLDivElement | null>(null);
+  const badgesRef = useRef<HTMLDivElement | null>(null);
+  const measuredBadgesWidthRef = useRef<number>(0);
+
+  const userWpCount = Math.max(0, missionWaypoints.length - 1);
+
+  useEffect(() => {
+    const updateBadgeVisibility = () => {
+      const header = headerRef.current;
+      const controls = rightControlsRef.current;
+      if (!header || !controls) return;
+
+      const headerWidth = header.clientWidth;
+      const controlsWidth = controls.offsetWidth;
+
+      if (badgesRef.current && badgesRef.current.offsetWidth > 0) {
+        measuredBadgesWidthRef.current = badgesRef.current.offsetWidth;
+      }
+
+      const activeBadgeEstimate =
+        (userWpCount > 0 ? 56 : 0) +
+        (fencePoints.length > 0 ? 68 : 0) +
+        (rallyPoints.length > 0 ? 64 : 0);
+
+      const badgesWidth =
+        measuredBadgesWidthRef.current > 0
+          ? measuredBadgesWidthRef.current
+          : activeBadgeEstimate;
+
+      if (activeBadgeEstimate === 0) {
+        setHideBadges(false);
+        return;
+      }
+
+      const neededWidth = controlsWidth + badgesWidth + 16;
+      const shouldHide = headerWidth > 0 && controlsWidth > 0 && headerWidth < neededWidth;
+      setHideBadges((prev) => (prev !== shouldHide ? shouldHide : prev));
+    };
+
+    updateBadgeVisibility();
+
+    if (typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => {
+      updateBadgeVisibility();
+    });
+
+    if (headerRef.current) {
+      observer.observe(headerRef.current);
+    }
+    if (rightControlsRef.current) {
+      observer.observe(rightControlsRef.current);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [userWpCount, fencePoints.length, rallyPoints.length, colSpan]);
 
   const handleFileDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -445,6 +531,27 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       isInteractingRef.current = false;
     });
 
+    const openFlyToPrompt = (lat: number, lon: number) => {
+      const st = useTelemetryStore.getState();
+      if (st.heartbeat.lastHeartbeatTime === 0 || st.heartbeat.modeName === 'DISCONNECTED') return;
+      const curAlt = Math.max(10, Math.round(st.position.relativeAlt || 20));
+      setFlyToAltInput(String(curAlt));
+      setPendingFlyTo({ lat, lon });
+      setFlyToMode(false);
+    };
+
+    // Right-click (or long-press on mobile) opens Guided Fly-To-Here prompt
+    map.on('contextmenu', (e: L.LeafletMouseEvent) => {
+      openFlyToPrompt(e.latlng.lat, e.latlng.lng);
+    });
+
+    // Left-click when Fly-To Mode toolbar button is armed
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      if (flyToModeRef.current) {
+        openFlyToPrompt(e.latlng.lat, e.latlng.lng);
+      }
+    });
+
     // Vehicle Marker with custom rotating SVG (scoped to marker element without CSS transition delay)
     const vehicleIcon = L.divIcon({
       className: 'vehicle-marker-icon',
@@ -653,6 +760,153 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     vehicleMarkerRef.current.setIcon(vehicleIcon);
     vehicleMarkerRef.current.setZIndexOffset(10000);
   }, [heartbeat.type]);
+
+  // Hide vehicle marker when no valid GPS position has been received, and dim on link loss
+  useEffect(() => {
+    if (!vehicleMarkerRef.current) return;
+    if (!hasValidPosition) {
+      vehicleMarkerRef.current.setOpacity(0);
+    } else if (!connected) {
+      vehicleMarkerRef.current.setOpacity(0.45);
+    } else {
+      vehicleMarkerRef.current.setOpacity(1);
+    }
+  }, [hasValidPosition, connected]);
+
+  // Render standalone Home ('H') marker when homePosition is known and not already rendered by mission WP #0
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+
+    if (homeMarkerRef.current) {
+      homeMarkerRef.current.remove();
+      homeMarkerRef.current = null;
+    }
+
+    const hasMissionHome = missionWaypoints.some((w) => w.seq === 0 && (w.lat !== 0 || w.lon !== 0));
+    if (hasMissionHome || homePosition.source === 'none' || (homePosition.lat === 0 && homePosition.lon === 0)) {
+      return;
+    }
+
+    const homeIcon = L.divIcon({
+      className: 'home-standalone-marker',
+      html: `
+        <div style="filter: drop-shadow(0 3px 6px rgba(0,0,0,0.85)); width: 26px; height: 36px; display: flex; align-items: center; justify-content: center;">
+          <svg width="26" height="36" viewBox="0 0 26 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 13 35 L 4.2 14.5 A 9.5 9.5 0 1 1 21.8 14.5 Z" fill="#15803d" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
+            <circle cx="13" cy="11.5" r="7.5" fill="#ffffff" />
+            <text x="13" y="15" font-size="10.5" font-weight="900" font-family="ui-monospace, monospace, sans-serif" text-anchor="middle" fill="#14532d">H</text>
+          </svg>
+        </div>
+      `,
+      iconSize: [26, 36],
+      iconAnchor: [13, 35],
+      popupAnchor: [0, -33],
+    });
+
+    const m = L.marker([homePosition.lat, homePosition.lon], {
+      icon: homeIcon,
+      pane: 'missionMarkersPane',
+      zIndexOffset: 220,
+    })
+      .bindPopup(
+        `<b>Home Position (${homePosition.source})</b><br/>Alt: ${homePosition.alt.toFixed(1)}m<br/>Lat: ${homePosition.lat.toFixed(
+          6
+        )}<br/>Lon: ${homePosition.lon.toFixed(6)}${
+          homePosition.distanceM !== null
+            ? `<br/>${formatHomeVector(homePosition.bearingDeg, homePosition.distanceM)}`
+            : ''
+        }`
+      )
+      .addTo(mapInstanceRef.current);
+
+    homeMarkerRef.current = m;
+  }, [homePosition.lat, homePosition.lon, homePosition.source, homePosition.distanceM, missionWaypoints]);
+
+  // Render active Fly-To target marker and dashed vector line
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    if (flyToMarkerRef.current) {
+      flyToMarkerRef.current.remove();
+      flyToMarkerRef.current = null;
+    }
+    if (flyToLineRef.current) {
+      flyToLineRef.current.remove();
+      flyToLineRef.current = null;
+    }
+
+    if (!activeFlyToTarget) return;
+
+    const targetIcon = L.divIcon({
+      className: 'flyto-target-marker',
+      html: `
+        <div style="filter: drop-shadow(0 2px 5px rgba(0,0,0,0.9)); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="14" cy="14" r="10" stroke="#38bdf8" stroke-width="2" fill="rgba(14,165,233,0.25)"/>
+            <circle cx="14" cy="14" r="3" fill="#38bdf8"/>
+            <line x1="14" y1="1" x2="14" y2="7" stroke="#38bdf8" stroke-width="2"/>
+            <line x1="14" y1="21" x2="14" y2="27" stroke="#38bdf8" stroke-width="2"/>
+            <line x1="1" y1="14" x2="7" y2="14" stroke="#38bdf8" stroke-width="2"/>
+            <line x1="21" y1="14" x2="27" y2="14" stroke="#38bdf8" stroke-width="2"/>
+          </svg>
+        </div>
+      `,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    });
+
+    const m = L.marker([activeFlyToTarget.lat, activeFlyToTarget.lon], {
+      icon: targetIcon,
+      pane: 'missionMarkersPane',
+      zIndexOffset: 300,
+    })
+      .bindPopup(
+        `<b>Guided Fly-To Target</b><br/>Alt: ${activeFlyToTarget.alt}m<br/>Lat: ${activeFlyToTarget.lat.toFixed(
+          6
+        )}<br/>Lon: ${activeFlyToTarget.lon.toFixed(6)}`
+      )
+      .addTo(mapInstanceRef.current);
+    flyToMarkerRef.current = m;
+
+    if (position.lat !== 0 || position.lon !== 0) {
+      const line = L.polyline(
+        [
+          [position.lat, position.lon],
+          [activeFlyToTarget.lat, activeFlyToTarget.lon],
+        ],
+        {
+          color: '#38bdf8',
+          weight: 2.5,
+          dashArray: '6, 6',
+          opacity: 0.9,
+          pane: 'missionLinesPane',
+        }
+      ).addTo(mapInstanceRef.current);
+      flyToLineRef.current = line;
+    }
+  }, [activeFlyToTarget, position.lat, position.lon]);
+
+  const handleConfirmFlyTo = (switchToGuidedFirst: boolean) => {
+    if (!pendingFlyTo) return;
+    const alt = Math.max(2, Number(flyToAltInput) || 20);
+    const { lat, lon } = pendingFlyTo;
+    const encoder = mavlinkConnection.getEncoder();
+    const sysId = heartbeat.systemId || 1;
+    const compId = heartbeat.componentId || 1;
+
+    if (switchToGuidedFirst && heartbeat.modeName !== 'GUIDED') {
+      const guidedNum = getGuidedModeNum(heartbeat.type);
+      const modeCmd = encoder.createSetMode(sysId, compId, guidedNum);
+      sendTrackedCommand(modeCmd, { label: 'Mode GUIDED', targetKey: 'mode:GUIDED' });
+    }
+
+    const repoCmd = encoder.createDoReposition(sysId, compId, lat, lon, alt);
+    sendTrackedCommand(repoCmd, {
+      label: `Fly To (${lat.toFixed(4)}, ${lon.toFixed(4)}) @ ${alt}m`,
+      targetKey: 'action:reposition',
+    });
+    setActiveFlyToTarget({ lat, lon, alt });
+    setPendingFlyTo(null);
+  };
 
   // Update mission waypoints rendering
   useEffect(() => {
@@ -916,19 +1170,19 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   return (
     <Card className={`border-zinc-800 bg-zinc-950/90 shadow-lg overflow-hidden flex flex-col w-full ${aspectClass}`}>
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
-        <div className="flex flex-wrap items-center justify-between gap-1.5">
-          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-            {missionWaypoints.length > 0 && (
+        <div ref={headerRef} className="flex items-center justify-between gap-1.5 min-w-0">
+          <div ref={badgesRef} className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+            {!hideBadges && userWpCount > 0 && (
               <Badge variant="warning" className="text-[10px] font-mono px-1.5 py-0.5">
-                {missionWaypoints.length} WPs
+                {userWpCount} {userWpCount === 1 ? 'WP' : 'WPs'}
               </Badge>
             )}
-            {fencePoints.length > 0 && (
+            {!hideBadges && fencePoints.length > 0 && (
               <Badge variant="destructive" className="text-[10px] font-mono px-1.5 py-0.5 gap-1">
                 <Shield className="h-2.5 w-2.5 inline" /> {fencePoints.length} Fence
               </Badge>
             )}
-            {rallyPoints.length > 0 && (
+            {!hideBadges && rallyPoints.length > 0 && (
               <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0.5 gap-1 text-[#f0abfc] border-[#9a337d]/40 bg-[#9a337d]/15">
                 <Flag className="h-2.5 w-2.5 inline text-[#f0abfc]" /> {rallyPoints.length} Rally
               </Badge>
@@ -945,7 +1199,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 ml-auto">
+          <div ref={rightControlsRef} className="flex items-center gap-1 sm:gap-1.5 ml-auto shrink-0">
             {/* Aspect Ratio Selector when in full-width mode */}
             {isFullWidth && (
               <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-[10px] font-sans font-medium">
@@ -1022,6 +1276,26 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                 <Eraser className="h-3.5 w-3.5 text-amber-400" />
               </Button>
             )}
+
+            <Button
+              variant={flyToMode ? 'default' : 'outline'}
+              size="sm"
+              disabled={!connected}
+              onClick={() => setFlyToMode((v) => !v)}
+              className={`h-7 px-2 text-xs font-bold gap-1 ${
+                flyToMode
+                  ? 'bg-sky-500 text-white ring-2 ring-sky-300'
+                  : 'text-zinc-300 hover:text-white disabled:opacity-40'
+              }`}
+              title={
+                connected
+                  ? 'Click map (or right-click anywhere) to send Guided Fly-To-Here (DO_REPOSITION)'
+                  : 'Connect to a vehicle to use Fly-To-Here'
+              }
+            >
+              <Navigation className="h-3.5 w-3.5 text-sky-300" />
+              <span className="hidden sm:inline text-[11px]">{flyToMode ? 'Click Map…' : 'Fly To'}</span>
+            </Button>
 
             <Button
               variant={followVehicle ? 'default' : 'outline'}
@@ -1152,12 +1426,136 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         )}
 
         {/* GPS Coordinate readout HUD overlay in top-left (decoupled from bottom Leaflet attribution) */}
-        <div className="absolute top-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] font-mono text-zinc-300 flex items-center gap-3 pointer-events-none shadow-md">
-          <span>Lat: <b className="text-sky-400">{position.lat.toFixed(6)}</b></span>
-          <span>Lon: <b className="text-sky-400">{position.lon.toFixed(6)}</b></span>
-          <span>Alt: <b className="text-emerald-400">{formatAltitude(altitudeMode === 'msl' ? (position.alt || position.relativeAlt) : position.relativeAlt).full} {altitudeMode.toUpperCase()}</b></span>
+        <div className="absolute top-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] font-mono text-zinc-300 flex flex-wrap items-center gap-2.5 pointer-events-none shadow-md">
+          <span>
+            Lat: <b className="text-sky-400">{hasValidPosition ? position.lat.toFixed(6) : '--'}</b>
+          </span>
+          <span>
+            Lon: <b className="text-sky-400">{hasValidPosition ? position.lon.toFixed(6) : '--'}</b>
+          </span>
+          <span>
+            Alt:{' '}
+            <b className="text-emerald-400">
+              {hasValidPosition
+                ? `${formatAltitude(altitudeMode === 'msl' ? (position.alt || position.relativeAlt) : position.relativeAlt).full} ${altitudeMode.toUpperCase()}`
+                : '--'}
+            </b>
+          </span>
+          {hasValidPosition && homePosition.distanceM !== null && (
+            <span className="text-emerald-300 flex items-center gap-1 border-l border-zinc-800 pl-2">
+              <Home className="h-3 w-3 text-emerald-400 inline" />
+              <b>{formatHomeVector(homePosition.bearingDeg, homePosition.distanceM)}</b>
+            </span>
+          )}
         </div>
+
+        {/* Mission Progress & Fly-To Status Overlay in bottom-left (single line) */}
+        {connected && (missionWaypoints.length > 0 || navController.wpDist > 0 || flyToMode) && (
+          <div className="absolute bottom-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] font-mono text-zinc-200 flex items-center gap-2.5 pointer-events-none shadow-md whitespace-nowrap overflow-hidden">
+            {flyToMode && (
+              <span className="text-sky-300 font-bold animate-pulse">
+                Click any point on the map to command Guided Fly-To…
+              </span>
+            )}
+            {(missionWaypoints.length > 0 || navController.wpDist > 0) && (
+              <>
+                <span className="text-amber-300 font-bold">
+                  WP {currentWaypointSeq}/{Math.max(0, missionWaypoints.length - 1)}
+                </span>
+                {navController.wpDist > 0 && (
+                  <span>
+                    Dist: <b className="text-sky-400">{formatDistance(navController.wpDist).full}</b>
+                  </span>
+                )}
+                {Math.abs(navController.xtrackError) >= 0.5 && (
+                  <span>
+                    XTrack: <b className="text-zinc-300">{formatCrosstrack(navController.xtrackError).full}</b>
+                  </span>
+                )}
+                {navController.wpDist > 0 && vfr.groundspeed > 0.5 && (
+                  <span>
+                    ETA:{' '}
+                    <b className="text-emerald-400">
+                      {(() => {
+                        const s = Math.round(navController.wpDist / vfr.groundspeed);
+                        return s >= 60 ? `${Math.floor(s / 60)}m${(s % 60).toString().padStart(2, '0')}s` : `${s}s`;
+                      })()}
+                    </b>
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </CardContent>
+
+      {/* Guided Fly-To-Here Confirmation Modal */}
+      {pendingFlyTo && (
+        <Modal
+          isOpen={true}
+          onClose={() => setPendingFlyTo(null)}
+          title="Guided Fly-To-Here (DO_REPOSITION)"
+          description="Command the vehicle to fly directly to the selected map coordinates."
+        >
+          <div className="space-y-3 text-xs">
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-lg p-3 space-y-2 font-mono">
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400 font-sans">Target Latitude:</span>
+                <span className="text-sky-400 font-bold">{pendingFlyTo.lat.toFixed(6)}°</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400 font-sans">Target Longitude:</span>
+                <span className="text-sky-400 font-bold">{pendingFlyTo.lon.toFixed(6)}°</span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-zinc-800">
+                <label className="text-zinc-300 font-sans font-semibold">Target Altitude (m AGL):</label>
+                <Input
+                  type="number"
+                  min={2}
+                  max={1000}
+                  step={1}
+                  value={flyToAltInput}
+                  onChange={(e) => setFlyToAltInput(e.target.value)}
+                  className="h-7 w-24 text-xs font-mono text-right"
+                />
+              </div>
+            </div>
+
+            {heartbeat.modeName !== 'GUIDED' && (
+              <div className="p-2.5 rounded-lg bg-amber-950/60 border border-amber-500/40 text-amber-200 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  Vehicle is currently in <b>{heartbeat.modeName}</b> mode. ArduPilot requires <b>GUIDED</b> mode to execute reposition commands.
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+              <Button variant="outline" size="sm" onClick={() => setPendingFlyTo(null)}>
+                Cancel
+              </Button>
+              {heartbeat.modeName !== 'GUIDED' && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="bg-amber-600 hover:bg-amber-500 text-white font-bold"
+                  onClick={() => handleConfirmFlyTo(true)}
+                >
+                  Switch to GUIDED & Fly Here
+                </Button>
+              )}
+              <Button
+                variant="default"
+                size="sm"
+                className="bg-sky-600 hover:bg-sky-500 text-white font-bold"
+                onClick={() => handleConfirmFlyTo(false)}
+              >
+                Send Fly-To Command
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Confirmation Modal with Armed/Auto Warning and Summary */}
       {pendingUpload && (

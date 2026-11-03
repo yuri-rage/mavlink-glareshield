@@ -7,13 +7,25 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Compass } from 'lucide-react';
 
 export const HudWidget: React.FC = () => {
+  const heartbeat = useTelemetryStore((state) => state.heartbeat);
+  const hasConnectedInSession = useTelemetryStore((state) => state.hasConnectedInSession);
   const attitude = useTelemetryStore((state) => state.attitude);
   const vfr = useTelemetryStore((state) => state.vfr);
   const position = useTelemetryStore((state) => state.position);
+  const navController = useTelemetryStore((state) => state.navController);
+  const homePosition = useTelemetryStore((state) => state.homePosition);
   const missionWaypoints = useTelemetryStore((state) => state.missionWaypoints);
   const currentWaypointSeq = useTelemetryStore((state) => state.currentWaypointSeq);
   const imu = useTelemetryStore((state) => state.imu);
-  const { formatSpeed, formatAltitude, formatClimb, system: unitSystem, altitudeMode } = useUnitsStore();
+  const {
+    formatSpeed,
+    formatAltitude,
+    formatClimb,
+    formatDistance,
+    formatHomeVector,
+    system: unitSystem,
+    altitudeMode,
+  } = useUnitsStore();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fpmStateRef = useRef<{ gamma: number; delta: number; initialized: boolean; lastTime: number }>({
     gamma: 0,
@@ -22,11 +34,12 @@ export const HudWidget: React.FC = () => {
     lastTime: 0,
   });
 
-  // Register subscription for high-frequency attitude, VFR, and IMU
+  // Register subscription for high-frequency attitude, VFR, NAV_CONTROLLER, and IMU
   useEffect(() => {
     messageRateManager.registerRequirement('hud-attitude', MAVLINK_MSG_ID.ATTITUDE);
     messageRateManager.registerRequirement('hud-vfr', MAVLINK_MSG_ID.VFR_HUD);
     messageRateManager.registerRequirement('hud-pos', MAVLINK_MSG_ID.GLOBAL_POSITION_INT);
+    messageRateManager.registerRequirement('hud-nav', MAVLINK_MSG_ID.NAV_CONTROLLER_OUTPUT);
     messageRateManager.registerRequirement('hud-imu', MAVLINK_MSG_ID.RAW_IMU);
     messageRateManager.registerRequirement('hud-scaled-imu', MAVLINK_MSG_ID.SCALED_IMU);
     messageRateManager.registerRequirement('hud-highres-imu', MAVLINK_MSG_ID.HIGHRES_IMU);
@@ -34,6 +47,7 @@ export const HudWidget: React.FC = () => {
       messageRateManager.unregisterRequirement('hud-attitude');
       messageRateManager.unregisterRequirement('hud-vfr');
       messageRateManager.unregisterRequirement('hud-pos');
+      messageRateManager.unregisterRequirement('hud-nav');
       messageRateManager.unregisterRequirement('hud-imu');
       messageRateManager.unregisterRequirement('hud-scaled-imu');
       messageRateManager.unregisterRequirement('hud-highres-imu');
@@ -480,14 +494,23 @@ export const HudWidget: React.FC = () => {
     ctx.lineTo(spdBoxX + spdBoxW, cy + 65);
     ctx.stroke();
 
+    const hasLink =
+      heartbeat.lastHeartbeatTime > 0 &&
+      heartbeat.modeName !== 'DISCONNECTED' &&
+      Date.now() - heartbeat.lastHeartbeatTime <= 3500;
+
     // Prominent Speed: Indicated Airspeed (IAS)
     const isKtsMode = unitSystem === 'kts';
     const iasKts = vfr.airspeed * 1.943844;
     const gsKts = vfr.groundspeed * 1.943844;
 
-    const primarySpeedVal = isKtsMode
-      ? (iasKts >= 100 ? iasKts.toFixed(0) : iasKts.toFixed(1))
-      : formatSpeed(vfr.airspeed).value;
+    const primarySpeedVal = !hasLink
+      ? '--.-'
+      : isKtsMode
+        ? iasKts >= 100
+          ? iasKts.toFixed(0)
+          : iasKts.toFixed(1)
+        : formatSpeed(vfr.airspeed).value;
     const primarySpeedUnit = isKtsMode ? 'KIAS' : `IAS ${formatSpeed(vfr.airspeed).unit.toUpperCase()}`;
 
     // Current Speed Value Box (Mask pitch ladders)
@@ -515,9 +538,13 @@ export const HudWidget: React.FC = () => {
     ctx.fillText(primarySpeedUnit, spdBoxX + spdBoxW / 2, spdBoxY + 22);
 
     // Groundspeed readout beneath box (Mask pitch ladders)
-    const gsVal = isKtsMode
-      ? (gsKts >= 100 ? gsKts.toFixed(0) : gsKts.toFixed(1))
-      : formatSpeed(vfr.groundspeed).value;
+    const gsVal = !hasLink
+      ? '--'
+      : isKtsMode
+        ? gsKts >= 100
+          ? gsKts.toFixed(0)
+          : gsKts.toFixed(1)
+        : formatSpeed(vfr.groundspeed).value;
     const gsUnit = isKtsMode ? 'KGS' : formatSpeed(vfr.groundspeed).unit.toUpperCase();
     const gsText = isKtsMode ? `${gsVal} ${gsUnit}` : `GS ${gsVal} ${gsUnit}`;
 
@@ -581,7 +608,7 @@ export const HudWidget: React.FC = () => {
     ctx.font = 'bold 14px ui-monospace, SFMono-Regular, monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(altFormatted.value, altBoxX + altBoxW / 2, altBoxY + 10);
+    ctx.fillText(hasLink ? altFormatted.value : '--.-', altBoxX + altBoxW / 2, altBoxY + 10);
 
     ctx.fillStyle = HUD_BRIGHT;
     ctx.font = 'bold 8px ui-monospace, monospace';
@@ -589,7 +616,7 @@ export const HudWidget: React.FC = () => {
 
     // Vertical Speed / Climb Rate readout beneath box (Mask pitch ladders)
     const climbFormatted = formatClimb(vfr.climb);
-    const vviText = climbFormatted.full;
+    const vviText = hasLink ? climbFormatted.full : `-- ${climbFormatted.unit}`;
     const vviMetrics = ctx.measureText(vviText);
     const vviW = vviMetrics.width + 8;
     const vviH = 15;
@@ -609,26 +636,43 @@ export const HudWidget: React.FC = () => {
     ctx.fillText(vviText, vviX + 4, vviY + vviH / 2);
 
     // =========================================================
-    // 7. Bottom Status Readout (WP N/NNN and THR with Masking)
+    // 7. Bottom Status Readout (Mission WP Progress & THR with Masking)
     // =========================================================
-    const bottomY = height - 12;
     const rawTotalWps = missionWaypoints.length;
     // Human readable waypoint count excludes WP 0 (Home position)
     const totalWps = Math.max(0, rawTotalWps - 1);
     const currentWp = currentWaypointSeq ?? missionWaypoints.find((w) => w.current)?.seq ?? 0;
-    const wpText = totalWps > 0 ? `WP ${currentWp}/${totalWps}` : 'WP 0/0';
-    const thrText = `THR: ${Math.round(vfr.throttle)}%`;
+    const wpDistM = navController.wpDist;
+    const etaSec =
+      hasLink && wpDistM > 0 && vfr.groundspeed > 0.8
+        ? Math.round(wpDistM / vfr.groundspeed)
+        : null;
 
-    ctx.font = 'bold 11px ui-monospace, SFMono-Regular, monospace';
-    ctx.textBaseline = 'middle';
+    // Split HUD WP info to two lines: line 1 = WP index, line 2 = distance/ETA
+    const wpLine1 = totalWps > 0 ? `WP ${currentWp}/${totalWps}` : 'WP 0/0';
+    const wpDistStr = hasLink && wpDistM > 0 ? formatDistance(wpDistM).full : '';
+    const etaStr =
+      etaSec !== null
+        ? etaSec >= 60
+          ? `${Math.floor(etaSec / 60)}m${(etaSec % 60).toString().padStart(2, '0')}s`
+          : `${etaSec}s`
+        : '';
+    const wpLine2 = wpDistStr
+      ? (etaStr ? `${wpDistStr} · ${etaStr}` : wpDistStr)
+      : (totalWps > 0 ? '--' : '');
 
-    // Lower Left: WP N/NNN with mask
-    const wpMetrics = ctx.measureText(wpText);
+    const thrText = hasLink ? `THR: ${Math.round(vfr.throttle)}%` : 'THR: --%';
+
     const wpPadX = 7;
-    const wpBoxW = wpMetrics.width + wpPadX * 2;
-    const wpBoxH = 20;
+    ctx.font = 'bold 10px ui-monospace, SFMono-Regular, monospace';
+    const w1 = ctx.measureText(wpLine1).width;
+    ctx.font = 'bold 9.5px ui-monospace, SFMono-Regular, monospace';
+    const w2 = wpLine2 ? ctx.measureText(wpLine2).width : 0;
+    const wpBoxW = Math.max(w1, w2) + wpPadX * 2;
+    const isTwoLine = Boolean(wpLine2);
+    const wpBoxH = isTwoLine ? 32 : 20;
     const wpBoxX = 10;
-    const wpBoxY = bottomY - wpBoxH / 2;
+    const wpBoxY = height - wpBoxH - 8;
 
     ctx.fillStyle = 'rgba(2, 5, 4, 0.92)';
     ctx.fillRect(wpBoxX, wpBoxY, wpBoxW, wpBoxH);
@@ -636,16 +680,29 @@ export const HudWidget: React.FC = () => {
     ctx.lineWidth = 1;
     ctx.strokeRect(wpBoxX, wpBoxY, wpBoxW, wpBoxH);
 
-    ctx.fillStyle = HUD_HIGHLIGHT;
     ctx.textAlign = 'left';
-    ctx.fillText(wpText, wpBoxX + wpPadX, bottomY);
+    ctx.textBaseline = 'middle';
+    if (isTwoLine) {
+      ctx.fillStyle = HUD_HIGHLIGHT;
+      ctx.font = 'bold 10px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillText(wpLine1, wpBoxX + wpPadX, wpBoxY + 9);
+
+      ctx.fillStyle = HUD_BRIGHT;
+      ctx.font = 'bold 9.5px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillText(wpLine2, wpBoxX + wpPadX, wpBoxY + 22);
+    } else {
+      ctx.fillStyle = HUD_HIGHLIGHT;
+      ctx.font = 'bold 10px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillText(wpLine1, wpBoxX + wpPadX, wpBoxY + 10);
+    }
 
     // Lower Right: THR with mask
+    ctx.font = 'bold 11px ui-monospace, SFMono-Regular, monospace';
     const thrMetrics = ctx.measureText(thrText);
     const thrBoxW = thrMetrics.width + wpPadX * 2;
     const thrBoxH = 20;
     const thrBoxX = width - thrBoxW - 10;
-    const thrBoxY = bottomY - thrBoxH / 2;
+    const thrBoxY = height - thrBoxH - 8;
 
     ctx.fillStyle = 'rgba(2, 5, 4, 0.92)';
     ctx.fillRect(thrBoxX, thrBoxY, thrBoxW, thrBoxH);
@@ -655,16 +712,17 @@ export const HudWidget: React.FC = () => {
 
     ctx.fillStyle = HUD_HIGHLIGHT;
     ctx.textAlign = 'left';
-    ctx.fillText(thrText, thrBoxX + wpPadX, bottomY);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(thrText, thrBoxX + wpPadX, thrBoxY + 10);
 
     // =========================================================
-    // 8. Upper Left: Normal Load Factor (Nz) in G
+    // 8. Upper Left: Normal Load Factor (Nz) in G & Upper Right: Home Vector
     // =========================================================
     const nzVal =
       imu && imu.nz !== 0 && !isNaN(imu.nz)
         ? imu.nz
         : Math.min(9.9, Math.max(-4.0, 1 / Math.max(0.15, Math.cos(attitude.roll))));
-    const nzText = `${nzVal.toFixed(1)} G`;
+    const nzText = hasLink ? `${nzVal.toFixed(1)} G` : '-- G';
 
     ctx.font = 'bold 11px ui-monospace, SFMono-Regular, monospace';
     ctx.textBaseline = 'middle';
@@ -686,8 +744,63 @@ export const HudWidget: React.FC = () => {
     ctx.textAlign = 'left';
     ctx.fillText(nzText, nzBoxX + nzPadX, 16);
 
+    // Upper Right: Home Distance & Bearing (Symbology: "H 000°/0.0 NM")
+    if (hasLink && homePosition.distanceM !== null) {
+      const homeText = formatHomeVector(homePosition.bearingDeg, homePosition.distanceM);
+      const hmMetrics = ctx.measureText(homeText);
+      const hmBoxW = hmMetrics.width + nzPadX * 2;
+      const hmBoxX = width - hmBoxW - 10;
+      ctx.fillStyle = 'rgba(2, 5, 4, 0.92)';
+      ctx.fillRect(hmBoxX, nzBoxY, hmBoxW, nzBoxH);
+      ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(hmBoxX, nzBoxY, hmBoxW, nzBoxH);
+      ctx.fillStyle = HUD_HIGHLIGHT;
+      ctx.textAlign = 'left';
+      ctx.fillText(homeText, hmBoxX + nzPadX, 16);
+    }
+
+    // =========================================================
+    // 9. No-Link / Link-Lost HUD Flag (#3)
+    // =========================================================
+    if (!hasLink) {
+      const flagText = hasConnectedInSession ? 'LINK LOST — STALE DATA' : 'NO LINK — STANDBY';
+      ctx.font = 'bold 11px ui-monospace, SFMono-Regular, monospace';
+      const flMetrics = ctx.measureText(flagText);
+      const flW = flMetrics.width + 20;
+      const flH = 22;
+      const flX = cx - flW / 2;
+      const flY = 42;
+      ctx.fillStyle = hasConnectedInSession ? 'rgba(69, 10, 10, 0.92)' : 'rgba(9, 9, 11, 0.88)';
+      ctx.fillRect(flX, flY, flW, flH);
+      ctx.strokeStyle = hasConnectedInSession ? '#ef4444' : '#f59e0b';
+      ctx.lineWidth = 1.4;
+      ctx.strokeRect(flX, flY, flW, flH);
+      ctx.fillStyle = hasConnectedInSession ? '#fca5a5' : '#fde68a';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(flagText, cx, flY + flH / 2);
+    }
+
     ctx.restore();
-  }, [attitude, vfr, position, missionWaypoints, currentWaypointSeq, imu, unitSystem, altitudeMode, formatSpeed, formatAltitude, formatClimb]);
+  }, [
+    heartbeat,
+    hasConnectedInSession,
+    attitude,
+    vfr,
+    position,
+    navController,
+    homePosition,
+    missionWaypoints,
+    currentWaypointSeq,
+    imu,
+    unitSystem,
+    altitudeMode,
+    formatSpeed,
+    formatAltitude,
+    formatClimb,
+    formatDistance,
+  ]);
 
   return (
     <Card className="h-full border-zinc-800 bg-zinc-950 shadow-lg overflow-hidden flex flex-col">
