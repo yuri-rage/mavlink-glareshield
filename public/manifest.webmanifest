@@ -1,0 +1,23 @@
+{
+  "name": "MAVLink Glareshield — ArduPilot GCS",
+  "short_name": "Glareshield",
+  "description": "Low-latency ArduPilot MAVLink telemetry, HUD, tactical map, and glareshield flight controls.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "/logo-64.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

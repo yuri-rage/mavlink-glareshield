@@ -56,3 +56,85 @@ body {
   color: #f4f4f5 !important;
   border: 1px solid #27272a !important;
 }
+
+/* High-Contrast Daylight (Sunlight) Mode for Outdoor Field Use */
+html.daylight-theme body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.daylight-theme .bg-zinc-950,
+html.daylight-theme .bg-zinc-950\/95,
+html.daylight-theme .bg-zinc-950\/90,
+html.daylight-theme .bg-zinc-950\/80,
+html.daylight-theme .bg-zinc-950\/70,
+html.daylight-theme .bg-zinc-950\/60 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html.daylight-theme .bg-zinc-900,
+html.daylight-theme .bg-zinc-900\/95,
+html.daylight-theme .bg-zinc-900\/90,
+html.daylight-theme .bg-zinc-900\/80,
+html.daylight-theme .bg-zinc-900\/60,
+html.daylight-theme .bg-zinc-900\/40 {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+html.daylight-theme .bg-zinc-800,
+html.daylight-theme .bg-zinc-800\/80,
+html.daylight-theme .bg-zinc-800\/60 {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html.daylight-theme .text-zinc-100,
+html.daylight-theme .text-zinc-200,
+html.daylight-theme .text-zinc-300 {
+  color: #0f172a !important;
+}
+
+html.daylight-theme .text-zinc-400,
+html.daylight-theme .text-zinc-500 {
+  color: #334155 !important;
+}
+
+html.daylight-theme .border-zinc-800,
+html.daylight-theme .border-zinc-800\/80,
+html.daylight-theme .border-zinc-800\/60,
+html.daylight-theme .border-zinc-700,
+html.daylight-theme .border-zinc-700\/80 {
+  border-color: #cbd5e1 !important;
+}
+
+html.daylight-theme .text-sky-300,
+html.daylight-theme .text-sky-400 {
+  color: #0369a1 !important;
+}
+
+html.daylight-theme .text-emerald-300,
+html.daylight-theme .text-emerald-400 {
+  color: #047857 !important;
+}
+
+html.daylight-theme .text-amber-300,
+html.daylight-theme .text-amber-400 {
+  color: #b45309 !important;
+}
+
+html.daylight-theme .text-rose-300,
+html.daylight-theme .text-rose-400,
+html.daylight-theme .text-red-400 {
+  color: #be123c !important;
+}
+
+/* Hide scrollbars cleanly where horizontal scroll hints are used */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
