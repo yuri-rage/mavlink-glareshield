@@ -20,7 +20,7 @@ const { useDashboardStore } = await import('../src/store/dashboardStore.ts');
 const { useTelemetryStore, sendTrackedCommand, computeDistanceAndBearing, evaluatePreArmReadiness, setMissionCurrentWaypoint } = await import('../src/store/telemetryStore.ts');
 const { MavlinkEncoder } = await import('../src/mavlink/encoder.ts');
 const { MavlinkParser, decodePayload } = await import('../src/mavlink/parser.ts');
-const { MAVLINK_MSG_ID } = await import('../src/mavlink/messages.ts');
+const { MAVLINK_MSG_ID, MAV_CMD } = await import('../src/mavlink/messages.ts');
 const { missionManager } = await import('../src/mavlink/missionManager.ts');
 const { parseParamFile, serializeParamFile, getParamMetadata, areParamsDifferent, formatParamValue } = await import('../src/mavlink/paramMetadata.ts');
 const { normalizeCalloutText, useAudioAlertsStore } = await import('../src/lib/audioAlerts.ts');
@@ -524,9 +524,9 @@ for (const [type, landCmd, opts, label] of [
   });
   await setMissionCurrentWaypoint(2);
   const updatedCurrentSeq = useTelemetryStore.getState().currentWaypointSeq;
-  check('setMissionCurrentWaypoint updates currentWaypointSeq in telemetry store',
-    updatedCurrentSeq === 2,
-    `currentSeq=${updatedCurrentSeq}`);
+  check('setMissionCurrentWaypoint updates currentWaypointSeq in telemetry store and uses command 224',
+    updatedCurrentSeq === 2 && MAV_CMD.DO_SET_MISSION_CURRENT === 224,
+    `currentSeq=${updatedCurrentSeq}, DO_SET_MISSION_CURRENT=${MAV_CMD.DO_SET_MISSION_CURRENT}`);
 
   // 15. Audio alerts waypoint arrival announce option toggle
   useAudioAlertsStore.getState().setWaypointAnnounceEnabled(true);

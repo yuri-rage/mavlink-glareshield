@@ -1421,12 +1421,29 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         }
 
         case MAVLINK_MSG_ID.MISSION_CURRENT: {
+          const feedback = state.commandFeedback;
+          const isMatchingNavFeedback =
+            feedback &&
+            feedback.targetKey === `action:wp:${data.seq}` &&
+            (feedback.status === 'pending' || feedback.status === 'denied' || feedback.status === 'failed');
+
           return {
             currentWaypointSeq: data.seq,
             missionWaypoints: state.missionWaypoints.map((w) => ({
               ...w,
               current: w.seq === data.seq,
             })),
+            ...(isMatchingNavFeedback
+              ? {
+                  commandFeedback: {
+                    ...feedback,
+                    status: 'accepted',
+                    result: 0,
+                    resultText: 'ACCEPTED',
+                    reason: undefined,
+                  },
+                }
+              : {}),
           };
         }
 
@@ -1835,9 +1852,17 @@ export async function setMissionCurrentWaypoint(seq: number): Promise<boolean> {
     })),
   }));
 
-  // Also send tracked MAV_CMD_DO_SET_MISSION_CURRENT (324) for command confirmation toast
+  // Also send tracked MAV_CMD_DO_SET_MISSION_CURRENT (224) for command confirmation toast
   if (sent) {
-    const cmdPkt = encoder.createCommandLong(sysId, compId, 324, [seq, 0, 0, 0, 0, 0, 0]);
+    const cmdPkt = encoder.createCommandLong(sysId, compId, MAV_CMD.DO_SET_MISSION_CURRENT, [
+      seq,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+    ]);
     sendTrackedCommand(cmdPkt, {
       label: `Nav to WP ${seq}`,
       targetKey: `action:wp:${seq}`,
