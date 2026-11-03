@@ -1,6 +1,7 @@
 import { MavlinkParser, MavlinkPacket } from './parser';
 import { MavlinkEncoder } from './encoder';
 import { messageRateManager } from './rateManager';
+import { MAVLINK_MSG_ID } from './messages';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -182,7 +183,7 @@ export class MavlinkConnection {
         this.startStats();
         messageRateManager.resetCache();
         try {
-          const req = this.encoder.createRequestAutopilotVersion();
+          const req = this.encoder.createRequestMessage(1, 1, MAVLINK_MSG_ID.AUTOPILOT_VERSION);
           this.send(req);
         } catch {}
       };

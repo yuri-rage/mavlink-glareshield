@@ -816,7 +816,9 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
             versionPollAttempts++;
             const encoder = mavlinkConnection.getEncoder();
             mavlinkConnection.send(encoder.createRequestBanner(packet.systemId, packet.componentId));
-            mavlinkConnection.send(encoder.createRequestAutopilotVersion(packet.systemId, packet.componentId));
+            mavlinkConnection.send(
+              encoder.createRequestMessage(packet.systemId, packet.componentId, MAVLINK_MSG_ID.AUTOPILOT_VERSION)
+            );
             if (versionPollAttempts === 1) {
               mavlinkConnection.send(
                 encoder.createRequestMessage(packet.systemId, packet.componentId, MAVLINK_MSG_ID.HOME_POSITION)
@@ -1532,7 +1534,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
             matchedPending.resolve(ackInfo);
           }
 
-          const ackMsg = isError
+          const isUserTracked = Boolean(matchedPending?.label);
+          const ackMsg = isError && (!isHousekeeping || isUserTracked)
             ? {
                 severity: data.result === 1 ? 4 : 3, // WARNING or ERROR
                 severityLabel: data.result === 1 ? 'WARNING' : 'ERROR',
