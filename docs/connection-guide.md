@@ -63,7 +63,7 @@ If you use Docker, certificate generation and LAN IP detection are automated:
 > [!NOTE]
 > **Docker Desktop & Field Networks**:
 > - If running Docker Desktop (macOS/Windows) where containers use internal bridge networking, set `CERT_CN=<your-lan-ip>` in `docker-compose.yml` so the certificate includes the host's LAN IP rather than the Docker internal IP.
-> - Any existing certificates placed in `./certs` (e.g. from Let's Encrypt or nginx) are preserved and will **never** be overwritten.
+> - Any existing certificates placed in `./certs` (e.g. from Let's Encrypt or nginx) are preserved and will **never** be overwritten. If your IP address changes or you need to re-issue an expired self-signed certificate, delete `./certs` (`rm -rf certs/*`) and restart the container to regenerate.
 
 ### Method B: Manual Python & OpenSSL Setup
 
@@ -140,17 +140,6 @@ Because self-signed certificates are not signed by a recognized Certificate Auth
    ```text
    ws://192.168.1.69:56781/
    ```
-2. Click **Accept the Risk and Continue**.
-3. Search for:
-   ```text
-   network.websocket.allowInsecureFromHTTPS
-   ```
-4. Double-click to toggle the value to **`true`**.
-5. Reload [https://glareshield.yurirage.com](https://glareshield.yurirage.com).
-6. Open **Link Settings** (gear icon) and connect to:
-   ```text
-   ws://192.168.1.69:56781/
-   ```
 
 ---
 
@@ -208,7 +197,7 @@ For an automated setup that handles real public certificates (e.g. Let's Encrypt
 > If you make your bridge reachable outside your local network, you **MUST** protect it with an authentication gateway:
 > - **Cloudflare Zero Trust (Access)**: Put a Cloudflare Access policy (email OTP, Google/GitHub OAuth) in front of your tunnel hostname.
 > - **Private Mesh VPN (Recommended)**: Use [Tailscale](https://tailscale.com) or WireGuard so only your authorized devices can reach the bridge machine's IP.
-> - **Authenticated Reverse Proxy**: Enforce HTTP Basic Auth or mutual TLS on the proxy before upgrading to WebSocket.
+> - **Authenticated Reverse Proxy**: Because browsers cannot reliably send HTTP Basic Auth credentials during native WebSocket handshakes, protect your reverse proxy with an IP allowlist, a query-string authentication token, mutual TLS (client certificates), or an identity proxy.
 
 ### Caddy (Automatic HTTPS on Local Network)
 
