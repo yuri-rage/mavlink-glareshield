@@ -7,8 +7,14 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Wind, Gauge, Compass, ArrowUp } from 'lucide-react';
 
 export const VfrHudWidget: React.FC = () => {
+  const connected = useTelemetryStore(
+    (state) => state.heartbeat.lastHeartbeatTime > 0 && state.heartbeat.modeName !== 'DISCONNECTED'
+  );
+  const hasConnectedInSession = useTelemetryStore((state) => state.hasConnectedInSession);
   const vfr = useTelemetryStore((state) => state.vfr);
   const { formatSpeed, formatClimb } = useUnitsStore();
+
+  const hasData = connected || hasConnectedInSession;
 
   useEffect(() => {
     messageRateManager.registerRequirement('vfr-hud', MAVLINK_MSG_ID.VFR_HUD);
@@ -24,7 +30,11 @@ export const VfrHudWidget: React.FC = () => {
   const climbFormatted = formatClimb(vfr.climb);
 
   return (
-    <Card className="h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
+    <Card
+      className={`h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md transition-opacity ${
+        !connected ? 'opacity-75' : ''
+      }`}
+    >
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
           <Gauge className="h-3.5 w-3.5 text-sky-400 shrink-0" />
@@ -38,7 +48,8 @@ export const VfrHudWidget: React.FC = () => {
               <Gauge className="h-3 w-3 text-sky-400 shrink-0" /> Groundspeed
             </span>
             <div className="text-base sm:text-lg font-mono font-bold text-zinc-100 mt-0.5">
-              {gsFormatted.value} <span className="text-xs text-zinc-400 font-normal">{gsFormatted.unit}</span>
+              {hasData ? gsFormatted.value : '--'}{' '}
+              <span className="text-xs text-zinc-400 font-normal">{gsFormatted.unit}</span>
             </div>
           </div>
 
@@ -47,7 +58,8 @@ export const VfrHudWidget: React.FC = () => {
               <Wind className="h-3 w-3 text-cyan-400 shrink-0" /> Airspeed
             </span>
             <div className="text-base sm:text-lg font-mono font-bold text-zinc-100 mt-0.5">
-              {asFormatted.value} <span className="text-xs text-zinc-400 font-normal">{asFormatted.unit}</span>
+              {hasData ? asFormatted.value : '--'}{' '}
+              <span className="text-xs text-zinc-400 font-normal">{asFormatted.unit}</span>
             </div>
           </div>
 
@@ -56,7 +68,7 @@ export const VfrHudWidget: React.FC = () => {
               <ArrowUp className="h-3 w-3 text-emerald-400 shrink-0" /> Climb Rate
             </span>
             <div className="text-base sm:text-lg font-mono font-bold text-zinc-100 mt-0.5">
-              {climbFormatted.value}{' '}
+              {hasData ? climbFormatted.value : '--'}{' '}
               <span className="text-xs text-zinc-400 font-normal">{climbFormatted.unit}</span>
             </div>
           </div>
@@ -66,7 +78,7 @@ export const VfrHudWidget: React.FC = () => {
               <Compass className="h-3 w-3 text-amber-400 shrink-0" /> Heading
             </span>
             <div className="text-base sm:text-lg font-mono font-bold text-zinc-100 mt-0.5">
-              {vfr.heading}°
+              {hasData ? `${vfr.heading}°` : '--'}
             </div>
           </div>
         </div>
@@ -76,13 +88,13 @@ export const VfrHudWidget: React.FC = () => {
           <div className="flex justify-between text-[11px] font-mono text-zinc-400">
             <span>Throttle</span>
             <span className={`font-bold ${isReverse ? 'text-amber-400' : 'text-zinc-200'}`}>
-              {isReverse ? `${vfr.throttle}% (REV)` : `${vfr.throttle}%`}
+              {hasData ? (isReverse ? `${vfr.throttle}% (REV)` : `${vfr.throttle}%`) : '--'}
             </span>
           </div>
           <div className="w-full bg-zinc-900 h-2 rounded-full overflow-hidden border border-zinc-800 relative">
             <div
               className={`h-full transition-all duration-200 ${isReverse ? 'bg-amber-500' : 'bg-sky-500'}`}
-              style={{ width: `${absThrottle}%` }}
+              style={{ width: `${hasData ? absThrottle : 0}%` }}
             />
           </div>
         </div>

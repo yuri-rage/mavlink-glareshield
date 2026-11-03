@@ -4,7 +4,7 @@ import { useAudioAlertsStore } from '../../lib/audioAlerts';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Terminal, Trash2, Volume2, VolumeX, ArrowUpDown } from 'lucide-react';
+import { Terminal, Trash2, Volume2, VolumeX, ArrowUpDown, MessageSquare } from 'lucide-react';
 
 const STORAGE_KEY_SORT = 'glareshield_messages_sort';
 
@@ -21,7 +21,7 @@ const getInitialSortOrder = (): 'newest' | 'oldest' => {
 export const StatusTextConsoleWidget: React.FC = () => {
   const statusMessages = useTelemetryStore((state) => state.statusMessages);
   const clearMessages = useTelemetryStore((state) => state.clearMessages);
-  const { soundEnabled, toggleSound } = useAudioAlertsStore();
+  const { soundEnabled, toggleSound, voiceEnabled, toggleVoice } = useAudioAlertsStore();
   const [filterSeverity, setFilterSeverity] = useState<number | null>(null);
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>(getInitialSortOrder);
 
@@ -75,7 +75,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
   }, [displayed.length, sortOrder]);
 
   return (
-    <Card className="border-zinc-800 bg-zinc-950/90 shadow-md flex flex-col h-full min-h-[300px]">
+    <Card className="border-zinc-800 bg-zinc-950/90 shadow-md flex flex-col h-full min-h-[380px] sm:min-h-[540px]">
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
@@ -93,6 +93,19 @@ export const StatusTextConsoleWidget: React.FC = () => {
             >
               <ArrowUpDown className="h-3.5 w-3.5 text-sky-400" />
               <span className="hidden sm:inline capitalize">{sortOrder}</span>
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleVoice}
+              className={`h-7 px-2 text-[11px] font-sans font-semibold gap-1 ${
+                voiceEnabled ? 'text-emerald-400 hover:text-emerald-300' : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+              title={voiceEnabled ? 'Spoken voice callouts enabled (click to mute voice)' : 'Spoken voice callouts muted (click to enable)'}
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{voiceEnabled ? 'Voice On' : 'Voice Off'}</span>
             </Button>
 
             <Button
@@ -151,7 +164,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 bg-black/60 rounded-xl border border-zinc-850 p-1.5 font-mono text-xs overflow-y-auto max-h-[260px] space-y-0.5 select-text"
+          className="flex-1 bg-black/60 rounded-xl border border-zinc-850 p-1.5 font-mono text-xs overflow-y-auto min-h-[240px] max-h-[68vh] space-y-0.5 select-text"
         >
           {displayed.length === 0 ? (
             <div className="text-zinc-600 text-center py-8 italic">

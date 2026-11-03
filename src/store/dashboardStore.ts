@@ -15,7 +15,7 @@ const DEFAULT_PROFILE: DashboardProfile = {
   tabs: [
     {
       id: 'tab-flight',
-      title: 'Flight Deck',
+      title: 'HUD',
       widgets: [
         { instanceId: 'w-glareshield', widgetId: 'built-in-glareshield', colSpan: 12 },
         { instanceId: 'w-hud', widgetId: 'built-in-hud', colSpan: 6 },
@@ -27,7 +27,7 @@ const DEFAULT_PROFILE: DashboardProfile = {
     },
     {
       id: 'tab-map',
-      title: 'Tactical Map',
+      title: 'Moving Map',
       widgets: [
         { instanceId: 'w-glareshield-map', widgetId: 'built-in-glareshield', colSpan: 12 },
         { instanceId: 'w-map-large', widgetId: 'built-in-map', colSpan: 12 },
@@ -35,7 +35,7 @@ const DEFAULT_PROFILE: DashboardProfile = {
     },
     {
       id: 'tab-telemetry',
-      title: 'Instruments & Graphs',
+      title: 'Telemetry',
       widgets: [
         { instanceId: 'w-charts', widgetId: 'built-in-charts', colSpan: 12 },
         { instanceId: 'w-vfr-2', widgetId: 'built-in-vfr-hud', colSpan: 6 },
@@ -44,7 +44,7 @@ const DEFAULT_PROFILE: DashboardProfile = {
     },
     {
       id: 'tab-console',
-      title: 'Messages & Params',
+      title: 'Configuration',
       widgets: [
         { instanceId: 'w-console', widgetId: 'built-in-statustext', colSpan: 6 },
         { instanceId: 'w-params', widgetId: 'built-in-parameters', colSpan: 6 },
@@ -138,7 +138,20 @@ function loadInitialProfile(): DashboardProfile {
     if (typeof localStorage !== 'undefined') {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed.tabs)) {
+          const OLD_TO_NEW_TITLES: Record<string, string> = {
+            'Flight Deck': 'HUD',
+            'Tactical Map': 'Moving Map',
+            'Instruments & Graphs': 'Telemetry',
+            'Messages & Params': 'Configuration',
+          };
+          parsed.tabs = parsed.tabs.map((t: DashboardTab) => ({
+            ...t,
+            title: OLD_TO_NEW_TITLES[t.title] || t.title,
+          }));
+        }
+        return parsed;
       }
     }
   } catch (e) {
@@ -176,6 +189,7 @@ interface DashboardState {
   addWidgetToActiveTab: (widgetId: string, colSpan?: number) => void;
   removeWidgetFromActiveTab: (instanceId: string) => void;
   updateWidgetColSpan: (instanceId: string, colSpan: number) => void;
+  updateWidgetRowSpan: (instanceId: string, rowSpan: number) => void;
   moveWidget: (instanceId: string, direction: 'up' | 'down') => void;
   reorderWidgetsInActiveTab: (fromIndex: number, toIndex: number) => void;
 
@@ -288,6 +302,22 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         return {
           ...tab,
           widgets: tab.widgets.map((w) => (w.instanceId === instanceId ? { ...w, colSpan } : w)),
+        };
+      });
+      const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
+      saveProfileToStorage(newProfile);
+      return { profile: newProfile };
+    });
+  },
+
+  updateWidgetRowSpan: (instanceId: string, rowSpan: number) => {
+    const { activeTabId } = get();
+    set((state) => {
+      const newTabs = state.profile.tabs.map((tab) => {
+        if (tab.id !== activeTabId) return tab;
+        return {
+          ...tab,
+          widgets: tab.widgets.map((w) => (w.instanceId === instanceId ? { ...w, rowSpan } : w)),
         };
       });
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };

@@ -27,6 +27,8 @@ import {
   Pencil,
   GripVertical,
   Sliders,
+  Lock,
+  ChevronRight,
 } from 'lucide-react';
 
 interface DashboardGridProps {
@@ -46,6 +48,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
     reorderTabs,
     removeWidgetFromActiveTab,
     updateWidgetColSpan,
+    updateWidgetRowSpan,
     moveWidget,
     reorderWidgetsInActiveTab,
   } = useDashboardStore();
@@ -163,9 +166,10 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
   return (
     <div className="flex-1 flex flex-col p-3 sm:p-5 max-w-7xl mx-auto w-full space-y-4">
       {/* Tab Navigation Bar */}
-      <div className="flex items-center justify-between border-b border-zinc-800 pb-2 gap-2">
-        {/* Scrollable Tabs */}
-        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto min-w-0 flex-1 py-1">
+      <div className="flex items-center justify-between border-b border-zinc-800 pb-2 gap-2 relative">
+        {/* Scrollable Tabs with Mobile Scroll Hint */}
+        <div className="relative flex-1 min-w-0 flex items-center">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto min-w-0 flex-1 py-1 pr-6 scrollbar-thin">
           {profile.tabs.map((tab, tabIdx) => {
             const isActive = tab.id === activeTab?.id;
             const isBeingRenamed = editingTabId === tab.id;
@@ -340,6 +344,14 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
               </Button>
             </form>
           )}
+          </div>
+          {/* Right scroll fade & chevron hint on narrow mobile viewports */}
+          <div
+            className="sm:hidden pointer-events-none absolute right-0 top-0 bottom-0 w-7 bg-gradient-to-l from-zinc-950 via-zinc-950/80 to-transparent flex items-center justify-end pr-0.5 text-zinc-500"
+            aria-hidden="true"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </div>
         </div>
 
         {/* Far Right: Edit Mode Button (hidden while editing since EditToolbar has Finish Edit) */}
@@ -364,6 +376,13 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
         <div className="grid grid-cols-12 gap-3 sm:gap-4 items-stretch">
           {activeTab.widgets.map((widget, idx) => {
             const colSpan = widget.colSpan || 6;
+            const rowSpan = widget.rowSpan || 2;
+            const heightPresetClass =
+              rowSpan === 1
+                ? 'max-h-[260px] overflow-y-auto'
+                : rowSpan === 3
+                ? 'min-h-[540px]'
+                : '';
             const isConfirmingDeleteWidget = confirmDeleteWidgetId === widget.instanceId;
             const customDef = profile.customWidgets.find((w) => w.id === widget.widgetId);
             const isDropTarget =
@@ -409,15 +428,22 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                 {isEditing && (
                   <div className="mb-1.5 flex items-center justify-between gap-1 bg-zinc-900 border border-zinc-700/80 rounded-lg px-2 py-1 text-xs text-zinc-300 shadow-md">
                     <div
-                      className="flex items-center gap-1 min-w-0 cursor-grab active:cursor-grabbing"
-                      title="Drag card to reorder in grid"
+                      className="flex items-center gap-1.5 min-w-0 cursor-grab active:cursor-grabbing"
+                      title="Drag card to reorder in grid — flight controls locked while editing"
                     >
-                      <GripVertical className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+                      <GripVertical className="h-3.5 w-3.5 text-sky-400 shrink-0" />
                       <span
                         className="font-sans text-[11px] text-sky-400 font-bold truncate max-w-[110px] sm:max-w-[170px]"
                         title={getWidgetTitle(widget.widgetId)}
                       >
                         {getWidgetTitle(widget.widgetId)}
+                      </span>
+                      <span
+                        className="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800/90 border border-zinc-700 text-[9px] font-mono text-zinc-400 shrink-0"
+                        title="Widget controls are locked in Edit Mode so you can safely drag to reorder"
+                      >
+                        <Lock className="h-2.5 w-2.5 text-amber-400" />
+                        Drag · Controls Locked
                       </span>
                     </div>
 
@@ -439,6 +465,28 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                           title={opt.title}
                         >
                           {opt.label}
+                        </button>
+                      ))}
+
+                      <div className="h-3 w-px bg-zinc-700 mx-0.5" />
+
+                      {/* Height presets: Compact, Normal, Tall */}
+                      {[
+                        { rows: 1, label: 'H:S', title: 'Compact Height' },
+                        { rows: 2, label: 'H:M', title: 'Normal Height' },
+                        { rows: 3, label: 'H:L', title: 'Tall Height' },
+                      ].map((hOpt) => (
+                        <button
+                          key={hOpt.rows}
+                          onClick={() => updateWidgetRowSpan(widget.instanceId, hOpt.rows)}
+                          className={`px-1 py-0.5 rounded text-[9px] font-mono font-semibold transition-colors ${
+                            rowSpan === hOpt.rows
+                              ? 'bg-emerald-600 text-white font-bold'
+                              : 'hover:bg-zinc-800 text-zinc-400'
+                          }`}
+                          title={hOpt.title}
+                        >
+                          {hOpt.label}
                         </button>
                       ))}
 
@@ -511,20 +559,26 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                   </div>
                 )}
 
-                {/* Render the actual widget with edit-lock protection */}
-                <div className={`h-full flex flex-col relative ${isEditing ? 'ring-1 ring-dashed ring-zinc-700 rounded-xl' : ''}`}>
+                {/* Render the actual widget with non-obscuring edit-lock protection */}
+                <div
+                  className={`h-full flex flex-col relative ${heightPresetClass} ${
+                    isEditing ? 'ring-1 ring-dashed ring-zinc-700 rounded-xl' : ''
+                  }`}
+                >
                   <ErrorBoundary fallbackTitle={getWidgetTitle(widget.widgetId)}>
                     {renderWidgetContent(widget)}
                   </ErrorBoundary>
                   {isEditing && (
                     <div
-                      className="absolute inset-0 bg-zinc-950/40 backdrop-blur-[0.5px] rounded-xl z-20 cursor-grab active:cursor-grabbing flex items-center justify-center pointer-events-auto select-none"
+                      className="absolute inset-0 rounded-xl z-20 cursor-grab active:cursor-grabbing flex items-center justify-center pointer-events-auto select-none"
                       title="Drag to reorder widget — flight controls locked while editing"
                     >
-                      <span className="text-[11px] font-mono font-medium text-zinc-200 bg-zinc-900/95 px-2.5 py-1 rounded-md border border-zinc-700 shadow flex items-center gap-1.5">
-                        <GripVertical className="h-3.5 w-3.5 text-sky-400" />
-                        {isDropTarget ? 'Drop Here to Swap' : 'Drag to Reorder · Controls Locked'}
-                      </span>
+                      {isDropTarget && (
+                        <span className="text-[11px] font-mono font-bold text-sky-200 bg-sky-950/95 px-3 py-1.5 rounded-lg border border-sky-400 shadow-lg flex items-center gap-1.5">
+                          <GripVertical className="h-3.5 w-3.5 text-sky-400" />
+                          Drop Here to Swap
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>

@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   Pencil,
   Trash2,
+  Check,
 } from 'lucide-react';
 
 function getMavCmdName(cmdId: number): string {
@@ -126,9 +127,12 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
   onOpenWidgetCreator,
   onEditCustomWidget,
 }) => {
-  const { profile, addWidgetToActiveTab, saveCustomWidget, deleteCustomWidget } = useDashboardStore();
+  const { profile, activeTabId, addWidgetToActiveTab, saveCustomWidget, deleteCustomWidget } = useDashboardStore();
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [pendingImportWidget, setPendingImportWidget] = useState<CustomWidgetDefinition | null>(null);
+
+  const activeTab = profile.tabs.find((t) => t.id === activeTabId) || profile.tabs[0];
+  const placedWidgetIdsOnTab = new Set(activeTab ? activeTab.widgets.map((w) => w.widgetId) : []);
 
   const handleAddBuiltIn = (widgetId: string, colSpan: number) => {
     addWidgetToActiveTab(widgetId, colSpan);
@@ -369,11 +373,16 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                     <Zap className="h-4 w-4" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
+                    <h4 className="text-xs font-bold text-zinc-100 flex items-center gap-1.5 flex-wrap">
                       {cw.name}
                       <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-sky-950 text-sky-300 border border-sky-800">
                         {cw.displayType}
                       </span>
+                      {placedWidgetIdsOnTab.has(cw.id) && (
+                        <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 inline-flex items-center gap-0.5">
+                          <Check className="h-2.5 w-2.5" /> On Tab
+                        </span>
+                      )}
                     </h4>
                     <p className="text-[11px] text-zinc-400 mt-0.5">{cw.description || 'Custom user widget'}</p>
                   </div>
@@ -415,6 +424,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
           {/* Built-in Widgets */}
           {filteredBuiltIn.map((item) => {
             const Icon = item.icon;
+            const isAlreadyOnTab = placedWidgetIdsOnTab.has(item.id);
             return (
               <div
                 key={item.id}
@@ -425,7 +435,14 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                     <Icon className="h-4 w-4" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-zinc-100">{item.name}</h4>
+                    <h4 className="text-xs font-bold text-zinc-100 flex items-center gap-1.5 flex-wrap">
+                      <span>{item.name}</span>
+                      {isAlreadyOnTab && (
+                        <span className="text-[9px] uppercase px-1.5 py-0.2 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 inline-flex items-center gap-0.5 font-sans">
+                          <Check className="h-2.5 w-2.5" /> On Tab
+                        </span>
+                      )}
+                    </h4>
                     <p className="text-[11px] text-zinc-400 mt-0.5">{item.description}</p>
                   </div>
                 </div>
@@ -436,7 +453,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                   className="h-8 px-3 text-xs font-bold border-zinc-700 hover:bg-zinc-800"
                   onClick={() => handleAddBuiltIn(item.id, item.defaultSpan)}
                 >
-                  Place
+                  {isAlreadyOnTab ? 'Place Copy' : 'Place'}
                 </Button>
               </div>
             );
