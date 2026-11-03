@@ -19,6 +19,7 @@ const audioBufferCache = new Map<string, AudioBuffer>();
 
 // Cockpit voice playback queue & active source tracking
 let activeVoiceSource: AudioBufferSourceNode | null = null;
+let isPlaybackStarting = false;
 const playbackQueue: AudioBuffer[] = [];
 let playbackQueueTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -86,8 +87,20 @@ function cacheAudioBuffer(key: string, buffer: AudioBuffer) {
  * - High-shelf @ 6.0 kHz (+2.5 dB) to eliminate any muffle
  * - Fast dynamics compressor for consistent cockpit volume
  */
-function startBufferPlayback(ctx: AudioContext, buffer: AudioBuffer) {
+async function startBufferPlayback(ctx: AudioContext, buffer: AudioBuffer) {
+  isPlaybackStarting = true;
   try {
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch {}
+    }
+
+    // If a priority alert intervened and cancelled playback while resuming, abort cleanly
+    if (!isPlaybackStarting) {
+      return;
+    }
+
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.playbackRate.value = 1.0; // Natural pitch; +15% cadence is generated natively by VITS length_scale
@@ -109,10 +122,10 @@ function startBufferPlayback(ctx: AudioContext, buffer: AudioBuffer) {
     airShelf.gain.value = 2.5;
 
     const compressor = ctx.createDynamicsCompressor();
-    compressor.threshold.value = -16;
+    compressor.threshold.value = -14;
     compressor.knee.value = 8;
-    compressor.ratio.value = 3.5;
-    compressor.attack.value = 0.003;
+    compressor.ratio.value = 3.2;
+    compressor.attack.value = 0.008; // 8ms lets initial consonant transients breathe before clamping
     compressor.release.value = 0.12;
 
     const outGain = ctx.createGain();
@@ -126,6 +139,8 @@ function startBufferPlayback(ctx: AudioContext, buffer: AudioBuffer) {
     outGain.connect(ctx.destination);
 
     activeVoiceSource = source;
+    isPlaybackStarting = false;
+
     source.onended = () => {
       if (activeVoiceSource === source) {
         activeVoiceSource = null;
@@ -135,21 +150,25 @@ function startBufferPlayback(ctx: AudioContext, buffer: AudioBuffer) {
           playbackQueueTimer = null;
           const nextBuf = playbackQueue.shift();
           const currentCtx = getSharedAudioContext();
-          if (nextBuf && currentCtx && !activeVoiceSource) {
+          if (nextBuf && currentCtx && !activeVoiceSource && !isPlaybackStarting) {
             startBufferPlayback(currentCtx, nextBuf);
           }
         }, 80);
       }
     };
 
-    source.start(0);
+    // Pre-roll schedule offset (50ms) to ensure the audio DAC and OS sound daemon
+    // complete any hardware anti-pop un-mute ramp during silence, preserving the crisp leading attack.
+    const startTime = Math.max(ctx.currentTime, 0) + 0.05;
+    source.start(startTime);
   } catch {
     activeVoiceSource = null;
+    isPlaybackStarting = false;
   }
 }
 
 function enqueueCockpitBuffer(buffer: AudioBuffer, priority: boolean) {
-  const ctx = getSharedAudioContext();
+  const ctx = getSharedAudioContext(true);
   if (!ctx) return;
 
   if (priority) {
@@ -165,6 +184,7 @@ function enqueueCockpitBuffer(buffer: AudioBuffer, priority: boolean) {
       } catch {}
       activeVoiceSource = null;
     }
+    isPlaybackStarting = false;
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
         window.speechSynthesis.cancel();
@@ -174,7 +194,7 @@ function enqueueCockpitBuffer(buffer: AudioBuffer, priority: boolean) {
     return;
   }
 
-  if (!activeVoiceSource && playbackQueue.length === 0) {
+  if (!activeVoiceSource && !isPlaybackStarting && playbackQueue.length === 0) {
     startBufferPlayback(ctx, buffer);
   } else {
     playbackQueue.push(buffer);
@@ -249,8 +269,8 @@ async function prewarmCoreCallouts() {
   const phrases = [
     'Motors armed',
     'Motors disarmed',
-    'Warning: telemetry link lost',
-    'Telemetry link restored',
+    'Telemetry lost',
+    'Telemetry restored',
   ];
   for (const phrase of phrases) {
     if (audioBufferCache.has(phrase)) continue;
@@ -400,10 +420,14 @@ export function speakCallout(text: string, priority = false) {
 
 export function playAlertChime(severity: number) {
   try {
-    const ctx = getSharedAudioContext();
+    const ctx = getSharedAudioContext(true);
     if (!ctx) return;
 
-    const now = ctx.currentTime;
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+
+    const now = ctx.currentTime + 0.02; // Small 20ms offset so chime attack isn't truncated by DAC un-mute ramp
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
@@ -650,7 +674,7 @@ export function useAudioAlertListener() {
 
     if (prevModeRef.current !== heartbeat.modeName) {
       prevModeRef.current = heartbeat.modeName;
-      speakCallout(`Flight mode ${heartbeat.modeName}`);
+      speakCallout(`${heartbeat.modeName} mode`);
     }
   }, [heartbeat.modeName, heartbeat.isArmed, heartbeat.lastHeartbeatTime]);
 
