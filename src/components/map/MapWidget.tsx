@@ -464,6 +464,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
           maxNativeZoom: 19,
           maxZoom: 22,
+          crossOrigin: true,
         });
       case 'satellite':
       default:
@@ -471,6 +472,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA',
           maxNativeZoom: 19,
           maxZoom: 22,
+          crossOrigin: true,
         });
     }
   };

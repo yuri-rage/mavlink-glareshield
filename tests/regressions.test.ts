@@ -20,7 +20,7 @@ const { useDashboardStore } = await import('../src/store/dashboardStore.ts');
 const { useTelemetryStore, sendTrackedCommand, computeDistanceAndBearing, evaluatePreArmReadiness } = await import('../src/store/telemetryStore.ts');
 const { MavlinkEncoder } = await import('../src/mavlink/encoder.ts');
 const { MavlinkParser, decodePayload } = await import('../src/mavlink/parser.ts');
-const { parseParamFile, serializeParamFile, getParamMetadata } = await import('../src/mavlink/paramMetadata.ts');
+const { parseParamFile, serializeParamFile, getParamMetadata, areParamsDifferent, formatParamValue } = await import('../src/mavlink/paramMetadata.ts');
 const { normalizeCalloutText, useAudioAlertsStore } = await import('../src/lib/audioAlerts.ts');
 
 const failures: string[] = [];
@@ -282,6 +282,67 @@ for (const [type, landCmd, opts, label] of [
   check('paramMetadata serializeParamFile/parseParamFile roundtrips and provides units/ranges',
     parsedParams.WPNAV_SPEED === 500 && Math.abs(parsedParams.BATT_LOW_VOLT - 14.2) < 1e-5 && meta?.units === 'cm/s',
     JSON.stringify({ parsedParams, units: meta?.units }));
+
+  // 5b. Small float calibration preservation (toPrecision 9) & relative tolerance
+  const smallParams = {
+    INS_TCAL1_ACC1_X: -3.48e-7,
+    INS_TCAL1_GYR2_Y: 1.239e-5,
+    ATC_RAT_YAW_D: 1.2345e-4,
+    BATT_LOW_VOLT: 14.2,
+  };
+  const serializedSmall = serializeParamFile(smallParams);
+  const parsedSmall = parseParamFile(serializedSmall);
+  check('param file preserves small calibration floats without dropping exponents',
+    Math.abs(parsedSmall.INS_TCAL1_ACC1_X - (-3.48e-7)) < 1e-12 &&
+    Math.abs(parsedSmall.INS_TCAL1_GYR2_Y - 1.239e-5) < 1e-10 &&
+    Math.abs(parsedSmall.ATC_RAT_YAW_D - 1.2345e-4) < 1e-9 &&
+    !serializedSmall.includes('-3.48e-7,0\n'),
+    serializedSmall.split('\n').filter((l) => !l.startsWith('#')).join('; '));
+
+  check('areParamsDifferent correctly compares with relative tolerance',
+    areParamsDifferent(0, -3.48e-7) &&
+    areParamsDifferent(0.000012, 1.239e-5) &&
+    areParamsDifferent(0.000123, 1.2345e-4) &&
+    !areParamsDifferent(1.5, 1.5) &&
+    !areParamsDifferent(-3.48e-7, -3.48e-7),
+    'relative comparison passed');
+
+  // 5c. Parameter metadata alias support (AIRSPEED_MIN/MAX vs ARSPD_FBW_MIN/MAX)
+  const metaAirspeedMin = getParamMetadata('AIRSPEED_MIN');
+  const metaArspdFbwMin = getParamMetadata('ARSPD_FBW_MIN');
+  check('paramMetadata supports AIRSPEED_MIN and ARSPD_FBW_MIN aliases',
+    metaAirspeedMin !== null && metaArspdFbwMin !== null && metaAirspeedMin.units === 'm/s',
+    `AIRSPEED_MIN: ${metaAirspeedMin?.description}, ARSPD_FBW_MIN: ${metaArspdFbwMin?.description}`);
+
+  // 5d. sendTrackedCommand settles immediately with NOT_SENT if offline
+  (mavlinkConnection as any).send = () => false;
+  const dummyPacket = new MavlinkEncoder().createSetMode(1, 1, 4);
+  const offlineAck = await sendTrackedCommand(dummyPacket, { label: 'Test Offline Send' });
+  check('sendTrackedCommand resolves immediately with NOT_SENT if send() returns false',
+    offlineAck.result === -2 && offlineAck.resultText === 'NOT_SENT',
+    JSON.stringify(offlineAck));
+  (mavlinkConnection as any).send = origSend;
+
+  // 5e. evaluatePreArmReadiness subsystem check (0x400000=Terrain, 0x1000000=Logging) and age-out
+  const terrainSysStatus: any = {
+    sensorsPresent: 0x10000000 | 0x400000 | 0x1000000,
+    sensorsEnabled: 0x10000000 | 0x400000 | 0x1000000,
+    sensorsHealth: 0x10000000 | 0x1000000, // Terrain (0x400000) unhealthy, Logging healthy
+  };
+  const prearmTerrain = evaluatePreArmReadiness(terrainSysStatus, [], false);
+  check('evaluatePreArmReadiness maps 0x400000 to Terrain and 0x1000000 to Logging',
+    prearmTerrain.failedSubsystems.includes('Terrain') && !prearmTerrain.failedSubsystems.includes('Logging'),
+    JSON.stringify(prearmTerrain.failedSubsystems));
+
+  const nowTs = Date.now();
+  const oldPreArmMessages: any[] = [
+    { id: '1', text: 'PreArm: Compass not calibrated', severity: 4, timestamp: nowTs - 35000 },
+    { id: '2', text: 'PreArm: GPS fix degraded', severity: 4, timestamp: nowTs - 5000 },
+  ];
+  const prearmAgeOut = evaluatePreArmReadiness(terrainSysStatus, oldPreArmMessages, false);
+  check('evaluatePreArmReadiness ages out PreArm messages older than 30s',
+    prearmAgeOut.activePreArmErrors.length === 1 && prearmAgeOut.activePreArmErrors[0] === 'PreArm: GPS fix degraded',
+    JSON.stringify(prearmAgeOut.activePreArmErrors));
 
   // 6. Distance to home / waypoint unit logic and "H 000°/0.0 NM" symbology
   useUnitsStore.getState().setSystem('ms');

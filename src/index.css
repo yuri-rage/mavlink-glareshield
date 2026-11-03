@@ -66,6 +66,7 @@ html.daylight-theme body {
 html.daylight-theme .bg-zinc-950,
 html.daylight-theme .bg-zinc-950\/95,
 html.daylight-theme .bg-zinc-950\/90,
+html.daylight-theme .bg-zinc-950\/85,
 html.daylight-theme .bg-zinc-950\/80,
 html.daylight-theme .bg-zinc-950\/70,
 html.daylight-theme .bg-zinc-950\/60 {
@@ -77,6 +78,7 @@ html.daylight-theme .bg-zinc-900,
 html.daylight-theme .bg-zinc-900\/95,
 html.daylight-theme .bg-zinc-900\/90,
 html.daylight-theme .bg-zinc-900\/80,
+html.daylight-theme .bg-zinc-900\/70,
 html.daylight-theme .bg-zinc-900\/60,
 html.daylight-theme .bg-zinc-900\/40 {
   background-color: #f1f5f9 !important;
@@ -85,9 +87,65 @@ html.daylight-theme .bg-zinc-900\/40 {
 
 html.daylight-theme .bg-zinc-800,
 html.daylight-theme .bg-zinc-800\/80,
-html.daylight-theme .bg-zinc-800\/60 {
+html.daylight-theme .bg-zinc-800\/60,
+html.daylight-theme .bg-zinc-800\/40 {
   background-color: #e2e8f0 !important;
   color: #0f172a !important;
+}
+
+/* Daylight High-Contrast Badge & Pill Overrides */
+html.daylight-theme .bg-red-950,
+html.daylight-theme .bg-red-950\/95,
+html.daylight-theme .bg-red-950\/90,
+html.daylight-theme .bg-red-950\/80,
+html.daylight-theme .bg-red-950\/75,
+html.daylight-theme .bg-red-950\/60,
+html.daylight-theme .bg-red-950\/50,
+html.daylight-theme .bg-red-950\/40,
+html.daylight-theme .bg-rose-950\/95,
+html.daylight-theme .bg-rose-950\/90,
+html.daylight-theme .bg-rose-950\/75 {
+  background-color: #fee2e2 !important;
+  color: #991b1b !important;
+  border-color: #f87171 !important;
+}
+
+html.daylight-theme .bg-emerald-950,
+html.daylight-theme .bg-emerald-950\/95,
+html.daylight-theme .bg-emerald-950\/90,
+html.daylight-theme .bg-emerald-950\/80,
+html.daylight-theme .bg-emerald-950\/70,
+html.daylight-theme .bg-emerald-950\/60,
+html.daylight-theme .bg-emerald-950\/50,
+html.daylight-theme .bg-emerald-950\/40,
+html.daylight-theme .bg-emerald-950\/30 {
+  background-color: #d1fae5 !important;
+  color: #065f46 !important;
+  border-color: #34d399 !important;
+}
+
+html.daylight-theme .bg-sky-950,
+html.daylight-theme .bg-sky-950\/95,
+html.daylight-theme .bg-sky-950\/90,
+html.daylight-theme .bg-sky-950\/80,
+html.daylight-theme .bg-sky-950\/60,
+html.daylight-theme .bg-sky-950\/50,
+html.daylight-theme .bg-sky-950\/40 {
+  background-color: #e0f2fe !important;
+  color: #0369a1 !important;
+  border-color: #38bdf8 !important;
+}
+
+html.daylight-theme .bg-amber-950,
+html.daylight-theme .bg-amber-950\/80,
+html.daylight-theme .bg-amber-950\/60,
+html.daylight-theme .bg-amber-950\/50,
+html.daylight-theme .bg-amber-950\/40,
+html.daylight-theme .bg-amber-950\/30,
+html.daylight-theme .bg-amber-950\/20 {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+  border-color: #fbbf24 !important;
 }
 
 html.daylight-theme .text-zinc-100,
@@ -101,6 +159,10 @@ html.daylight-theme .text-zinc-500 {
   color: #334155 !important;
 }
 
+html.daylight-theme .text-zinc-700 {
+  color: #94a3b8 !important;
+}
+
 html.daylight-theme .border-zinc-800,
 html.daylight-theme .border-zinc-800\/80,
 html.daylight-theme .border-zinc-800\/60,
@@ -109,9 +171,41 @@ html.daylight-theme .border-zinc-700\/80 {
   border-color: #cbd5e1 !important;
 }
 
+html.daylight-theme .border-red-800,
+html.daylight-theme .border-red-800\/60,
+html.daylight-theme .border-rose-600\/80,
+html.daylight-theme .border-rose-600\/70 {
+  border-color: #f87171 !important;
+}
+
+html.daylight-theme .border-emerald-800,
+html.daylight-theme .border-emerald-800\/60,
+html.daylight-theme .border-emerald-700\/80,
+html.daylight-theme .border-emerald-700\/60,
+html.daylight-theme .border-emerald-600\/50,
+html.daylight-theme .border-emerald-500\/40 {
+  border-color: #34d399 !important;
+}
+
+html.daylight-theme .border-sky-800,
+html.daylight-theme .border-sky-800\/60,
+html.daylight-theme .border-sky-700\/80,
+html.daylight-theme .border-sky-700\/60,
+html.daylight-theme .border-sky-500\/40 {
+  border-color: #38bdf8 !important;
+}
+
+html.daylight-theme .border-amber-800,
+html.daylight-theme .border-amber-800\/60,
+html.daylight-theme .border-amber-800\/40,
+html.daylight-theme .border-amber-700\/50,
+html.daylight-theme .border-amber-500\/60 {
+  border-color: #fbbf24 !important;
+}
+
 html.daylight-theme .text-sky-300,
 html.daylight-theme .text-sky-400 {
-  color: #0369a1 !important;
+  color: #0284c7 !important;
 }
 
 html.daylight-theme .text-emerald-300,
@@ -126,6 +220,7 @@ html.daylight-theme .text-amber-400 {
 
 html.daylight-theme .text-rose-300,
 html.daylight-theme .text-rose-400,
+html.daylight-theme .text-red-300,
 html.daylight-theme .text-red-400 {
   color: #be123c !important;
 }

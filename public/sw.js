@@ -65,7 +65,9 @@ self.addEventListener('fetch', (event) => {
         const cached = await cache.match(req);
         const networkFetch = fetch(req)
           .then((res) => {
-            if (res && (res.ok || res.type === 'opaque')) {
+            // Only cache valid CORS / same-origin responses; never cache opaque responses
+            // to avoid Chrome inflating quota to ~7MB per opaque tile.
+            if (res && res.ok && res.type !== 'opaque') {
               cache.put(req, res.clone()).then(() => trimTileCache(cache));
             }
             return res;
