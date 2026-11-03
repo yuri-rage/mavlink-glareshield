@@ -24,6 +24,27 @@ export function getDefaultWsUrl(): string {
   return 'ws://localhost:56781';
 }
 
+/**
+ * Checks if a WebSocket URL points to a loopback address (localhost, 127.x.x.x, [::1]).
+ * Modern browsers permit unencrypted ws:// connections to loopback hosts even when
+ * the page is loaded over HTTPS.
+ */
+export function isLoopbackWs(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const h = parsed.hostname.toLowerCase();
+    return (
+      h === 'localhost' ||
+      h === '127.0.0.1' ||
+      h.startsWith('127.') ||
+      h === '[::1]' ||
+      h === '::1'
+    );
+  } catch {
+    return /^ws:\/\/(localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[?::1\]?)(:\d+)?(\/.*)?$/i.test(url.trim());
+  }
+}
+
 export class MavlinkConnection {
   private ws: WebSocket | null = null;
   private url: string;
@@ -187,7 +208,8 @@ export class MavlinkConnection {
         const isMixedContent =
           typeof window !== 'undefined' &&
           window.location.protocol === 'https:' &&
-          this.url.startsWith('ws://');
+          this.url.startsWith('ws://') &&
+          !isLoopbackWs(this.url);
         const errMsg = isMixedContent
           ? 'Mixed Content: HTTPS pages block unencrypted ws://. Use wss:// or permit insecure WebSockets.'
           : 'WebSocket error occurred';
@@ -203,7 +225,8 @@ export class MavlinkConnection {
           const isMixedContent =
             typeof window !== 'undefined' &&
             window.location.protocol === 'https:' &&
-            this.url.startsWith('ws://');
+            this.url.startsWith('ws://') &&
+            !isLoopbackWs(this.url);
           // If blocked by browser mixed content, back off to 10s to avoid spamming the console
           const delay = isMixedContent ? 10000 : 2000;
           this.reconnectTimeout = setTimeout(() => this.connect(), delay);
@@ -213,7 +236,8 @@ export class MavlinkConnection {
       const isMixedContent =
         typeof window !== 'undefined' &&
         window.location.protocol === 'https:' &&
-        this.url.startsWith('ws://');
+        this.url.startsWith('ws://') &&
+        !isLoopbackWs(this.url);
       const msg = isMixedContent
         ? 'Mixed Content: HTTPS pages block unencrypted ws://. Use wss:// or permit insecure WebSockets.'
         : e?.message || 'Failed to connect';

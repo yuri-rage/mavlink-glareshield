@@ -7,7 +7,7 @@ import {
 } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { useAudioAlertsStore } from '../../lib/audioAlerts';
-import { mavlinkConnection } from '../../mavlink/connection';
+import { mavlinkConnection, isLoopbackWs } from '../../mavlink/connection';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Modal } from '../ui/modal';
@@ -1057,7 +1057,7 @@ export const Navbar: React.FC = () => {
               Default companion bridge endpoint is <code className="text-sky-400">ws://localhost:56781</code>. Saved automatically for page reloads.
             </p>
 
-            {typeof window !== 'undefined' && window.location.protocol === 'https:' && inputUrl.trim().startsWith('ws://') && (
+            {typeof window !== 'undefined' && window.location.protocol === 'https:' && inputUrl.trim().startsWith('ws://') && !isLoopbackWs(inputUrl.trim()) && (
               <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-950/25 text-amber-200 text-xs space-y-1 mt-2">
                 <div className="font-semibold flex items-center gap-1.5 text-amber-300">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
