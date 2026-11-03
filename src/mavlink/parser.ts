@@ -420,6 +420,25 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
       };
     }
 
+    case MAVLINK_MSG_ID.COMMAND_INT: {
+      const command = getUint16(28);
+      return {
+        param1: getFloat32(0),
+        param2: getFloat32(4),
+        param3: getFloat32(8),
+        param4: getFloat32(12),
+        x: getInt32(16),
+        y: getInt32(20),
+        z: getFloat32(24),
+        command,
+        target_system: getUint8(30),
+        target_component: getUint8(31),
+        frame: getUint8(32),
+        current: getUint8(33),
+        autocontinue: getUint8(34),
+      };
+    }
+
     case MAVLINK_MSG_ID.COMMAND_ACK:
       return {
         command: getUint16(0),
@@ -719,6 +738,34 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         flags: getUint8(0),
         len,
         data: payload.subarray(2, 2 + Math.min(len, 180)),
+      };
+    }
+
+    case MAVLINK_MSG_ID.RADIO_STATUS:
+      return {
+        rxerrors: getUint16(0),
+        fixed: getUint16(2),
+        rssi: getUint8(4),
+        remrssi: getUint8(5),
+        txbuf: getUint8(6),
+        noise: getUint8(7),
+        remnoise: getUint8(8),
+      };
+
+    case MAVLINK_MSG_ID.HOME_POSITION: {
+      const latitude = getInt32(0) / 1e7;
+      const longitude = getInt32(4) / 1e7;
+      const altitude = getInt32(8) / 1000; // mm -> m MSL
+      return {
+        latitude,
+        longitude,
+        altitude,
+        lat: latitude,
+        lon: longitude,
+        alt: altitude,
+        x: getFloat32(12),
+        y: getFloat32(16),
+        z: getFloat32(20),
       };
     }
 

@@ -222,7 +222,40 @@ export interface CommandAckInfo {
   command: number;
   result: number;
   resultText: string;
+  reason?: string;
   time: number;
+}
+
+export interface CommandFeedbackInfo {
+  id: number;
+  command: number;
+  cmdName: string;
+  label: string;
+  targetKey?: string;
+  status: 'pending' | 'accepted' | 'denied' | 'timeout';
+  result?: number;
+  resultText?: string;
+  reason?: string;
+  time: number;
+}
+
+export interface HomePositionInfo {
+  lat: number;
+  lon: number;
+  alt: number;
+  distanceM: number | null;
+  bearingDeg: number | null;
+  source: 'home_msg' | 'wp0' | 'arm_pos' | 'none';
+}
+
+export interface RadioStatusInfo {
+  rssi: number;
+  remrssi: number;
+  txbuf: number;
+  noise: number;
+  remnoise: number;
+  rxerrors: number;
+  fixed: number;
 }
 
 export interface BaseStationPosition {
@@ -252,6 +285,8 @@ interface TelemetryState {
   esc: VehicleESC;
   power: VehiclePower;
   pressure: VehiclePressure;
+  radioStatus: RadioStatusInfo;
+  homePosition: HomePositionInfo;
   statusMessages: StatusMessage[];
   firmwareVersion: string | null;
   firmwareRaw?: string;
@@ -263,11 +298,16 @@ interface TelemetryState {
   flightTrace: [number, number][];
   history: TelemetryHistoryPoint[];
   lastCommandAck?: CommandAckInfo;
+  commandFeedback?: CommandFeedbackInfo;
   baseStationPosition: BaseStationPosition | null;
+  hasConnectedInSession: boolean;
+  armedStartedAt: number | null;
+  accumulatedArmedMs: number;
 
   // Actions
   processPacket: (packet: MavlinkPacket) => void;
   clearMessages: () => void;
+  clearCommandFeedback: () => void;
   addTracePoint: (lat: number, lon: number) => void;
   clearTrace: () => void;
   setBaseStationPosition: (pos: BaseStationPosition | null) => void;
@@ -318,7 +358,106 @@ const HANDLED_MESSAGE_IDS = new Set<number>([
   MAVLINK_MSG_ID.MISSION_ITEM_INT,
   MAVLINK_MSG_ID.MISSION_CURRENT,
   MAVLINK_MSG_ID.COMMAND_ACK,
+  MAVLINK_MSG_ID.RADIO_STATUS,
+  MAVLINK_MSG_ID.HOME_POSITION,
 ]);
+
+export function computeDistanceAndBearing(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): { distanceM: number; bearingDeg: number } {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const toDeg = (rad: number) => (rad * 180) / Math.PI;
+  const R = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const phi1 = toRad(lat1);
+  const phi2 = toRad(lat2);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distanceM = R * c;
+
+  const y = Math.sin(dLon) * Math.cos(phi2);
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLon);
+  const bearingDeg = (toDeg(Math.atan2(y, x)) + 360) % 360;
+
+  return { distanceM, bearingDeg };
+}
+
+export interface PreArmReadiness {
+  isReady: boolean;
+  prearmBitPresent: boolean;
+  prearmBitHealthy: boolean;
+  failedSubsystems: string[];
+  activePreArmErrors: string[];
+}
+
+const SENSOR_SUBSYSTEM_CHECKS: { mask: number; label: string }[] = [
+  { mask: 0x01, label: '3D Gyro' },
+  { mask: 0x02, label: '3D Accel' },
+  { mask: 0x04, label: '3D Mag' },
+  { mask: 0x08, label: 'Baro' },
+  { mask: 0x20, label: 'GPS' },
+  { mask: 0x10000, label: 'RC Input' },
+  { mask: 0x200000, label: 'AHRS' },
+  { mask: 0x1000000, label: 'Terrain' },
+  { mask: 0x2000000, label: 'Battery' },
+];
+
+export function evaluatePreArmReadiness(
+  sysStatus: VehicleSysStatus,
+  statusMessages: StatusMessage[],
+  isArmed: boolean
+): PreArmReadiness {
+  const PREARM_BIT = 0x10000000; // MAV_SYS_STATUS_PREARM_CHECK (268435456)
+  const prearmBitPresent =
+    (sysStatus.sensorsPresent & PREARM_BIT) !== 0 ||
+    (sysStatus.sensorsEnabled & PREARM_BIT) !== 0;
+  const prearmBitHealthy = (sysStatus.sensorsHealth & PREARM_BIT) !== 0;
+
+  const failedSubsystems: string[] = [];
+  for (const sub of SENSOR_SUBSYSTEM_CHECKS) {
+    const enabled = (sysStatus.sensorsEnabled & sub.mask) !== 0;
+    const healthy = (sysStatus.sensorsHealth & sub.mask) !== 0;
+    if (enabled && !healthy) {
+      failedSubsystems.push(sub.label);
+    }
+  }
+
+  const seenErrors = new Set<string>();
+  const activePreArmErrors: string[] = [];
+  for (const msg of statusMessages) {
+    if (/^(PreArm:|Arm:)/i.test(msg.text.trim())) {
+      const cleaned = msg.text.trim();
+      if (!seenErrors.has(cleaned)) {
+        seenErrors.add(cleaned);
+        activePreArmErrors.push(cleaned);
+      }
+      if (activePreArmErrors.length >= 6) break;
+    }
+  }
+
+  const isReady = isArmed
+    ? true
+    : prearmBitPresent
+      ? prearmBitHealthy && failedSubsystems.length === 0
+      : failedSubsystems.length === 0 && activePreArmErrors.length === 0;
+
+  return {
+    isReady,
+    prearmBitPresent,
+    prearmBitHealthy,
+    failedSubsystems,
+    activePreArmErrors,
+  };
+}
 
 const SEVERITY_LABELS: Record<number, string> = {
   0: 'EMERGENCY',
@@ -555,6 +694,38 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     pressDiff: 0,
     temperature: 25.0,
   },
+  radioStatus: {
+    rssi: 0,
+    remrssi: 0,
+    txbuf: 100,
+    noise: 0,
+    remnoise: 0,
+    rxerrors: 0,
+    fixed: 0,
+  },
+  homePosition: (() => {
+    const wp0 = initialNav.missionWaypoints?.find(
+      (w) => w.seq === 0 && (w.lat !== 0 || w.lon !== 0)
+    );
+    if (wp0) {
+      return {
+        lat: wp0.lat,
+        lon: wp0.lon,
+        alt: wp0.alt,
+        distanceM: null,
+        bearingDeg: null,
+        source: 'wp0' as const,
+      };
+    }
+    return {
+      lat: 0,
+      lon: 0,
+      alt: 0,
+      distanceM: null,
+      bearingDeg: null,
+      source: 'none' as const,
+    };
+  })(),
   statusMessages: [],
   firmwareVersion: null,
   firmwareRaw: undefined,
@@ -566,8 +737,12 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   flightTrace: [],
   history: [],
   baseStationPosition: null,
+  hasConnectedInSession: false,
+  armedStartedAt: null,
+  accumulatedArmedMs: 0,
 
   clearMessages: () => set({ statusMessages: [] }),
+  clearCommandFeedback: () => set({ commandFeedback: undefined }),
   setBaseStationPosition: (pos: BaseStationPosition | null) => set({ baseStationPosition: pos }),
 
   addTracePoint: (lat: number, lon: number) => {
@@ -629,6 +804,11 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
             const encoder = mavlinkConnection.getEncoder();
             mavlinkConnection.send(encoder.createRequestBanner(packet.systemId, packet.componentId));
             mavlinkConnection.send(encoder.createRequestAutopilotVersion(packet.systemId, packet.componentId));
+            if (versionPollAttempts === 1) {
+              mavlinkConnection.send(
+                encoder.createRequestMessage(packet.systemId, packet.componentId, MAVLINK_MSG_ID.HOME_POSITION)
+              );
+            }
             if (versionPollAttempts === 3) {
               mavlinkConnection.send(encoder.createParamRequestList(packet.systemId, packet.componentId));
             }
@@ -637,7 +817,38 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           versionPollAttempts = 0;
         }
 
+        // Track armed flight time and arm-position fallback for Home
+        let armedStartedAt = state.armedStartedAt;
+        let accumulatedArmedMs = state.accumulatedArmedMs;
+        if (isArmed && !state.heartbeat.isArmed) {
+          armedStartedAt = now;
+        } else if (!isArmed && state.heartbeat.isArmed && state.armedStartedAt !== null) {
+          accumulatedArmedMs += Math.max(0, now - state.armedStartedAt);
+          armedStartedAt = null;
+        }
+
+        let updatedHome = state.homePosition;
+        if (
+          isArmed &&
+          !state.heartbeat.isArmed &&
+          state.homePosition.source === 'none' &&
+          (state.position.lat !== 0 || state.position.lon !== 0)
+        ) {
+          updatedHome = {
+            lat: state.position.lat,
+            lon: state.position.lon,
+            alt: state.position.alt,
+            distanceM: 0,
+            bearingDeg: 0,
+            source: 'arm_pos',
+          };
+        }
+
         return {
+          hasConnectedInSession: true,
+          armedStartedAt,
+          accumulatedArmedMs,
+          ...(updatedHome !== state.homePosition ? { homePosition: updatedHome } : {}),
           heartbeat: {
             type: data.type,
             autopilot: data.autopilot,
@@ -716,6 +927,25 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
             }
           }
 
+          let updatedHome = state.homePosition;
+          if (
+            state.homePosition.source !== 'none' &&
+            (data.lat !== 0 || data.lon !== 0) &&
+            (state.homePosition.lat !== 0 || state.homePosition.lon !== 0)
+          ) {
+            const { distanceM, bearingDeg } = computeDistanceAndBearing(
+              data.lat,
+              data.lon,
+              state.homePosition.lat,
+              state.homePosition.lon
+            );
+            updatedHome = {
+              ...state.homePosition,
+              distanceM,
+              bearingDeg,
+            };
+          }
+
           return {
             position: {
               timeBootMs: data.time_boot_ms ?? 0,
@@ -729,6 +959,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
               hdg: data.rawHdg === 65535 ? 65535 : data.hdg,
             },
             ...(updatedTrace !== state.flightTrace ? { flightTrace: updatedTrace } : {}),
+            ...(updatedHome !== state.homePosition ? { homePosition: updatedHome } : {}),
           };
         }
 
@@ -1008,6 +1239,49 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
 
         case MAVLINK_MSG_ID.STATUSTEXT: {
           const version = extractFirmwareVersion(data.text);
+          const trimmedText = (data.text ?? '').trim();
+          const isExplanatory =
+            Boolean(trimmedText) &&
+            !version &&
+            (data.severity <= 4 ||
+              /^(PreArm:|Arm:|Takeoff|Mode|Guided|RTL|Land|Auto|Fence|Mission|Command|Disarm|Failed|Unable|Requires)/i.test(
+                trimmedText
+              ));
+
+          if (isExplanatory) {
+            lastRecentExplanatoryStatus = { text: trimmedText, time: now };
+          }
+
+          let updatedLastAck = state.lastCommandAck;
+          let updatedFeedback = state.commandFeedback;
+
+          if (
+            isExplanatory &&
+            state.lastCommandAck &&
+            state.lastCommandAck.result !== 0 &&
+            state.lastCommandAck.result !== 5 &&
+            now - state.lastCommandAck.time <= 1200 &&
+            !state.lastCommandAck.reason
+          ) {
+            updatedLastAck = {
+              ...state.lastCommandAck,
+              reason: trimmedText,
+            };
+          }
+
+          if (
+            isExplanatory &&
+            state.commandFeedback &&
+            (state.commandFeedback.status === 'denied' || state.commandFeedback.status === 'pending') &&
+            now - state.commandFeedback.time <= 1200 &&
+            !state.commandFeedback.reason
+          ) {
+            updatedFeedback = {
+              ...state.commandFeedback,
+              reason: trimmedText,
+            };
+          }
+
           return {
             statusMessages: appendStatusMessage(
               state.statusMessages,
@@ -1019,6 +1293,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
               now
             ),
             ...(version ? { firmwareVersion: version, firmwareRaw: data.text } : {}),
+            ...(updatedLastAck !== state.lastCommandAck ? { lastCommandAck: updatedLastAck } : {}),
+            ...(updatedFeedback !== state.commandFeedback ? { commandFeedback: updatedFeedback } : {}),
           };
         }
 
@@ -1103,9 +1379,31 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
             updatedWps.push(wp);
             updatedWps.sort((a, b) => a.seq - b.seq);
           }
+
+          let updatedHome = state.homePosition;
+          if (
+            data.seq === 0 &&
+            (data.x !== 0 || data.y !== 0) &&
+            state.homePosition.source !== 'home_msg'
+          ) {
+            const hasPos = state.position.lat !== 0 || state.position.lon !== 0;
+            const distBrg = hasPos
+              ? computeDistanceAndBearing(state.position.lat, state.position.lon, data.x, data.y)
+              : null;
+            updatedHome = {
+              lat: data.x,
+              lon: data.y,
+              alt: data.z,
+              distanceM: distBrg ? distBrg.distanceM : null,
+              bearingDeg: distBrg ? distBrg.bearingDeg : null,
+              source: 'wp0',
+            };
+          }
+
           return {
             missionWaypoints: updatedWps,
             ...(isCurrent ? { currentWaypointSeq: data.seq } : {}),
+            ...(updatedHome !== state.homePosition ? { homePosition: updatedHome } : {}),
           };
         }
 
@@ -1119,11 +1417,51 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           };
         }
 
+        case MAVLINK_MSG_ID.RADIO_STATUS: {
+          return {
+            radioStatus: {
+              rssi: data.rssi ?? 0,
+              remrssi: data.remrssi ?? 0,
+              txbuf: data.txbuf ?? 100,
+              noise: data.noise ?? 0,
+              remnoise: data.remnoise ?? 0,
+              rxerrors: data.rxerrors ?? 0,
+              fixed: data.fixed ?? 0,
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.HOME_POSITION: {
+          if (data.latitude === 0 && data.longitude === 0) {
+            return state;
+          }
+          const hasPos = state.position.lat !== 0 || state.position.lon !== 0;
+          const distBrg = hasPos
+            ? computeDistanceAndBearing(
+                state.position.lat,
+                state.position.lon,
+                data.latitude,
+                data.longitude
+              )
+            : null;
+          return {
+            homePosition: {
+              lat: data.latitude,
+              lon: data.longitude,
+              alt: data.altitude ?? 0,
+              distanceM: distBrg ? distBrg.distanceM : null,
+              bearingDeg: distBrg ? distBrg.bearingDeg : null,
+              source: 'home_msg',
+            },
+          };
+        }
+
         case MAVLINK_MSG_ID.COMMAND_ACK: {
+          let matchedPending: PendingCommand | undefined;
           const pendingList = pendingCommands.get(data.command);
           if (pendingList && pendingList.length > 0) {
-            const oldest = pendingList.shift()!;
-            clearTimeout(oldest.timer);
+            matchedPending = pendingList.shift()!;
+            clearTimeout(matchedPending.timer);
             if (pendingList.length === 0) {
               pendingCommands.delete(data.command);
             }
@@ -1131,19 +1469,60 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           const cmdName = getMavCmdName(data.command);
           const resultText = COMMAND_ACK_RESULTS[data.result] ?? `CODE_${data.result}`;
           const isError = data.result !== 0 && data.result !== 5; // not ACCEPTED or IN_PROGRESS
-          const ackMsg = isError ? {
-            severity: data.result === 1 ? 4 : 3, // WARNING or ERROR
-            severityLabel: data.result === 1 ? 'WARNING' : 'ERROR',
-            text: `CMD ${cmdName}: ${resultText}${data.result_param2 ? ` (${data.result_param2})` : ''}`,
-          } : null;
+          const isHousekeeping =
+            data.command === MAV_CMD.SET_MESSAGE_INTERVAL ||
+            data.command === MAV_CMD.REQUEST_MESSAGE ||
+            data.command === MAV_CMD.REQUEST_AUTOPILOT_CAPABILITIES ||
+            data.command === MAV_CMD.DO_SEND_BANNER;
+
+          let reason: string | undefined;
+          if (
+            isError &&
+            lastRecentExplanatoryStatus &&
+            now - lastRecentExplanatoryStatus.time <= 600
+          ) {
+            reason = lastRecentExplanatoryStatus.text;
+          }
+
+          const ackInfo: CommandAckInfo = {
+            command: data.command,
+            result: data.result,
+            resultText,
+            reason,
+            time: now,
+          };
+
+          if (matchedPending?.resolve) {
+            matchedPending.resolve(ackInfo);
+          }
+
+          const ackMsg = isError
+            ? {
+                severity: data.result === 1 ? 4 : 3, // WARNING or ERROR
+                severityLabel: data.result === 1 ? 'WARNING' : 'ERROR',
+                text: `CMD ${cmdName}: ${resultText}${data.result_param2 ? ` (${data.result_param2})` : ''}${reason ? ` — ${reason}` : ''}`,
+              }
+            : null;
+
+          const shouldUpdateFeedback = !isHousekeeping || Boolean(matchedPending?.label);
+          const updatedFeedback: CommandFeedbackInfo | undefined = shouldUpdateFeedback
+            ? {
+                id: matchedPending?.id ?? nextPendingId++,
+                command: data.command,
+                cmdName,
+                label: matchedPending?.label ?? cmdName,
+                targetKey: matchedPending?.targetKey,
+                status: isError ? 'denied' : 'accepted',
+                result: data.result,
+                resultText,
+                reason,
+                time: now,
+              }
+            : state.commandFeedback;
 
           return {
-            lastCommandAck: {
-              command: data.command,
-              result: data.result,
-              resultText,
-              time: now,
-            },
+            lastCommandAck: ackInfo,
+            ...(shouldUpdateFeedback ? { commandFeedback: updatedFeedback } : {}),
             ...(ackMsg ? { statusMessages: appendStatusMessage(state.statusMessages, ackMsg, now) } : {}),
           };
         }
@@ -1168,6 +1547,7 @@ mavlinkConnection.onStatus((status) => {
     useTelemetryStore.setState((state) => ({
       firmwareVersion: null,
       firmwareRaw: undefined,
+      armedStartedAt: null,
       heartbeat: {
         ...state.heartbeat,
         type: 0,
@@ -1185,11 +1565,38 @@ interface PendingCommand {
   id: number;
   commandId: number;
   cmdName: string;
+  label?: string;
+  targetKey?: string;
   sentAt: number;
   timer: any;
+  resolve?: (ack: CommandAckInfo) => void;
 }
 let nextPendingId = 1;
 const pendingCommands = new Map<number, PendingCommand[]>();
+let lastRecentExplanatoryStatus: { text: string; time: number } | null = null;
+let pendingSendMeta: {
+  label?: string;
+  targetKey?: string;
+  resolve?: (ack: CommandAckInfo) => void;
+} | null = null;
+
+export function sendTrackedCommand(
+  packet: Uint8Array,
+  meta?: { label?: string; targetKey?: string }
+): Promise<CommandAckInfo> {
+  return new Promise<CommandAckInfo>((resolve) => {
+    pendingSendMeta = {
+      label: meta?.label,
+      targetKey: meta?.targetKey,
+      resolve,
+    };
+    try {
+      mavlinkConnection.send(packet);
+    } finally {
+      pendingSendMeta = null;
+    }
+  });
+}
 
 mavlinkConnection.onSend((data) => {
   if (data.length >= 12 && data[0] === 0xFD) {
@@ -1202,32 +1609,74 @@ mavlinkConnection.onSend((data) => {
       const cmdId = b0 | (b1 << 8);
       const cmdName = getMavCmdName(cmdId);
       const entryId = nextPendingId++;
+      const meta = pendingSendMeta;
+      pendingSendMeta = null;
+
+      const isHousekeeping =
+        cmdId === MAV_CMD.SET_MESSAGE_INTERVAL ||
+        cmdId === MAV_CMD.REQUEST_MESSAGE ||
+        cmdId === MAV_CMD.REQUEST_AUTOPILOT_CAPABILITIES ||
+        cmdId === MAV_CMD.DO_SEND_BANNER;
+
+      const sentNow = Date.now();
+      if (!isHousekeeping || meta?.label) {
+        useTelemetryStore.setState({
+          commandFeedback: {
+            id: entryId,
+            command: cmdId,
+            cmdName,
+            label: meta?.label ?? cmdName,
+            targetKey: meta?.targetKey,
+            status: 'pending',
+            time: sentNow,
+          },
+        });
+      }
 
       const timer = setTimeout(() => {
         const list = pendingCommands.get(cmdId);
+        let timedOutEntry: PendingCommand | undefined;
         if (list) {
           const idx = list.findIndex((item) => item.id === entryId);
-          if (idx >= 0) list.splice(idx, 1);
+          if (idx >= 0) {
+            timedOutEntry = list[idx];
+            list.splice(idx, 1);
+          }
           if (list.length === 0) pendingCommands.delete(cmdId);
         }
         const now = Date.now();
-        const isHousekeeping =
-          cmdId === MAV_CMD.SET_MESSAGE_INTERVAL ||
-          cmdId === MAV_CMD.REQUEST_MESSAGE ||
-          cmdId === MAV_CMD.REQUEST_AUTOPILOT_CAPABILITIES ||
-          cmdId === MAV_CMD.DO_SEND_BANNER;
         const timeoutMsg = {
           severity: isHousekeeping ? 6 : 4, // INFO for background housekeeping, WARNING for user commands
           severityLabel: isHousekeeping ? 'INFO' : 'WARNING',
           text: `CMD ${cmdName}: NO ACK (TIMEOUT)`,
         };
+        const timeoutAck: CommandAckInfo = {
+          command: cmdId,
+          result: -1,
+          resultText: 'TIMEOUT',
+          time: now,
+        };
+        if (timedOutEntry?.resolve) {
+          timedOutEntry.resolve(timeoutAck);
+        }
         useTelemetryStore.setState((s) => ({
-          lastCommandAck: {
-            command: cmdId,
-            result: -1,
-            resultText: 'TIMEOUT',
-            time: now,
-          },
+          lastCommandAck: timeoutAck,
+          ...(!isHousekeeping || timedOutEntry?.label
+            ? {
+                commandFeedback: {
+                  id: entryId,
+                  command: cmdId,
+                  cmdName,
+                  label: timedOutEntry?.label ?? cmdName,
+                  targetKey: timedOutEntry?.targetKey,
+                  status: 'timeout',
+                  result: -1,
+                  resultText: 'TIMEOUT',
+                  reason: 'No COMMAND_ACK received from vehicle within 5s',
+                  time: now,
+                },
+              }
+            : {}),
           statusMessages: appendStatusMessage(s.statusMessages, timeoutMsg, now),
         }));
       }, 5000);
@@ -1237,8 +1686,11 @@ mavlinkConnection.onSend((data) => {
         id: entryId,
         commandId: cmdId,
         cmdName,
-        sentAt: Date.now(),
+        label: meta?.label,
+        targetKey: meta?.targetKey,
+        sentAt: sentNow,
         timer,
+        resolve: meta?.resolve,
       });
       pendingCommands.set(cmdId, list);
     }

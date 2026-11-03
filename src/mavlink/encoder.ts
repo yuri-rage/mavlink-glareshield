@@ -198,6 +198,26 @@ export class MavlinkEncoder {
     );
   }
 
+  // Request a single MAVLink message ID via MAV_CMD_REQUEST_MESSAGE (512)
+  public createRequestMessage(targetSystem = 1, targetComponent = 1, messageId: number): Uint8Array {
+    return this.createCommandLong(
+      targetSystem,
+      targetComponent,
+      MAV_CMD.REQUEST_MESSAGE,
+      [messageId, 0, 0, 0, 0, 0, 0]
+    );
+  }
+
+  // Trigger ArduPilot pre-arm safety checks via MAV_CMD_RUN_PREARM_CHECKS (401)
+  public createRunPrearmChecks(targetSystem = 1, targetComponent = 1): Uint8Array {
+    return this.createCommandLong(
+      targetSystem,
+      targetComponent,
+      MAV_CMD.RUN_PREARM_CHECKS,
+      [0, 0, 0, 0, 0, 0, 0]
+    );
+  }
+
   // Request version banner via MAV_CMD_DO_SEND_BANNER (42428)
   public createRequestBanner(targetSystem = 1, targetComponent = 1): Uint8Array {
     return this.createCommandLong(

@@ -55,9 +55,11 @@ MSG_MISSION_REQUEST_INT = 51
 MSG_NAV_CONTROLLER_OUTPUT = 62
 MSG_RC_CHANNELS = 65
 MSG_MISSION_ITEM_INT = 73
+MSG_VFR_HUD = 74
+MSG_COMMAND_INT = 75
 MSG_COMMAND_LONG = 76
 MSG_COMMAND_ACK = 77
-MSG_VFR_HUD = 74
+MSG_RADIO_STATUS = 109
 MSG_FILE_TRANSFER_PROTOCOL = 110
 MSG_GPS2_RAW = 124
 MSG_POWER_STATUS = 125
@@ -67,8 +69,9 @@ MSG_WIND = 168
 MSG_RANGEFINDER = 173
 MSG_EKF_STATUS_REPORT = 193
 MSG_RPM = 226
-MSG_VIBRATION = 241
 MSG_GPS_RTCM_DATA = 233
+MSG_VIBRATION = 241
+MSG_HOME_POSITION = 242
 MSG_STATUSTEXT = 253
 MSG_ESC_TELEMETRY_1_TO_4 = 11030
 
@@ -93,9 +96,11 @@ CRC_EXTRA = {
     MSG_NAV_CONTROLLER_OUTPUT: 183,
     MSG_RC_CHANNELS: 118,
     MSG_MISSION_ITEM_INT: 38,
+    MSG_VFR_HUD: 20,
+    MSG_COMMAND_INT: 158,
     MSG_COMMAND_LONG: 152,
     MSG_COMMAND_ACK: 143,
-    MSG_VFR_HUD: 20,
+    MSG_RADIO_STATUS: 185,
     MSG_FILE_TRANSFER_PROTOCOL: 84,
     MSG_GPS2_RAW: 87,
     MSG_POWER_STATUS: 203,
@@ -105,8 +110,9 @@ CRC_EXTRA = {
     MSG_RANGEFINDER: 83,
     MSG_EKF_STATUS_REPORT: 71,
     MSG_RPM: 207,
-    MSG_VIBRATION: 90,
     MSG_GPS_RTCM_DATA: 35,
+    MSG_VIBRATION: 90,
+    MSG_HOME_POSITION: 104,
     MSG_STATUSTEXT: 83,
     MSG_ESC_TELEMETRY_1_TO_4: 144,
 }
@@ -491,6 +497,107 @@ class BridgeServer:
                         )
                     )
 
+                elif cmd == 22:  # MAV_CMD_NAV_TAKEOFF
+                    if not self.armed or self.flight_mode != 4:
+                        reason = (
+                            "Takeoff: must be in GUIDED mode"
+                            if self.flight_mode != 4
+                            else "Takeoff: must be armed"
+                        )
+                        txt_bytes = reason.encode("ascii")[:50].ljust(50, b"\x00")
+                        await self.broadcast(
+                            self.encoder.pack(
+                                MSG_STATUSTEXT, struct.pack("<B", 4) + txt_bytes
+                            )
+                        )
+                        ack_payload = struct.pack(
+                            "<HBBIBB", 22, 4, 0, 0, 1, 1
+                        )  # 4 = MAV_RESULT_FAILED
+                        await self.broadcast(
+                            self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
+                        )
+                    else:
+                        target_alt = float(_p7) if _p7 > 0 else 10.0
+                        self.sim_alt = target_alt
+                        ack_payload = struct.pack(
+                            "<HBBIBB", 22, 0, 0, 0, 1, 1
+                        )  # 0 = MAV_RESULT_ACCEPTED
+                        await self.broadcast(
+                            self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
+                        )
+                        txt_bytes = f"Taking off to {target_alt:.0f}m".encode("ascii")[
+                            :50
+                        ].ljust(50, b"\x00")
+                        await self.broadcast(
+                            self.encoder.pack(
+                                MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes
+                            )
+                        )
+
+                elif cmd == 20:  # MAV_CMD_NAV_RETURN_TO_LAUNCH
+                    self.flight_mode = 6  # RTL
+                    ack_payload = struct.pack("<HBBIBB", 20, 0, 0, 0, 1, 1)
+                    await self.broadcast(
+                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
+                    )
+                    txt_bytes = b"Flight mode set to RTL".ljust(50, b"\x00")
+                    await self.broadcast(
+                        self.encoder.pack(
+                            MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes
+                        )
+                    )
+
+                elif cmd == 21:  # MAV_CMD_NAV_LAND
+                    self.flight_mode = 9  # LAND
+                    ack_payload = struct.pack("<HBBIBB", 21, 0, 0, 0, 1, 1)
+                    await self.broadcast(
+                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
+                    )
+                    txt_bytes = b"Flight mode set to LAND".ljust(50, b"\x00")
+                    await self.broadcast(
+                        self.encoder.pack(
+                            MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes
+                        )
+                    )
+
+                elif cmd == 401:  # MAV_CMD_RUN_PREARM_CHECKS
+                    ack_payload = struct.pack("<HBBIBB", 401, 0, 0, 0, 1, 1)
+                    await self.broadcast(
+                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
+                    )
+                    txt_bytes = b"PreArm: All checks passing".ljust(50, b"\x00")
+                    await self.broadcast(
+                        self.encoder.pack(
+                            MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes
+                        )
+                    )
+
+                elif cmd in (410, 512) and (cmd == 410 or int(p1) == MSG_HOME_POSITION):
+                    ack_payload = struct.pack("<HBBIBB", cmd, 0, 0, 0, 1, 1)
+                    await self.broadcast(
+                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
+                    )
+                    home_payload = struct.pack(
+                        "<iii3f4f3fQ",
+                        int(37.7749 * 1e7),
+                        int(-122.4194 * 1e7),
+                        10000,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        int(time.time() * 1e6),
+                    )
+                    await self.broadcast(
+                        self.encoder.pack(MSG_HOME_POSITION, home_payload)
+                    )
+
                 elif cmd == 42428:  # MAV_CMD_DO_SEND_BANNER
                     ack_payload = struct.pack(
                         "<HBBIBB", 42428, 0, 0, 0, 1, 1
@@ -511,6 +618,36 @@ class BridgeServer:
                     ack_payload = struct.pack(
                         "<HBBIBB", cmd, 0, 0, 0, 1, 1
                     )  # 0 = MAV_RESULT_ACCEPTED
+                    await self.broadcast(
+                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
+                    )
+
+            elif msgid == MSG_COMMAND_INT:
+                if len(payload) < 35:
+                    payload = payload.ljust(35, b"\x00")
+                _p1, _p2, _p3, _p4, x_i, y_i, z_f, cmd_i = struct.unpack(
+                    "<4fiifH", payload[:30]
+                )
+                if cmd_i == 192:  # MAV_CMD_DO_REPOSITION
+                    self.sim_lat = x_i / 1e7
+                    self.sim_lon = y_i / 1e7
+                    if z_f > 0:
+                        self.sim_alt = float(z_f)
+                    self.flight_mode = 4  # GUIDED
+                    ack_payload = struct.pack("<HBBIBB", 192, 0, 0, 0, 1, 1)
+                    await self.broadcast(
+                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
+                    )
+                    txt_bytes = b"Flying to target position (GUIDED)".ljust(
+                        50, b"\x00"
+                    )
+                    await self.broadcast(
+                        self.encoder.pack(
+                            MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes
+                        )
+                    )
+                else:
+                    ack_payload = struct.pack("<HBBIBB", cmd_i, 0, 0, 0, 1, 1)
                     await self.broadcast(
                         self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
                     )
@@ -1016,6 +1153,30 @@ class BridgeServer:
                     int(self.sim_battery_pct),
                 )
                 await self.broadcast(self.encoder.pack(MSG_BATTERY_STATUS, bat_st))
+
+                # HOME_POSITION (msg 242)
+                home_st = struct.pack(
+                    "<iii3f4f3fQ",
+                    int(37.7749 * 1e7),
+                    int(-122.4194 * 1e7),
+                    10000,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    int(now * 1e6),
+                )
+                await self.broadcast(self.encoder.pack(MSG_HOME_POSITION, home_st))
+
+                # RADIO_STATUS (msg 109)
+                radio_st = struct.pack("<HHBBBBB", 0, 0, 195, 190, 98, 45, 48)
+                await self.broadcast(self.encoder.pack(MSG_RADIO_STATUS, radio_st))
 
                 # Slowly discharge battery
                 self.sim_battery_pct = max(10, 95 - (elapsed / 60.0))

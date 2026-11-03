@@ -31,6 +31,7 @@ export const MAVLINK_MSG_ID = {
   NAV_CONTROLLER_OUTPUT: 62,
   RC_CHANNELS: 65,
   VFR_HUD: 74,
+  RADIO_STATUS: 109,
   FILE_TRANSFER_PROTOCOL: 110,
   HIGHRES_IMU: 105,
   POWER_STATUS: 125,
@@ -43,6 +44,7 @@ export const MAVLINK_MSG_ID = {
   RPM: 226,
   GPS_RTCM_DATA: 233,
   VIBRATION: 241,
+  HOME_POSITION: 242,
   STATUSTEXT: 253,
   ESC_TELEMETRY_1_TO_4: 11030,
 } as const;
@@ -80,6 +82,7 @@ export const MAVLINK_MESSAGE_CRC_EXTRA: Record<number, number> = {
   [MAVLINK_MSG_ID.NAV_CONTROLLER_OUTPUT]: 183,
   [MAVLINK_MSG_ID.RC_CHANNELS]: 118,
   [MAVLINK_MSG_ID.VFR_HUD]: 20,
+  [MAVLINK_MSG_ID.RADIO_STATUS]: 185,
   [MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL]: 84,
   [MAVLINK_MSG_ID.HIGHRES_IMU]: 93,
   [MAVLINK_MSG_ID.POWER_STATUS]: 203,
@@ -92,6 +95,7 @@ export const MAVLINK_MESSAGE_CRC_EXTRA: Record<number, number> = {
   [MAVLINK_MSG_ID.RPM]: 207,
   [MAVLINK_MSG_ID.GPS_RTCM_DATA]: 35,
   [MAVLINK_MSG_ID.VIBRATION]: 90,
+  [MAVLINK_MSG_ID.HOME_POSITION]: 104,
   [MAVLINK_MSG_ID.STATUSTEXT]: 83,
   [MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4]: 144,
 };
@@ -109,6 +113,8 @@ export const MAV_CMD = {
   DO_SET_SERVO: 183,
   DO_SET_RELAY: 181,
   COMPONENT_ARM_DISARM: 400,
+  RUN_PREARM_CHECKS: 401,
+  GET_HOME_POSITION: 410,
   SET_MESSAGE_INTERVAL: 511,
   REQUEST_MESSAGE: 512,
   REQUEST_AUTOPILOT_CAPABILITIES: 520,
@@ -426,6 +432,14 @@ export function getVehicleFlightModes(type: number): { label: string; mode: numb
         { label: 'STABILIZE', mode: 0 },
       ];
   }
+}
+
+export function getGuidedModeNum(type: number): number {
+  const category = getVehicleCategory(type);
+  if (category === 'plane' || category === 'rover') {
+    return 15;
+  }
+  return 4;
 }
 
 export function getMavCmdName(commandId: number): string {
