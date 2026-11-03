@@ -90,6 +90,17 @@ npm run dev
 
 Open `http://localhost:3000` in your browser. The application connects automatically to `ws://localhost:56781` (custom endpoints entered in Link Settings are saved to localStorage).
 
+### 4. Connecting from HTTPS Deployments (Chrome, Firefox, Mobile)
+
+When accessing Glareshield over HTTPS (e.g., [`https://glareshield.yurirage.com`](https://glareshield.yurirage.com) or Cloudflare Pages), browser Mixed Active Content policies restrict unencrypted `ws://` connections:
+
+- **Native TLS / `wss://` (Recommended)**: Run `bridge.py` with `--ssl-cert cert.pem --ssl-key key.pem` and connect to `wss://<host>:<port>/`.
+- **Firefox**: In `about:config`, set `network.websocket.allowInsecureFromHTTPS` to `true`.
+- **Chrome / Chromium**: In Site settings for the page, set **Insecure content** to **Allow**.
+- **Bridge Security**: The bridge allows `*.yurirage.com`, `*.pages.dev`, `localhost`, and LAN IPs by default. Use `--allow-origin` for custom domains.
+
+📖 **For detailed step-by-step setup and certificate commands, see the [Browser & Network Connection Guide](docs/connection-guide.md).**
+
 ---
 
 ## Custom Widget Specification
