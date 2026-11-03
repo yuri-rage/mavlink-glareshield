@@ -3,12 +3,34 @@ set -e
 
 BRIDGE_SCRIPT="${BRIDGE_SCRIPT:-/app/bridge.py}"
 
+setup_serial_permissions() {
+    if [ "$(id -u)" = "0" ] && id -u glareshield >/dev/null 2>&1; then
+        local devs=()
+        if [ "$MODE" = "serial" ] && [ -n "$TARGET" ]; then
+            devs+=("${TARGET%%:*}")
+        fi
+        devs+=(/dev/ttyUSB0 /dev/ttyACM0)
+        for dev in "${devs[@]}"; do
+            if [ -n "$dev" ] && [ -e "$dev" ]; then
+                local dev_gid
+                dev_gid=$(stat -c '%g' "$dev" 2>/dev/null || true)
+                if [ -n "$dev_gid" ] && [ "$dev_gid" != "0" ]; then
+                    if ! id -G glareshield 2>/dev/null | grep -qw "$dev_gid"; then
+                        groupadd -g "$dev_gid" "host_serial_$dev_gid" 2>/dev/null || true
+                        usermod -a -G "$dev_gid" glareshield 2>/dev/null || true
+                    fi
+                fi
+            fi
+        done
+    fi
+}
+
 run_bridge() {
+    setup_serial_permissions
     if [ "$(id -u)" = "0" ] && id -u glareshield >/dev/null 2>&1 && command -v gosu >/dev/null 2>&1; then
-        chown -R glareshield:glareshield "$CERT_DIR" 2>/dev/null || true
-        exec gosu glareshield python3 "$BRIDGE_SCRIPT" "$@"
+        exec gosu glareshield python3 -u "$BRIDGE_SCRIPT" "$@"
     else
-        exec python3 "$BRIDGE_SCRIPT" "$@"
+        exec python3 -u "$BRIDGE_SCRIPT" "$@"
     fi
 }
 
@@ -162,25 +184,41 @@ fi
 
 # Handle TLS / SSL Configuration
 USE_TLS=false
-CERT_FILE="$CERT_DIR/cert.pem"
-KEY_FILE="$CERT_DIR/key.pem"
+RUN_CERT_DIR="/tmp/glareshield_certs"
+mkdir -p "$RUN_CERT_DIR"
 
-if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
+if [ -f "$CERT_DIR/cert.pem" ] && [ -f "$CERT_DIR/key.pem" ]; then
     echo "[TLS] Reusing existing certificates found in $CERT_DIR"
+    cp "$CERT_DIR/cert.pem" "$RUN_CERT_DIR/cert.pem"
+    cp "$CERT_DIR/key.pem" "$RUN_CERT_DIR/key.pem"
+    chmod 644 "$RUN_CERT_DIR/cert.pem"
+    chmod 600 "$RUN_CERT_DIR/key.pem"
+    chown -R glareshield:glareshield "$RUN_CERT_DIR" 2>/dev/null || true
+    CERT_FILE="$RUN_CERT_DIR/cert.pem"
+    KEY_FILE="$RUN_CERT_DIR/key.pem"
     USE_TLS=true
 elif [ "$AUTO_TLS" = "true" ] || [ "$AUTO_TLS" = "1" ] || [ "$AUTO_TLS" = "yes" ]; then
-    mkdir -p "$CERT_DIR"
     echo "[TLS] Generating self-signed TLS certificate (CN=$CERT_CN)..."
     echo "[TLS] Certificate SANs: $SAN"
     openssl req -x509 -newkey rsa:2048 -nodes \
-        -keyout "$KEY_FILE" \
-        -out "$CERT_FILE" \
+        -keyout "$RUN_CERT_DIR/key.pem" \
+        -out "$RUN_CERT_DIR/cert.pem" \
         -days 365 \
         -subj "/CN=$CERT_CN" \
         -addext "subjectAltName=$SAN"
-    chmod 600 "$KEY_FILE"
-    chmod 644 "$CERT_FILE"
-    echo "[TLS] Certificate generated successfully in $CERT_DIR"
+    chmod 644 "$RUN_CERT_DIR/cert.pem"
+    chmod 600 "$RUN_CERT_DIR/key.pem"
+    chown -R glareshield:glareshield "$RUN_CERT_DIR" 2>/dev/null || true
+
+    # Persist to mounted volume without modifying host permissions
+    if mkdir -p "$CERT_DIR" 2>/dev/null && [ -w "$CERT_DIR" ]; then
+        cp "$RUN_CERT_DIR/cert.pem" "$CERT_DIR/cert.pem" 2>/dev/null || true
+        cp "$RUN_CERT_DIR/key.pem" "$CERT_DIR/key.pem" 2>/dev/null || true
+        echo "[TLS] Certificate saved to $CERT_DIR for persistence"
+    fi
+
+    CERT_FILE="$RUN_CERT_DIR/cert.pem"
+    KEY_FILE="$RUN_CERT_DIR/key.pem"
     USE_TLS=true
 fi
 

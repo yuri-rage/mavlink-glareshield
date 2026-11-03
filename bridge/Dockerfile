@@ -34,6 +34,7 @@ ENV HOST=0.0.0.0 \
     MODE=udp \
     TARGET=0.0.0.0:14550 \
     AUTO_TLS=false \
-    CERT_DIR=/certs
+    CERT_DIR=/certs \
+    PYTHONUNBUFFERED=1
 
 ENTRYPOINT ["/app/entrypoint.sh"]

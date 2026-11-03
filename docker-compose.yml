@@ -35,3 +35,6 @@ services:
     # If using physical telemetry radio over USB serial (e.g. SiK radio), uncomment below:
     # devices:
     #   - /dev/ttyUSB0:/dev/ttyUSB0
+    # Optional group permissions if your host uses non-standard serial GID (e.g. Fedora 18, Arch 14):
+    # group_add:
+    #   - dialout
