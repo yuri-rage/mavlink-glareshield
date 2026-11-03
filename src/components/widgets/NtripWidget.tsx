@@ -72,9 +72,9 @@ export const NtripWidget: React.FC = () => {
     return {
       host: 'rtk2go.com',
       port: 2101,
-      mountpoint: 'TEST-BASE',
-      username: 'testuser@example.com',
-      password: 'none',
+      mountpoint: '',
+      username: '',
+      password: '',
       protocol: 'http',
       sendGga: true,
     };
@@ -282,7 +282,7 @@ export const NtripWidget: React.FC = () => {
                       disabled={isConnected || isConnecting}
                       value={ntripConfig.host}
                       onChange={(e) => handleHostChange(e.target.value)}
-                      placeholder="e.g. rtk2go.com or rtk2go.com:2101/TEST-BASE"
+                      placeholder="e.g. rtk2go.com or caster.example.com:2101/MOUNT"
                       className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
                     />
                   </div>
