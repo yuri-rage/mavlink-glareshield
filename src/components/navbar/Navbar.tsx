@@ -125,7 +125,6 @@ export const Navbar: React.FC = () => {
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
   const armMenuRef = useRef<HTMLDivElement | null>(null);
   const modeMenuRef = useRef<HTMLDivElement | null>(null);
-  const preArmMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 1000);
@@ -162,9 +161,6 @@ export const Navbar: React.FC = () => {
       }
       if (modeMenuRef.current && !modeMenuRef.current.contains(event.target as Node)) {
         setIsModeMenuOpen(false);
-      }
-      if (preArmMenuRef.current && !preArmMenuRef.current.contains(event.target as Node)) {
-        setIsPreArmMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -742,11 +738,11 @@ export const Navbar: React.FC = () => {
         {/* Persistent Global Telemetry Status Strip (Health First, Battery, GPS, Alt/Spd, Home, Flight Time) */}
         <div className="relative border-t border-zinc-800/80 bg-zinc-900/70 min-h-[30px] flex items-center overflow-hidden">
           <div className="px-2.5 sm:px-6 py-1 flex items-center gap-3 sm:gap-5 text-[11px] font-mono overflow-x-auto no-scrollbar w-full">
-            {/* Pre-Arm & Subsystem Health Pill + Popover (Rank 3 - first on mobile for immediate visibility) */}
-          <div className="relative shrink-0" ref={preArmMenuRef}>
+            {/* Pre-Arm & Subsystem Health Pill (Rank 3 - first on mobile for immediate visibility) */}
+          <div className="relative shrink-0">
             <button
               type="button"
-              onClick={() => setIsPreArmMenuOpen((v) => !v)}
+              onClick={() => setIsPreArmMenuOpen(true)}
               className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-sans font-bold uppercase tracking-wider transition-colors ${
                 !isHeartbeatActive
                   ? 'border-zinc-800 bg-zinc-900 text-zinc-500'
@@ -778,105 +774,6 @@ export const Navbar: React.FC = () => {
               )}
               <ChevronDown className="h-3 w-3 opacity-60" />
             </button>
-
-            {isPreArmMenuOpen && (
-              <div className="fixed sm:absolute left-2 sm:left-0 mt-1.5 w-80 rounded-xl bg-zinc-900/95 border border-zinc-700 shadow-2xl backdrop-blur-md p-3 z-50 text-xs font-sans space-y-2.5">
-                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-                  <span className="font-bold uppercase tracking-wider text-zinc-200 flex items-center gap-1.5">
-                    {preArm.isReady ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 text-amber-400" />
-                    )}
-                    Pre-Arm & Subsystem Health
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!isHeartbeatActive}
-                    onClick={handleRunPreArmChecks}
-                    className="h-6 px-2 text-[10px] font-bold border-sky-500/50 bg-sky-950/40 text-sky-200 hover:bg-sky-900/60"
-                  >
-                    Run Pre-Arm Check
-                  </Button>
-                </div>
-
-                {/* Subsystem Grid */}
-                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                  {[
-                    {
-                      label: 'Pre-Arm Bit',
-                      ok: !preArm.prearmBitPresent || preArm.prearmBitHealthy,
-                    },
-                    {
-                      label: 'Sensors',
-                      ok: preArm.failedSubsystems.length === 0,
-                      detail:
-                        preArm.failedSubsystems.length > 0
-                          ? preArm.failedSubsystems.join(', ')
-                          : 'OK',
-                    },
-                    {
-                      label: 'EKF Nav',
-                      ok: !isHeartbeatActive || ekfHealthy,
-                      detail: isHeartbeatActive
-                        ? `Var ${ekf.posHorizVariance.toFixed(2)}`
-                        : '--',
-                    },
-                    {
-                      label: 'Vibration',
-                      ok: !vibeWarning,
-                      detail: isHeartbeatActive
-                        ? `${Math.max(vibration.vibrationX, vibration.vibrationY, vibration.vibrationZ).toFixed(1)} m/s²`
-                        : '--',
-                    },
-                  ].map((item) => (
-                    <div
-                      key={item.label}
-                      className="flex items-center justify-between px-2 py-1 rounded bg-zinc-950/70 border border-zinc-800"
-                    >
-                      <span className="text-zinc-400">{item.label}</span>
-                      <span
-                        className={`font-mono font-bold flex items-center gap-1 ${
-                          item.ok ? 'text-emerald-400' : 'text-rose-400'
-                        }`}
-                      >
-                        {item.ok ? (
-                          <CheckCircle2 className="h-3 w-3" />
-                        ) : (
-                          <XCircle className="h-3 w-3" />
-                        )}
-                        {item.detail ?? (item.ok ? 'PASS' : 'FAIL')}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Active Pre-Arm / Arming Blocker Messages */}
-                <div className="space-y-1">
-                  <div className="text-[10px] font-bold uppercase text-zinc-400">
-                    Active Pre-Arm / Arming Notices
-                  </div>
-                  {preArm.activePreArmErrors.length === 0 ? (
-                    <div className="text-[11px] text-emerald-300 bg-emerald-950/30 border border-emerald-800/50 rounded px-2.5 py-1.5">
-                      No PreArm blockers reported by autopilot.
-                    </div>
-                  ) : (
-                    <div className="space-y-1 max-h-36 overflow-y-auto">
-                      {preArm.activePreArmErrors.map((err, i) => (
-                        <div
-                          key={i}
-                          className="text-[11px] font-mono text-amber-200 bg-amber-950/40 border border-amber-700/50 rounded px-2 py-1"
-                        >
-                          {err}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
 
           <span className="text-zinc-700">|</span>
@@ -1381,6 +1278,145 @@ export const Navbar: React.FC = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Pre-Arm & Subsystem Health Modal */}
+      <Modal
+        isOpen={isPreArmMenuOpen}
+        onClose={() => setIsPreArmMenuOpen(false)}
+        title="Pre-Arm & Subsystem Health"
+        description="Autopilot pre-flight checks, sensor health, and active arming blockers."
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {preArm.isReady && !vibeWarning ? (
+                <>
+                  <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-emerald-300">
+                      {heartbeat.isArmed ? 'VEHICLE ARMED (HEALTHY)' : 'PRE-ARM CHECKS PASSED'}
+                    </div>
+                    <div className="text-[11px] text-zinc-400 truncate">
+                      All required onboard sensors and safety checks report normal.
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-amber-300">PRE-ARM CHECKS FAILING</div>
+                    <div className="text-[11px] text-zinc-400 truncate">
+                      Vehicle cannot be armed until blockers below are resolved.
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!isHeartbeatActive}
+              onClick={handleRunPreArmChecks}
+              className="h-8 px-3 text-xs font-bold border-sky-500/50 bg-sky-950/40 text-sky-200 hover:bg-sky-900/60 shrink-0"
+            >
+              Run Pre-Arm Check
+            </Button>
+          </div>
+
+          {/* Subsystem Health Grid */}
+          <div>
+            <div className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">
+              Subsystems & Sensors
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {[
+                {
+                  label: 'Pre-Arm Bit',
+                  ok: !preArm.prearmBitPresent || preArm.prearmBitHealthy,
+                },
+                {
+                  label: 'Sensors',
+                  ok: preArm.failedSubsystems.length === 0,
+                  detail:
+                    preArm.failedSubsystems.length > 0
+                      ? preArm.failedSubsystems.join(', ')
+                      : 'OK',
+                },
+                {
+                  label: 'EKF Nav',
+                  ok: !isHeartbeatActive || ekfHealthy,
+                  detail: isHeartbeatActive
+                    ? `Var ${ekf.posHorizVariance.toFixed(2)}`
+                    : '--',
+                },
+                {
+                  label: 'Vibration',
+                  ok: !vibeWarning,
+                  detail: isHeartbeatActive
+                    ? `${Math.max(vibration.vibrationX, vibration.vibrationY, vibration.vibrationZ).toFixed(1)} m/s²`
+                    : '--',
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-900 border border-zinc-800"
+                >
+                  <span className="text-zinc-300 font-medium">{item.label}</span>
+                  <span
+                    className={`font-mono font-bold flex items-center gap-1.5 text-xs ${
+                      item.ok ? 'text-emerald-400' : 'text-rose-400'
+                    }`}
+                  >
+                    {item.ok ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      <XCircle className="h-4 w-4" />
+                    )}
+                    {item.detail ?? (item.ok ? 'PASS' : 'FAIL')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Active Pre-Arm / Arming Blocker Messages */}
+          <div className="space-y-2">
+            <div className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+              Active Pre-Arm & Safety Notices ({preArm.activePreArmErrors.length})
+            </div>
+            {preArm.activePreArmErrors.length === 0 ? (
+              <div className="text-xs text-emerald-300 bg-emerald-950/30 border border-emerald-800/50 rounded-lg p-3">
+                No Pre-Arm blockers reported by autopilot telemetry.
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                {preArm.activePreArmErrors.map((err, i) => (
+                  <div
+                    key={i}
+                    className="text-xs font-mono text-amber-200 bg-amber-950/40 border border-amber-700/50 rounded-lg px-3 py-2 flex items-start gap-2"
+                  >
+                    <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                    <span>{err}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-zinc-800">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsPreArmMenuOpen(false)}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
       </Modal>
     </>
   );
