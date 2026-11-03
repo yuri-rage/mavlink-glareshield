@@ -55,80 +55,100 @@ Designed to remove the "glare" from more fully featured GCS applications and foc
 
 ## Quickstart
 
-### 1. Requirements
-- Node.js 18+ and npm
-- Python 3.10+ with `websockets>=14.0` and `pyserial` (or use `nix-shell` / `direnv`)
+Glareshield is deployed and ready to use at **[https://glareshield.yurirage.com](https://glareshield.yurirage.com)**. No installation or build steps are required for the web application.
 
-### 2. Start the Telemetry Bridge
+To connect your vehicle, run a MAVLink-to-WebSocket telemetry bridge on your ground station, companion computer, or telemetry base.
 
-#### Using Docker (Recommended)
+### Option 1: Existing Mission Planner (Zero Install)
 
-Docker provides zero-configuration setup for standard MAVLink UDP broadcast (port 14550) with automated TLS certificate generation for `wss://`.
+If you already run Mission Planner on Windows, it includes an automatic WebSocket server on port `56781`:
+1. Start SITL or connect to your vehicle in Mission Planner.
+2. Open **[https://glareshield.yurirage.com](https://glareshield.yurirage.com)** in your browser on the same PC.
+3. Click **Connect** in the top right, enter `ws://localhost:56781`, and click **Connect Now**.
+   *(If prompted by Chrome for Local Network Access, click Allow).*
 
-To run standalone without cloning the entire repository:
+### Option 2: Docker Bridge (Recommended for Telemetry Radios, Network Vehicles & `wss://`)
+
+Docker provides automated TLS certificate generation (`wss://`) and LAN IP detection, allowing secure connections across phones, tablets, and laptops on your local network.
+
+Zero-configuration for standard MAVLink UDP broadcast (`0.0.0.0:14550`):
 ```bash
 # 1. Download docker-compose.yml into a dedicated folder
 mkdir -p glareshield-bridge && cd glareshield-bridge
 curl -O https://raw.githubusercontent.com/yuri-rage/mavlink-glareshield/master/docker-compose.yml
 
-# 2. (Optional) Edit docker-compose.yml for TCP or Serial telemetry (see Connection Guide)
-
-# 3. Start the container from within that directory
+# 2. Start the bridge container
 docker compose up -d
 
-# View bridge logs and connection URL
-docker compose logs -f
+# View bridge logs and your direct wss:// connection URL
+docker compose logs
 ```
 
-Configure settings directly in [`docker-compose.yml`](docker-compose.yml) (e.g. `MODE=tcp` or `MODE=serial` with USB device mapping; see the [Connection Guide](docs/connection-guide.md#method-a-automated-setup-with-docker-compose) for examples) or run via Docker CLI (LAN IP is automatically detected for TLS):
-```bash
-docker run -d --restart unless-stopped --net=host \
-  -e AUTO_TLS=true \
-  -v ./certs:/certs \
-  yurirage/mavlink-glareshield-bridge:latest
-```
+For **TCP** or **USB Serial** telemetry (e.g. SiK radio on `/dev/ttyUSB0`), edit `docker-compose.yml` to set `MODE` and uncomment `devices:`. See the [Connection Guide](docs/connection-guide.md#method-a-automated-setup-with-docker-compose) for examples.
 
-#### Running Directly with Python
+Open **[https://glareshield.yurirage.com](https://glareshield.yurirage.com)** and connect to your displayed `wss://<lan-ip>:56781/` endpoint.
 
+### Option 3: Python Bridge
+
+If you prefer running directly with Python 3.10+ (`pip install -r bridge/requirements.txt`):
 ```bash
-# Option A: Start simulated mock telemetry
+# Option A: Offline simulation & mock telemetry
 python3 bridge/bridge.py --mock
 
-# Option B: Connect to ArduPilot SITL or broadcast vehicle over UDP
+# Option B: Connect to ArduPilot SITL or network vehicle over UDP
 python3 bridge/bridge.py --udp 0.0.0.0:14550
 
-# Option C: Connect to physical telemetry radio over Serial
+# Option C: Connect to physical telemetry radio over Serial (e.g. SiK radio at 57600 baud)
 python3 bridge/bridge.py --serial /dev/ttyUSB0:57600
 ```
-By default, the bridge listens on `ws://127.0.0.1:56781`.
-
-> [!NOTE]
-> **Remote & Phone Access over LAN**:
-> The bridge binds to `127.0.0.1` by default. To connect from a phone, tablet, or secondary PC on your local network, start the bridge with `--host 0.0.0.0` (e.g. `python3 bridge/bridge.py --host 0.0.0.0 --mock`) and run Vite with `npm run dev -- --host`. The browser will automatically resolve the WebSocket connection to your host IP.
+By default, the bridge listens on `ws://127.0.0.1:56781`. Add `--host 0.0.0.0` to permit connections from other devices on your local network.
 
 > [!TIP]
 > **Coexisting with Mission Planner or QGroundControl**:
-> Glareshield defaults to GCS System ID `255` (`SYSID_MYGCS`). If connecting through Mission Planner's WebSocket or sharing an active MAVLink telemetry stream, set Glareshield's GCS System ID to `254` (or another unused ID) in **Link Settings** so MAVFTP and mission protocol replies do not cross over.
+> Glareshield defaults to GCS System ID `255` (`SYSID_MYGCS`). If sharing an active telemetry stream with another GCS, set Glareshield's GCS System ID to `254` (or another unused ID) in **Link Settings** so MAVFTP and mission protocol replies do not cross over.
 
-### 3. Start the Web Application
+---
 
+## Connecting from Browsers & Devices
+
+When connecting from [https://glareshield.yurirage.com](https://glareshield.yurirage.com):
+- **Localhost (`ws://localhost:56781`)**: Modern browsers permit unencrypted WebSockets to loopback addresses from HTTPS pages. If Chrome prompts for Local Network Access permission, click **Allow**.
+- **Local Network (`wss://<ip>:56781`)**: Modern browsers require a one-time trust step for self-signed certificates. Open `https://<ip>:56781` in a new tab, proceed past the certificate warning, and then connect in Glareshield. (Click the "Open in Tab" shortcut in Glareshield's connection settings).
+
+📖 **For detailed browser-specific configuration (Chrome, Firefox, Safari on iOS), secure reverse proxies, and remote tunnels, see the [Browser & Network Connection Guide](docs/connection-guide.md).**
+
+---
+
+## Local Development & Building from Source
+
+For contributors or anyone wishing to run a local development server or build offline bundles:
+
+### Requirements
+- Node.js 18+ and npm
+- Python 3.10+ (for bridge or mock telemetry)
+
+### Development Server
 ```bash
+git clone https://github.com/yuri-rage/mavlink-glareshield.git
+cd mavlink-glareshield
 npm install
 npm run dev
 ```
+Open `http://localhost:3000` in your browser.
 
-Open `http://localhost:3000` in your browser. The application connects automatically to `ws://localhost:56781` (custom endpoints entered in Link Settings are saved to localStorage).
+### Testing & Build
+```bash
+# Run unit tests and pymavlink golden vector validation
+npm test
 
-### 4. Connecting from HTTPS Deployments (Chrome, Firefox, Mobile)
+# Run regression tests
+npm run test:regressions
 
-When accessing Glareshield over HTTPS (e.g., [`https://glareshield.yurirage.com`](https://glareshield.yurirage.com) or Cloudflare Pages), browser Mixed Active Content policies restrict unencrypted `ws://` connections:
+# Build production bundle
+npm run build
+```
 
-- **Native TLS / `wss://` (Recommended)**: Run `bridge.py` with `--ssl-cert cert.pem --ssl-key key.pem` and connect to `wss://<host>:<port>/`.
-- **Firefox**: In `about:config`, set `network.websocket.allowInsecureFromHTTPS` to `true`.
-- **Chrome / Chromium**: In Site settings for the page, set **Insecure content** to **Allow**.
-- **Bridge Security**: The bridge allows `https://glareshield.yurirage.com`, `https://*.glareshield.pages.dev`, `localhost`, and LAN IPs by default. Use `--allow-origin` for custom domains.
-
-📖 **For detailed step-by-step setup and certificate commands, see the [Browser & Network Connection Guide](docs/connection-guide.md).**
+For advanced testing workflows (e.g. regenerating golden vectors or running mock bridge telemetry validation), see [tests/README.md](tests/README.md).
 
 ---
 
@@ -169,17 +189,3 @@ Action buttons enforce confirmation on execution:
   }
 }
 ```
-
----
-
-## Testing & Build
-
-```bash
-# Run unit tests and pymavlink golden vector validation
-npm test
-
-# Build production bundle
-npm run build
-```
-
-For advanced testing workflows (e.g. regenerating golden vectors or running mock bridge telemetry validation), see [tests/README.md](tests/README.md).

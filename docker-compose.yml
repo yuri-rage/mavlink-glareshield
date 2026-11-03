@@ -25,8 +25,8 @@ services:
       - AUTO_TLS=true
       # Optional: Override certificate Common Name (defaults to auto-detected LAN IP / hostname)
       # - CERT_CN=192.168.1.69
-      # Optional: Allowed origins (comma-separated). Default allowlist includes *.yurirage.com, localhost, etc.
-      # - ALLOW_ORIGINS=https://glareshield.yurirage.com,https://my-domain.com
+      # Optional: Additional allowed origins (https://glareshield.yurirage.com and localhost are allowed by default)
+      # - ALLOW_ORIGINS=https://my-custom-domain.com
 
     volumes:
       # Mount directory to persist generated TLS certificates across restarts
