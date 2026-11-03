@@ -60,6 +60,9 @@ If you use Docker, certificate generation and LAN IP detection are automated:
    ============================================================
    ```
 
+3. Authorize the certificate on each client browser/device:
+   Before connecting in Glareshield over `wss://`, follow the one-time [Client Certificate Acceptance steps](#trusting-the-self-signed-certificate-on-clients-first-time-only) below to open `https://<ip>:56781` in a browser tab and accept the self-signed certificate.
+
 > [!NOTE]
 > **Docker Desktop & Field Networks**:
 > - If running Docker Desktop (macOS/Windows) where containers use internal bridge networking, set `CERT_CN=<your-lan-ip>` in `docker-compose.yml` so the certificate includes the host's LAN IP rather than the Docker internal IP.
@@ -101,7 +104,7 @@ The console will confirm:
 
 ### Trusting the Self-Signed Certificate on Clients (First Time Only)
 
-Because self-signed certificates are not signed by a recognized Certificate Authority (CA), modern browsers and mobile OSes require client-side confirmation:
+Whether generated automatically via Docker Compose (Method A) or manually with OpenSSL (Method B), self-signed certificates are not signed by a recognized Certificate Authority (CA). Modern browsers and mobile operating systems silently abort background WebSocket connections to self-signed endpoints until you authorize the certificate in a browser tab:
 
 1. Open a new tab in your browser (on desktop or mobile) and navigate directly to:
    ```text

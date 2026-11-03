@@ -37,6 +37,7 @@ import {
   Milestone,
   RefreshCw,
   Info,
+  ExternalLink,
 } from 'lucide-react';
 import { BandwidthProfile } from '../../mavlink/rateManager';
 import { getVehicleCategory, getVehicleCategoryLabel, getVehicleFlightModes } from '../../mavlink/messages';
@@ -1070,6 +1071,39 @@ export const Navbar: React.FC = () => {
                   <div>• <strong>Secure:</strong> Use <code className="text-emerald-400">wss://</code> (e.g. bridge with <code className="text-zinc-300">--ssl-cert</code> or reverse proxy).</div>
                   <div>• <strong>Firefox:</strong> In <code className="text-zinc-300">about:config</code>, set <code className="text-zinc-300">network.websocket.allowInsecureFromHTTPS</code> to <code className="text-zinc-300">true</code>.</div>
                 </div>
+              </div>
+            )}
+
+            {inputUrl.trim().startsWith('wss://') && (
+              <div className="p-2.5 rounded-lg border border-sky-500/30 bg-sky-950/25 text-sky-200 text-xs space-y-1.5 mt-2">
+                <div className="font-semibold flex items-center justify-between text-sky-300">
+                  <div className="flex items-center gap-1.5">
+                    <Shield className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+                    Self-Signed Certificate Trust
+                  </div>
+                  <a
+                    href={`https://${inputUrl.trim().slice(6).replace(/\/.*$/, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-400 hover:text-sky-300 underline"
+                  >
+                    Open in Tab
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                </div>
+                <p className="text-[11px] text-zinc-300 leading-relaxed">
+                  If using a self-signed certificate, browsers require a one-time trust step. Open{' '}
+                  <a
+                    href={`https://${inputUrl.trim().slice(6).replace(/\/.*$/, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sky-400 hover:underline font-mono inline-flex items-center gap-0.5"
+                  >
+                    https://{inputUrl.trim().slice(6).replace(/\/.*$/, '')}
+                    <ExternalLink className="h-2.5 w-2.5 inline" />
+                  </a>{' '}
+                  in a new tab, proceed past the certificate warning, then connect.
+                </p>
               </div>
             )}
 
