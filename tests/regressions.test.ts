@@ -22,6 +22,7 @@ const { MavlinkEncoder } = await import('../src/mavlink/encoder.ts');
 const { MavlinkParser, decodePayload } = await import('../src/mavlink/parser.ts');
 const { parseParamFile, serializeParamFile, getParamMetadata, areParamsDifferent, formatParamValue } = await import('../src/mavlink/paramMetadata.ts');
 const { normalizeCalloutText, useAudioAlertsStore } = await import('../src/lib/audioAlerts.ts');
+const { computeMapBadgeVisibility } = await import('../src/components/map/mapBadgeVisibility.ts');
 
 const failures: string[] = [];
 function check(name: string, ok: boolean, detail = '') {
@@ -409,6 +410,88 @@ for (const [type, landCmd, opts, label] of [
   check('normalizeCalloutText expands aviation abbreviations for clear TTS pronunciation',
     normMode === 'Flight mode Return to Launch' && normCallout.startsWith('Pre-arm:'),
     `normMode="${normMode}", normCallout="${normCallout}", ttsStatus=${useAudioAlertsStore.getState().ttsStatus}`);
+
+  // 11. Map badge visibility and waypoint download stability on 1/2-width cards
+  const fullWidthVisible = computeMapBadgeVisibility({
+    headerWidth: 800,
+    controlsWidth: 280,
+    userWpCount: 8,
+    fenceCount: 4,
+    rallyCount: 2,
+    isFetching: false,
+    previouslyHidden: false,
+  });
+  check('map header with ample width keeps badges visible',
+    fullWidthVisible === false,
+    `fullWidthVisible=${fullWidthVisible}`);
+
+  const halfWidthTightHidden = computeMapBadgeVisibility({
+    headerWidth: 380,
+    controlsWidth: 300,
+    userWpCount: 5,
+    fenceCount: 4,
+    rallyCount: 0,
+    isFetching: true,
+    previouslyHidden: false,
+  });
+  check('map header at 1/2 width hides count badges when controls & download badge require space',
+    halfWidthTightHidden === true,
+    `halfWidthTightHidden=${halfWidthTightHidden}`);
+
+  // Simulate downloading waypoints step-by-step on 1/2 width to verify zero flapping / oscillation
+  let hiddenState = false;
+  const flappingDetections: boolean[] = [];
+  for (let wp = 0; wp <= 10; wp++) {
+    hiddenState = computeMapBadgeVisibility({
+      headerWidth: 380,
+      controlsWidth: 300,
+      userWpCount: wp,
+      fenceCount: 0,
+      rallyCount: 0,
+      isFetching: true,
+      previouslyHidden: hiddenState,
+    });
+    flappingDetections.push(hiddenState);
+  }
+  // Once hidden on 380px header with 300px controls + 68px download badge + 56px WP badge = 440px needed,
+  // it must stay solidly hidden (no false flips back and forth)
+  const allHiddenDuringDownload = flappingDetections.slice(1).every((h) => h === true);
+  check('downloading waypoints on 1/2-width map has zero oscillation or badge flapping',
+    allHiddenDuringDownload,
+    `sequence=${JSON.stringify(flappingDetections)}`);
+
+  // Hysteresis verification: once hidden, does not unhide within the +24px buffer
+  // Needed width: 300 (controls) + 68 (MAVFTP) + 56 (WP) + 6 (gap) + 16 (margin) = 446px
+  const boundaryAt445 = computeMapBadgeVisibility({
+    headerWidth: 445,
+    controlsWidth: 300,
+    userWpCount: 5,
+    fenceCount: 0,
+    rallyCount: 0,
+    isFetching: true,
+    previouslyHidden: true,
+  });
+  const boundaryAt460 = computeMapBadgeVisibility({
+    headerWidth: 460, // 460 < 446 + 24 = 470
+    controlsWidth: 300,
+    userWpCount: 5,
+    fenceCount: 0,
+    rallyCount: 0,
+    isFetching: true,
+    previouslyHidden: true,
+  });
+  const boundaryAt475 = computeMapBadgeVisibility({
+    headerWidth: 475, // 475 >= 470
+    controlsWidth: 300,
+    userWpCount: 5,
+    fenceCount: 0,
+    rallyCount: 0,
+    isFetching: true,
+    previouslyHidden: true,
+  });
+  check('hysteresis prevents unhiding until +24px threshold is exceeded',
+    boundaryAt445 === true && boundaryAt460 === true && boundaryAt475 === false,
+    `at445=${boundaryAt445}, at460=${boundaryAt460}, at475=${boundaryAt475}`);
 
   (mavlinkConnection as any).send = origSend;
 }

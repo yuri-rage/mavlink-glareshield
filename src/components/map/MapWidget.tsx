@@ -78,6 +78,8 @@ interface GpsFix {
   yaw: number;
 }
 
+import { computeMapBadgeVisibility } from './mapBadgeVisibility';
+
 interface MapWidgetProps {
   colSpan?: number;
 }
@@ -175,12 +177,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     message: '',
   });
 
-  // Responsive header badge visibility to keep top bar on a single row
+  // Responsive header badge visibility to keep top bar on a single row without feedback oscillation
   const [hideBadges, setHideBadges] = useState(false);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const rightControlsRef = useRef<HTMLDivElement | null>(null);
-  const badgesRef = useRef<HTMLDivElement | null>(null);
-  const measuredBadgesWidthRef = useRef<number>(0);
 
   const userWpCount = Math.max(0, missionWaypoints.length - 1);
 
@@ -193,28 +193,17 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       const headerWidth = header.clientWidth;
       const controlsWidth = controls.offsetWidth;
 
-      if (badgesRef.current && badgesRef.current.offsetWidth > 0) {
-        measuredBadgesWidthRef.current = badgesRef.current.offsetWidth;
-      }
-
-      const activeBadgeEstimate =
-        (userWpCount > 0 ? 56 : 0) +
-        (fencePoints.length > 0 ? 68 : 0) +
-        (rallyPoints.length > 0 ? 64 : 0);
-
-      const badgesWidth =
-        measuredBadgesWidthRef.current > 0
-          ? measuredBadgesWidthRef.current
-          : activeBadgeEstimate;
-
-      if (activeBadgeEstimate === 0) {
-        setHideBadges(false);
-        return;
-      }
-
-      const neededWidth = controlsWidth + badgesWidth + 16;
-      const shouldHide = headerWidth > 0 && controlsWidth > 0 && headerWidth < neededWidth;
-      setHideBadges((prev) => (prev !== shouldHide ? shouldHide : prev));
+      setHideBadges((prev) =>
+        computeMapBadgeVisibility({
+          headerWidth,
+          controlsWidth,
+          userWpCount,
+          fenceCount: fencePoints.length,
+          rallyCount: rallyPoints.length,
+          isFetching: missionStatus.isFetching,
+          previouslyHidden: prev,
+        })
+      );
     };
 
     updateBadgeVisibility();
@@ -235,7 +224,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     return () => {
       observer.disconnect();
     };
-  }, [userWpCount, fencePoints.length, rallyPoints.length, colSpan]);
+  }, [userWpCount, fencePoints.length, rallyPoints.length, missionStatus.isFetching, colSpan]);
 
   const handleFileDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -1173,31 +1162,34 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     <Card className={`border-zinc-800 bg-zinc-950/90 shadow-lg overflow-hidden flex flex-col w-full ${aspectClass}`}>
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <div ref={headerRef} className="flex items-center justify-between gap-1.5 min-w-0">
-          <div ref={badgesRef} className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-            {!hideBadges && userWpCount > 0 && (
-              <Badge variant="warning" className="text-[10px] font-mono px-1.5 py-0.5">
-                {userWpCount} {userWpCount === 1 ? 'WP' : 'WPs'}
+          <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+            {missionStatus.isFetching && (
+              <Badge
+                variant={missionStatus.method === 'ftp' ? 'info' : 'secondary'}
+                className="text-[9px] font-mono px-1.5 py-0.5 shrink-0 flex items-center gap-1"
+              >
+                <RefreshCw className="h-2.5 w-2.5 animate-spin" />
+                {missionStatus.method === 'ftp' ? 'MAVFTP' : 'STREAM'}
               </Badge>
             )}
-            {!hideBadges && fencePoints.length > 0 && (
-              <Badge variant="destructive" className="text-[10px] font-mono px-1.5 py-0.5 gap-1">
-                <Shield className="h-2.5 w-2.5 inline" /> {fencePoints.length} Fence
-              </Badge>
-            )}
-            {!hideBadges && rallyPoints.length > 0 && (
-              <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0.5 gap-1 text-[#f0abfc] border-[#9a337d]/40 bg-[#9a337d]/15">
-                <Flag className="h-2.5 w-2.5 inline text-[#f0abfc]" /> {rallyPoints.length} Rally
-              </Badge>
-            )}
-            {missionStatus.isFetching && missionStatus.method === 'ftp' && (
-              <Badge variant="info" className="text-[9px] font-mono px-1.5 py-0.5">
-                MAVFTP
-              </Badge>
-            )}
-            {missionStatus.isFetching && missionStatus.method === 'legacy' && (
-              <Badge variant="secondary" className="text-[9px] font-mono px-1.5 py-0.5">
-                STREAM
-              </Badge>
+            {!hideBadges && (
+              <div className="flex items-center gap-1.5 min-w-0">
+                {userWpCount > 0 && (
+                  <Badge variant="warning" className="text-[10px] font-mono px-1.5 py-0.5 shrink-0">
+                    {userWpCount} {userWpCount === 1 ? 'WP' : 'WPs'}
+                  </Badge>
+                )}
+                {fencePoints.length > 0 && (
+                  <Badge variant="destructive" className="text-[10px] font-mono px-1.5 py-0.5 gap-1 shrink-0">
+                    <Shield className="h-2.5 w-2.5 inline" /> {fencePoints.length} Fence
+                  </Badge>
+                )}
+                {rallyPoints.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0.5 gap-1 text-[#f0abfc] border-[#9a337d]/40 bg-[#9a337d]/15 shrink-0">
+                    <Flag className="h-2.5 w-2.5 inline text-[#f0abfc]" /> {rallyPoints.length} Rally
+                  </Badge>
+                )}
+              </div>
             )}
           </div>
 
@@ -1350,7 +1342,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               {missionStatus.isFetching ? (
                 <>
                   <X className="h-3.5 w-3.5 text-red-400" />
-                  <span className="text-[11px]">Cancel</span>
+                  <span className="hidden xl:inline text-[11px]">Cancel</span>
                 </>
               ) : (
                 <>
@@ -1365,23 +1357,24 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
       {/* Progress / Status banner */}
       {(missionStatus.message || uploadError) && (
-        <div className="bg-zinc-900/90 border-b border-zinc-800 px-4 py-1 text-[11px] font-mono flex items-center justify-between">
+        <div className="bg-zinc-900/90 border-b border-zinc-800 px-3 sm:px-4 py-1 text-[11px] font-mono flex items-center justify-between min-w-0 gap-2">
           <span
-            className={
+            className={`truncate min-w-0 ${
               uploadError
                 ? 'text-red-400 font-medium'
                 : missionStatus.isFetching || missionStatus.isUploading
                 ? 'text-amber-400 animate-pulse font-medium'
                 : 'text-emerald-400'
-            }
+            }`}
+            title={uploadError || missionStatus.message}
           >
             {uploadError || missionStatus.message}
           </span>
           {!uploadError && (missionStatus.isFetching || missionStatus.isUploading) && missionStatus.method === 'ftp' && (
-            <span className="text-[10px] text-sky-400 font-bold ml-2">MAVFTP</span>
+            <span className="text-[10px] text-sky-400 font-bold shrink-0 ml-2">MAVFTP</span>
           )}
           {!uploadError && (missionStatus.isFetching || missionStatus.isUploading) && missionStatus.method === 'legacy' && (
-            <span className="text-[10px] text-purple-400 font-bold ml-2">ITEM-BY-ITEM</span>
+            <span className="text-[10px] text-purple-400 font-bold shrink-0 ml-2">ITEM-BY-ITEM</span>
           )}
         </div>
       )}
