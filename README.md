@@ -57,7 +57,7 @@ Designed to remove the "glare" from more fully featured GCS applications and foc
 
 ### 1. Requirements
 - Node.js 18+ and npm
-- Python 3.8+ with `websockets` and `pyserial` (or use `nix-shell` / `direnv`)
+- Python 3.10+ with `websockets>=14.0` and `pyserial` (or use `nix-shell` / `direnv`)
 
 ### 2. Start the Telemetry Bridge
 
@@ -117,7 +117,7 @@ When accessing Glareshield over HTTPS (e.g., [`https://glareshield.yurirage.com`
 - **Native TLS / `wss://` (Recommended)**: Run `bridge.py` with `--ssl-cert cert.pem --ssl-key key.pem` and connect to `wss://<host>:<port>/`.
 - **Firefox**: In `about:config`, set `network.websocket.allowInsecureFromHTTPS` to `true`.
 - **Chrome / Chromium**: In Site settings for the page, set **Insecure content** to **Allow**.
-- **Bridge Security**: The bridge allows `*.yurirage.com`, `*.pages.dev`, `localhost`, and LAN IPs by default. Use `--allow-origin` for custom domains.
+- **Bridge Security**: The bridge allows `https://glareshield.yurirage.com`, `https://*.glareshield.pages.dev`, `localhost`, and LAN IPs by default. Use `--allow-origin` for custom domains.
 
 📖 **For detailed step-by-step setup and certificate commands, see the [Browser & Network Connection Guide](docs/connection-guide.md).**
 

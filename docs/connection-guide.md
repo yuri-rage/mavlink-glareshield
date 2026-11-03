@@ -8,7 +8,11 @@ This guide explains how to connect Glareshield to your telemetry bridge (`bridge
 
 To explore the features of Glareshield, start a SITL session in Mission Planner or connect it to a live vehicle (Mission Planner automatically opens a WebSocket server on port 56781). On the same computer, open [Glareshield](https://glareshield.yurirage.com) in any modern web browser, click "Connect" in the upper right corner, enter `ws://localhost:56781` as the host:port, and click "Connect Now."
 
-Alternatively, if you are not using Mission Planner, you can start the included companion bridge (`python3 bridge/bridge.py --udp 127.0.0.1:14550` or `--mock` for offline simulation).
+> [!NOTE]
+> **Chrome Local Network Access**:
+> When connecting to `ws://localhost:56781` from a public HTTPS page like `https://glareshield.yurirage.com`, modern Chromium browsers may display a permission prompt: *"Allow Glareshield to connect to devices on your local network?"*. Click **Allow** to permit the connection.
+
+Alternatively, if you are not using Mission Planner, you can start the included companion bridge (`python3 bridge/bridge.py --udp 0.0.0.0:14550` to listen for vehicle broadcasts, `127.0.0.1:14550` for local SITL, or `--mock` for offline simulation).
 
 To use Glareshield on other devices within the same local network (connecting to a LAN IP instead of localhost), continue reading below.
 
@@ -29,13 +33,13 @@ Choose the setup that best fits your environment below.
 
 ---
 
-## Option 1: Native TLS / `wss://` (Recommended for All Browsers & Mobile)
+## Option 1: Native TLS / `wss://` (Recommended for Encrypted Connections)
 
-Configuring encrypted WebSockets (`wss://`) is the most robust, permanent solution. It works across all browsers (Chrome, Firefox, Safari, Edge) and mobile devices without requiring users to alter browser settings or flags.
+Configuring encrypted WebSockets (`wss://`) provides an encrypted telemetry transport. Note that when using self-signed certificates, client devices must perform a one-time trust/acceptance step.
 
 ### Method A: Automated Setup with Docker Compose (Zero Configuration)
 
-If you use Docker, certificate generation, renewal, and LAN IP detection are completely automated without editing any config files:
+If you use Docker, certificate generation and LAN IP detection are automated:
 
 1. Start the container:
    ```bash
@@ -45,7 +49,7 @@ If you use Docker, certificate generation, renewal, and LAN IP detection are com
    ```bash
    docker compose logs
    ```
-   The container automatically detects your host's primary LAN IP (e.g. `192.168.1.69`) and hostname, generates a 2048-bit RSA TLS certificate with all IP/DNS Subject Alternative Names (`subjectAltName`) in `./certs/`, and prints your direct connection URL:
+   The container automatically detects your host's network interfaces and hostname via the kernel, generates a 2048-bit RSA TLS certificate with all IP/DNS Subject Alternative Names (`subjectAltName`) into `./certs/`, and prints your direct connection URL:
    ```text
    ============================================================
     MAVLink Glareshield Bridge Container
@@ -55,7 +59,11 @@ If you use Docker, certificate generation, renewal, and LAN IP detection are com
     Connect at: wss://192.168.1.69:56781/
    ============================================================
    ```
-   If your machine changes networks or receives a new DHCP address, the container detects the change on restart and automatically re-issues a matching certificate.
+
+> [!NOTE]
+> **Docker Desktop & Field Networks**:
+> - If running Docker Desktop (macOS/Windows) where containers use internal bridge networking, set `CERT_CN=<your-lan-ip>` in `docker-compose.yml` so the certificate includes the host's LAN IP rather than the Docker internal IP.
+> - Any existing certificates placed in `./certs` (e.g. from Let's Encrypt or nginx) are preserved and will **never** be overwritten.
 
 ### Method B: Manual Python & OpenSSL Setup
 
@@ -75,7 +83,7 @@ openssl req -x509 -newkey rsa:2048 -nodes \
 Pass `--ssl-cert` and `--ssl-key` to `bridge.py`:
 
 ```bash
-# Example with UDP (SITL or live broadcast):
+# Example with UDP (listening for any vehicle or SITL broadcast):
 python3 bridge/bridge.py --host 0.0.0.0 --port 56781 --udp 0.0.0.0:14550 \
   --ssl-cert cert.pem --ssl-key key.pem
 
@@ -91,15 +99,19 @@ The console will confirm:
 ============================================================
 ```
 
-### Trusting the Self-Signed Certificate in Browser (First Time Only)
+### Trusting the Self-Signed Certificate on Clients (First Time Only)
 
-Because the certificate is self-signed, your browser needs one-time confirmation:
-1. Open a new tab and navigate directly to:
+Because self-signed certificates are not signed by a recognized Certificate Authority (CA), modern browsers and mobile OSes require client-side confirmation:
+
+1. Open a new tab in your browser and navigate directly to:
    ```text
    https://192.168.1.69:56781
    ```
 2. Click **Advanced → Accept the Risk and Continue** (Firefox) or **Advanced → Proceed** (Chrome).
-3. Close the tab, open [https://glareshield.yurirage.com](https://glareshield.yurirage.com), and in **Link Settings** connect to:
+   > [!NOTE]
+   > The browser will display: `Failed to open a WebSocket connection: missing Connection header`. **This is expected and normal!** It confirms the browser completed the TLS handshake with the bridge before reaching the WebSocket endpoint.
+3. On **iOS / iPadOS**: iOS requires downloading the certificate file, installing it as a configuration profile under *Settings → Profile Downloaded*, and then enabling full trust under *Settings → General → About → Certificate Trust Settings*.
+4. Close the tab, open [https://glareshield.yurirage.com](https://glareshield.yurirage.com), and in **Link Settings** connect to:
    ```text
    wss://192.168.1.69:56781/
    ```
@@ -110,9 +122,23 @@ Because the certificate is self-signed, your browser needs one-time confirmation
 
 `localhost` connections work out-of-the-box in Firefox. However, if you are connecting across your local network to another computer's LAN IP (e.g. `ws://192.168.1.69:56781`), you can allow unencrypted WebSockets from HTTPS without needing SSL certificates:
 
+> [!WARNING]
+> Toggling `network.websocket.allowInsecureFromHTTPS` is a global Firefox preference that applies to all HTTPS websites visited in that browser profile.
+
 1. In Firefox, open a new tab to:
    ```text
    about:config
+   ```
+2. Click **Accept the Risk and Continue**.
+3. Search for:
+   ```text
+   network.websocket.allowInsecureFromHTTPS
+   ```
+4. Double-click to toggle the value to **`true`**.
+5. Reload [https://glareshield.yurirage.com](https://glareshield.yurirage.com).
+6. Open **Link Settings** (gear icon) and connect to:
+   ```text
+   ws://192.168.1.69:56781/
    ```
 2. Click **Accept the Risk and Continue**.
 3. Search for:
@@ -141,17 +167,19 @@ Chromium-based browsers (Google Chrome, Microsoft Edge, Brave, Opera) require pe
 5. Change the setting to **Allow**.
 6. Switch back to your Glareshield tab and click **Reload**.
 
-### Step 2: Private Network Access (Internet Origin → Local IP)
+### Step 2: Local Network Access (Internet Origin → Local IP)
 
-When a public web origin (`yurirage.com`) connects to a local RFC 1918 IP address (`10.x.x.x` or `192.168.x.x`), Chrome's Private Network Access security policy may block the handshake.
+When a public web origin (`glareshield.yurirage.com` or `glareshield.pages.dev`) connects to a local RFC 1918 IP address (`10.x.x.x`, `192.168.x.x`, `172.16-31.x.x`), Chrome's **Local Network Access (LNA)** policy applies.
 
-If the connection is still refused after Step 1:
-1. In Chrome, open a new tab to:
+Modern Chromium browsers will display a prompt: *"Allow Glareshield to connect to devices on your local network?"*. Click **Allow**.
+
+If Chrome blocks local network requests or you need to inspect the policy:
+1. In Chrome, open:
    ```text
-   chrome://flags/#block-insecure-private-network-requests
+   chrome://flags/#local-network-access-check
+   chrome://flags/#local-network-access-check-websockets
    ```
-2. Set **Block insecure private network requests** to **Disabled**.
-3. Click **Relaunch** at the bottom of the browser.
+2. Verify that Local Network Access checks are set to their default prompt behavior, or disable them temporarily for testing.
 
 ### Dedicated Desktop Launcher (Field Laptop Alternative)
 
@@ -168,9 +196,21 @@ google-chrome \
 
 ## Option 4: Local Reverse Proxy / Cloudflare Tunnel / Caddy
 
-For an automated setup that handles real certificates (e.g. Let's Encrypt or Cloudflare Zero Trust) with zero browser configuration needed on any client:
+For an automated setup that handles real public certificates (e.g. Let's Encrypt or Cloudflare Zero Trust) with zero browser trust configuration required:
 
-### Caddy (Automatic HTTPS)
+> [!CAUTION]
+> **CRITICAL SECURITY WARNING: NEVER EXPOSE AN UNAUTHENTICATED BRIDGE TO THE OPEN INTERNET**
+> 
+> The MAVLink bridge protocol does not implement user authentication. Anyone who connects to your WebSocket endpoint can issue vehicle commands, trigger motors/actuators, arm/disarm, and alter flight parameters.
+> 
+> While the browser `Origin` check guards against cross-site web scripts, direct CLI tools and non-browser clients do not send an Origin header and are permitted by design.
+> 
+> If you make your bridge reachable outside your local network, you **MUST** protect it with an authentication gateway:
+> - **Cloudflare Zero Trust (Access)**: Put a Cloudflare Access policy (email OTP, Google/GitHub OAuth) in front of your tunnel hostname.
+> - **Private Mesh VPN (Recommended)**: Use [Tailscale](https://tailscale.com) or WireGuard so only your authorized devices can reach the bridge machine's IP.
+> - **Authenticated Reverse Proxy**: Enforce HTTP Basic Auth or mutual TLS on the proxy before upgrading to WebSocket.
+
+### Caddy (Automatic HTTPS on Local Network)
 
 Create a `Caddyfile`:
 
@@ -182,13 +222,18 @@ gcs-bridge.your-domain.com {
 
 Run `caddy run`. Connect in Glareshield to `wss://gcs-bridge.your-domain.com`.
 
-### Cloudflare Tunnel (`cloudflared`)
+### Cloudflare Tunnel (`cloudflared`) with Access
 
-If you manage your domain via Cloudflare:
-```bash
-cloudflared tunnel --url ws://localhost:56781
-```
-Route a public hostname (e.g. `telemetry.yurirage.com`) to the tunnel. You can now connect securely over `wss://telemetry.yurirage.com` from anywhere in the world.
+For remote internet access, use a **Named Cloudflare Tunnel** protected by **Cloudflare Access**:
+
+1. Create a named tunnel in your Cloudflare dashboard (or CLI: `cloudflared tunnel create glareshield-bridge`).
+2. Route a public hostname (e.g. `telemetry.yourdomain.com`) to `ws://localhost:56781`.
+3. In **Cloudflare Zero Trust → Access → Applications**, add an application covering `telemetry.yourdomain.com` requiring email PIN or OAuth authentication.
+4. Run the tunnel:
+   ```bash
+   cloudflared tunnel run glareshield-bridge
+   ```
+   *(Note: `cloudflared tunnel --url` creates an unauthenticated, ephemeral quick-tunnel on `trycloudflare.com`, which should never be used for live vehicle control).*
 
 ---
 
@@ -201,20 +246,21 @@ Route a public hostname (e.g. `telemetry.yurirage.com`) to the tunnel. You can n
 By default, the bridge permits connections from:
 - `http://localhost:*` and `http://127.0.0.1:*`
 - Private network IPs: `192.168.*`, `10.*`, `172.16-31.*`
-- `https://*.yurirage.com` and `https://*.pages.dev`
+- Production domain: `https://glareshield.yurirage.com`
+- Cloudflare Pages project: `https://glareshield.pages.dev` and preview/branch URLs (`https://*.glareshield.pages.dev`)
 - `tauri://*` (desktop companion)
-- Direct tools without an Origin header (`None`)
+- Direct CLI tools and scripts without an Origin header (`None`)
 
 ### Custom Domains
 
-If hosting Glareshield on a different domain, pass `--allow-origin` when starting the bridge:
+If hosting Glareshield on a custom domain, pass `--allow-origin` when starting the bridge:
 
 ```bash
 # Allow a specific custom origin:
-python3 bridge/bridge.py --udp 127.0.0.1:14550 --allow-origin "https://gcs.example.com"
+python3 bridge/bridge.py --udp 0.0.0.0:14550 --allow-origin "https://gcs.example.com"
 
 # Allow all origins (field/testing only):
-python3 bridge/bridge.py --udp 127.0.0.1:14550 --allow-all-origins
+python3 bridge/bridge.py --udp 0.0.0.0:14550 --allow-all-origins
 ```
 
 If an unauthorized origin attempts to connect, the bridge prints:
@@ -229,7 +275,7 @@ If an unauthorized origin attempts to connect, the bridge prints:
 
 | Symptom | Cause | Solution |
 | :--- | :--- | :--- |
-| **"The connection to ws://... was interrupted while the page was loading"** | Browser Mixed Content policy blocking `ws://` from an `https://` site. | See [Option 1](#option-1-native-tls--wss-recommended-for-all-browsers--mobile) for `wss://` or [Option 2 / 3](#option-2-firefox-configuration-fastest-for-desktop-testing) for browser overrides. |
+| **"The connection to ws://... was interrupted while the page was loading"** | Browser Mixed Content policy blocking `ws://` from an `https://` site. | See [Option 1](#option-1-native-tls--wss-recommended-for-encrypted-connections) for `wss://` or [Option 2 / 3](#option-2-firefox-configuration-connecting-to-a-remote-lan-ip) for browser overrides. |
 | **Bridge console shows `Refused WebSocket connection from Origin`** | Host domain not in bridge allowlist. | Pass `--allow-origin "https://yourdomain.com"` or `--allow-all-origins` to `bridge.py`. |
 | **Bridge connected, but 0 pkts/s and no telemetry received over UDP** | Host firewall blocking inbound UDP port 14550. | On Linux/NixOS, ensure port 14550/udp is allowed in your firewall (e.g. `sudo iptables -I INPUT -p udp --dport 14550 -j ACCEPT` or `sudo ufw allow 14550/udp`). |
 | **"WebSocket connection failed" / Connection timed out** | Bridge is only bound to `127.0.0.1`. | Restart the bridge with `--host 0.0.0.0` so it listens on all network interfaces. |
