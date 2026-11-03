@@ -194,6 +194,28 @@ async def main(url):
         "injected header reached the caster" if injected else "",
     )
 
+    sys.path.insert(0, os.path.join(REPO, "bridge"))
+    from bridge import BridgeServer
+
+    cases = [
+        (
+            "/dev/serial/by-path/p-0:1.2:1.0-port0:115200",
+            ("/dev/serial/by-path/p-0:1.2:1.0-port0", 115200),
+        ),
+        (
+            "/dev/serial/by-path/p-0:1.2:1.0-port0",
+            ("/dev/serial/by-path/p-0:1.2:1.0-port0", 57600),
+        ),
+        ("/dev/ttyUSB0:57600", ("/dev/ttyUSB0", 57600)),
+        ("/dev/ttyUSB0", ("/dev/ttyUSB0", 57600)),
+    ]
+    all_ok = all(
+        BridgeServer.parse_serial_target(target) == expected for target, expected in cases
+    )
+    check(
+        "Serial target rsplit correctly parses by-path device names with colons", all_ok
+    )
+
 
 if __name__ == "__main__":
     port = free_port()

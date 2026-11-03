@@ -12,7 +12,7 @@ export {};
 (globalThis as any).localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 
 const { parseDroppedMissionFile } = await import('../src/mavlink/missionFileParser.ts');
-const { mavlinkConnection, isLoopbackWs } = await import('../src/mavlink/connection.ts');
+const { mavlinkConnection, isLoopbackWs, getWssHost } = await import('../src/mavlink/connection.ts');
 const { rtcmInjector } = await import('../src/mavlink/rtcmInjector.ts');
 const { useConnectionStore } = await import('../src/store/connectionStore.ts');
 const { useUnitsStore } = await import('../src/store/unitsStore.ts');
@@ -561,6 +561,19 @@ for (const [type, landCmd, opts, label] of [
   check('isLoopbackWs matches only loopback addresses and rejects 127.* nip.io subdomains',
     loopbackChecks.every(Boolean),
     `results=${JSON.stringify(loopbackChecks)}`);
+
+  // 18. getWssHost URL token and path stripping
+  const wssChecks = [
+    getWssHost('wss://host:56781?key=secret_token') === 'host:56781',
+    getWssHost('wss://192.168.1.69:56781/ws?token=123#frag') === '192.168.1.69:56781',
+    getWssHost('wss://[::1]:56781') === '[::1]:56781',
+    getWssHost('wss://telemetry.example.com') === 'telemetry.example.com',
+    getWssHost('ws://host:56781?key=secret') === null,
+    getWssHost('') === null,
+  ];
+  check('getWssHost extracts host:port and strips query tokens, paths, and fragments',
+    wssChecks.every(Boolean),
+    `results=${JSON.stringify(wssChecks)}`);
 
   (mavlinkConnection as any).send = origSend;
 }

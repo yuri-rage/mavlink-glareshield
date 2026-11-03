@@ -44,6 +44,21 @@ export function isLoopbackWs(url: string): boolean {
   }
 }
 
+/**
+ * Extracts the host (hostname and port) from a wss:// URL for certificate authorization,
+ * safely ignoring any paths, queries (?token=...), or authentication credentials.
+ */
+export function getWssHost(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed.toLowerCase().startsWith('wss://')) return null;
+  try {
+    return new URL(trimmed).host || null;
+  } catch {
+    const match = trimmed.match(/^wss:\/\/([^/?#]+)/i);
+    return match ? match[1] : null;
+  }
+}
+
 export class MavlinkConnection {
   private ws: WebSocket | null = null;
   private url: string;

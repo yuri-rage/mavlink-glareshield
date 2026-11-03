@@ -7,7 +7,11 @@ setup_serial_permissions() {
     if [ "$(id -u)" = "0" ] && id -u glareshield >/dev/null 2>&1; then
         local devs=()
         if [ "$MODE" = "serial" ] && [ -n "$TARGET" ]; then
-            devs+=("${TARGET%%:*}")
+            if [ -e "$TARGET" ]; then
+                devs+=("$TARGET")
+            else
+                devs+=("${TARGET%:*}")
+            fi
         fi
         devs+=(/dev/ttyUSB0 /dev/ttyACM0)
         for dev in "${devs[@]}"; do

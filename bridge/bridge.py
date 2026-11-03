@@ -1457,6 +1457,13 @@ class BridgeServer:
                 print(f"[TCP] Connection failed ({e}), retrying in 2s...")
                 await asyncio.sleep(2)
 
+    @staticmethod
+    def parse_serial_target(target: str) -> tuple[str, int]:
+        parts = target.rsplit(":", 1)
+        if len(parts) > 1 and parts[1].isdigit():
+            return parts[0], int(parts[1])
+        return target, 57600
+
     async def setup_serial(self):
         try:
             import serial  # pyright: ignore[reportMissingImports,reportMissingModuleSource]
@@ -1464,9 +1471,7 @@ class BridgeServer:
             print("[SERIAL] Error: pyserial is not installed. Please install pyserial.")
             return
 
-        parts = self.target.split(":")
-        port = parts[0]
-        baud = int(parts[1]) if len(parts) > 1 else 57600
+        port, baud = self.parse_serial_target(self.target)
         loop = asyncio.get_running_loop()
         while True:
             try:

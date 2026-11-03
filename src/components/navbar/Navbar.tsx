@@ -7,7 +7,7 @@ import {
 } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { useAudioAlertsStore } from '../../lib/audioAlerts';
-import { mavlinkConnection, isLoopbackWs } from '../../mavlink/connection';
+import { mavlinkConnection, isLoopbackWs, getWssHost } from '../../mavlink/connection';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Modal } from '../ui/modal';
@@ -1074,38 +1074,42 @@ export const Navbar: React.FC = () => {
               </div>
             )}
 
-            {inputUrl.trim().startsWith('wss://') && (
-              <div className="p-2.5 rounded-lg border border-sky-500/30 bg-sky-950/25 text-sky-200 text-xs space-y-1.5 mt-2">
-                <div className="font-semibold flex items-center justify-between text-sky-300">
-                  <div className="flex items-center gap-1.5">
-                    <Shield className="h-3.5 w-3.5 shrink-0 text-sky-400" />
-                    Self-Signed Certificate Trust
+            {(() => {
+              const wssHost = getWssHost(inputUrl);
+              if (!wssHost) return null;
+              return (
+                <div className="p-2.5 rounded-lg border border-sky-500/30 bg-sky-950/25 text-sky-200 text-xs space-y-1.5 mt-2">
+                  <div className="font-semibold flex items-center justify-between text-sky-300">
+                    <div className="flex items-center gap-1.5">
+                      <Shield className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+                      Self-Signed Certificate Trust
+                    </div>
+                    <a
+                      href={`https://${wssHost}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-400 hover:text-sky-300 underline"
+                    >
+                      Open in Tab
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                    </a>
                   </div>
-                  <a
-                    href={`https://${inputUrl.trim().slice(6).replace(/\/.*$/, '')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-400 hover:text-sky-300 underline"
-                  >
-                    Open in Tab
-                    <ExternalLink className="h-3 w-3 shrink-0" />
-                  </a>
+                  <p className="text-[11px] text-zinc-300 leading-relaxed">
+                    If using a self-signed certificate, browsers require a one-time trust step. Open{' '}
+                    <a
+                      href={`https://${wssHost}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sky-400 hover:underline font-mono inline-flex items-center gap-0.5"
+                    >
+                      https://{wssHost}
+                      <ExternalLink className="h-2.5 w-2.5 inline" />
+                    </a>{' '}
+                    in a new tab, proceed past the certificate warning, then connect.
+                  </p>
                 </div>
-                <p className="text-[11px] text-zinc-300 leading-relaxed">
-                  If using a self-signed certificate, browsers require a one-time trust step. Open{' '}
-                  <a
-                    href={`https://${inputUrl.trim().slice(6).replace(/\/.*$/, '')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sky-400 hover:underline font-mono inline-flex items-center gap-0.5"
-                  >
-                    https://{inputUrl.trim().slice(6).replace(/\/.*$/, '')}
-                    <ExternalLink className="h-2.5 w-2.5 inline" />
-                  </a>{' '}
-                  in a new tab, proceed past the certificate warning, then connect.
-                </p>
-              </div>
-            )}
+              );
+            })()}
 
             {errorMessage && (
               <div className="p-2.5 rounded-lg border border-red-500/30 bg-red-950/25 text-red-300 text-xs flex items-start gap-2 mt-2">
