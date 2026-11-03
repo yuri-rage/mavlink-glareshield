@@ -103,15 +103,17 @@ The console will confirm:
 
 Because self-signed certificates are not signed by a recognized Certificate Authority (CA), modern browsers and mobile OSes require client-side confirmation:
 
-1. Open a new tab in your browser and navigate directly to:
+1. Open a new tab in your browser (on desktop or mobile) and navigate directly to:
    ```text
    https://192.168.1.69:56781
    ```
-2. Click **Advanced → Accept the Risk and Continue** (Firefox) or **Advanced → Proceed** (Chrome).
+2. Proceed past the certificate warning:
+   - **Chrome**: Click **Advanced → Proceed to 192.168.1.69**.
+   - **Firefox**: Click **Advanced → Accept the Risk and Continue**.
+   - **Safari (iOS / iPadOS / macOS)**: Tap **Show Details → visit this website** (and confirm when prompted).
    > [!NOTE]
    > The browser will display: `Failed to open a WebSocket connection: missing Connection header`. **This is expected and normal!** It confirms the browser completed the TLS handshake with the bridge before reaching the WebSocket endpoint.
-3. On **iOS / iPadOS**: iOS requires downloading the certificate file, installing it as a configuration profile under *Settings → Profile Downloaded*, and then enabling full trust under *Settings → General → About → Certificate Trust Settings*.
-4. Close the tab, open [https://glareshield.yurirage.com](https://glareshield.yurirage.com), and in **Link Settings** connect to:
+3. Close the tab, open [https://glareshield.yurirage.com](https://glareshield.yurirage.com), and in **Link Settings** connect to:
    ```text
    wss://192.168.1.69:56781/
    ```
