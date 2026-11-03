@@ -12,7 +12,7 @@ export {};
 (globalThis as any).localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 
 const { parseDroppedMissionFile } = await import('../src/mavlink/missionFileParser.ts');
-const { mavlinkConnection } = await import('../src/mavlink/connection.ts');
+const { mavlinkConnection, isLoopbackWs } = await import('../src/mavlink/connection.ts');
 const { rtcmInjector } = await import('../src/mavlink/rtcmInjector.ts');
 const { useConnectionStore } = await import('../src/store/connectionStore.ts');
 const { useUnitsStore } = await import('../src/store/unitsStore.ts');
@@ -547,6 +547,20 @@ for (const [type, landCmd, opts, label] of [
   check('mission download stats auto-clear after delay and do not persist forever',
     hasMsgBefore && hasMsgAfter,
     `before="${hasMsgBefore}", after="${hasMsgAfter}"`);
+
+  // 17. isLoopbackWs loopback address discrimination
+  const loopbackChecks = [
+    isLoopbackWs('ws://localhost:56781') === true,
+    isLoopbackWs('ws://127.0.0.1:56781') === true,
+    isLoopbackWs('ws://127.0.0.5:56781') === true,
+    isLoopbackWs('ws://[::1]:56781') === true,
+    isLoopbackWs('ws://127.0.0.1.nip.io:56781') === false,
+    isLoopbackWs('ws://192.168.1.50:56781') === false,
+    isLoopbackWs('ws://glareshield.pages.dev') === false,
+  ];
+  check('isLoopbackWs matches only loopback addresses and rejects 127.* nip.io subdomains',
+    loopbackChecks.every(Boolean),
+    `results=${JSON.stringify(loopbackChecks)}`);
 
   (mavlinkConnection as any).send = origSend;
 }

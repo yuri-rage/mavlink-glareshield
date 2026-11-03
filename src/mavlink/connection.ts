@@ -35,8 +35,7 @@ export function isLoopbackWs(url: string): boolean {
     const h = parsed.hostname.toLowerCase();
     return (
       h === 'localhost' ||
-      h === '127.0.0.1' ||
-      h.startsWith('127.') ||
+      /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h) ||
       h === '[::1]' ||
       h === '::1'
     );
