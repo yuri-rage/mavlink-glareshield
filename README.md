@@ -57,65 +57,32 @@ Designed to remove the "glare" from more fully featured GCS applications and foc
 
 Glareshield is deployed and ready to use at **[https://glareshield.yurirage.com](https://glareshield.yurirage.com)**. No installation or build steps are required for the web application.
 
-To connect your vehicle, run a MAVLink-to-WebSocket telemetry bridge on your ground station, companion computer, or telemetry base.
+### 1. Start a Telemetry Bridge
 
-### Option 1: Existing Mission Planner (Zero Install)
+Choose either Mission Planner or the Docker bridge:
 
-If you already run Mission Planner on Windows, it includes an automatic WebSocket server on port `56781`:
-1. Start SITL or connect to your vehicle in Mission Planner.
-2. Open **[https://glareshield.yurirage.com](https://glareshield.yurirage.com)** in your browser on the same PC.
-3. Click **Connect** in the top right, enter `ws://localhost:56781`, and click **Connect Now**.
-   *(If prompted by Chrome for Local Network Access, click Allow).*
+- **Mission Planner (Zero Install)**:
+  If already running Mission Planner on Windows, it includes an automatic WebSocket server on port `56781`. Connect to your vehicle or start SITL in Mission Planner.
 
-### Option 2: Docker Bridge (Recommended for Telemetry Radios, Network Vehicles & `wss://`)
+- **Docker Bridge (Recommended for Telemetry Radios, Network Vehicles & `wss://`)**:
+  Provides zero-configuration telemetry bridging on UDP port 14550 with automated TLS certificate generation (`wss://`) for connecting from phones, tablets, or laptops over your local network:
+  ```bash
+  mkdir -p glareshield-bridge && cd glareshield-bridge
+  curl -O https://raw.githubusercontent.com/yuri-rage/mavlink-glareshield/master/docker-compose.yml
+  docker compose up -d
+  docker compose logs
+  ```
 
-Docker provides automated TLS certificate generation (`wss://`) and LAN IP detection, allowing secure connections across phones, tablets, and laptops on your local network.
+### 2. Connect in Glareshield
 
-Zero-configuration for standard MAVLink UDP broadcast (`0.0.0.0:14550`):
-```bash
-# 1. Download docker-compose.yml into a dedicated folder
-mkdir -p glareshield-bridge && cd glareshield-bridge
-curl -O https://raw.githubusercontent.com/yuri-rage/mavlink-glareshield/master/docker-compose.yml
+1. Open **[https://glareshield.yurirage.com](https://glareshield.yurirage.com)** in your browser.
+2. Click **Connect** in the top right.
+3. Enter your bridge address:
+   - **Same computer (Mission Planner)**: `ws://localhost:56781`
+   - **Local network (Docker)**: `wss://<bridge-ip>:56781/`
+4. Click **Connect Now**.
 
-# 2. Start the bridge container
-docker compose up -d
-
-# View bridge logs and your direct wss:// connection URL
-docker compose logs
-```
-
-For **TCP** or **USB Serial** telemetry (e.g. SiK radio on `/dev/ttyUSB0`), edit `docker-compose.yml` to set `MODE` and uncomment `devices:`. See the [Connection Guide](docs/connection-guide.md#method-a-automated-setup-with-docker-compose) for examples.
-
-Open **[https://glareshield.yurirage.com](https://glareshield.yurirage.com)** and connect to your displayed `wss://<lan-ip>:56781/` endpoint.
-
-### Option 3: Python Bridge
-
-If you prefer running directly with Python 3.10+ (`pip install -r bridge/requirements.txt`):
-```bash
-# Option A: Offline simulation & mock telemetry
-python3 bridge/bridge.py --mock
-
-# Option B: Connect to ArduPilot SITL or network vehicle over UDP
-python3 bridge/bridge.py --udp 0.0.0.0:14550
-
-# Option C: Connect to physical telemetry radio over Serial (e.g. SiK radio at 57600 baud)
-python3 bridge/bridge.py --serial /dev/ttyUSB0:57600
-```
-By default, the bridge listens on `ws://127.0.0.1:56781`. Add `--host 0.0.0.0` to permit connections from other devices on your local network.
-
-> [!TIP]
-> **Coexisting with Mission Planner or QGroundControl**:
-> Glareshield defaults to GCS System ID `255` (`SYSID_MYGCS`). If sharing an active telemetry stream with another GCS, set Glareshield's GCS System ID to `254` (or another unused ID) in **Link Settings** so MAVFTP and mission protocol replies do not cross over.
-
----
-
-## Connecting from Browsers & Devices
-
-When connecting from [https://glareshield.yurirage.com](https://glareshield.yurirage.com):
-- **Localhost (`ws://localhost:56781`)**: Modern browsers permit unencrypted WebSockets to loopback addresses from HTTPS pages. If Chrome prompts for Local Network Access permission, click **Allow**.
-- **Local Network (`wss://<ip>:56781`)**: Modern browsers require a one-time trust step for self-signed certificates. Open `https://<ip>:56781` in a new tab, proceed past the certificate warning, and then connect in Glareshield. (Click the "Open in Tab" shortcut in Glareshield's connection settings).
-
-📖 **For detailed browser-specific configuration (Chrome, Firefox, Safari on iOS), secure reverse proxies, and remote tunnels, see the [Browser & Network Connection Guide](docs/connection-guide.md).**
+📖 **For detailed setup (including USB Serial radios, TCP, direct Python bridge usage, self-signed certificate acceptance, and remote tunnels), see the [Browser & Network Connection Guide](docs/connection-guide.md).**
 
 ---
 
