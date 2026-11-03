@@ -113,7 +113,7 @@ async def record(url, seconds):
         while loop.time() < end:
             try:
                 data = await asyncio.wait_for(ws.recv(), timeout=0.5)
-            except (asyncio.TimeoutError, TimeoutError):  # noqa: UP041
+            except TimeoutError:
                 continue
             if isinstance(data, str):
                 continue
