@@ -3,9 +3,29 @@ set -e
 
 BRIDGE_SCRIPT="${BRIDGE_SCRIPT:-/app/bridge.py}"
 
-# If user passed custom CLI arguments directly, execute them
+run_bridge() {
+    if [ "$(id -u)" = "0" ] && id -u glareshield >/dev/null 2>&1 && command -v gosu >/dev/null 2>&1; then
+        chown -R glareshield:glareshield "$CERT_DIR" 2>/dev/null || true
+        exec gosu glareshield python3 "$BRIDGE_SCRIPT" "$@"
+    else
+        exec python3 "$BRIDGE_SCRIPT" "$@"
+    fi
+}
+
+# If user passed custom CLI arguments directly, execute them (defaulting host to 0.0.0.0 if not specified)
 if [ "$#" -gt 0 ] && [ "${1:0:1}" = "-" ]; then
-    exec python3 "$BRIDGE_SCRIPT" "$@"
+    HAS_HOST=false
+    for arg in "$@"; do
+        if [ "$arg" = "--host" ] || [[ "$arg" == --host=* ]]; then
+            HAS_HOST=true
+            break
+        fi
+    done
+    EXTRA_ARGS=()
+    if [ "$HAS_HOST" = "false" ]; then
+        EXTRA_ARGS=("--host" "${HOST:-0.0.0.0}")
+    fi
+    run_bridge "${EXTRA_ARGS[@]}" "$@"
 elif [ "$#" -gt 0 ]; then
     exec "$@"
 fi
@@ -56,18 +76,42 @@ DETECTED_HOST=""
 ALL_IPS=""
 
 eval "$(python3 -c "
-import socket
+import socket, struct, fcntl, array
 ips = set()
 primary = ''
+
+# 1. Enumerate network interfaces via ioctl (offline / no gateway needed)
 try:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(('1.1.1.1', 80))
-    primary = s.getsockname()[0]
-    ips.add(primary)
+    buf = array.array('B', b'\0' * 4096)
+    ifconf = struct.pack('iP', 4096, buf.buffer_info()[0])
+    res = fcntl.ioctl(s.fileno(), 0x8912, ifconf)
+    size, _ = struct.unpack('iP', res)
+    raw = buf.tobytes()[:size]
+    for i in range(0, size, 40):
+        ifname = raw[i:i+16].split(b'\0', 1)[0].decode()
+        ip = socket.inet_ntoa(raw[i+20:i+24])
+        if not ip.startswith('127.'):
+            ips.add(ip)
+            if not primary and not ifname.startswith(('docker', 'br-', 'veth')):
+                primary = ip
     s.close()
 except Exception:
     pass
 
+# 2. Kernel route lookup (if outbound gateway is available)
+try:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(('1.1.1.1', 80))
+    gw_ip = s.getsockname()[0]
+    if not gw_ip.startswith('127.'):
+        ips.add(gw_ip)
+        primary = gw_ip
+    s.close()
+except Exception:
+    pass
+
+# 3. Hostname resolution
 host = ''
 try:
     host = socket.gethostname()
@@ -121,48 +165,22 @@ USE_TLS=false
 CERT_FILE="$CERT_DIR/cert.pem"
 KEY_FILE="$CERT_DIR/key.pem"
 
-if [ "$AUTO_TLS" = "true" ] || [ "$AUTO_TLS" = "1" ] || [ "$AUTO_TLS" = "yes" ]; then
-    mkdir -p "$CERT_DIR"
-    VALID_EXISTING=false
-
-    if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
-        if [[ "$CERT_CN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            if openssl x509 -in "$CERT_FILE" -text -noout 2>/dev/null | grep -q "IP Address:$CERT_CN"; then
-                VALID_EXISTING=true
-            fi
-        else
-            if openssl x509 -in "$CERT_FILE" -text -noout 2>/dev/null | grep -E -q "(DNS:$CERT_CN|CN\s*=\s*$CERT_CN)"; then
-                VALID_EXISTING=true
-            fi
-        fi
-
-        # Verify certificate hasn't expired
-        if [ "$VALID_EXISTING" = "true" ]; then
-            if ! openssl x509 -checkend 86400 -noout -in "$CERT_FILE" >/dev/null 2>&1; then
-                echo "[TLS] Certificate in $CERT_DIR has expired or expires within 24h."
-                VALID_EXISTING=false
-            fi
-        fi
-    fi
-
-    if [ "$VALID_EXISTING" = "true" ]; then
-        echo "[TLS] Reusing valid existing TLS certificate in $CERT_DIR (covers $CERT_CN)"
-    else
-        echo "[TLS] Generating self-signed TLS certificate (CN=$CERT_CN)..."
-        echo "[TLS] Certificate SANs: $SAN"
-        openssl req -x509 -newkey rsa:2048 -nodes \
-            -keyout "$KEY_FILE" \
-            -out "$CERT_FILE" \
-            -days 365 \
-            -subj "/CN=$CERT_CN" \
-            -addext "subjectAltName=$SAN"
-        chmod 600 "$KEY_FILE"
-        chmod 644 "$CERT_FILE"
-        echo "[TLS] Certificate generated successfully in $CERT_DIR"
-    fi
+if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
+    echo "[TLS] Reusing existing certificates found in $CERT_DIR"
     USE_TLS=true
-elif [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
-    echo "[TLS] Existing TLS certificates detected in $CERT_DIR"
+elif [ "$AUTO_TLS" = "true" ] || [ "$AUTO_TLS" = "1" ] || [ "$AUTO_TLS" = "yes" ]; then
+    mkdir -p "$CERT_DIR"
+    echo "[TLS] Generating self-signed TLS certificate (CN=$CERT_CN)..."
+    echo "[TLS] Certificate SANs: $SAN"
+    openssl req -x509 -newkey rsa:2048 -nodes \
+        -keyout "$KEY_FILE" \
+        -out "$CERT_FILE" \
+        -days 365 \
+        -subj "/CN=$CERT_CN" \
+        -addext "subjectAltName=$SAN"
+    chmod 600 "$KEY_FILE"
+    chmod 644 "$CERT_FILE"
+    echo "[TLS] Certificate generated successfully in $CERT_DIR"
     USE_TLS=true
 fi
 
@@ -210,4 +228,4 @@ else
 fi
 echo "============================================================"
 
-exec python3 "$BRIDGE_SCRIPT" "${ARGS[@]}"
+run_bridge "${ARGS[@]}"
