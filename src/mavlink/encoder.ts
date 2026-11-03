@@ -277,6 +277,16 @@ export class MavlinkEncoder {
     return this.packV2(MAVLINK_MSG_ID.PARAM_SET, payload);
   }
 
+  // Set Mission Current Item (Msg ID 41)
+  public createMissionSetCurrent(targetSystem = 1, targetComponent = 1, seq: number): Uint8Array {
+    const payload = new Uint8Array(4);
+    const view = new DataView(payload.buffer);
+    view.setUint16(0, seq, true);
+    payload[2] = targetSystem;
+    payload[3] = targetComponent;
+    return this.packV2(MAVLINK_MSG_ID.MISSION_SET_CURRENT, payload);
+  }
+
   // Request Mission Count / List (Msg ID 43)
   public createMissionRequestList(targetSystem = 1, targetComponent = 1, missionType = 0): Uint8Array {
     const payload = new Uint8Array(3);

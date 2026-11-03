@@ -17,9 +17,11 @@ const { rtcmInjector } = await import('../src/mavlink/rtcmInjector.ts');
 const { useConnectionStore } = await import('../src/store/connectionStore.ts');
 const { useUnitsStore } = await import('../src/store/unitsStore.ts');
 const { useDashboardStore } = await import('../src/store/dashboardStore.ts');
-const { useTelemetryStore, sendTrackedCommand, computeDistanceAndBearing, evaluatePreArmReadiness } = await import('../src/store/telemetryStore.ts');
+const { useTelemetryStore, sendTrackedCommand, computeDistanceAndBearing, evaluatePreArmReadiness, setMissionCurrentWaypoint } = await import('../src/store/telemetryStore.ts');
 const { MavlinkEncoder } = await import('../src/mavlink/encoder.ts');
 const { MavlinkParser, decodePayload } = await import('../src/mavlink/parser.ts');
+const { MAVLINK_MSG_ID } = await import('../src/mavlink/messages.ts');
+const { missionManager } = await import('../src/mavlink/missionManager.ts');
 const { parseParamFile, serializeParamFile, getParamMetadata, areParamsDifferent, formatParamValue } = await import('../src/mavlink/paramMetadata.ts');
 const { normalizeCalloutText, useAudioAlertsStore } = await import('../src/lib/audioAlerts.ts');
 const { computeMapBadgeVisibility } = await import('../src/components/map/mapBadgeVisibility.ts');
@@ -492,6 +494,59 @@ for (const [type, landCmd, opts, label] of [
   check('hysteresis prevents unhiding until +24px threshold is exceeded',
     boundaryAt445 === true && boundaryAt460 === true && boundaryAt475 === false,
     `at445=${boundaryAt445}, at460=${boundaryAt460}, at475=${boundaryAt475}`);
+
+  // 12. MISSION_SET_CURRENT (Msg 41) encode & decode
+  const encoder = new MavlinkEncoder(1, 1);
+  const setCurrentPkt = encoder.createMissionSetCurrent(1, 1, 7);
+  const testParser = new MavlinkParser();
+  const parsedPackets = testParser.parse(setCurrentPkt);
+  const foundPacket = parsedPackets.find((p) => p.messageId === MAVLINK_MSG_ID.MISSION_SET_CURRENT);
+  const parsedSetCurrent = foundPacket ? decodePayload(foundPacket.messageId, foundPacket.payload) : null;
+  check('MISSION_SET_CURRENT (41) encodes and decodes targetSys, targetComp, seq',
+    parsedSetCurrent !== null && parsedSetCurrent.seq === 7 && parsedSetCurrent.target_system === 1,
+    JSON.stringify(parsedSetCurrent));
+
+  // 13. MISSION_ITEM_REACHED (Msg 46) decode
+  const reachedPayload = new Uint8Array([3, 0]); // seq = 3
+  const decodedReached = decodePayload(MAVLINK_MSG_ID.MISSION_ITEM_REACHED, reachedPayload);
+  check('MISSION_ITEM_REACHED (46) decodes waypoint arrival sequence',
+    decodedReached?.seq === 3,
+    JSON.stringify(decodedReached));
+
+  // 14. setMissionCurrentWaypoint action sends packet and updates store
+  useTelemetryStore.setState({
+    missionWaypoints: [
+      { seq: 0, command: 16, lat: 37, lon: -122, alt: 0, current: false, frame: 3 },
+      { seq: 1, command: 16, lat: 37.1, lon: -122.1, alt: 50, current: true, frame: 3 },
+      { seq: 2, command: 16, lat: 37.2, lon: -122.2, alt: 60, current: false, frame: 3 },
+    ],
+    currentWaypointSeq: 1,
+  });
+  await setMissionCurrentWaypoint(2);
+  const updatedCurrentSeq = useTelemetryStore.getState().currentWaypointSeq;
+  check('setMissionCurrentWaypoint updates currentWaypointSeq in telemetry store',
+    updatedCurrentSeq === 2,
+    `currentSeq=${updatedCurrentSeq}`);
+
+  // 15. Audio alerts waypoint arrival announce option toggle
+  useAudioAlertsStore.getState().setWaypointAnnounceEnabled(true);
+  const initWpAnnounce = useAudioAlertsStore.getState().waypointAnnounceEnabled;
+  useAudioAlertsStore.getState().toggleWaypointAnnounce();
+  const toggledWpAnnounce = useAudioAlertsStore.getState().waypointAnnounceEnabled;
+  useAudioAlertsStore.getState().setWaypointAnnounceEnabled(true);
+  check('waypoint announce audio option toggles and persists',
+    initWpAnnounce === true && toggledWpAnnounce === false,
+    `init=${initWpAnnounce}, toggled=${toggledWpAnnounce}`);
+
+  // 16. Mission download status banner auto-clears after completion
+  (missionManager as any).setStatus({ message: 'Synced 10 WPs in 1.1s', isFetching: false, isUploading: false });
+  const hasMsgBefore = (missionManager as any).status.message === 'Synced 10 WPs in 1.1s';
+  (missionManager as any).scheduleMessageClear(50);
+  await new Promise((r) => setTimeout(r, 80));
+  const hasMsgAfter = (missionManager as any).status.message === '';
+  check('mission download stats auto-clear after delay and do not persist forever',
+    hasMsgBefore && hasMsgAfter,
+    `before="${hasMsgBefore}", after="${hasMsgAfter}"`);
 
   (mavlinkConnection as any).send = origSend;
 }

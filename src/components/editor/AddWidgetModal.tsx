@@ -9,6 +9,7 @@ import {
   Compass,
   Radio,
   MapPin,
+  Milestone,
   Battery,
   Satellite,
   Gauge,
@@ -117,6 +118,14 @@ const BUILT_IN_CATALOG = [
     category: 'avionics',
     description: 'Stream RTCM3 corrections from an NTRIP caster or USB serial base station and inject into vehicle GPS.',
     icon: Satellite,
+    defaultSpan: 6,
+  },
+  {
+    id: 'built-in-waypoints',
+    name: 'Waypoint Navigation & Mission Control',
+    category: 'control',
+    description: 'Advance to next waypoint, jump immediately to any mission waypoint, and track active waypoint metrics.',
+    icon: Milestone,
     defaultSpan: 6,
   },
 ];

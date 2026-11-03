@@ -449,7 +449,19 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         target_component: getUint8(9),
       };
 
+    case MAVLINK_MSG_ID.MISSION_SET_CURRENT:
+      return {
+        seq: getUint16(0),
+        target_system: getUint8(2),
+        target_component: getUint8(3),
+      };
+
     case MAVLINK_MSG_ID.MISSION_CURRENT:
+      return {
+        seq: getUint16(0),
+      };
+
+    case MAVLINK_MSG_ID.MISSION_ITEM_REACHED:
       return {
         seq: getUint16(0),
       };

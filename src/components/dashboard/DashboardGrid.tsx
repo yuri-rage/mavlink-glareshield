@@ -11,6 +11,7 @@ import { StatusTextConsoleWidget } from '../widgets/StatusTextConsoleWidget';
 import { ParametersWidget } from '../widgets/ParametersWidget';
 import { TelemetryChartsWidget } from '../widgets/TelemetryChartsWidget';
 import { NtripWidget } from '../widgets/NtripWidget';
+import { WaypointControlWidget } from '../widgets/WaypointControlWidget';
 import { CustomWidgetRenderer } from '../widgets/CustomWidgetRenderer';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { Button } from '../ui/button';
@@ -82,6 +83,8 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       'built-in-statustext': 'Messages',
       'built-in-parameters': 'Parameters',
       'built-in-charts': 'Telemetry Graphs',
+      'built-in-ntrip': 'NTRIP RTK Base Stream',
+      'built-in-waypoints': 'Waypoint Control',
     };
     if (BUILTIN_TITLES[widgetId]) return BUILTIN_TITLES[widgetId];
     const custom = profile.customWidgets.find((w) => w.id === widgetId);
@@ -130,6 +133,8 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
         return <TelemetryChartsWidget />;
       case 'built-in-ntrip':
         return <NtripWidget />;
+      case 'built-in-waypoints':
+        return <WaypointControlWidget />;
       default: {
         // Look up custom widget definition
         const customDef = profile.customWidgets.find((w) => w.id === widgetId);

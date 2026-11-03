@@ -34,6 +34,7 @@ import {
   Moon,
   Volume2,
   VolumeX,
+  Milestone,
   RefreshCw,
 } from 'lucide-react';
 import { BandwidthProfile } from '../../mavlink/rateManager';
@@ -81,10 +82,12 @@ export const Navbar: React.FC = () => {
   const {
     soundEnabled,
     voiceEnabled,
+    waypointAnnounceEnabled,
     ttsStatus,
     ttsDownloadProgress,
     toggleSound,
     toggleVoice,
+    toggleWaypointAnnounce,
   } = useAudioAlertsStore();
 
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
@@ -1138,7 +1141,7 @@ export const Navbar: React.FC = () => {
           {/* Field Theme & Audio Callouts (Rank 4 & Rank 7) */}
           <div className="space-y-2">
             <label className="text-xs font-medium text-zinc-300">Field Visibility & Audio Callouts</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 type="button"
                 onClick={() => setDaylightMode((v) => !v)}
@@ -1195,6 +1198,26 @@ export const Navbar: React.FC = () => {
                       : ttsStatus === 'ready'
                       ? 'Betty Neural TTS Ready'
                       : 'Spoken modes/alerts'
+                    : 'Off'}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleWaypointAnnounce}
+                className={`p-2.5 rounded-lg border text-left transition-all ${
+                  waypointAnnounceEnabled && voiceEnabled && soundEnabled
+                    ? 'border-emerald-500 bg-emerald-950/40 text-emerald-200'
+                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
+                }`}
+              >
+                <div className="font-semibold text-xs flex items-center gap-1.5">
+                  <Milestone className="h-3.5 w-3.5 text-emerald-400" />
+                  Announce WPs
+                </div>
+                <div className="text-[10px] text-zinc-400 mt-0.5">
+                  {waypointAnnounceEnabled && voiceEnabled && soundEnabled
+                    ? 'Speaks "waypoint n"'
                     : 'Off'}
                 </div>
               </button>

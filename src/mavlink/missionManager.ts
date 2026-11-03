@@ -39,8 +39,21 @@ export class MissionManager {
   private targetComp = 1;
   private isCancelled = false;
   private legacyAbort: (() => void) | null = null;
+  private messageClearTimer: any = null;
   private listeners: Set<(isFetching: boolean, count?: number, method?: string, status?: MissionManagerStatus) => void> = new Set();
   private statusListeners: Set<(status: MissionManagerStatus) => void> = new Set();
+
+  public scheduleMessageClear(delayMs = 5000) {
+    if (this.messageClearTimer) {
+      clearTimeout(this.messageClearTimer);
+    }
+    this.messageClearTimer = setTimeout(() => {
+      this.messageClearTimer = null;
+      if (!this.status.isFetching && !this.status.isUploading) {
+        this.setStatus({ message: '' });
+      }
+    }, delayMs);
+  }
 
   public cancelFetch() {
     if (!this.status.isFetching) return;
@@ -55,6 +68,7 @@ export class MissionManager {
       method: 'idle',
       message: 'Mission & fence sync cancelled',
     });
+    this.scheduleMessageClear(3500);
   }
 
   public onStateChange(listener: (isFetching: boolean, count?: number, method?: string, status?: MissionManagerStatus) => void): () => void {
@@ -70,6 +84,12 @@ export class MissionManager {
   }
 
   private setStatus(patch: Partial<MissionManagerStatus>) {
+    if (patch.isFetching || patch.isUploading) {
+      if (this.messageClearTimer) {
+        clearTimeout(this.messageClearTimer);
+        this.messageClearTimer = null;
+      }
+    }
     this.status = { ...this.status, ...patch };
     this.notify();
   }
@@ -437,6 +457,7 @@ export class MissionManager {
         : res.error || `Failed to upload ${parsed.type}`,
       uploadProgress: undefined,
     });
+    this.scheduleMessageClear(5000);
 
     return {
       success: res.success,
@@ -839,6 +860,7 @@ export class MissionManager {
       rallyCount: rallies.length,
       message: summaryMsg,
     });
+    this.scheduleMessageClear(5000);
   }
 
   /**

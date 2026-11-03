@@ -5,6 +5,7 @@ import { mavlinkConnection } from '../mavlink/connection';
 
 export const STORAGE_KEY_SOUND = 'mavlink_glareshield_sound_enabled';
 export const STORAGE_KEY_VOICE = 'mavlink_glareshield_voice_enabled';
+export const STORAGE_KEY_WAYPOINT_ANNOUNCE = 'mavlink_glareshield_wp_announce_enabled';
 
 const PIPER_VOICE_ID = 'en_US-amy-medium';
 const MAX_CACHED_BUFFERS = 64;
@@ -427,12 +428,15 @@ export type TtsEngineStatus = 'idle' | 'downloading' | 'ready' | 'fallback';
 interface AudioAlertsState {
   soundEnabled: boolean;
   voiceEnabled: boolean;
+  waypointAnnounceEnabled: boolean;
   ttsStatus: TtsEngineStatus;
   ttsDownloadProgress: number;
   toggleSound: () => void;
   toggleVoice: () => void;
+  toggleWaypointAnnounce: () => void;
   setSoundEnabled: (enabled: boolean) => void;
   setVoiceEnabled: (enabled: boolean) => void;
+  setWaypointAnnounceEnabled: (enabled: boolean) => void;
 }
 
 export const useAudioAlertsStore = create<AudioAlertsState>((set, get) => ({
@@ -449,6 +453,15 @@ export const useAudioAlertsStore = create<AudioAlertsState>((set, get) => ({
     try {
       if (typeof localStorage !== 'undefined') {
         const val = localStorage.getItem(STORAGE_KEY_VOICE);
+        if (val !== null) return val === 'true';
+      }
+    } catch {}
+    return true;
+  })(),
+  waypointAnnounceEnabled: (() => {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const val = localStorage.getItem(STORAGE_KEY_WAYPOINT_ANNOUNCE);
         if (val !== null) return val === 'true';
       }
     } catch {}
@@ -480,6 +493,18 @@ export const useAudioAlertsStore = create<AudioAlertsState>((set, get) => ({
       speakCallout('Voice callouts enabled', true);
     }
   },
+  toggleWaypointAnnounce: () => {
+    const next = !get().waypointAnnounceEnabled;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_WAYPOINT_ANNOUNCE, String(next));
+      }
+    } catch {}
+    set({ waypointAnnounceEnabled: next });
+    if (next && get().voiceEnabled && get().soundEnabled) {
+      speakCallout('Waypoint announcements enabled');
+    }
+  },
   setSoundEnabled: (enabled: boolean) => {
     try {
       if (typeof localStorage !== 'undefined') {
@@ -496,6 +521,14 @@ export const useAudioAlertsStore = create<AudioAlertsState>((set, get) => ({
     } catch {}
     set({ voiceEnabled: enabled });
   },
+  setWaypointAnnounceEnabled: (enabled: boolean) => {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_WAYPOINT_ANNOUNCE, String(enabled));
+      }
+    } catch {}
+    set({ waypointAnnounceEnabled: enabled });
+  },
 }));
 
 /**
@@ -511,11 +544,16 @@ export function useAudioAlertListener() {
   const hasConnectedInSession = useTelemetryStore((state) => state.hasConnectedInSession);
   const soundEnabled = useAudioAlertsStore((state) => state.soundEnabled);
   const voiceEnabled = useAudioAlertsStore((state) => state.voiceEnabled);
+  const waypointAnnounceEnabled = useAudioAlertsStore((state) => state.waypointAnnounceEnabled);
+  const lastReachedWaypointSeq = useTelemetryStore((state) => state.lastReachedWaypointSeq);
+  const currentWaypointSeq = useTelemetryStore((state) => state.currentWaypointSeq);
   const lastSeenIdRef = useRef<string | null>(statusMessages[0]?.id ?? null);
   const prevModeRef = useRef<string>(heartbeat.modeName);
   const prevArmedRef = useRef<boolean>(heartbeat.isArmed);
   const prevLinkLostRef = useRef<boolean>(false);
   const batteryWarnedRef = useRef<'none' | 'low' | 'critical'>('none');
+  const lastAnnouncedWpRef = useRef<number>(-1);
+  const prevWpSeqRef = useRef<number>(currentWaypointSeq);
 
   // Initialize Piper Neural TTS Worker in the background when voice callouts are enabled
   useEffect(() => {
@@ -596,6 +634,46 @@ export function useAudioAlertListener() {
       speakCallout(`Flight mode ${heartbeat.modeName}`);
     }
   }, [heartbeat.modeName, heartbeat.isArmed, heartbeat.lastHeartbeatTime]);
+
+  // Spoken mission progress ("waypoint n") upon arriving at each waypoint
+  useEffect(() => {
+    if (heartbeat.lastHeartbeatTime === 0 || heartbeat.modeName === 'DISCONNECTED') {
+      lastAnnouncedWpRef.current = -1;
+      prevWpSeqRef.current = currentWaypointSeq;
+      return;
+    }
+
+    if (!soundEnabled || !voiceEnabled || !waypointAnnounceEnabled) {
+      prevWpSeqRef.current = currentWaypointSeq;
+      return;
+    }
+
+    // 1. Direct MAVLink MISSION_ITEM_REACHED event
+    if (lastReachedWaypointSeq > 0 && lastReachedWaypointSeq !== lastAnnouncedWpRef.current) {
+      lastAnnouncedWpRef.current = lastReachedWaypointSeq;
+      speakCallout(`Waypoint ${lastReachedWaypointSeq}`);
+      prevWpSeqRef.current = currentWaypointSeq;
+      return;
+    }
+
+    // 2. Autopilot advanced current waypoint during mission (fallback when MISSION_ITEM_REACHED is not emitted)
+    if (currentWaypointSeq > prevWpSeqRef.current && prevWpSeqRef.current > 0 && heartbeat.isArmed) {
+      const completedWp = prevWpSeqRef.current;
+      if (completedWp !== lastAnnouncedWpRef.current) {
+        lastAnnouncedWpRef.current = completedWp;
+        speakCallout(`Waypoint ${completedWp}`);
+      }
+    }
+    prevWpSeqRef.current = currentWaypointSeq;
+  }, [
+    lastReachedWaypointSeq,
+    currentWaypointSeq,
+    heartbeat.isArmed,
+    heartbeat.lastHeartbeatTime,
+    soundEnabled,
+    voiceEnabled,
+    waypointAnnounceEnabled,
+  ]);
 
   // Battery threshold callouts (25% Low, 15% Critical)
   useEffect(() => {

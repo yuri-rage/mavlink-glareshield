@@ -19,9 +19,11 @@ export const MAVLINK_MSG_ID = {
   SERVO_OUTPUT_RAW: 36,
   MISSION_ITEM: 39,
   MISSION_REQUEST: 40,
+  MISSION_SET_CURRENT: 41,
   MISSION_CURRENT: 42,
   MISSION_REQUEST_LIST: 43,
   MISSION_COUNT: 44,
+  MISSION_ITEM_REACHED: 46,
   MISSION_ACK: 47,
   MISSION_REQUEST_INT: 51,
   MISSION_ITEM_INT: 73,
@@ -70,9 +72,11 @@ export const MAVLINK_MESSAGE_CRC_EXTRA: Record<number, number> = {
   [MAVLINK_MSG_ID.SERVO_OUTPUT_RAW]: 222,
   [MAVLINK_MSG_ID.MISSION_ITEM]: 254,
   [MAVLINK_MSG_ID.MISSION_REQUEST]: 230,
+  [MAVLINK_MSG_ID.MISSION_SET_CURRENT]: 28,
   [MAVLINK_MSG_ID.MISSION_CURRENT]: 28,
   [MAVLINK_MSG_ID.MISSION_REQUEST_LIST]: 132,
   [MAVLINK_MSG_ID.MISSION_COUNT]: 221,
+  [MAVLINK_MSG_ID.MISSION_ITEM_REACHED]: 11,
   [MAVLINK_MSG_ID.MISSION_ACK]: 153,
   [MAVLINK_MSG_ID.MISSION_REQUEST_INT]: 196,
   [MAVLINK_MSG_ID.MISSION_ITEM_INT]: 38,
@@ -440,6 +444,14 @@ export function getGuidedModeNum(type: number): number {
     return 15;
   }
   return 4;
+}
+
+export function getAutoModeNum(type: number): number {
+  const category = getVehicleCategory(type);
+  if (category === 'plane' || category === 'rover' || category === 'tracker') {
+    return 10;
+  }
+  return 3;
 }
 
 export function getMavCmdName(commandId: number): string {

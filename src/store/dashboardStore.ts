@@ -30,6 +30,7 @@ const DEFAULT_PROFILE: DashboardProfile = {
       title: 'Moving Map',
       widgets: [
         { instanceId: 'w-glareshield-map', widgetId: 'built-in-glareshield', colSpan: 12 },
+        { instanceId: 'w-waypoints-map', widgetId: 'built-in-waypoints', colSpan: 12 },
         { instanceId: 'w-map-large', widgetId: 'built-in-map', colSpan: 12 },
       ],
     },

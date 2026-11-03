@@ -294,6 +294,7 @@ interface TelemetryState {
   parameters: Record<string, { value: number; type: number; index: number; defaultValue?: number }>;
   missionWaypoints: MissionWaypoint[];
   currentWaypointSeq: number;
+  lastReachedWaypointSeq: number;
   fencePoints: FencePoint[];
   rallyPoints: RallyPoint[];
   flightTrace: [number, number][];
@@ -743,6 +744,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   parameters: {},
   missionWaypoints: initialNav.missionWaypoints ?? [],
   currentWaypointSeq: 0,
+  lastReachedWaypointSeq: 0,
   fencePoints: initialNav.fencePoints ?? [],
   rallyPoints: initialNav.rallyPoints ?? [],
   flightTrace: [],
@@ -1428,6 +1430,12 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           };
         }
 
+        case MAVLINK_MSG_ID.MISSION_ITEM_REACHED: {
+          return {
+            lastReachedWaypointSeq: data.seq,
+          };
+        }
+
         case MAVLINK_MSG_ID.RADIO_STATUS: {
           return {
             radioStatus: {
@@ -1804,3 +1812,37 @@ useTelemetryStore.subscribe((state) => {
   };
   saveNavCache(currentNav);
 });
+
+/**
+ * Commands the autopilot to navigate immediately to a specified waypoint sequence.
+ * Sends MAVLink MISSION_SET_CURRENT (Msg 41) and tracked MAV_CMD_DO_SET_MISSION_CURRENT (324).
+ */
+export async function setMissionCurrentWaypoint(seq: number): Promise<boolean> {
+  const hb = useTelemetryStore.getState().heartbeat;
+  const sysId = hb.systemId > 0 ? hb.systemId : 1;
+  const compId = hb.componentId > 0 ? hb.componentId : 1;
+
+  const encoder = mavlinkConnection.getEncoder();
+  const pkt = encoder.createMissionSetCurrent(sysId, compId, seq);
+  const sent = mavlinkConnection.send(pkt);
+
+  // Optimistically set current waypoint in store for responsive UI feedback
+  useTelemetryStore.setState((s) => ({
+    currentWaypointSeq: seq,
+    missionWaypoints: s.missionWaypoints.map((w) => ({
+      ...w,
+      current: w.seq === seq,
+    })),
+  }));
+
+  // Also send tracked MAV_CMD_DO_SET_MISSION_CURRENT (324) for command confirmation toast
+  if (sent) {
+    const cmdPkt = encoder.createCommandLong(sysId, compId, 324, [seq, 0, 0, 0, 0, 0, 0]);
+    sendTrackedCommand(cmdPkt, {
+      label: `Nav to WP ${seq}`,
+      targetKey: `action:wp:${seq}`,
+    }).catch(() => {});
+  }
+
+  return sent;
+}
