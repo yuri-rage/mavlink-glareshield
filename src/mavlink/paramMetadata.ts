@@ -238,14 +238,26 @@ export const ARDUPILOT_PARAM_META: Record<string, ParamMeta> = {
     min: 3,
     max: 100,
   },
+  AIRSPEED_MIN: {
+    description: 'Minimum airspeed allowed in Fly-By-Wire and autonomous modes (Plane)',
+    units: 'm/s',
+    min: 3,
+    max: 100,
+  },
+  AIRSPEED_MAX: {
+    description: 'Maximum airspeed allowed in Fly-By-Wire and autonomous modes (Plane)',
+    units: 'm/s',
+    min: 5,
+    max: 200,
+  },
   ARSPD_FBW_MIN: {
-    description: 'Minimum airspeed allowed in Fly-By-Wire and autonomous modes',
+    description: 'Minimum airspeed allowed in Fly-By-Wire and autonomous modes (legacy alias for AIRSPEED_MIN)',
     units: 'm/s',
     min: 3,
     max: 100,
   },
   ARSPD_FBW_MAX: {
-    description: 'Maximum airspeed allowed in Fly-By-Wire and autonomous modes',
+    description: 'Maximum airspeed allowed in Fly-By-Wire and autonomous modes (legacy alias for AIRSPEED_MAX)',
     units: 'm/s',
     min: 5,
     max: 200,
@@ -283,23 +295,94 @@ export const ARDUPILOT_PARAM_META: Record<string, ParamMeta> = {
   },
 };
 
-export function getParamMetadata(name: string): ParamMeta | null {
-  if (ARDUPILOT_PARAM_META[name]) {
-    return ARDUPILOT_PARAM_META[name];
+const PARAM_ALIASES: Record<string, string> = {
+  AIRSPEED_MIN: 'ARSPD_FBW_MIN',
+  ARSPD_FBW_MIN: 'AIRSPEED_MIN',
+  AIRSPEED_MAX: 'ARSPD_FBW_MAX',
+  ARSPD_FBW_MAX: 'AIRSPEED_MAX',
+};
+
+// Online ArduPilot metadata catalog loaded dynamically per vehicle
+const onlineCatalogs: Record<string, Record<string, ParamMeta>> = {};
+
+export async function fetchArduPilotParamCatalog(vehicleCategory: string): Promise<Record<string, ParamMeta> | null> {
+  const vehicleName =
+    vehicleCategory === 'plane'
+      ? 'ArduPlane'
+      : vehicleCategory === 'rover'
+        ? 'Rover'
+        : vehicleCategory === 'sub'
+          ? 'ArduSub'
+          : 'ArduCopter';
+
+  if (onlineCatalogs[vehicleName]) return onlineCatalogs[vehicleName];
+
+  try {
+    const url = `https://autotest.ardupilot.org/Parameters/${vehicleName}/apm.pdef.json`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const catalog: Record<string, ParamMeta> = {};
+    const params = json?.[vehicleName] || json?.params || json;
+    for (const [key, meta] of Object.entries(params as Record<string, any>)) {
+      if (meta && typeof meta === 'object') {
+        const pMeta: ParamMeta = {
+          description: meta.Description || meta.HumanName || '',
+          units: meta.Units,
+          values: meta.Values,
+        };
+        if (meta.Range && Array.isArray(meta.Range) && meta.Range.length >= 2) {
+          pMeta.min = Number(meta.Range[0]);
+          pMeta.max = Number(meta.Range[1]);
+        }
+        catalog[key.toUpperCase()] = pMeta;
+      }
+    }
+    onlineCatalogs[vehicleName] = catalog;
+    return catalog;
+  } catch {
+    return null;
   }
-  if (/^FLTMODE\d+$/.test(name)) {
+}
+
+export function getParamMetadata(name: string, vehicleCategory?: string): ParamMeta | null {
+  const upper = name.toUpperCase();
+  const vehicleName =
+    vehicleCategory === 'plane'
+      ? 'ArduPlane'
+      : vehicleCategory === 'rover'
+        ? 'Rover'
+        : vehicleCategory === 'sub'
+          ? 'ArduSub'
+          : 'ArduCopter';
+
+  if (onlineCatalogs[vehicleName]?.[upper]) {
+    return onlineCatalogs[vehicleName][upper];
+  }
+
+  if (ARDUPILOT_PARAM_META[upper]) {
+    return ARDUPILOT_PARAM_META[upper];
+  }
+
+  const alias = PARAM_ALIASES[upper];
+  if (alias) {
+    if (onlineCatalogs[vehicleName]?.[alias]) return onlineCatalogs[vehicleName][alias];
+    if (ARDUPILOT_PARAM_META[alias]) return ARDUPILOT_PARAM_META[alias];
+  }
+
+  if (/^FLTMODE\d+$/.test(upper)) {
     return {
       description: 'Flight mode assigned to RC mode switch position',
       min: 0,
       max: 27,
     };
   }
-  if (/^SERVO\d+_FUNCTION$/.test(name)) {
+  if (/^SERVO\d+_FUNCTION$/.test(upper)) {
     return {
       description: 'Output function assignment for this servo/motor channel',
     };
   }
-  if (/^SERVO\d+_(MIN|MAX|TRIM)$/.test(name)) {
+  if (/^SERVO\d+_(MIN|MAX|TRIM)$/.test(upper)) {
     return {
       description: 'PWM pulse limit or trim for this output channel',
       units: 'PWM',
@@ -307,7 +390,7 @@ export function getParamMetadata(name: string): ParamMeta | null {
       max: 2200,
     };
   }
-  if (/^RC\d+_(MIN|MAX|TRIM)$/.test(name)) {
+  if (/^RC\d+_(MIN|MAX|TRIM)$/.test(upper)) {
     return {
       description: 'Calibrated RC input PWM limit or center trim',
       units: 'PWM',
@@ -315,27 +398,27 @@ export function getParamMetadata(name: string): ParamMeta | null {
       max: 2200,
     };
   }
-  if (/^ATC_/.test(name)) {
+  if (/^ATC_/.test(upper)) {
     return {
       description: 'Attitude controller tuning gain or rate limit',
     };
   }
-  if (/^PSC_/.test(name)) {
+  if (/^PSC_/.test(upper)) {
     return {
       description: 'Position controller tuning gain',
     };
   }
-  if (/^MOT_/.test(name)) {
+  if (/^MOT_/.test(upper)) {
     return {
       description: 'Motor mixer, throttle curve, or spin threshold setting',
     };
   }
-  if (/^INS_/.test(name)) {
+  if (/^INS_/.test(upper)) {
     return {
       description: 'Inertial measurement unit (IMU) calibration or filter setting',
     };
   }
-  if (/^EK3_/.test(name)) {
+  if (/^EK3_/.test(upper)) {
     return {
       description: 'Extended Kalman Filter (EKF3) sensor fusion parameter',
     };
@@ -382,6 +465,28 @@ export function parseParamFile(content: string): Record<string, number> {
 }
 
 /**
+ * Format parameter value for display and serialization.
+ * Uses toPrecision(9) which is exact for IEEE-754 32-bit floats without dropping small exponents.
+ */
+export function formatParamValue(val: number): string {
+  if (Number.isInteger(val)) return String(val);
+  const str = Number(val).toPrecision(9);
+  return String(parseFloat(str));
+}
+
+/**
+ * Check if two parameter values are meaningfully different, combining relative tolerance
+ * with an absolute epsilon floor for values near zero.
+ */
+export function areParamsDifferent(val1?: number, val2?: number, relTol = 1e-6, absTol = 1e-12): boolean {
+  if (val1 === undefined || val2 === undefined) return val1 !== val2;
+  const diff = Math.abs(val1 - val2);
+  if (diff <= absTol) return false;
+  const maxAbs = Math.max(Math.abs(val1), Math.abs(val2));
+  return diff / maxAbs > relTol;
+}
+
+/**
  * Serialize a parameter map into a sorted ArduPilot `.param` file string.
  */
 export function serializeParamFile(params: Record<string, number>, firmwareVersion?: string | null): string {
@@ -394,7 +499,7 @@ export function serializeParamFile(params: Record<string, number>, firmwareVersi
   const sortedKeys = Object.keys(params).sort();
   const body = sortedKeys.map((key) => {
     const val = params[key];
-    const formatted = Number.isInteger(val) ? String(val) : Number(val.toFixed(6)).toString();
+    const formatted = formatParamValue(val);
     return `${key},${formatted}`;
   });
 

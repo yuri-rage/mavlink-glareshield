@@ -2,12 +2,20 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { paramManager, ParamManagerStatus } from '../../mavlink/paramManager';
-import { getParamMetadata, parseParamFile, serializeParamFile } from '../../mavlink/paramMetadata';
+import {
+  getParamMetadata,
+  parseParamFile,
+  serializeParamFile,
+  areParamsDifferent,
+  fetchArduPilotParamCatalog,
+} from '../../mavlink/paramMetadata';
+import { getVehicleCategory } from '../../mavlink/messages';
+import { decodePayload } from '../../mavlink/parser';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
-import { Sliders, RefreshCw, Check, Search, Zap, X, Download, Upload, AlertTriangle, Info } from 'lucide-react';
+import { Sliders, RefreshCw, Check, Search, Zap, X, Download, Upload, AlertTriangle, Info, Loader2 } from 'lucide-react';
 
 const ROW_HEIGHT = 38;
 const DEFAULT_VIEWPORT_HEIGHT = 440;
@@ -17,7 +25,7 @@ export function formatParamValue(val: number): string {
   if (val === undefined || val === null || isNaN(val)) return '-';
   if (Number.isInteger(val)) return val.toString();
   if (Math.abs(val) < 0.0001 && val !== 0) {
-    return Number(val.toPrecision(3)).toString();
+    return Number(val.toPrecision(9)).toString();
   }
   return parseFloat(val.toFixed(4)).toString();
 }
@@ -51,6 +59,15 @@ export const ParametersWidget: React.FC = () => {
   const [diffFileName, setDiffFileName] = useState('');
   const [diffEntries, setDiffEntries] = useState<ParamDiffEntry[]>([]);
   const [batchWriteStatus, setBatchWriteStatus] = useState<string | null>(null);
+  const [isBatchWriting, setIsBatchWriting] = useState(false);
+  const abortBatchRef = useRef<boolean>(false);
+
+  const heartbeatType = useTelemetryStore((s) => s.heartbeat.type);
+  const category = getVehicleCategory(heartbeatType);
+
+  useEffect(() => {
+    void fetchArduPilotParamCatalog(category);
+  }, [category]);
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -160,7 +177,7 @@ export const ParametersWidget: React.FC = () => {
 
     for (const [name, fileVal] of Object.entries(parsed)) {
       const current = parameters[name]?.value;
-      const isDifferent = current === undefined || Math.abs(current - fileVal) > 1e-5;
+      const isDifferent = current === undefined || areParamsDifferent(current, fileVal);
       if (isDifferent) {
         diffs.push({
           name,
@@ -178,28 +195,69 @@ export const ParametersWidget: React.FC = () => {
     setDiffModalOpen(true);
   };
 
-  const handleWriteSelectedDiffs = () => {
+  const handleWriteSelectedDiffs = async () => {
     const selected = diffEntries.filter((d) => d.selected);
     if (selected.length === 0) return;
+    setIsBatchWriting(true);
+    abortBatchRef.current = false;
     const hb = useTelemetryStore.getState().heartbeat;
-    let count = 0;
-    for (const entry of selected) {
+    const sysId = hb.systemId || 1;
+    const compId = hb.componentId || 1;
+
+    let confirmed = 0;
+    for (let i = 0; i < selected.length; i++) {
+      if (abortBatchRef.current) {
+        setBatchWriteStatus(`Batch write aborted (${confirmed}/${selected.length} confirmed).`);
+        setIsBatchWriting(false);
+        return;
+      }
+      const entry = selected[i];
+      setBatchWriteStatus(`Writing ${i + 1}/${selected.length}: ${entry.name} (${entry.fileValue})…`);
+
       const existing = parameters[entry.name];
-      const cmd = encoder.createParamSet(
-        hb.systemId || 1,
-        hb.componentId || 1,
-        entry.name,
-        entry.fileValue,
-        existing ? existing.type : 9
-      );
-      mavlinkConnection.send(cmd);
-      count++;
+      const pType = existing ? existing.type : 9;
+
+      const success = await new Promise<boolean>((resolve) => {
+        let timer: any = null;
+        let unsub: (() => void) | null = null;
+        const finish = (ok: boolean) => {
+          if (timer) clearTimeout(timer);
+          if (unsub) unsub();
+          resolve(ok);
+        };
+
+        unsub = mavlinkConnection.onPacket((packet) => {
+          if (packet.messageId === 22) {
+            // PARAM_VALUE
+            const data = decodePayload(packet.messageId, packet.payload);
+            const pId = data?.param_id?.trim();
+            if (pId === entry.name) {
+              finish(true);
+            }
+          }
+        });
+
+        timer = setTimeout(() => {
+          finish(false);
+        }, 850);
+
+        const cmd = encoder.createParamSet(sysId, compId, entry.name, entry.fileValue, pType);
+        const sent = mavlinkConnection.send(cmd);
+        if (!sent) finish(false);
+      });
+
+      if (success) confirmed++;
+      await new Promise((r) => setTimeout(r, 60));
     }
-    setBatchWriteStatus(`Sent ${count} PARAM_SET update${count === 1 ? '' : 's'} to vehicle.`);
+
+    setIsBatchWriting(false);
+    setBatchWriteStatus(`Batch write finished: ${confirmed}/${selected.length} confirmed by vehicle.`);
     setTimeout(() => {
-      setDiffModalOpen(false);
-      setBatchWriteStatus(null);
-    }, 1200);
+      if (!abortBatchRef.current) {
+        setDiffModalOpen(false);
+        setBatchWriteStatus(null);
+      }
+    }, 2000);
   };
 
   const filteredKeys = useMemo(() => {
@@ -207,18 +265,18 @@ export const ParametersWidget: React.FC = () => {
     const matched = paramKeys.filter((k) => {
       if (onlyModified) {
         const p = parameters[k];
-        if (!p || p.defaultValue === undefined || Math.abs(p.value - p.defaultValue) < 1e-6) {
+        if (!p || p.defaultValue === undefined || !areParamsDifferent(p.value, p.defaultValue)) {
           return false;
         }
       }
       if (!q) return true;
       if (k.toLowerCase().includes(q)) return true;
-      const meta = getParamMetadata(k);
+      const meta = getParamMetadata(k, category);
       if (meta && meta.description.toLowerCase().includes(q)) return true;
       return false;
     });
     return matched.sort((a, b) => a.localeCompare(b));
-  }, [paramKeys, parameters, search, onlyModified]);
+  }, [paramKeys, parameters, search, onlyModified, category]);
 
   const hasAnyDefaults = paramStatus.hasDefaults || Object.values(parameters).some((p) => p.defaultValue !== undefined);
 
@@ -652,8 +710,18 @@ export const ParametersWidget: React.FC = () => {
               )}
 
               {batchWriteStatus && (
-                <div className="p-2.5 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
-                  <Check className="h-4 w-4" />
+                <div
+                  className={`p-2.5 rounded-lg border text-xs flex items-center gap-2 ${
+                    isBatchWriting
+                      ? 'bg-sky-950/60 border-sky-500/40 text-sky-300'
+                      : 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                  }`}
+                >
+                  {isBatchWriting ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-sky-400 shrink-0" />
+                  ) : (
+                    <Check className="h-4 w-4 text-emerald-400 shrink-0" />
+                  )}
                   <span>{batchWriteStatus}</span>
                 </div>
               )}
@@ -665,17 +733,40 @@ export const ParametersWidget: React.FC = () => {
                 Review safety-critical parameters before writing to an active vehicle.
               </span>
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setDiffModalOpen(false)} className="h-8 text-xs">
-                  Close
-                </Button>
+                {isBatchWriting ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                      abortBatchRef.current = true;
+                    }}
+                    className="h-8 text-xs font-bold"
+                  >
+                    Abort Write
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDiffModalOpen(false)}
+                    className="h-8 text-xs"
+                  >
+                    Close
+                  </Button>
+                )}
                 {diffEntries.length > 0 && (
                   <Button
                     variant="default"
                     size="sm"
-                    disabled={!connected || diffEntries.filter((d) => d.selected).length === 0}
+                    disabled={
+                      !connected ||
+                      isBatchWriting ||
+                      diffEntries.filter((d) => d.selected).length === 0
+                    }
                     onClick={handleWriteSelectedDiffs}
-                    className="h-8 text-xs bg-sky-600 hover:bg-sky-500 text-white font-bold"
+                    className="h-8 text-xs bg-sky-600 hover:bg-sky-500 text-white font-bold gap-1.5"
                   >
+                    {isBatchWriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                     Write Selected ({diffEntries.filter((d) => d.selected).length}) to Vehicle
                   </Button>
                 )}
