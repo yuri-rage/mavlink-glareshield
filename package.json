@@ -17,6 +17,7 @@
     "test:review": "npm run test:ftp-sim && npm run test:regressions && npm run test:bridge-security"
   },
   "dependencies": {
+    "@diffusionstudio/vits-web": "^1.0.3",
     "clsx": "^2.1.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.475.0",

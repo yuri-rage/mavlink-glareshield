@@ -200,6 +200,12 @@ function ntripProxyPlugin() {
 
 export default defineConfig({
   plugins: [react(), ntripProxyPlugin()],
+  worker: {
+    format: 'es',
+  },
+  optimizeDeps: {
+    exclude: ['@diffusionstudio/vits-web', 'onnxruntime-web'],
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
