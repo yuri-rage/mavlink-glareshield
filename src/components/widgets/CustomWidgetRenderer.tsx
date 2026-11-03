@@ -25,6 +25,33 @@ interface CustomWidgetRendererProps {
   definition: CustomWidgetDefinition;
 }
 
+/**
+ * Scales a raw PWM value using ArduPilot min, max, and trim parameters to the [-1, 1] range.
+ * If pwm <= trim: (pwm - trim) / (trim - min)
+ * If pwm > trim: (pwm - trim) / (max - trim)
+ * Falls back to min=1000, trim=1500, max=2000 if parameters are missing.
+ */
+export function scalePwmToUnitRange(
+  pwm: number,
+  minParam: number = 1000,
+  maxParam: number = 2000,
+  trimParam: number = 1500
+): number {
+  if (pwm <= trimParam) {
+    if (trimParam > minParam) {
+      const scaled = (pwm - trimParam) / (trimParam - minParam);
+      return Math.max(-1, Math.min(1, scaled));
+    }
+    return 0;
+  } else {
+    if (maxParam > trimParam) {
+      const scaled = (pwm - trimParam) / (maxParam - trimParam);
+      return Math.max(-1, Math.min(1, scaled));
+    }
+    return 0;
+  }
+}
+
 export function extractBoundValueFromState(
   binding: CustomWidgetDefinition['binding'],
   state: any
@@ -32,6 +59,8 @@ export function extractBoundValueFromState(
   if (!binding) return null;
   const { messageName, fieldName, multiplier = 1, decimals = 1 } = binding;
   const msg = messageName.toUpperCase();
+  const isRcScaled = msg === 'RC_CHANNELS (SCALED)' || (msg.startsWith('RC_CHANNELS') && fieldName.includes('scaled'));
+  const isServoScaled = msg === 'SERVO_OUTPUT_RAW (SCALED)' || (msg.startsWith('SERVO_OUTPUT_RAW') && fieldName.includes('scaled'));
 
   const fieldAliases: Record<string, string> = {
     voltage_battery: 'voltage',
@@ -102,27 +131,46 @@ export function extractBoundValueFromState(
     rawVal = state.heartbeat?.[targetKey] ?? state.heartbeat?.[fieldName];
   } else if (msg === 'RAW_IMU' || msg === 'SCALED_IMU' || msg === 'HIGHRES_IMU') {
     rawVal = state.imu?.[targetKey] ?? state.imu?.[fieldName];
-  } else if (msg === 'RC_CHANNELS' || msg === 'RC_CHANNELS_RAW') {
+  } else if (msg === 'RC_CHANNELS' || msg === 'RC_CHANNELS_RAW' || msg === 'RC_CHANNELS (SCALED)') {
     if (fieldName === 'rssi') {
       const rssi = state.rc?.rssi;
       return (rssi === 255 || rssi === undefined) ? '--' : String(rssi);
     }
-    const chanMatch = fieldName.match(/^chan(\d+)_raw$/);
+    const chanMatch = fieldName.match(/^chan(\d+)(?:_raw|_scaled)?$/i);
     if (chanMatch) {
-      const idx = parseInt(chanMatch[1], 10) - 1;
+      const chNum = parseInt(chanMatch[1], 10);
+      const idx = chNum - 1;
       const chancount = state.rc?.chancount ?? 18;
       if (idx >= chancount) return '--';
       const val = state.rc?.channels?.[idx];
-      return (val === 65535 || val === undefined) ? '--' : String(val);
+      if (val === 65535 || val === undefined || (isRcScaled && val === 0)) return '--';
+      if (isRcScaled) {
+        const minP = state.parameters?.[`RC${chNum}_MIN`]?.value ?? 1000;
+        const maxP = state.parameters?.[`RC${chNum}_MAX`]?.value ?? 2000;
+        const trimP = state.parameters?.[`RC${chNum}_TRIM`]?.value ?? 1500;
+        rawVal = scalePwmToUnitRange(val, minP, maxP, trimP);
+      } else {
+        return String(val);
+      }
     } else {
       rawVal = state.rc?.[targetKey] ?? state.rc?.[fieldName];
       if (fieldName === 'rssi' && (rawVal === 255 || rawVal === undefined)) return '--';
     }
-  } else if (msg === 'SERVO_OUTPUT_RAW') {
-    const srvMatch = fieldName.match(/^servo(\d+)_raw$/);
+  } else if (msg === 'SERVO_OUTPUT_RAW' || msg === 'SERVO_OUTPUT_RAW (SCALED)') {
+    const srvMatch = fieldName.match(/^servo(\d+)(?:_raw|_scaled)?$/i);
     if (srvMatch) {
-      const idx = parseInt(srvMatch[1], 10) - 1;
-      rawVal = state.servo?.servos?.[idx];
+      const svNum = parseInt(srvMatch[1], 10);
+      const idx = svNum - 1;
+      const val = state.servo?.servos?.[idx];
+      if (val === 0 || val === 65535 || val === undefined) return '--';
+      if (isServoScaled) {
+        const minP = state.parameters?.[`SERVO${svNum}_MIN`]?.value ?? state.parameters?.[`RC${svNum}_MIN`]?.value ?? 1000;
+        const maxP = state.parameters?.[`SERVO${svNum}_MAX`]?.value ?? state.parameters?.[`RC${svNum}_MAX`]?.value ?? 2000;
+        const trimP = state.parameters?.[`SERVO${svNum}_TRIM`]?.value ?? state.parameters?.[`RC${svNum}_TRIM`]?.value ?? 1500;
+        rawVal = scalePwmToUnitRange(val, minP, maxP, trimP);
+      } else {
+        rawVal = val;
+      }
     } else {
       rawVal = state.servo?.[targetKey] ?? state.servo?.[fieldName];
     }
@@ -195,6 +243,28 @@ function extractMultiBarItems(group: MultiBarGroupType, state: any): MultiBarIte
         };
       });
     }
+    case 'rc-8-scaled': {
+      const ch = state.rc?.channels ?? [];
+      const chancount = state.rc?.chancount ?? 8;
+      const count = Math.max(0, Math.min(8, chancount));
+      return Array.from({ length: count }, (_, i) => {
+        const val = ch[i];
+        const isUnused = val === 65535 || val === undefined || val === 0;
+        const chNum = i + 1;
+        const minP = state.parameters?.[`RC${chNum}_MIN`]?.value ?? 1000;
+        const maxP = state.parameters?.[`RC${chNum}_MAX`]?.value ?? 2000;
+        const trimP = state.parameters?.[`RC${chNum}_TRIM`]?.value ?? 1500;
+        const scaled = isUnused ? 0 : scalePwmToUnitRange(val, minP, maxP, trimP);
+        return {
+          label: `CH${chNum}`,
+          value: Number(scaled.toFixed(2)),
+          min: -1,
+          max: 1,
+          unit: '',
+          displayValue: isUnused ? '--' : scaled.toFixed(2),
+        };
+      });
+    }
     case 'servo-8': {
       const sv = state.servo?.servos ?? [];
       return Array.from({ length: 8 }, (_, i) => {
@@ -207,6 +277,26 @@ function extractMultiBarItems(group: MultiBarGroupType, state: any): MultiBarIte
           max: 2000,
           unit: 'µs',
           displayValue: isUnused ? '--' : `${val} µs`,
+        };
+      });
+    }
+    case 'servo-8-scaled': {
+      const sv = state.servo?.servos ?? [];
+      return Array.from({ length: 8 }, (_, i) => {
+        const val = sv[i];
+        const isUnused = val === 0 || val === 65535 || val === undefined;
+        const svNum = i + 1;
+        const minP = state.parameters?.[`SERVO${svNum}_MIN`]?.value ?? state.parameters?.[`RC${svNum}_MIN`]?.value ?? 1000;
+        const maxP = state.parameters?.[`SERVO${svNum}_MAX`]?.value ?? state.parameters?.[`RC${svNum}_MAX`]?.value ?? 2000;
+        const trimP = state.parameters?.[`SERVO${svNum}_TRIM`]?.value ?? state.parameters?.[`RC${svNum}_TRIM`]?.value ?? 1500;
+        const scaled = isUnused ? 0 : scalePwmToUnitRange(val, minP, maxP, trimP);
+        return {
+          label: `S${svNum}`,
+          value: Number(scaled.toFixed(2)),
+          min: -1,
+          max: 1,
+          unit: '',
+          displayValue: isUnused ? '--' : scaled.toFixed(2),
         };
       });
     }
@@ -283,7 +373,9 @@ function extractMultiBarItems(group: MultiBarGroupType, state: any): MultiBarIte
 
 const MULTI_BAR_MSG_ID: Record<MultiBarGroupType, number> = {
   'rc-8': MAVLINK_MSG_ID.RC_CHANNELS,
+  'rc-8-scaled': MAVLINK_MSG_ID.RC_CHANNELS,
   'servo-8': MAVLINK_MSG_ID.SERVO_OUTPUT_RAW,
+  'servo-8-scaled': MAVLINK_MSG_ID.SERVO_OUTPUT_RAW,
   'esc-rpm': MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4,
   'esc-temp': MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4,
   'esc-current': MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4,
@@ -391,7 +483,8 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
       return;
     }
     if (!definition.binding?.messageName) return;
-    const msgId = (MAVLINK_MSG_ID as any)[definition.binding.messageName.toUpperCase()];
+    const cleanMsg = definition.binding.messageName.replace(/\s*\(scaled\)$/i, '').trim().toUpperCase();
+    const msgId = (MAVLINK_MSG_ID as any)[cleanMsg];
     if (msgId !== undefined) {
       messageRateManager.registerRequirement(`custom-${definition.id}`, msgId);
       return () => {
@@ -726,7 +819,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
             {multiBarItems.map((item) => {
               const isUnused = item.displayValue === '--';
               const barPct =
-                isUnused || item.value === 0
+                isUnused || (item.value === 0 && item.min >= 0)
                   ? 0
                   : item.max > item.min
                     ? Math.max(0, Math.min(100, ((item.value - item.min) / (item.max - item.min)) * 100))
@@ -748,6 +841,9 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                     </span>
                   </div>
                   <div className="w-full bg-zinc-900 h-2 rounded overflow-hidden border border-zinc-800/80 relative">
+                    {item.min < 0 && (
+                      <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-zinc-600/80 z-10 -translate-x-1/2" />
+                    )}
                     <div
                       className={`h-full ${barColor} transition-all duration-150`}
                       style={{ width: `${barPct}%` }}

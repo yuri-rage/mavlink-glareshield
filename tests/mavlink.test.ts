@@ -6,6 +6,8 @@ import {
   getVehicleCategoryLabel,
   getVehicleModeName,
   getVehicleFlightModes,
+  getAllVehicleFlightModes,
+  MAV_TYPE,
 } from '../src/mavlink/messages.ts';
 
 const encoder = new MavlinkEncoder(255, 190);
@@ -706,6 +708,40 @@ if (getVehicleModeName(12, 9) !== 'SURFACE' || getVehicleModeName(12, 16) !== 'P
   process.exit(1);
 }
 
+// 11c. Test getAllVehicleFlightModes (Rover vs Boat, Plane, Copter)
+const roverAllModes = getAllVehicleFlightModes(MAV_TYPE.GROUND_ROVER);
+const boatAllModes = getAllVehicleFlightModes(MAV_TYPE.SURFACE_BOAT);
+const planeAllModes = getAllVehicleFlightModes(MAV_TYPE.FIXED_WING);
+const copterAllModes = getAllVehicleFlightModes(MAV_TYPE.QUADROTOR);
+
+// Rover has STEERING (3) before LOITER (5), Boat has LOITER (5) before STEERING (3)
+const roverSteeringIdx = roverAllModes.findIndex((m) => m.mode === 3);
+const roverLoiterIdx = roverAllModes.findIndex((m) => m.mode === 5);
+const boatLoiterIdx = boatAllModes.findIndex((m) => m.mode === 5);
+const boatSteeringIdx = boatAllModes.findIndex((m) => m.mode === 3);
+
+if (roverSteeringIdx === -1 || roverLoiterIdx === -1 || roverSteeringIdx >= roverLoiterIdx) {
+  console.error('Rover modes should have STEERING before LOITER!', { roverSteeringIdx, roverLoiterIdx });
+  process.exit(1);
+}
+if (boatLoiterIdx === -1 || boatSteeringIdx === -1 || boatLoiterIdx >= boatSteeringIdx) {
+  console.error('Boat modes should prioritize LOITER before STEERING!', { boatLoiterIdx, boatSteeringIdx });
+  process.exit(1);
+}
+if (!planeAllModes.some((m) => m.mode === 10) || !planeAllModes.some((m) => m.mode === 13)) {
+  console.error('Plane modes must include AUTO (10) and TAKEOFF (13)!');
+  process.exit(1);
+}
+if (!copterAllModes.some((m) => m.mode === 3) || !copterAllModes.some((m) => m.mode === 5)) {
+  console.error('Copter modes must include AUTO (3) and LOITER (5)!');
+  process.exit(1);
+}
+if (planeAllModes.some((m) => m.mode === 16) || roverAllModes.some((m) => m.mode === 16)) {
+  console.error('Flight modes must not include internal non-flight mode INITIALISING (16)!');
+  process.exit(1);
+}
+console.log('getAllVehicleFlightModes resolution & boat loiter priority verified successfully!');
+
 // 11c. Test Glareshield Vehicle Flight Mode Selection Sets
 const roverModes = getVehicleFlightModes(10);
 const roverLabels = roverModes.map((m) => m.label);
@@ -1045,7 +1081,7 @@ if (Math.abs(decodedHighres.nz - 2.0) > 0.01) {
 console.log('IMU and Nz load factor decoding verified successfully!');
 
 // 19. Test Extended Telemetry Store Slices, Custom Widget Value Extraction & Dashboard Reordering
-import { extractBoundValueFromState } from '../src/components/widgets/CustomWidgetRenderer.tsx';
+import { extractBoundValueFromState, scalePwmToUnitRange } from '../src/components/widgets/CustomWidgetRenderer.tsx';
 import { useDashboardStore } from '../src/store/dashboardStore.ts';
 
 // Test WIND (msg 168) -> store & custom widget binding
@@ -1103,6 +1139,81 @@ if (boundRc3 !== '1850') {
   console.error('extractBoundValueFromState(RC_CHANNELS.chan3_raw) expected "1850", got:', boundRc3);
   process.exit(1);
 }
+
+// Test scalePwmToUnitRange
+if (scalePwmToUnitRange(1500, 1000, 2000, 1500) !== 0) {
+  console.error('scalePwmToUnitRange at trim should be 0!');
+  process.exit(1);
+}
+if (scalePwmToUnitRange(1000, 1000, 2000, 1500) !== -1) {
+  console.error('scalePwmToUnitRange at min should be -1!');
+  process.exit(1);
+}
+if (scalePwmToUnitRange(2000, 1000, 2000, 1500) !== 1) {
+  console.error('scalePwmToUnitRange at max should be 1!');
+  process.exit(1);
+}
+if (Math.abs(scalePwmToUnitRange(1750, 1000, 2000, 1500) - 0.5) > 0.001) {
+  console.error('scalePwmToUnitRange at halfway should be 0.5!');
+  process.exit(1);
+}
+// Asymmetric calibration
+if (scalePwmToUnitRange(1520, 1100, 1940, 1520) !== 0) {
+  console.error('scalePwmToUnitRange asymmetric trim should be 0!');
+  process.exit(1);
+}
+if (scalePwmToUnitRange(1100, 1100, 1940, 1520) !== -1) {
+  console.error('scalePwmToUnitRange asymmetric min should be -1!');
+  process.exit(1);
+}
+if (scalePwmToUnitRange(1940, 1100, 1940, 1520) !== 1) {
+  console.error('scalePwmToUnitRange asymmetric max should be 1!');
+  process.exit(1);
+}
+
+// Test extractBoundValueFromState with scaled RC channels and parameters
+useTelemetryStore.setState((s) => ({
+  ...s,
+  parameters: {
+    ...s.parameters,
+    RC3_MIN: { value: 1000, type: 9, index: 1 },
+    RC3_MAX: { value: 2000, type: 9, index: 2 },
+    RC3_TRIM: { value: 1500, type: 9, index: 3 },
+  },
+}));
+// rcPayload has chan3 = 1850. With 1000/1500/2000, (1850-1500)/(2000-1500) = 350/500 = 0.70
+const boundRc3Scaled = extractBoundValueFromState(
+  { messageName: 'RC_CHANNELS (scaled)', fieldName: 'chan3_scaled', decimals: 2 },
+  useTelemetryStore.getState()
+);
+if (boundRc3Scaled !== '0.70') {
+  console.error('extractBoundValueFromState(RC_CHANNELS (scaled).chan3_scaled) expected "0.70", got:', boundRc3Scaled);
+  process.exit(1);
+}
+
+// Test SERVO_OUTPUT_RAW scaled with servo parameters
+useTelemetryStore.setState((s) => ({
+  ...s,
+  servo: {
+    ...s.servo,
+    servos: [1500, 1100, 1900, 0],
+  },
+  parameters: {
+    ...s.parameters,
+    SERVO2_MIN: { value: 1100, type: 9, index: 4 },
+    SERVO2_MAX: { value: 1900, type: 9, index: 5 },
+    SERVO2_TRIM: { value: 1500, type: 9, index: 6 },
+  },
+}));
+const boundServo2Scaled = extractBoundValueFromState(
+  { messageName: 'SERVO_OUTPUT_RAW (scaled)', fieldName: 'servo2_scaled', decimals: 2 },
+  useTelemetryStore.getState()
+);
+if (boundServo2Scaled !== '-1.00') {
+  console.error('extractBoundValueFromState(SERVO_OUTPUT_RAW (scaled).servo2_scaled) expected "-1.00", got:', boundServo2Scaled);
+  process.exit(1);
+}
+console.log('RC and Servo parameter-based scaling (-1 to 1) verified successfully!');
 
 // Test DashboardStore drag-and-drop reorderWidgetsInActiveTab & reorderTabs
 useDashboardStore.getState().resetToDefaults();

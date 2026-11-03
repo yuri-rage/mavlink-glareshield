@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CustomWidgetDefinition, PlacedWidget } from '../../types/widget';
-import { GlareshieldWidget } from '../glareshield/GlareshieldWidget';
+import { GlareshieldWidget, AllFlightModesWidget, SetSpeedWidget } from '../glareshield/GlareshieldWidget';
 import { HudWidget } from '../hud/HudWidget';
 import { MapWidget } from '../map/MapWidget';
 import { BatteryWidget } from '../widgets/BatteryWidget';
@@ -73,7 +73,10 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
 
   const getWidgetTitle = (widgetId: string): string => {
     const BUILTIN_TITLES: Record<string, string> = {
-      'built-in-glareshield': 'Flight Controls',
+      'built-in-glareshield': 'Flight Controls (Arming & Quick Modes)',
+      'built-in-arm-modes': 'Flight Controls (Arming & Quick Modes)',
+      'built-in-all-modes': 'All Flight Modes',
+      'built-in-set-speed': 'Set Speed',
       'built-in-hud': 'Heads-Up Display (HUD)',
       'built-in-pfd': 'Heads-Up Display (HUD)',
       'built-in-map': 'Tactical Map',
@@ -113,7 +116,12 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
     // Check built-in widgets
     switch (widgetId) {
       case 'built-in-glareshield':
+      case 'built-in-arm-modes':
         return <GlareshieldWidget />;
+      case 'built-in-all-modes':
+        return <AllFlightModesWidget />;
+      case 'built-in-set-speed':
+        return <SetSpeedWidget />;
       case 'built-in-hud':
       case 'built-in-pfd':
         return <HudWidget />;

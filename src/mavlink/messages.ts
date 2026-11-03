@@ -439,6 +439,124 @@ export function getVehicleFlightModes(type: number): { label: string; mode: numb
   }
 }
 
+export function getAllVehicleFlightModes(type: number): { label: string; mode: number }[] {
+  const category = getVehicleCategory(type);
+  switch (category) {
+    case 'rover': {
+      const isBoat = type === MAV_TYPE.SURFACE_BOAT;
+      if (isBoat) {
+        return [
+          { label: 'HOLD', mode: 4 },
+          { label: 'MANUAL', mode: 0 },
+          { label: 'LOITER', mode: 5 },
+          { label: 'STEERING', mode: 3 },
+          { label: 'ACRO', mode: 1 },
+          { label: 'AUTO', mode: 10 },
+          { label: 'RTL', mode: 11 },
+          { label: 'SMART RTL', mode: 12 },
+          { label: 'GUIDED', mode: 15 },
+          { label: 'GUIDED NO GPS', mode: 14 },
+          { label: 'FOLLOW', mode: 6 },
+          { label: 'SIMPLE', mode: 7 },
+          { label: 'DOCK', mode: 8 },
+          { label: 'CIRCLE', mode: 9 },
+        ];
+      }
+      return [
+        { label: 'HOLD', mode: 4 },
+        { label: 'MANUAL', mode: 0 },
+        { label: 'STEERING', mode: 3 },
+        { label: 'ACRO', mode: 1 },
+        { label: 'AUTO', mode: 10 },
+        { label: 'LOITER', mode: 5 },
+        { label: 'RTL', mode: 11 },
+        { label: 'SMART RTL', mode: 12 },
+        { label: 'GUIDED', mode: 15 },
+        { label: 'GUIDED NO GPS', mode: 14 },
+        { label: 'FOLLOW', mode: 6 },
+        { label: 'SIMPLE', mode: 7 },
+        { label: 'DOCK', mode: 8 },
+        { label: 'CIRCLE', mode: 9 },
+      ];
+    }
+    case 'plane':
+      return [
+        { label: 'MANUAL', mode: 0 },
+        { label: 'FBWA', mode: 5 },
+        { label: 'FBWB', mode: 6 },
+        { label: 'CRUISE', mode: 7 },
+        { label: 'LOITER', mode: 12 },
+        { label: 'AUTO', mode: 10 },
+        { label: 'RTL', mode: 11 },
+        { label: 'GUIDED', mode: 15 },
+        { label: 'TAKEOFF', mode: 13 },
+        { label: 'STABILIZE', mode: 2 },
+        { label: 'TRAINING', mode: 3 },
+        { label: 'ACRO', mode: 4 },
+        { label: 'AUTOTUNE', mode: 8 },
+        { label: 'CIRCLE', mode: 1 },
+        { label: 'THERMAL', mode: 24 },
+        { label: 'AVOID ADSB', mode: 14 },
+        { label: 'QSTABILIZE', mode: 17 },
+        { label: 'QHOVER', mode: 18 },
+        { label: 'QLOITER', mode: 19 },
+        { label: 'QLAND', mode: 20 },
+        { label: 'QRTL', mode: 21 },
+        { label: 'QAUTOTUNE', mode: 22 },
+        { label: 'QACRO', mode: 23 },
+      ];
+    case 'sub':
+      return [
+        { label: 'MANUAL', mode: 19 },
+        { label: 'STABILIZE', mode: 0 },
+        { label: 'ALT HOLD', mode: 2 },
+        { label: 'POSHOLD', mode: 16 },
+        { label: 'AUTO', mode: 3 },
+        { label: 'GUIDED', mode: 4 },
+        { label: 'SURFACE', mode: 9 },
+        { label: 'SURFTRAK', mode: 21 },
+        { label: 'CIRCLE', mode: 7 },
+        { label: 'ACRO', mode: 1 },
+      ];
+    case 'tracker':
+      return [
+        { label: 'MANUAL', mode: 0 },
+        { label: 'STOP', mode: 1 },
+        { label: 'SCAN', mode: 2 },
+        { label: 'SERVO TEST', mode: 3 },
+        { label: 'AUTO', mode: 10 },
+      ];
+    case 'copter':
+    default:
+      return [
+        { label: 'STABILIZE', mode: 0 },
+        { label: 'ALT HOLD', mode: 2 },
+        { label: 'LOITER', mode: 5 },
+        { label: 'POSHOLD', mode: 16 },
+        { label: 'AUTO', mode: 3 },
+        { label: 'GUIDED', mode: 4 },
+        { label: 'RTL', mode: 6 },
+        { label: 'SMART RTL', mode: 21 },
+        { label: 'LAND', mode: 9 },
+        { label: 'BRAKE', mode: 17 },
+        { label: 'ACRO', mode: 1 },
+        { label: 'SPORT', mode: 13 },
+        { label: 'DRIFT', mode: 11 },
+        { label: 'CIRCLE', mode: 7 },
+        { label: 'FOLLOW', mode: 23 },
+        { label: 'AUTOTUNE', mode: 15 },
+        { label: 'FLIP', mode: 14 },
+        { label: 'THROW', mode: 18 },
+        { label: 'AUTOROTATE', mode: 26 },
+        { label: 'FLOWHOLD', mode: 22 },
+        { label: 'ZIGZAG', mode: 24 },
+        { label: 'GUIDED NOGPS', mode: 20 },
+        { label: 'AVOID ADSB', mode: 19 },
+        { label: 'AUTO RTL', mode: 27 },
+      ];
+  }
+}
+
 export function getGuidedModeNum(type: number): number {
   const category = getVehicleCategory(type);
   if (category === 'plane' || category === 'rover') {

@@ -37,6 +37,28 @@ export const COMMON_FIELDS: Record<string, string[]> = {
     'chan10_raw',
     'chan11_raw',
     'chan12_raw',
+    'chan13_raw',
+    'chan14_raw',
+    'chan15_raw',
+    'chan16_raw',
+  ],
+  'RC_CHANNELS (scaled)': [
+    'chan1_scaled',
+    'chan2_scaled',
+    'chan3_scaled',
+    'chan4_scaled',
+    'chan5_scaled',
+    'chan6_scaled',
+    'chan7_scaled',
+    'chan8_scaled',
+    'chan9_scaled',
+    'chan10_scaled',
+    'chan11_scaled',
+    'chan12_scaled',
+    'chan13_scaled',
+    'chan14_scaled',
+    'chan15_scaled',
+    'chan16_scaled',
   ],
   SERVO_OUTPUT_RAW: [
     'servo1_raw',
@@ -51,6 +73,28 @@ export const COMMON_FIELDS: Record<string, string[]> = {
     'servo10_raw',
     'servo11_raw',
     'servo12_raw',
+    'servo13_raw',
+    'servo14_raw',
+    'servo15_raw',
+    'servo16_raw',
+  ],
+  'SERVO_OUTPUT_RAW (scaled)': [
+    'servo1_scaled',
+    'servo2_scaled',
+    'servo3_scaled',
+    'servo4_scaled',
+    'servo5_scaled',
+    'servo6_scaled',
+    'servo7_scaled',
+    'servo8_scaled',
+    'servo9_scaled',
+    'servo10_scaled',
+    'servo11_scaled',
+    'servo12_scaled',
+    'servo13_scaled',
+    'servo14_scaled',
+    'servo15_scaled',
+    'servo16_scaled',
   ],
   NAV_CONTROLLER_OUTPUT: [
     'wp_dist',
@@ -429,7 +473,9 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                 className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs font-mono text-zinc-200"
               >
                 <option value="rc-8">RC_CHANNELS: Radio Input Channels 1–8 (1000–2000 µs)</option>
+                <option value="rc-8-scaled">RC_CHANNELS (scaled): Radio Input Channels 1–8 (-1.0 to 1.0)</option>
                 <option value="servo-8">SERVO_OUTPUT_RAW: Motor / Servo Outputs 1–8 (1000–2000 µs)</option>
+                <option value="servo-8-scaled">SERVO_OUTPUT_RAW (scaled): Motor / Servo Outputs 1–8 (-1.0 to 1.0)</option>
                 <option value="esc-rpm">ESC_TELEMETRY_1_TO_4: ESC 1–4 Motor Speed (RPM)</option>
                 <option value="esc-temp">ESC_TELEMETRY_1_TO_4: ESC 1–4 Temperature (°C)</option>
                 <option value="esc-current">ESC_TELEMETRY_1_TO_4: ESC 1–4 Current Draw (A)</option>
@@ -572,6 +618,17 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                       setMessageName(msg);
                       if (COMMON_FIELDS[msg]?.length) {
                         setFieldName(COMMON_FIELDS[msg][0]);
+                      }
+                      if (msg === 'RC_CHANNELS (scaled)' || msg === 'SERVO_OUTPUT_RAW (scaled)') {
+                        setMinVal('-1');
+                        setMaxVal('1');
+                        setUnit('');
+                        setDecimals('2');
+                      } else if (msg === 'RC_CHANNELS' || msg === 'SERVO_OUTPUT_RAW') {
+                        setMinVal('1000');
+                        setMaxVal('2000');
+                        setUnit('µs');
+                        setDecimals('0');
                       }
                     }}
                     className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs font-mono text-zinc-200"

@@ -14,7 +14,9 @@ export type WidgetDisplayType =
 
 export type MultiBarGroupType =
   | 'rc-8'
+  | 'rc-8-scaled'
   | 'servo-8'
+  | 'servo-8-scaled'
   | 'esc-rpm'
   | 'esc-temp'
   | 'esc-current'

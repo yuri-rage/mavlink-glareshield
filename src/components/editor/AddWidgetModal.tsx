@@ -8,6 +8,7 @@ import { MAV_CMD } from '../../mavlink/messages';
 import {
   Compass,
   Radio,
+  Shield,
   MapPin,
   Milestone,
   Battery,
@@ -42,11 +43,27 @@ interface AddWidgetModalProps {
 const BUILT_IN_CATALOG = [
   {
     id: 'built-in-glareshield',
-    name: 'Autopilot Glareshield Panel',
+    name: 'Flight Controls (Arming & Quick Modes)',
     category: 'control',
-    description: 'Arm/Disarm slider, flight mode switcher, and target speed controls.',
-    icon: Radio,
+    description: 'Safety master arm/disarm slider and quick mode selector buttons.',
+    icon: Shield,
     defaultSpan: 12,
+  },
+  {
+    id: 'built-in-all-modes',
+    name: 'All Flight Modes',
+    category: 'control',
+    description: 'Full grid of all selectable flight modes for the active vehicle type with live status.',
+    icon: Sliders,
+    defaultSpan: 12,
+  },
+  {
+    id: 'built-in-set-speed',
+    name: 'Set Speed Controller',
+    category: 'control',
+    description: 'Command vehicle target cruising or navigation speed with live speed indicator.',
+    icon: Gauge,
+    defaultSpan: 6,
   },
   {
     id: 'built-in-hud',
