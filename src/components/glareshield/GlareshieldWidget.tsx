@@ -67,7 +67,6 @@ export const GlareshieldWidget: React.FC = () => {
   const vfr = useTelemetryStore((state) => state.vfr);
   const gps = useTelemetryStore((state) => state.gps);
   const commandFeedback = useTelemetryStore((state) => state.commandFeedback);
-  const clearCommandFeedback = useTelemetryStore((state) => state.clearCommandFeedback);
   const { formatSpeed, system, isImperial } = useUnitsStore();
   const altUnit = isImperial() ? 'ft' : 'm';
   const [manualTargetSpeedMs, setManualTargetSpeedMs] = useState<number | null>(null);
@@ -89,16 +88,6 @@ export const GlareshieldWidget: React.FC = () => {
       messageRateManager.unregisterRequirement('glareshield-vfr');
     };
   }, []);
-
-  // Auto-dismiss ACCEPTED command feedback after 3.5s
-  useEffect(() => {
-    if (!commandFeedback || commandFeedback.status === 'pending') return;
-    const delay = commandFeedback.status === 'accepted' ? 3500 : 9000;
-    const t = setTimeout(() => {
-      clearCommandFeedback();
-    }, delay);
-    return () => clearTimeout(t);
-  }, [commandFeedback, clearCommandFeedback]);
 
   const encoder = mavlinkConnection.getEncoder();
   const category = getVehicleCategory(heartbeat.type);
@@ -407,54 +396,8 @@ export const GlareshieldWidget: React.FC = () => {
   };
 
   return (
-    <Card className="border-sky-500/20 bg-zinc-950/90 shadow-xl overflow-hidden relative">
-      <CardContent className="p-2.5 sm:p-4 space-y-3 relative">
-        {/* Inline Command Feedback Banner - absolute overlay so it does NOT shift layout */}
-        {commandFeedback && (
-          <div
-            role="status"
-            aria-live="polite"
-            className={`absolute top-2 left-2.5 right-2.5 sm:top-2.5 sm:left-4 sm:right-4 z-30 flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs font-sans shadow-xl backdrop-blur-md transition-all ${
-              commandFeedback.status === 'pending'
-                ? 'bg-sky-950/95 border-sky-700/80 text-sky-200'
-                : commandFeedback.status === 'accepted'
-                  ? 'bg-emerald-950/95 border-emerald-700/80 text-emerald-200'
-                  : 'bg-rose-950/95 border-rose-600/80 text-rose-100'
-            }`}
-          >
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              {commandFeedback.status === 'pending' ? (
-                <Loader2 className="h-4 w-4 animate-spin text-sky-400 shrink-0" />
-              ) : commandFeedback.status === 'accepted' ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-              ) : (
-                <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
-              )}
-              <div className="min-w-0 flex-1">
-                <span className="font-bold">{commandFeedback.label}:</span>{' '}
-                <span className="font-mono font-semibold">
-                  {commandFeedback.status === 'pending'
-                    ? 'AWAITING ACK…'
-                    : commandFeedback.resultText ?? commandFeedback.status.toUpperCase()}
-                </span>
-                {commandFeedback.reason && (
-                  <span className="ml-1.5 text-amber-200 font-medium">
-                    — {commandFeedback.reason}
-                  </span>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={clearCommandFeedback}
-              className="text-zinc-400 hover:text-white p-0.5 rounded shrink-0"
-              title="Dismiss command status"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
-
+    <Card className="border-sky-500/20 bg-zinc-950/90 shadow-xl overflow-hidden">
+      <CardContent className="p-2.5 sm:p-4 space-y-3">
         {/* Top Control Bar: Arming Slider & Emergency Action Buttons */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 sm:gap-3 items-center">
           {/* Arm / Disarm Interlock */}

@@ -29,6 +29,7 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  X,
   Sun,
   Moon,
   Volume2,
@@ -65,6 +66,8 @@ export const Navbar: React.FC = () => {
   const accumulatedArmedMs = useTelemetryStore((state) => state.accumulatedArmedMs);
   const firmwareVersion = useTelemetryStore((state) => state.firmwareVersion);
   const firmwareRaw = useTelemetryStore((state) => state.firmwareRaw);
+  const commandFeedback = useTelemetryStore((state) => state.commandFeedback);
+  const clearCommandFeedback = useTelemetryStore((state) => state.clearCommandFeedback);
   const {
     system: unitSystem,
     setSystem: setUnitSystem,
@@ -123,6 +126,16 @@ export const Navbar: React.FC = () => {
       }
     } catch {}
   }, [daylightMode]);
+
+  // Auto-dismiss command feedback notification after 3.5s (or 9s on error)
+  useEffect(() => {
+    if (!commandFeedback || commandFeedback.status === 'pending') return;
+    const delay = commandFeedback.status === 'accepted' ? 3500 : 9000;
+    const t = setTimeout(() => {
+      clearCommandFeedback();
+    }, delay);
+    return () => clearTimeout(t);
+  }, [commandFeedback, clearCommandFeedback]);
 
   // Close menus on click outside
   useEffect(() => {
@@ -711,8 +724,9 @@ export const Navbar: React.FC = () => {
         )}
 
         {/* Persistent Global Telemetry Status Strip (Health First, Battery, GPS, Alt/Spd, Home, Flight Time) */}
-        <div className="border-t border-zinc-800/80 bg-zinc-900/70 px-2.5 sm:px-6 py-1 flex items-center gap-3 sm:gap-5 text-[11px] font-mono overflow-x-auto no-scrollbar">
-          {/* Pre-Arm & Subsystem Health Pill + Popover (Rank 3 - first on mobile for immediate visibility) */}
+        <div className="relative border-t border-zinc-800/80 bg-zinc-900/70 min-h-[30px] flex items-center overflow-hidden">
+          <div className="px-2.5 sm:px-6 py-1 flex items-center gap-3 sm:gap-5 text-[11px] font-mono overflow-x-auto no-scrollbar w-full">
+            {/* Pre-Arm & Subsystem Health Pill + Popover (Rank 3 - first on mobile for immediate visibility) */}
           <div className="relative shrink-0" ref={preArmMenuRef}>
             <button
               type="button"
@@ -958,7 +972,54 @@ export const Navbar: React.FC = () => {
             <span className="font-bold text-zinc-200">{formatDurationClock(totalArmedMs)}</span>
           </div>
         </div>
-      </header>
+
+        {/* Global Toast Notification overlay on top of the status bar */}
+        {commandFeedback && (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`absolute inset-0 z-30 px-3 sm:px-6 flex items-center justify-between gap-2 text-xs font-sans transition-all animate-in fade-in duration-150 ${
+              commandFeedback.status === 'pending'
+                ? 'bg-sky-950/95 border-y border-sky-600/70 text-sky-200'
+                : commandFeedback.status === 'accepted'
+                  ? 'bg-emerald-950/95 border-y border-emerald-600/70 text-emerald-200'
+                  : 'bg-rose-950/95 border-rose-600/70 text-rose-100'
+            }`}
+          >
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {commandFeedback.status === 'pending' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400 shrink-0" />
+              ) : commandFeedback.status === 'accepted' ? (
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+              ) : (
+                <AlertTriangle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+              )}
+              <div className="min-w-0 flex-1 truncate text-[11px] sm:text-xs">
+                <span className="font-bold">{commandFeedback.label}:</span>{' '}
+                <span className="font-mono font-semibold">
+                  {commandFeedback.status === 'pending'
+                    ? 'AWAITING ACK…'
+                    : commandFeedback.resultText ?? commandFeedback.status.toUpperCase()}
+                </span>
+                {commandFeedback.reason && (
+                  <span className="ml-1.5 text-amber-300 font-medium font-sans">
+                    — {commandFeedback.reason}
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={clearCommandFeedback}
+              className="text-zinc-400 hover:text-white p-1 rounded shrink-0 transition-colors"
+              title="Dismiss notification"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
+    </header>
 
       {/* Link & Display Settings Modal */}
       <Modal
