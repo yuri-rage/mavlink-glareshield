@@ -121,7 +121,7 @@ export const useUnitsStore = create<UnitsState>((set, get) => ({
       const fpm = m_s * 196.85;
       const sign = fpm >= 0 ? '+' : '';
       const val = `${sign}${Math.round(fpm)}`;
-      return { value: val, unit: 'ft/min', full: `${val} ft/min` };
+      return { value: val, unit: 'fpm', full: `${val} fpm` };
     }
     const sign = m_s >= 0 ? '+' : '';
     const val = `${sign}${m_s.toFixed(1)}`;

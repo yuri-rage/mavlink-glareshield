@@ -909,8 +909,8 @@ if (spdKmh.unit !== 'km/h' || spdKmh.value !== '36.0' || altKmh.unit !== 'm' || 
 useUnitsStore.getState().setSystem('mph');
 const spdMph = useUnitsStore.getState().formatSpeed(10); // 10 m/s ~ 22.4 mph
 const altMph = useUnitsStore.getState().formatAltitude(100); // 100 m ~ 328 ft
-const climbMph = useUnitsStore.getState().formatClimb(2.5); // 2.5 m/s ~ +492 ft/min
-if (spdMph.unit !== 'mph' || spdMph.value !== '22.4' || altMph.unit !== 'ft' || climbMph.unit !== 'ft/min') {
+const climbMph = useUnitsStore.getState().formatClimb(2.5); // 2.5 m/s ~ +492 fpm
+if (spdMph.unit !== 'mph' || spdMph.value !== '22.4' || altMph.unit !== 'ft' || climbMph.unit !== 'fpm') {
   console.error('Unit system "mph" failed:', { spdMph, altMph, climbMph });
   process.exit(1);
 }
@@ -919,8 +919,8 @@ if (spdMph.unit !== 'mph' || spdMph.value !== '22.4' || altMph.unit !== 'ft' || 
 useUnitsStore.getState().setSystem('kts');
 const spdKts = useUnitsStore.getState().formatSpeed(10); // 10 m/s ~ 19.4 kts
 const altKts = useUnitsStore.getState().formatAltitude(100); // 100 m ~ 328 ft
-const climbKts = useUnitsStore.getState().formatClimb(2.5); // 2.5 m/s ~ +492 ft/min
-if (spdKts.unit !== 'kts' || spdKts.value !== '19.4' || altKts.unit !== 'ft' || climbKts.unit !== 'ft/min') {
+const climbKts = useUnitsStore.getState().formatClimb(2.5); // 2.5 m/s ~ +492 fpm
+if (spdKts.unit !== 'kts' || spdKts.value !== '19.4' || altKts.unit !== 'ft' || climbKts.unit !== 'fpm') {
   console.error('Unit system "kts" failed:', { spdKts, altKts, climbKts });
   process.exit(1);
 }

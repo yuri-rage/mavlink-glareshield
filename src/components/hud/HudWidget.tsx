@@ -70,6 +70,49 @@ function saveHudVideoConfig(cfg: HudVideoConfig) {
   } catch {}
 }
 
+function isFailsafeActive(
+  heartbeat: { systemStatus?: number; modeName?: string },
+  statusMessages: { text: string; severity?: number; timestamp?: number }[]
+): boolean {
+  // 1. MAVLink System Status explicitly flags critical / emergency failsafe states
+  // 5 = MAV_STATE_CRITICAL, 6 = MAV_STATE_EMERGENCY, 8 = MAV_STATE_FLIGHT_TERMINATION
+  if (
+    heartbeat.systemStatus === 5 ||
+    heartbeat.systemStatus === 6 ||
+    heartbeat.systemStatus === 8
+  ) {
+    return true;
+  }
+
+  // 2. Flight mode specifically named FAILSAFE
+  if (heartbeat.modeName && heartbeat.modeName.toUpperCase().includes('FAILSAFE')) {
+    return true;
+  }
+
+  // 3. STATUSTEXT messages from autopilot indicating an active failsafe event
+  const now = Date.now();
+  for (let i = statusMessages.length - 1; i >= 0; i--) {
+    const msg = statusMessages[i];
+    if (msg.timestamp && now - msg.timestamp > 30000) break;
+    const txt = (msg.text || '').trim().toLowerCase();
+    if (txt.includes('failsafe')) {
+      if (
+        txt.includes('cleared') ||
+        txt.includes('disabled') ||
+        txt.includes('recovered') ||
+        txt.includes('restored') ||
+        txt.includes('cancelled') ||
+        txt.includes('passed')
+      ) {
+        return false;
+      }
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export const HudWidget: React.FC = () => {
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
   const hasConnectedInSession = useTelemetryStore((state) => state.hasConnectedInSession);
@@ -81,6 +124,7 @@ export const HudWidget: React.FC = () => {
   const missionWaypoints = useTelemetryStore((state) => state.missionWaypoints);
   const currentWaypointSeq = useTelemetryStore((state) => state.currentWaypointSeq);
   const imu = useTelemetryStore((state) => state.imu);
+  const statusMessages = useTelemetryStore((state) => state.statusMessages);
   const {
     formatSpeed,
     formatAltitude,
@@ -102,6 +146,18 @@ export const HudWidget: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [streamError, setStreamError] = useState(false);
   const [snapshotSrc, setSnapshotSrc] = useState<string>('');
+  const [flashTick, setFlashTick] = useState(0);
+
+  const isFailsafe = isFailsafeActive(heartbeat, statusMessages);
+
+  // Flash timer for active FAILSAFE alert (~1 Hz cycle)
+  useEffect(() => {
+    if (!isFailsafe) return;
+    const timer = setInterval(() => {
+      setFlashTick((t) => (t + 1) % 1000);
+    }, 500);
+    return () => clearInterval(timer);
+  }, [isFailsafe]);
 
   // Auto-refresh timer when Snapshot mode is active
   useEffect(() => {
@@ -126,7 +182,7 @@ export const HudWidget: React.FC = () => {
     setStreamError(false);
   };
 
-  // Register subscription for high-frequency attitude, VFR, NAV_CONTROLLER, and IMU
+  // Register subscription for high-frequency attitude, VFR, NAV_CONTROLLER, IMU, and STATUSTEXT
   useEffect(() => {
     messageRateManager.registerRequirement('hud-attitude', MAVLINK_MSG_ID.ATTITUDE);
     messageRateManager.registerRequirement('hud-vfr', MAVLINK_MSG_ID.VFR_HUD);
@@ -135,6 +191,7 @@ export const HudWidget: React.FC = () => {
     messageRateManager.registerRequirement('hud-imu', MAVLINK_MSG_ID.RAW_IMU);
     messageRateManager.registerRequirement('hud-scaled-imu', MAVLINK_MSG_ID.SCALED_IMU);
     messageRateManager.registerRequirement('hud-highres-imu', MAVLINK_MSG_ID.HIGHRES_IMU);
+    messageRateManager.registerRequirement('hud-status', MAVLINK_MSG_ID.STATUSTEXT);
     return () => {
       messageRateManager.unregisterRequirement('hud-attitude');
       messageRateManager.unregisterRequirement('hud-vfr');
@@ -143,6 +200,7 @@ export const HudWidget: React.FC = () => {
       messageRateManager.unregisterRequirement('hud-imu');
       messageRateManager.unregisterRequirement('hud-scaled-imu');
       messageRateManager.unregisterRequirement('hud-highres-imu');
+      messageRateManager.unregisterRequirement('hud-status');
     };
   }, []);
 
@@ -219,7 +277,7 @@ export const HudWidget: React.FC = () => {
     const HUD_DIM_GREEN = lerpColor(34, 197, 94, whiteness, 0.35);
     const HUD_BRIGHT = lerpColor(74, 222, 128, whiteness);
     const HUD_HIGHLIGHT = lerpColor(134, 239, 172, whiteness);
-    const HUD_BORDER = lerpColor(34, 197, 94, whiteness, 0.4);
+    const HUD_BORDER = HUD_GREEN; // Secondary readout outlines (matches heading box)
 
     const hasLink =
       heartbeat.lastHeartbeatTime > 0 &&
@@ -227,6 +285,11 @@ export const HudWidget: React.FC = () => {
       Date.now() - heartbeat.lastHeartbeatTime <= 3500;
 
     // Geometric layouts for HUD overlay instruments
+    const PITCH_SCALE = 4.2; // Pixels per degree
+    const disarmY = cy - 18 * PITCH_SCALE; // 20 deg above wings level horizon (84px above cy)
+    const failsafeY = disarmY + 25; // Directly below DISARMED
+    const isFlashVisible = flashTick % 2 === 0;
+
     const spdBoxX = 10;
     const spdBoxW = 62;
     const spdBoxH = 30;
@@ -263,7 +326,7 @@ export const HudWidget: React.FC = () => {
     // Right altitude tape corridor (bracket, Alt box, VVI readout)
     ctx.rect(altBoxX - 8, cy - 68, width - altBoxX + 8, 136);
     // Top compass tape & digital heading box
-    ctx.rect(cx - tapeWidth / 2 - 2, 0, tapeWidth + 4, 36);
+    ctx.rect(cx - tapeWidth / 2 - 2, 0, tapeWidth + 4, 40);
     // Bottom left WP progress readout
     ctx.rect(0, height - 44, 145, 44);
     // Bottom right Throttle readout
@@ -278,13 +341,19 @@ export const HudWidget: React.FC = () => {
     if (!hasLink) {
       ctx.rect(cx - 130, 40, 260, 26);
     }
+    // Central DISARMED / FAILSAFE annunciation cutouts
+    if (hasLink && !heartbeat.isArmed) {
+      ctx.rect(cx - 56, disarmY - 11, 112, 22);
+    }
+    if (isFailsafe && isFlashVisible) {
+      ctx.rect(cx - 56, failsafeY - 11, 112, 22);
+    }
     ctx.clip('evenodd');
 
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(-attitude.roll);
 
-    const PITCH_SCALE = 4.2; // Pixels per degree
     const pitchOffset = attitude.pitchDeg * PITCH_SCALE;
     ctx.translate(0, pitchOffset);
 
@@ -587,7 +656,7 @@ export const HudWidget: React.FC = () => {
     const tapeY = 18;
     ctx.save();
     ctx.beginPath();
-    ctx.rect(cx - tapeWidth / 2, 0, tapeWidth, 36);
+    ctx.rect(cx - tapeWidth / 2, 0, tapeWidth, 40); // Tall enough for labels below ticks
     ctx.clip();
 
     const degPx = 4; // 4 pixels per compass degree
@@ -655,14 +724,6 @@ export const HudWidget: React.FC = () => {
     // =========================================================
     // 5. Left: Airspeed / Groundspeed Ladder & Prominent IAS
     // =========================================================
-    // Speed vertical bracket
-    ctx.strokeStyle = HUD_DIM_GREEN;
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(spdBoxX + spdBoxW, cy - 65);
-    ctx.lineTo(spdBoxX + spdBoxW, cy + 65);
-    ctx.stroke();
-
     // Prominent Speed: Indicated Airspeed (IAS)
     const isKtsMode = unitSystem === 'kts';
     const iasKts = vfr.airspeed * 1.943844;
@@ -681,13 +742,6 @@ export const HudWidget: React.FC = () => {
     ctx.strokeStyle = HUD_BRIGHT;
     ctx.lineWidth = 1.5;
     ctx.strokeRect(spdBoxX, spdBoxY, spdBoxW, spdBoxH);
-
-    // Pointer to bracket
-    ctx.fillStyle = HUD_BRIGHT;
-    ctx.beginPath();
-    ctx.moveTo(spdBoxX + spdBoxW, cy);
-    ctx.lineTo(spdBoxX + spdBoxW + 5, cy);
-    ctx.stroke();
 
     ctx.fillStyle = HUD_HIGHLIGHT;
     ctx.font = 'bold 14px ui-monospace, SFMono-Regular, monospace';
@@ -715,10 +769,6 @@ export const HudWidget: React.FC = () => {
     const gsH = 15;
     const gsY = spdBoxY + spdBoxH + 4;
 
-    ctx.strokeStyle = HUD_BORDER;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(spdBoxX, gsY, gsW, gsH);
-
     ctx.fillStyle = HUD_BRIGHT;
     ctx.font = 'bold 9px ui-monospace, monospace';
     ctx.textAlign = 'left';
@@ -728,25 +778,10 @@ export const HudWidget: React.FC = () => {
     // =========================================================
     // 6. Right: Altitude Ladder & Box
     // =========================================================
-    // Altitude vertical bracket
-    ctx.strokeStyle = HUD_DIM_GREEN;
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(altBoxX, cy - 65);
-    ctx.lineTo(altBoxX, cy + 65);
-    ctx.stroke();
-
     // Current Altitude Value Box (Pitch ladder is masked behind this region)
     ctx.strokeStyle = HUD_BRIGHT;
     ctx.lineWidth = 1.5;
     ctx.strokeRect(altBoxX, altBoxY, altBoxW, altBoxH);
-
-    // Pointer to bracket
-    ctx.fillStyle = HUD_BRIGHT;
-    ctx.beginPath();
-    ctx.moveTo(altBoxX, cy);
-    ctx.lineTo(altBoxX - 5, cy);
-    ctx.stroke();
 
     const rawAltM =
       altitudeMode === 'msl'
@@ -775,10 +810,6 @@ export const HudWidget: React.FC = () => {
     const vviH = 15;
     const vviY = altBoxY + altBoxH + 4;
     const vviX = width - vviW - 10;
-
-    ctx.strokeStyle = HUD_BORDER;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(vviX, vviY, vviW, vviH);
 
     ctx.fillStyle = Math.abs(vfr.climb) > 0.3 ? HUD_HIGHLIGHT : HUD_BRIGHT;
     ctx.font = 'bold 9px ui-monospace, monospace';
@@ -827,7 +858,7 @@ export const HudWidget: React.FC = () => {
 
     // Waypoint Progress Box (Pitch ladder is masked behind this region)
     ctx.strokeStyle = HUD_BORDER;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.2;
     ctx.strokeRect(wpBoxX, wpBoxY, wpBoxW, wpBoxH);
 
     ctx.textAlign = 'left';
@@ -855,7 +886,7 @@ export const HudWidget: React.FC = () => {
     const thrBoxY = height - thrBoxH - 8;
 
     ctx.strokeStyle = HUD_BORDER;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.2;
     ctx.strokeRect(thrBoxX, thrBoxY, thrBoxW, thrBoxH);
 
     ctx.fillStyle = HUD_HIGHLIGHT;
@@ -884,7 +915,7 @@ export const HudWidget: React.FC = () => {
 
     // Normal Load Factor (Nz) Box (Pitch ladder is masked behind this region)
     ctx.strokeStyle = HUD_BORDER;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.2;
     ctx.strokeRect(nzBoxX, nzBoxY, nzBoxW, nzBoxH);
 
     ctx.fillStyle = HUD_HIGHLIGHT;
@@ -899,7 +930,7 @@ export const HudWidget: React.FC = () => {
       const hmBoxX = width - hmBoxW - 10;
       // Home Vector Box (Pitch ladder is masked behind this region)
       ctx.strokeStyle = HUD_BORDER;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.2;
       ctx.strokeRect(hmBoxX, nzBoxY, hmBoxW, nzBoxH);
       ctx.fillStyle = HUD_HIGHLIGHT;
       ctx.textAlign = 'left';
@@ -928,6 +959,31 @@ export const HudWidget: React.FC = () => {
       ctx.fillText(flagText, cx, flY + flH / 2);
     }
 
+    // =========================================================
+    // 10. Central Annunciations: DISARMED & Flashing FAILSAFE
+    // =========================================================
+    // Steady DISARMED text about 20 degrees above the wings level horizon
+    if (hasLink && !heartbeat.isArmed) {
+      ctx.save();
+      ctx.font = 'bold 18px ui-monospace, SFMono-Regular, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = HUD_BRIGHT;
+      ctx.fillText('DISARMED', cx, disarmY);
+      ctx.restore();
+    }
+
+    // Flashing FAILSAFE text directly below the area where DISARMED is displayed
+    if (isFailsafe && isFlashVisible) {
+      ctx.save();
+      ctx.font = 'bold 18px ui-monospace, SFMono-Regular, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = HUD_BRIGHT;
+      ctx.fillText('FAILSAFE', cx, failsafeY);
+      ctx.restore();
+    }
+
     ctx.restore();
   }, [
     heartbeat,
@@ -950,6 +1006,9 @@ export const HudWidget: React.FC = () => {
     videoConfig.url,
     videoConfig.darken,
     videoConfig.symbologyBrightness,
+    statusMessages,
+    isFailsafe,
+    flashTick,
   ]);
 
   return (
