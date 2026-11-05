@@ -33,6 +33,17 @@ const DEFAULT_HUD_VIDEO_CONFIG: HudVideoConfig = {
   symbologyBrightness: 1.0,
 };
 
+function lerpColor(r: number, g: number, b: number, whiteness: number, a?: number): string {
+  const nr = Math.round(r + (255 - r) * whiteness);
+  const ng = Math.round(g + (255 - g) * whiteness);
+  const nb = Math.round(b + (255 - b) * whiteness);
+  if (a !== undefined) {
+    const na = Math.min(1.0, a + (0.55 - a) * whiteness);
+    return `rgba(${nr}, ${ng}, ${nb}, ${na.toFixed(2)})`;
+  }
+  return `rgb(${nr}, ${ng}, ${nb})`;
+}
+
 function loadHudVideoConfig(): HudVideoConfig {
   if (typeof window === 'undefined') return DEFAULT_HUD_VIDEO_CONFIG;
   try {
@@ -44,7 +55,7 @@ function loadHudVideoConfig(): HudVideoConfig {
       ...parsed,
       symbologyBrightness:
         typeof parsed.symbologyBrightness === 'number'
-          ? Math.max(0.1, Math.min(1.0, parsed.symbologyBrightness))
+          ? Math.max(0.1, Math.min(2.0, parsed.symbologyBrightness))
           : DEFAULT_HUD_VIDEO_CONFIG.symbologyBrightness,
     };
   } catch {
@@ -194,15 +205,21 @@ export const HudWidget: React.FC = () => {
       ctx.shadowBlur = 0;
     }
 
-    const HUD_GREEN = '#22c55e';
-    const HUD_DIM_GREEN = 'rgba(34, 197, 94, 0.35)';
-    const HUD_BRIGHT = '#4ade80';
-    const HUD_HIGHLIGHT = '#86efac';
-
-    const symbologyBrightness =
+    const rawBrightness =
       typeof videoConfig.symbologyBrightness === 'number'
-        ? Math.max(0.1, Math.min(1.0, videoConfig.symbologyBrightness))
+        ? Math.max(0.1, Math.min(2.0, videoConfig.symbologyBrightness))
         : 1.0;
+
+    // Below 1.0: Dim alpha from 1.0 down to 0.1 (Night mode)
+    // Above 1.0: Alpha stays 1.0, while colors smoothly interpolate from green to pure white at 2.0 (Daylight overdrive)
+    const symbologyAlpha = Math.min(1.0, rawBrightness);
+    const whiteness = Math.max(0, Math.min(1.0, rawBrightness - 1.0));
+
+    const HUD_GREEN = lerpColor(34, 197, 94, whiteness);
+    const HUD_DIM_GREEN = lerpColor(34, 197, 94, whiteness, 0.35);
+    const HUD_BRIGHT = lerpColor(74, 222, 128, whiteness);
+    const HUD_HIGHLIGHT = lerpColor(134, 239, 172, whiteness);
+    const HUD_BORDER = lerpColor(34, 197, 94, whiteness, 0.4);
 
     const hasLink =
       heartbeat.lastHeartbeatTime > 0 &&
@@ -223,7 +240,7 @@ export const HudWidget: React.FC = () => {
     const tapeWidth = Math.min(280, width - 110);
 
     ctx.save();
-    ctx.globalAlpha = symbologyBrightness;
+    ctx.globalAlpha = symbologyAlpha;
 
     // Inner viewport clipping
     ctx.beginPath();
@@ -698,7 +715,7 @@ export const HudWidget: React.FC = () => {
     const gsH = 15;
     const gsY = spdBoxY + spdBoxH + 4;
 
-    ctx.strokeStyle = 'rgba(34, 197, 94, 0.35)';
+    ctx.strokeStyle = HUD_BORDER;
     ctx.lineWidth = 1;
     ctx.strokeRect(spdBoxX, gsY, gsW, gsH);
 
@@ -759,7 +776,7 @@ export const HudWidget: React.FC = () => {
     const vviY = altBoxY + altBoxH + 4;
     const vviX = width - vviW - 10;
 
-    ctx.strokeStyle = 'rgba(34, 197, 94, 0.35)';
+    ctx.strokeStyle = HUD_BORDER;
     ctx.lineWidth = 1;
     ctx.strokeRect(vviX, vviY, vviW, vviH);
 
@@ -809,7 +826,7 @@ export const HudWidget: React.FC = () => {
     const wpBoxY = height - wpBoxH - 8;
 
     // Waypoint Progress Box (Pitch ladder is masked behind this region)
-    ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
+    ctx.strokeStyle = HUD_BORDER;
     ctx.lineWidth = 1;
     ctx.strokeRect(wpBoxX, wpBoxY, wpBoxW, wpBoxH);
 
@@ -837,7 +854,7 @@ export const HudWidget: React.FC = () => {
     const thrBoxX = width - thrBoxW - 10;
     const thrBoxY = height - thrBoxH - 8;
 
-    ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
+    ctx.strokeStyle = HUD_BORDER;
     ctx.lineWidth = 1;
     ctx.strokeRect(thrBoxX, thrBoxY, thrBoxW, thrBoxH);
 
@@ -866,7 +883,7 @@ export const HudWidget: React.FC = () => {
     const nzBoxY = 16 - nzBoxH / 2;
 
     // Normal Load Factor (Nz) Box (Pitch ladder is masked behind this region)
-    ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
+    ctx.strokeStyle = HUD_BORDER;
     ctx.lineWidth = 1;
     ctx.strokeRect(nzBoxX, nzBoxY, nzBoxW, nzBoxH);
 
@@ -881,7 +898,7 @@ export const HudWidget: React.FC = () => {
       const hmBoxW = hmMetrics.width + nzPadX * 2;
       const hmBoxX = width - hmBoxW - 10;
       // Home Vector Box (Pitch ladder is masked behind this region)
-      ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
+      ctx.strokeStyle = HUD_BORDER;
       ctx.lineWidth = 1;
       ctx.strokeRect(hmBoxX, nzBoxY, hmBoxW, nzBoxH);
       ctx.fillStyle = HUD_HIGHLIGHT;
@@ -1030,29 +1047,49 @@ export const HudWidget: React.FC = () => {
           <div className="space-y-2.5 bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800">
             <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
               <div className="flex items-center gap-2">
-                <Sun className="w-4 h-4 text-emerald-400" />
+                <Sun className={clsx(
+                  "w-4 h-4 transition-colors",
+                  (videoConfig.symbologyBrightness ?? 1.0) > 1.05 ? "text-white" : "text-emerald-400"
+                )} />
                 <span className="font-semibold text-zinc-100 uppercase tracking-wide text-[11px]">
                   Symbology Brightness
                 </span>
               </div>
-              <span className="font-mono text-emerald-400 font-bold text-xs bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded">
+              <span
+                className={clsx(
+                  "font-mono font-bold text-xs px-2 py-0.5 rounded border transition-colors",
+                  (videoConfig.symbologyBrightness ?? 1.0) > 1.05
+                    ? "text-white bg-zinc-800 border-zinc-600 shadow-sm"
+                    : "text-emerald-400 bg-emerald-950/60 border-emerald-800/60"
+                )}
+              >
                 {Math.round((videoConfig.symbologyBrightness ?? 1.0) * 100)}%
+                {(videoConfig.symbologyBrightness ?? 1.0) >= 1.95
+                  ? ' • Pure White'
+                  : (videoConfig.symbologyBrightness ?? 1.0) > 1.05
+                  ? ' • White Boost'
+                  : (videoConfig.symbologyBrightness ?? 1.0) >= 0.95
+                  ? ' • Default Green'
+                  : ' • Dim'}
               </span>
             </div>
 
             <p className="text-[11px] text-zinc-400 leading-relaxed">
-              Controls the optical intensity and transparency of HUD pitch ladders, horizon, velocity vector, compass tape, and flight readouts.
+              Controls the optical intensity and color temperature of HUD symbology. Increasing beyond the 100% default smoothly transitions green vector elements into pure high-contrast white.
             </p>
 
             <div className="space-y-2 pt-1">
               <input
                 type="range"
                 min="0.1"
-                max="1.0"
+                max="2.0"
                 step="0.05"
                 value={videoConfig.symbologyBrightness ?? 1.0}
                 onChange={(e) => handleUpdateConfig({ symbologyBrightness: parseFloat(e.target.value) })}
-                className="w-full accent-emerald-500 cursor-pointer"
+                className={clsx(
+                  "w-full cursor-pointer transition-colors",
+                  (videoConfig.symbologyBrightness ?? 1.0) > 1.05 ? "accent-white" : "accent-emerald-500"
+                )}
               />
 
               <div className="flex items-center justify-between gap-2 pt-1">
@@ -1063,7 +1100,7 @@ export const HudWidget: React.FC = () => {
                     onClick={() => handleUpdateConfig({ symbologyBrightness: 0.3 })}
                     className={clsx(
                       "px-2 py-0.5 rounded text-[10px] font-medium border transition-colors",
-                      (videoConfig.symbologyBrightness ?? 1.0) <= 0.35
+                      (videoConfig.symbologyBrightness ?? 1.0) <= 0.4
                         ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
                         : "bg-zinc-800/80 text-zinc-400 border-zinc-700 hover:text-zinc-200"
                     )}
@@ -1072,30 +1109,30 @@ export const HudWidget: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleUpdateConfig({ symbologyBrightness: 0.65 })}
-                    className={clsx(
-                      "px-2 py-0.5 rounded text-[10px] font-medium border transition-colors",
-                      (videoConfig.symbologyBrightness ?? 1.0) > 0.35 && (videoConfig.symbologyBrightness ?? 1.0) < 0.9
-                        ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
-                        : "bg-zinc-800/80 text-zinc-400 border-zinc-700 hover:text-zinc-200"
-                    )}
-                  >
-                    Dusk (65%)
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => handleUpdateConfig({ symbologyBrightness: 1.0 })}
                     className={clsx(
                       "px-2 py-0.5 rounded text-[10px] font-medium border transition-colors",
-                      (videoConfig.symbologyBrightness ?? 1.0) >= 0.9
+                      Math.abs((videoConfig.symbologyBrightness ?? 1.0) - 1.0) <= 0.05
                         ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
                         : "bg-zinc-800/80 text-zinc-400 border-zinc-700 hover:text-zinc-200"
                     )}
                   >
-                    Day (100%)
+                    Default (100%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateConfig({ symbologyBrightness: 2.0 })}
+                    className={clsx(
+                      "px-2 py-0.5 rounded text-[10px] font-medium border transition-colors",
+                      (videoConfig.symbologyBrightness ?? 1.0) >= 1.9
+                        ? "bg-white text-zinc-950 border-white font-bold"
+                        : "bg-zinc-800/80 text-zinc-400 border-zinc-700 hover:text-zinc-200"
+                    )}
+                  >
+                    White (200%)
                   </button>
                 </div>
-                <span className="text-[10px] text-zinc-500 font-mono">100% (Day)</span>
+                <span className="text-[10px] text-zinc-500 font-mono">200% (White)</span>
               </div>
             </div>
           </div>
