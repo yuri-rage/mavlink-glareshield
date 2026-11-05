@@ -4,7 +4,9 @@ import { useUnitsStore } from '../../store/unitsStore';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { MAVLINK_MSG_ID } from '../../mavlink/messages';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Compass, Video, X } from 'lucide-react';
+import { Modal } from '../ui/modal';
+import { Button } from '../ui/button';
+import { Compass, Video, Sliders, Sun } from 'lucide-react';
 import clsx from 'clsx';
 
 export interface HudVideoConfig {
@@ -15,6 +17,7 @@ export interface HudVideoConfig {
   opacity: number;
   darken: number;
   snapshotIntervalMs: number;
+  symbologyBrightness: number;
 }
 
 const STORAGE_KEY = 'glareshield_hud_video_config';
@@ -27,6 +30,7 @@ const DEFAULT_HUD_VIDEO_CONFIG: HudVideoConfig = {
   opacity: 1.0,
   darken: 0.2,
   snapshotIntervalMs: 200,
+  symbologyBrightness: 1.0,
 };
 
 function loadHudVideoConfig(): HudVideoConfig {
@@ -34,7 +38,15 @@ function loadHudVideoConfig(): HudVideoConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_HUD_VIDEO_CONFIG;
-    return { ...DEFAULT_HUD_VIDEO_CONFIG, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    return {
+      ...DEFAULT_HUD_VIDEO_CONFIG,
+      ...parsed,
+      symbologyBrightness:
+        typeof parsed.symbologyBrightness === 'number'
+          ? Math.max(0.1, Math.min(1.0, parsed.symbologyBrightness))
+          : DEFAULT_HUD_VIDEO_CONFIG.symbologyBrightness,
+    };
   } catch {
     return DEFAULT_HUD_VIDEO_CONFIG;
   }
@@ -187,6 +199,11 @@ export const HudWidget: React.FC = () => {
     const HUD_BRIGHT = '#4ade80';
     const HUD_HIGHLIGHT = '#86efac';
 
+    const symbologyBrightness =
+      typeof videoConfig.symbologyBrightness === 'number'
+        ? Math.max(0.1, Math.min(1.0, videoConfig.symbologyBrightness))
+        : 1.0;
+
     const hasLink =
       heartbeat.lastHeartbeatTime > 0 &&
       heartbeat.modeName !== 'DISCONNECTED' &&
@@ -206,6 +223,7 @@ export const HudWidget: React.FC = () => {
     const tapeWidth = Math.min(280, width - 110);
 
     ctx.save();
+    ctx.globalAlpha = symbologyBrightness;
 
     // Inner viewport clipping
     ctx.beginPath();
@@ -914,6 +932,7 @@ export const HudWidget: React.FC = () => {
     videoConfig.enabled,
     videoConfig.url,
     videoConfig.darken,
+    videoConfig.symbologyBrightness,
   ]);
 
   return (
@@ -947,16 +966,16 @@ export const HudWidget: React.FC = () => {
           </span>
           <button
             type="button"
-            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+            onClick={() => setIsSettingsOpen(true)}
             className={clsx(
               "p-1 rounded transition-colors",
               isSettingsOpen || videoConfig.enabled
                 ? "text-sky-400 bg-sky-950/60 border border-sky-800/60 hover:bg-sky-900/60"
                 : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
             )}
-            title="Configure Video Stream Background"
+            title="Configure HUD Symbology & Video Settings"
           >
-            <Video className="w-3.5 h-3.5" />
+            <Sliders className="w-3.5 h-3.5" />
           </button>
         </div>
       </CardHeader>
@@ -997,164 +1016,232 @@ export const HudWidget: React.FC = () => {
 
         {/* HUD Vector Canvas */}
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block z-10" />
+      </CardContent>
 
-        {/* Video Settings Popover / Modal */}
-        {isSettingsOpen && (
-          <div className="absolute inset-0 z-30 bg-zinc-950/95 backdrop-blur-md p-4 overflow-y-auto flex flex-col justify-between text-xs text-zinc-300 border border-zinc-800">
-            <div className="space-y-3.5">
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-                <div className="flex items-center gap-2">
-                  <Video className="w-4 h-4 text-sky-400" />
-                  <span className="font-bold text-zinc-100 uppercase tracking-wide">HUD Video Background</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsSettingsOpen(false)}
-                  className="p-1 text-zinc-400 hover:text-zinc-100 rounded hover:bg-zinc-800"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+      {/* HUD Settings Page Modal */}
+      <Modal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        title="HUD & Video Settings"
+        description="Configure HUD symbology brightness, vector display, and live camera feed overlay."
+      >
+        <div className="space-y-4 text-xs text-zinc-300">
+          {/* Section 1: HUD Symbology & Brightness */}
+          <div className="space-y-2.5 bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+              <div className="flex items-center gap-2">
+                <Sun className="w-4 h-4 text-emerald-400" />
+                <span className="font-semibold text-zinc-100 uppercase tracking-wide text-[11px]">
+                  Symbology Brightness
+                </span>
               </div>
-
-              {/* Enable Video Stream */}
-              <div className="flex items-center justify-between bg-zinc-900/60 p-2.5 rounded-md border border-zinc-800">
-                <div>
-                  <div className="font-semibold text-zinc-200">Enable Video Background</div>
-                  <div className="text-[10px] text-zinc-400">Render live camera feed behind HUD symbology</div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={videoConfig.enabled}
-                    onChange={(e) => handleUpdateConfig({ enabled: e.target.checked })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-600"></div>
-                </label>
-              </div>
-
-              {/* Stream URL */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-zinc-300 flex items-center justify-between">
-                  <span>Stream URL</span>
-                  <span className="text-[10px] font-normal text-zinc-500">Stored in browser local storage</span>
-                </label>
-                <input
-                  type="text"
-                  value={videoConfig.url}
-                  onChange={(e) => handleUpdateConfig({ url: e.target.value })}
-                  placeholder="http://<camera-ip>/cgi-bin/mjpg/video.cgi?channel=1&subtype=1"
-                  className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-500"
-                />
-                <p className="text-[10px] text-zinc-500 leading-relaxed">
-                  Tip: For Amcrest or Dahua cameras, open the camera web UI in another browser tab and log in once to authorize your browser session before streaming.
-                </p>
-              </div>
-
-              {/* Stream Type & Fit */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-zinc-300">Format</label>
-                  <select
-                    value={videoConfig.type}
-                    onChange={(e) => handleUpdateConfig({ type: e.target.value as any })}
-                    className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-200 focus:outline-none focus:border-sky-500"
-                  >
-                    <option value="mjpeg">MJPEG Stream (HTTP)</option>
-                    <option value="snapshot">Snapshot Polling (JPEG)</option>
-                    <option value="video">HTML5 Video (HLS/WebRTC)</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-zinc-300">Aspect Ratio Fit</label>
-                  <select
-                    value={videoConfig.fit}
-                    onChange={(e) => handleUpdateConfig({ fit: e.target.value as any })}
-                    className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-200 focus:outline-none focus:border-sky-500"
-                  >
-                    <option value="cover">Cover (Fill HUD)</option>
-                    <option value="contain">Contain (Letterbox)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Snapshot interval if snapshot */}
-              {videoConfig.type === 'snapshot' && (
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-zinc-300">Snapshot Polling Rate</label>
-                  <select
-                    value={videoConfig.snapshotIntervalMs}
-                    onChange={(e) => handleUpdateConfig({ snapshotIntervalMs: Number(e.target.value) })}
-                    className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-200 focus:outline-none focus:border-sky-500"
-                  >
-                    <option value={100}>10 FPS (100 ms)</option>
-                    <option value={200}>5 FPS (200 ms)</option>
-                    <option value={333}>3 FPS (333 ms)</option>
-                    <option value={500}>2 FPS (500 ms)</option>
-                    <option value={1000}>1 FPS (1000 ms)</option>
-                  </select>
-                </div>
-              )}
-
-              {/* Sliders: Opacity & Darkening */}
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[11px]">
-                    <span className="font-semibold text-zinc-300">Opacity</span>
-                    <span className="font-mono text-zinc-400">{Math.round(videoConfig.opacity * 100)}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0.2"
-                    max="1.0"
-                    step="0.05"
-                    value={videoConfig.opacity}
-                    onChange={(e) => handleUpdateConfig({ opacity: parseFloat(e.target.value) })}
-                    className="w-full accent-sky-500 cursor-pointer"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[11px]">
-                    <span className="font-semibold text-zinc-300">Darkening</span>
-                    <span className="font-mono text-zinc-400">{Math.round(videoConfig.darken * 100)}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="0.7"
-                    step="0.05"
-                    value={videoConfig.darken}
-                    onChange={(e) => handleUpdateConfig({ darken: parseFloat(e.target.value) })}
-                    className="w-full accent-sky-500 cursor-pointer"
-                  />
-                </div>
-              </div>
+              <span className="font-mono text-emerald-400 font-bold text-xs bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded">
+                {Math.round((videoConfig.symbologyBrightness ?? 1.0) * 100)}%
+              </span>
             </div>
 
-            <div className="flex items-center justify-between border-t border-zinc-800 pt-3 mt-4">
-              <button
-                type="button"
-                onClick={() => {
-                  handleUpdateConfig(DEFAULT_HUD_VIDEO_CONFIG);
-                  setIsSettingsOpen(false);
-                }}
-                className="text-[11px] text-zinc-400 hover:text-zinc-200 underline"
-              >
-                Reset Defaults
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsSettingsOpen(false)}
-                className="px-4 py-1.5 bg-sky-600 hover:bg-sky-500 text-white font-medium rounded text-xs transition-colors"
-              >
-                Done
-              </button>
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              Controls the optical intensity and transparency of HUD pitch ladders, horizon, velocity vector, compass tape, and flight readouts.
+            </p>
+
+            <div className="space-y-2 pt-1">
+              <input
+                type="range"
+                min="0.1"
+                max="1.0"
+                step="0.05"
+                value={videoConfig.symbologyBrightness ?? 1.0}
+                onChange={(e) => handleUpdateConfig({ symbologyBrightness: parseFloat(e.target.value) })}
+                className="w-full accent-emerald-500 cursor-pointer"
+              />
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <span className="text-[10px] text-zinc-500 font-mono">10% (Night)</span>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateConfig({ symbologyBrightness: 0.3 })}
+                    className={clsx(
+                      "px-2 py-0.5 rounded text-[10px] font-medium border transition-colors",
+                      (videoConfig.symbologyBrightness ?? 1.0) <= 0.35
+                        ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
+                        : "bg-zinc-800/80 text-zinc-400 border-zinc-700 hover:text-zinc-200"
+                    )}
+                  >
+                    Night (30%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateConfig({ symbologyBrightness: 0.65 })}
+                    className={clsx(
+                      "px-2 py-0.5 rounded text-[10px] font-medium border transition-colors",
+                      (videoConfig.symbologyBrightness ?? 1.0) > 0.35 && (videoConfig.symbologyBrightness ?? 1.0) < 0.9
+                        ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
+                        : "bg-zinc-800/80 text-zinc-400 border-zinc-700 hover:text-zinc-200"
+                    )}
+                  >
+                    Dusk (65%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateConfig({ symbologyBrightness: 1.0 })}
+                    className={clsx(
+                      "px-2 py-0.5 rounded text-[10px] font-medium border transition-colors",
+                      (videoConfig.symbologyBrightness ?? 1.0) >= 0.9
+                        ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
+                        : "bg-zinc-800/80 text-zinc-400 border-zinc-700 hover:text-zinc-200"
+                    )}
+                  >
+                    Day (100%)
+                  </button>
+                </div>
+                <span className="text-[10px] text-zinc-500 font-mono">100% (Day)</span>
+              </div>
             </div>
           </div>
-        )}
-      </CardContent>
+
+          {/* Section 2: Video Background */}
+          <div className="space-y-3 bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+              <div className="flex items-center gap-2">
+                <Video className="w-4 h-4 text-sky-400" />
+                <span className="font-semibold text-zinc-100 uppercase tracking-wide text-[11px]">
+                  Video Background Feed
+                </span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={videoConfig.enabled}
+                  onChange={(e) => handleUpdateConfig({ enabled: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-600"></div>
+              </label>
+            </div>
+
+            {/* Stream URL */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-zinc-300 flex items-center justify-between">
+                <span>Stream URL</span>
+                <span className="text-[10px] font-normal text-zinc-500">Stored locally in browser</span>
+              </label>
+              <input
+                type="text"
+                value={videoConfig.url}
+                onChange={(e) => handleUpdateConfig({ url: e.target.value })}
+                placeholder="http://<camera-ip>/cgi-bin/mjpg/video.cgi?channel=1&subtype=1"
+                className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-500"
+              />
+              <p className="text-[10px] text-zinc-500 leading-relaxed">
+                Tip: For Amcrest, Dahua, or Axis cameras, open the camera web UI in another browser tab and log in once to authorize your browser session before streaming.
+              </p>
+            </div>
+
+            {/* Stream Type & Fit */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-zinc-300">Format</label>
+                <select
+                  value={videoConfig.type}
+                  onChange={(e) => handleUpdateConfig({ type: e.target.value as any })}
+                  className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-200 focus:outline-none focus:border-sky-500"
+                >
+                  <option value="mjpeg">MJPEG Stream (HTTP)</option>
+                  <option value="snapshot">Snapshot Polling (JPEG)</option>
+                  <option value="video">HTML5 Video (HLS/WebRTC)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-zinc-300">Aspect Ratio Fit</label>
+                <select
+                  value={videoConfig.fit}
+                  onChange={(e) => handleUpdateConfig({ fit: e.target.value as any })}
+                  className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-200 focus:outline-none focus:border-sky-500"
+                >
+                  <option value="cover">Cover (Fill HUD)</option>
+                  <option value="contain">Contain (Letterbox)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Snapshot interval if snapshot */}
+            {videoConfig.type === 'snapshot' && (
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-zinc-300">Snapshot Polling Rate</label>
+                <select
+                  value={videoConfig.snapshotIntervalMs}
+                  onChange={(e) => handleUpdateConfig({ snapshotIntervalMs: Number(e.target.value) })}
+                  className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-200 focus:outline-none focus:border-sky-500"
+                >
+                  <option value={100}>10 FPS (100 ms)</option>
+                  <option value={200}>5 FPS (200 ms)</option>
+                  <option value={333}>3 FPS (333 ms)</option>
+                  <option value={500}>2 FPS (500 ms)</option>
+                  <option value={1000}>1 FPS (1000 ms)</option>
+                </select>
+              </div>
+            )}
+
+            {/* Sliders: Opacity & Darkening */}
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px]">
+                  <span className="font-semibold text-zinc-300">Video Opacity</span>
+                  <span className="font-mono text-zinc-400">{Math.round(videoConfig.opacity * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="1.0"
+                  step="0.05"
+                  value={videoConfig.opacity}
+                  onChange={(e) => handleUpdateConfig({ opacity: parseFloat(e.target.value) })}
+                  className="w-full accent-sky-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px]">
+                  <span className="font-semibold text-zinc-300">Darkening Tint</span>
+                  <span className="font-mono text-zinc-400">{Math.round(videoConfig.darken * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="0.7"
+                  step="0.05"
+                  value={videoConfig.darken}
+                  onChange={(e) => handleUpdateConfig({ darken: parseFloat(e.target.value) })}
+                  className="w-full accent-sky-500 cursor-pointer"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Actions */}
+          <div className="flex items-center justify-between border-t border-zinc-800 pt-3">
+            <button
+              type="button"
+              onClick={() => {
+                handleUpdateConfig(DEFAULT_HUD_VIDEO_CONFIG);
+              }}
+              className="text-[11px] text-zinc-400 hover:text-zinc-200 underline"
+            >
+              Reset Defaults
+            </button>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={() => setIsSettingsOpen(false)}
+            >
+              Done
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </Card>
   );
 };

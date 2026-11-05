@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { Button } from './button';
 
@@ -108,7 +109,7 @@ export function Modal({ isOpen, onClose, title, description, children }: ModalPr
 
   if (!isOpen) return null;
 
-  return (
+  const content = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={(e) => {
@@ -145,4 +146,6 @@ export function Modal({ isOpen, onClose, title, description, children }: ModalPr
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(content, document.body) : content;
 }
