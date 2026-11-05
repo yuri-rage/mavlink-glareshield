@@ -14,7 +14,8 @@
     "test:ftp-sim": "npx tsx tests/ftp_ardupilot.test.ts",
     "test:regressions": "npx tsx tests/regressions.test.ts",
     "test:bridge-security": "python3 tests/check_bridge_security.py",
-    "test:review": "npm run test:ftp-sim && npm run test:regressions && npm run test:bridge-security"
+    "test:bridge-udp": "python3 tests/check_bridge_udp_target.py",
+    "test:review": "npm run test:ftp-sim && npm run test:regressions && npm run test:bridge-security && npm run test:bridge-udp"
   },
   "dependencies": {
     "@diffusionstudio/vits-web": "^1.0.3",

@@ -41,6 +41,14 @@ DEFAULT_ALLOWED_ORIGINS: list[Any] = [
 
 # Message IDs
 MSG_HEARTBEAT = 0
+MAV_TYPE_GCS = 6
+MAV_AUTOPILOT_INVALID = 8
+MAV_COMP_ID_AUTOPILOT1 = 1
+# Heartbeat types that are never a vehicle: GCS, ONBOARD_CONTROLLER (companions, RTK base
+# stations such as dock-of-the-base), GIMBAL, ADSB, CAMERA, CHARGING_STATION, SERVO, ODID
+NON_VEHICLE_MAV_TYPES = {6, 18, 26, 27, 30, 31, 33, 34}
+# Forget a UDP vehicle endpoint after this long without any packet from it
+UDP_VEHICLE_TIMEOUT_S = 10.0
 MSG_SYS_STATUS = 1
 MSG_PARAM_REQUEST_LIST = 21
 MSG_PARAM_VALUE = 22
@@ -218,6 +226,12 @@ class BridgeServer:
         self.transport = None
         self.serial_conn = None
         self.udp_target = None
+        # UDP vehicle endpoints (address -> last time a packet arrived from it). An address is
+        # added when it sends an autopilot HEARTBEAT (see is_vehicle_heartbeat) and dropped after
+        # UDP_VEHICLE_TIMEOUT_S of silence. Glareshield's traffic goes to every live endpoint;
+        # GCSes (e.g. Mission Planner sharing the port) and non-vehicle devices (e.g. an RTK base
+        # station) are never added.
+        self.udp_vehicles: dict[Any, float] = {}
 
         # Vehicle simulated state
         self.armed = False
@@ -430,11 +444,12 @@ class BridgeServer:
                 pass
 
     def send_to_vehicle(self, data: bytes):
-        if self.mode == "udp" and self.transport and self.udp_target:
-            try:
-                cast(Any, self.transport).sendto(data, self.udp_target)
-            except OSError:
-                pass
+        if self.mode == "udp" and self.transport:
+            for target in self.udp_send_targets():
+                try:
+                    cast(Any, self.transport).sendto(data, target)
+                except OSError:
+                    pass
         elif self.mode == "tcp" and self.transport:
             cast(Any, self.transport).write(data)
         elif self.mode == "serial" and self.serial_conn:
@@ -1365,6 +1380,91 @@ class BridgeServer:
                 )
                 await self.broadcast(self.encoder.pack(MSG_SCALED_PRESSURE, press_pkt))
 
+    @staticmethod
+    def mavlink_sources(
+        data: bytes,
+    ) -> list[tuple[int, int, int, int | None, int | None]]:
+        """Return (sysid, compid, msgid, mav_type, autopilot) for each MAVLink v1/v2 frame.
+
+        mav_type and autopilot are the HEARTBEAT fields for heartbeat frames, otherwise None.
+        Only the header is read; CRCs are not checked (the browser parser does that).
+        """
+        frames: list[tuple[int, int, int, int | None, int | None]] = []
+        i = 0
+        n = len(data)
+        while i < n:
+            magic = data[i]
+            if magic == 0xFD and i + 10 <= n:
+                plen, incompat = data[i + 1], data[i + 2]
+                sysid, compid = data[i + 5], data[i + 6]
+                msgid = data[i + 7] | (data[i + 8] << 8) | (data[i + 9] << 16)
+                payload = data[i + 10 : i + 10 + plen]
+                frame_len = 10 + plen + 2 + (13 if incompat & 0x01 else 0)
+            elif magic == 0xFE and i + 6 <= n:
+                plen = data[i + 1]
+                sysid, compid, msgid = data[i + 3], data[i + 4], data[i + 5]
+                payload = data[i + 6 : i + 6 + plen]
+                frame_len = 6 + plen + 2
+            else:
+                i += 1
+                continue
+            mav_type = autopilot = None
+            if msgid == MSG_HEARTBEAT:
+                # HEARTBEAT: custom_mode(u32) type(u8) autopilot(u8) ...; MAVLink 2 trims trailing zeros
+                mav_type = payload[4] if len(payload) > 4 else 0
+                autopilot = payload[5] if len(payload) > 5 else 0
+            frames.append((sysid, compid, msgid, mav_type, autopilot))
+            i += frame_len
+        return frames
+
+    @staticmethod
+    def is_vehicle_heartbeat(
+        compid: int, msgid: int, mav_type: int | None, autopilot: int | None
+    ) -> bool:
+        """An autopilot heartbeat: a real autopilot, a vehicle type, and component AUTOPILOT1.
+
+        Excludes GCSes (Glareshield, Mission Planner) and non-vehicle devices that also send
+        heartbeats, e.g. an RTK base station announcing itself as an ONBOARD_CONTROLLER.
+        """
+        return (
+            msgid == MSG_HEARTBEAT
+            and compid == MAV_COMP_ID_AUTOPILOT1
+            and autopilot not in (None, MAV_AUTOPILOT_INVALID)
+            and mav_type is not None
+            and mav_type not in NON_VEHICLE_MAV_TYPES
+        )
+
+    def update_udp_target(self, data: bytes, addr: Any) -> None:
+        """Track UDP vehicle endpoints: add on an autopilot heartbeat, refresh on any packet."""
+        now = time.monotonic()
+        if addr in self.udp_vehicles:
+            self.udp_vehicles[addr] = now
+            return
+        for sysid, compid, msgid, mav_type, autopilot in self.mavlink_sources(data):
+            if self.is_vehicle_heartbeat(compid, msgid, mav_type, autopilot):
+                self.udp_vehicles[addr] = now
+                print(
+                    f"[UDP] Vehicle endpoint {addr[0]}:{addr[1]} added (sysid {sysid}, "
+                    f"compid {compid}, type {mav_type}, autopilot {autopilot}); "
+                    f"{len(self.udp_vehicles)} active"
+                )
+                return
+
+    def udp_send_targets(self) -> list[Any]:
+        """Live vehicle endpoints, plus the configured remote target (if any)."""
+        now = time.monotonic()
+        for addr, seen in list(self.udp_vehicles.items()):
+            if now - seen > UDP_VEHICLE_TIMEOUT_S:
+                del self.udp_vehicles[addr]
+                print(
+                    f"[UDP] Vehicle endpoint {addr[0]}:{addr[1]} silent for "
+                    f"{UDP_VEHICLE_TIMEOUT_S:.0f}s; removed ({len(self.udp_vehicles)} active)"
+                )
+        targets = list(self.udp_vehicles)
+        if self.udp_target is not None and self.udp_target not in self.udp_vehicles:
+            targets.append(self.udp_target)
+        return targets
+
     async def setup_udp(self):
         parts = self.target.split(":")
         target_ip = parts[0]
@@ -1383,7 +1483,7 @@ class BridgeServer:
                     print(
                         f"[UDP] Ingesting telemetry from {addr[0]}:{addr[1]} ({len(data)} bytes). Forwarding to {len(self.server.clients)} web clients."
                     )
-                self.server.udp_target = addr
+                self.server.update_udp_target(data, addr)
                 asyncio.create_task(self.server.broadcast(data))
 
             def error_received(self, exc):

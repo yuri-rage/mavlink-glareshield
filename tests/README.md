@@ -8,6 +8,7 @@ This directory contains test suites for Glareshield's MAVLink protocol engine, v
 4. **`ftp_ardupilot.test.ts`**: MAVFTP client against a simulated vehicle that follows ArduPilot's `GCS_FTP.cpp` and `AP_Filesystem_Mission.cpp` (reply `seq = request + 1`, same-seq resend cache, one open file per session, regenerated `mission.dat` on read-back), on clean and lossy links.
 5. **`regressions.test.ts`**: QGC `.plan` files as QGroundControl writes them for ArduPilot (takeoff and land-start without coordinates, fixed-wing and VTOL landing patterns), the 720-byte RTCM fragmentation edge, and version polling against a vehicle that never answers.
 6. **`check_bridge_security.py`**: Starts the mock bridge and checks the WebSocket Origin allowlist (including `Origin: null`) and that the bridge's NTRIP client can't be used as a relay to arbitrary local ports or have request lines injected.
+7. **`check_bridge_udp_target.py`**: Runs the bridge in UDP mode with a simulated vehicle and a simulated second GCS (e.g. Mission Planner) on the same port, and checks that Glareshield's commands only ever go to the vehicle.
 
 ## Files
 
@@ -21,6 +22,7 @@ This directory contains test suites for Glareshield's MAVLink protocol engine, v
 | `ftp_ardupilot.test.ts` | MAVFTP upload/read against an ArduPilot-faithful simulator (run by `npm run test:ftp-sim`) |
 | `regressions.test.ts` | QGC plan parsing, RTCM 720-byte edge, version-poll limits (run by `npm run test:regressions`) |
 | `check_bridge_security.py` | Bridge Origin allowlist and NTRIP relay checks (run by `npm run test:bridge-security`) |
+| `check_bridge_udp_target.py` | UDP reply target stays on the vehicle when another GCS shares the port (run by `npm run test:bridge-udp`) |
 | [`bridge-mock-fix.patch`](file:///home/yuri/Projects/mavlink-glareshield/tests/bridge-mock-fix.patch) | Reference diff fixing mock telemetry struct layouts (applied to `bridge/bridge.py`) |
 
 ## Running Tests
