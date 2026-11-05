@@ -131,7 +131,7 @@ export const GpsWidget: React.FC = () => {
               {hasAnyYaw ? getYawLabel() : 'COG'}
             </span>
             <div
-              className="text-sm sm:text-base font-mono font-bold text-sky-400 whitespace-nowrap"
+              className="text-sm sm:text-base font-mono font-bold text-zinc-100 whitespace-nowrap"
               title={hasAnyYaw ? getYawDisplay() : `${gps.cog.toFixed(0)}°`}
             >
               {!hasLink
