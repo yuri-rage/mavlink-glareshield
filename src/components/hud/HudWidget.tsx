@@ -187,6 +187,24 @@ export const HudWidget: React.FC = () => {
     const HUD_BRIGHT = '#4ade80';
     const HUD_HIGHLIGHT = '#86efac';
 
+    const hasLink =
+      heartbeat.lastHeartbeatTime > 0 &&
+      heartbeat.modeName !== 'DISCONNECTED' &&
+      Date.now() - heartbeat.lastHeartbeatTime <= 3500;
+
+    // Geometric layouts for HUD overlay instruments
+    const spdBoxX = 10;
+    const spdBoxW = 62;
+    const spdBoxH = 30;
+    const spdBoxY = cy - spdBoxH / 2;
+
+    const altBoxW = 62;
+    const altBoxX = width - altBoxW - 10;
+    const altBoxH = 30;
+    const altBoxY = cy - altBoxH / 2;
+
+    const tapeWidth = Math.min(280, width - 110);
+
     ctx.save();
 
     // Inner viewport clipping
@@ -196,7 +214,37 @@ export const HudWidget: React.FC = () => {
 
     // =========================================================
     // 1. Artificial Horizon & Pitch Ladder (Rotates with roll)
+    // Masked around all HUD overlay instruments using evenodd clipping
+    // so rungs and horizon lines never cross behind flight readouts.
     // =========================================================
+    ctx.save();
+    ctx.beginPath();
+    // Outer canvas boundary
+    ctx.rect(0, 0, width, height);
+
+    // Instrument cutouts (evenodd winding rule cuts these out of the ladder drawing)
+    // Left speed tape corridor (bracket, IAS box, GS readout)
+    ctx.rect(0, cy - 68, spdBoxX + spdBoxW + 8, 136);
+    // Right altitude tape corridor (bracket, Alt box, VVI readout)
+    ctx.rect(altBoxX - 8, cy - 68, width - altBoxX + 8, 136);
+    // Top compass tape & digital heading box
+    ctx.rect(cx - tapeWidth / 2 - 2, 0, tapeWidth + 4, 36);
+    // Bottom left WP progress readout
+    ctx.rect(0, height - 44, 145, 44);
+    // Bottom right Throttle readout
+    ctx.rect(width - 95, height - 32, 95, 32);
+    // Top left Load Factor (Nz) readout
+    ctx.rect(0, 0, 80, 30);
+    // Top right Home vector readout (if active)
+    if (hasLink && homePosition.distanceM !== null) {
+      ctx.rect(width - 155, 0, 155, 30);
+    }
+    // Link lost banner (if active)
+    if (!hasLink) {
+      ctx.rect(cx - 130, 40, 260, 26);
+    }
+    ctx.clip('evenodd');
+
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(-attitude.roll);
@@ -283,7 +331,8 @@ export const HudWidget: React.FC = () => {
       }
     }
     ctx.setLineDash([]);
-    ctx.restore();
+    ctx.restore(); // Restores roll & pitch transform
+    ctx.restore(); // Restores evenodd cutout clipping mask (returns to full viewport)
 
     // =========================================================
     // 1b. Flight Path Marker (FPM) / Velocity Vector (The "Bird")
@@ -501,7 +550,6 @@ export const HudWidget: React.FC = () => {
     // 4. Moving Heading Compass Tape (Top) - Smooth scrolling fix
     // =========================================================
     const tapeY = 18;
-    const tapeWidth = Math.min(280, width - 110);
     ctx.save();
     ctx.beginPath();
     ctx.rect(cx - tapeWidth / 2, 0, tapeWidth, 36);
@@ -560,10 +608,8 @@ export const HudWidget: React.FC = () => {
     ctx.fill();
 
     // Digital Heading Box
-    ctx.fillStyle = 'rgba(2, 5, 4, 0.92)';
     ctx.strokeStyle = HUD_GREEN;
     ctx.lineWidth = 1.2;
-    ctx.fillRect(cx - 24, 2, 48, 14);
     ctx.strokeRect(cx - 24, 2, 48, 14);
     ctx.fillStyle = HUD_HIGHLIGHT;
     ctx.font = 'bold 10px ui-monospace, monospace';
@@ -574,11 +620,6 @@ export const HudWidget: React.FC = () => {
     // =========================================================
     // 5. Left: Airspeed / Groundspeed Ladder & Prominent IAS
     // =========================================================
-    const spdBoxX = 10;
-    const spdBoxW = 62;
-    const spdBoxH = 30;
-    const spdBoxY = cy - spdBoxH / 2;
-
     // Speed vertical bracket
     ctx.strokeStyle = HUD_DIM_GREEN;
     ctx.lineWidth = 1.2;
@@ -586,11 +627,6 @@ export const HudWidget: React.FC = () => {
     ctx.moveTo(spdBoxX + spdBoxW, cy - 65);
     ctx.lineTo(spdBoxX + spdBoxW, cy + 65);
     ctx.stroke();
-
-    const hasLink =
-      heartbeat.lastHeartbeatTime > 0 &&
-      heartbeat.modeName !== 'DISCONNECTED' &&
-      Date.now() - heartbeat.lastHeartbeatTime <= 3500;
 
     // Prominent Speed: Indicated Airspeed (IAS)
     const isKtsMode = unitSystem === 'kts';
@@ -606,11 +642,9 @@ export const HudWidget: React.FC = () => {
         : formatSpeed(vfr.airspeed).value;
     const primarySpeedUnit = isKtsMode ? 'KIAS' : `IAS ${formatSpeed(vfr.airspeed).unit.toUpperCase()}`;
 
-    // Current Speed Value Box (Mask pitch ladders)
-    ctx.fillStyle = 'rgba(2, 5, 4, 0.94)';
+    // Current Speed Value Box (Pitch ladder is masked behind this region)
     ctx.strokeStyle = HUD_BRIGHT;
     ctx.lineWidth = 1.5;
-    ctx.fillRect(spdBoxX, spdBoxY, spdBoxW, spdBoxH);
     ctx.strokeRect(spdBoxX, spdBoxY, spdBoxW, spdBoxH);
 
     // Pointer to bracket
@@ -630,7 +664,7 @@ export const HudWidget: React.FC = () => {
     ctx.font = 'bold 8px ui-monospace, monospace';
     ctx.fillText(primarySpeedUnit, spdBoxX + spdBoxW / 2, spdBoxY + 22);
 
-    // Groundspeed readout beneath box (Mask pitch ladders)
+    // Groundspeed readout beneath box (Pitch ladder is masked behind this region)
     const gsVal = !hasLink
       ? '--'
       : isKtsMode
@@ -646,8 +680,6 @@ export const HudWidget: React.FC = () => {
     const gsH = 15;
     const gsY = spdBoxY + spdBoxH + 4;
 
-    ctx.fillStyle = 'rgba(2, 5, 4, 0.9)';
-    ctx.fillRect(spdBoxX, gsY, gsW, gsH);
     ctx.strokeStyle = 'rgba(34, 197, 94, 0.35)';
     ctx.lineWidth = 1;
     ctx.strokeRect(spdBoxX, gsY, gsW, gsH);
@@ -661,11 +693,6 @@ export const HudWidget: React.FC = () => {
     // =========================================================
     // 6. Right: Altitude Ladder & Box
     // =========================================================
-    const altBoxW = 62;
-    const altBoxX = width - altBoxW - 10;
-    const altBoxH = 30;
-    const altBoxY = cy - altBoxH / 2;
-
     // Altitude vertical bracket
     ctx.strokeStyle = HUD_DIM_GREEN;
     ctx.lineWidth = 1.2;
@@ -674,11 +701,9 @@ export const HudWidget: React.FC = () => {
     ctx.lineTo(altBoxX, cy + 65);
     ctx.stroke();
 
-    // Current Altitude Value Box (Mask pitch ladders)
-    ctx.fillStyle = 'rgba(2, 5, 4, 0.94)';
+    // Current Altitude Value Box (Pitch ladder is masked behind this region)
     ctx.strokeStyle = HUD_BRIGHT;
     ctx.lineWidth = 1.5;
-    ctx.fillRect(altBoxX, altBoxY, altBoxW, altBoxH);
     ctx.strokeRect(altBoxX, altBoxY, altBoxW, altBoxH);
 
     // Pointer to bracket
@@ -707,7 +732,7 @@ export const HudWidget: React.FC = () => {
     ctx.font = 'bold 8px ui-monospace, monospace';
     ctx.fillText(`${altFormatted.unit.toUpperCase()} ${altitudeMode.toUpperCase()}`, altBoxX + altBoxW / 2, altBoxY + 22);
 
-    // Vertical Speed / Climb Rate readout beneath box (Mask pitch ladders)
+    // Vertical Speed / Climb Rate readout beneath box (Pitch ladder is masked behind this region)
     const climbFormatted = formatClimb(vfr.climb);
     const vviText = hasLink ? climbFormatted.full : `-- ${climbFormatted.unit}`;
     const vviMetrics = ctx.measureText(vviText);
@@ -716,8 +741,6 @@ export const HudWidget: React.FC = () => {
     const vviY = altBoxY + altBoxH + 4;
     const vviX = width - vviW - 10;
 
-    ctx.fillStyle = 'rgba(2, 5, 4, 0.9)';
-    ctx.fillRect(vviX, vviY, vviW, vviH);
     ctx.strokeStyle = 'rgba(34, 197, 94, 0.35)';
     ctx.lineWidth = 1;
     ctx.strokeRect(vviX, vviY, vviW, vviH);
@@ -767,8 +790,7 @@ export const HudWidget: React.FC = () => {
     const wpBoxX = 10;
     const wpBoxY = height - wpBoxH - 8;
 
-    ctx.fillStyle = 'rgba(2, 5, 4, 0.92)';
-    ctx.fillRect(wpBoxX, wpBoxY, wpBoxW, wpBoxH);
+    // Waypoint Progress Box (Pitch ladder is masked behind this region)
     ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
     ctx.lineWidth = 1;
     ctx.strokeRect(wpBoxX, wpBoxY, wpBoxW, wpBoxH);
@@ -789,7 +811,7 @@ export const HudWidget: React.FC = () => {
       ctx.fillText(wpLine1, wpBoxX + wpPadX, wpBoxY + 10);
     }
 
-    // Lower Right: THR with mask
+    // Lower Right: THR (Pitch ladder is masked behind this region)
     ctx.font = 'bold 11px ui-monospace, SFMono-Regular, monospace';
     const thrMetrics = ctx.measureText(thrText);
     const thrBoxW = thrMetrics.width + wpPadX * 2;
@@ -797,8 +819,6 @@ export const HudWidget: React.FC = () => {
     const thrBoxX = width - thrBoxW - 10;
     const thrBoxY = height - thrBoxH - 8;
 
-    ctx.fillStyle = 'rgba(2, 5, 4, 0.92)';
-    ctx.fillRect(thrBoxX, thrBoxY, thrBoxW, thrBoxH);
     ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
     ctx.lineWidth = 1;
     ctx.strokeRect(thrBoxX, thrBoxY, thrBoxW, thrBoxH);
@@ -827,8 +847,7 @@ export const HudWidget: React.FC = () => {
     const nzBoxX = 10;
     const nzBoxY = 16 - nzBoxH / 2;
 
-    ctx.fillStyle = 'rgba(2, 5, 4, 0.92)';
-    ctx.fillRect(nzBoxX, nzBoxY, nzBoxW, nzBoxH);
+    // Normal Load Factor (Nz) Box (Pitch ladder is masked behind this region)
     ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
     ctx.lineWidth = 1;
     ctx.strokeRect(nzBoxX, nzBoxY, nzBoxW, nzBoxH);
@@ -843,8 +862,7 @@ export const HudWidget: React.FC = () => {
       const hmMetrics = ctx.measureText(homeText);
       const hmBoxW = hmMetrics.width + nzPadX * 2;
       const hmBoxX = width - hmBoxW - 10;
-      ctx.fillStyle = 'rgba(2, 5, 4, 0.92)';
-      ctx.fillRect(hmBoxX, nzBoxY, hmBoxW, nzBoxH);
+      // Home Vector Box (Pitch ladder is masked behind this region)
       ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
       ctx.lineWidth = 1;
       ctx.strokeRect(hmBoxX, nzBoxY, hmBoxW, nzBoxH);
