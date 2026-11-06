@@ -566,7 +566,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     // Trail polyline: dark magenta, so it reads against satellite imagery and stays distinct from the
     // bright magenta / yellow mission lines.
     const trailPoly = L.polyline(flightTrace, {
-      color: '#800073',
+      color: '#8c0073',
       weight: 3.5,
       opacity: 0.95,
       pane: 'trailPane',
