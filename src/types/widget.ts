@@ -48,6 +48,11 @@ export interface WidgetDataBinding {
 }
 
 export interface WidgetGaugeConfig {
+  /**
+   * 'marker' (default): one gauge, with the first extra value drawn as a marker on its scale.
+   * 'multiple': one gauge per value, each with its own range, thresholds, multiplier and offset.
+   */
+  layout?: 'marker' | 'multiple';
   /** Dial sweep in degrees, centred on 12 o'clock. */
   sweep?: 180 | 240 | 270;
   style?: 'arc' | 'needle' | 'both';
@@ -99,7 +104,8 @@ export interface CustomWidgetDefinition {
   multiBarConfig?: WidgetMultiBarConfig;
   /**
    * Further values after `binding`. Charts plot them all, the value list shows them all, and the radial gauge,
-   * linear gauge and compass rose use the first one as a secondary marker (e.g. a target).
+   * linear gauge and compass rose use the first one as a secondary marker (e.g. a target) — or, with
+   * gauge.layout 'multiple', the gauges draw one gauge per value.
    */
   bindings?: WidgetDataBinding[];
   gauge?: WidgetGaugeConfig;

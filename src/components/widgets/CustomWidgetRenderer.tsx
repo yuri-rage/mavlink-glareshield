@@ -21,6 +21,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { RadialGauge } from './custom/RadialGauge';
+import { LinearGauge } from './custom/LinearGauge';
+import { GaugeGrid, type GridGauge } from './custom/GaugeGrid';
 import { TimeSeriesChart, type ChartSeries } from './custom/TimeSeriesChart';
 import { ACCENT_HEX, SERIES_HEX, ZONE_HEX, useChromeColors, type ColorScheme } from './custom/palette';
 import {
@@ -567,12 +569,23 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
   const numVal = primary?.value ?? null;
   const boundText = primary?.text ?? '--';
   const pct = numVal !== null && max > min ? clamp(((numVal - min) / (max - min)) * 100, 0, 100) : 0;
+  const isMultiGauge =
+    (definition.displayType === 'gauge-radial' || definition.displayType === 'gauge-linear') &&
+    definition.gauge?.layout === 'multiple';
   const secondary =
-    bindings.length > 1 && readings[1]
+    !isMultiGauge && bindings.length > 1 && readings[1]
       ? { value: readings[1].value, text: `${readings[1].text} ${readings[1].unit}`.trim(), label: seriesLabel(bindings[1]) }
       : null;
 
-  const alertState = evaluateAlert(primary?.base ?? null, definition.binding);
+  // Multi-gauge: one gauge per value, each on its own scale (falling back to the first value's range).
+  const gaugeLevels = isMultiGauge ? bindings.map((b, i) => evaluateAlert(readings[i]?.base ?? null, b)) : [];
+  const alertState = isMultiGauge
+    ? gaugeLevels.includes('crit')
+      ? 'crit'
+      : gaugeLevels.includes('warn')
+        ? 'warn'
+        : 'normal'
+    : evaluateAlert(primary?.base ?? null, definition.binding);
   const staleReadings = readings.filter((r) => r.stale);
   const isStaleAll = readings.length > 0 && staleReadings.length === readings.length;
   const staleMessages = [...new Set(bindings.filter((_, i) => readings[i]?.stale).map((b) => b.messageName))];
@@ -581,6 +594,33 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
   const effectiveScheme: ColorScheme =
     alertState === 'crit' ? 'red' : alertState === 'warn' ? 'amber' : ((definition.colorScheme || 'default') as ColorScheme);
   const accentHex = ACCENT_HEX[effectiveScheme];
+  const gaugeItems: GridGauge[] = isMultiGauge
+    ? bindings.map((b, i) => {
+        const r = readings[i];
+        const scaled = displayBinding(
+          { ...b, min: b.min ?? definition.binding?.min, max: b.max ?? definition.binding?.max },
+          system
+        );
+        const level = gaugeLevels[i];
+        return {
+          key: `${b.messageName}.${b.fieldName}.${i}`,
+          label: seriesLabel(b),
+          value: r?.value ?? null,
+          text: r?.text ?? '--',
+          unit: r?.unit ?? '',
+          min: scaled?.min ?? 0,
+          max: scaled?.max ?? 100,
+          zoneBinding: scaled,
+          accent:
+            level === 'crit'
+              ? ACCENT_HEX.red
+              : level === 'warn'
+                ? ACCENT_HEX.amber
+                : b.color || ACCENT_HEX[(definition.colorScheme || 'default') as ColorScheme],
+          dimmed: Boolean(r?.stale),
+        };
+      })
+    : [];
 
   const schemeColors = {
     default: {
@@ -708,7 +748,10 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
         {definition.displayType === 'gauge-radial' && (
           // The dial is absolutely positioned so it fits the card instead of sizing it: the card's height comes
           // from its row (neighbouring widgets, or the row-height setting), with a modest minimum.
-          <div className="relative flex-1 min-h-[190px]">
+          <div className={`relative flex-1 ${isMultiGauge && gaugeItems.length > 4 ? 'min-h-[240px]' : 'min-h-[190px]'}`}>
+            {isMultiGauge ? (
+              <GaugeGrid gauges={gaugeItems} config={definition.gauge} />
+            ) : (
             <RadialGauge
               value={numVal}
               text={boundText}
@@ -721,77 +764,46 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
               secondary={secondary}
               dimmed={isStaleAll}
             />
+            )}
           </div>
         )}
 
         {/* LINEAR GAUGE */}
-        {definition.displayType === 'gauge-linear' && (() => {
-          const zones = (definition.gauge?.showZones ?? true) ? thresholdZones(pb, min, max) : [];
-          const ticks = niceTicks(min, max, definition.gauge?.majorTicks ?? 5);
-          const tickDec = stepDecimals(niceStep(min, max, definition.gauge?.majorTicks ?? 5));
-          const at = (v: number) => (max > min ? clamp(((v - min) / (max - min)) * 100, 0, 100) : 0);
-          return (
-            <div className={`space-y-1.5 transition-opacity ${isStaleAll ? 'opacity-40' : ''}`}>
-              <div className="flex justify-between items-baseline font-mono gap-2">
-                <span className={`text-2xl font-bold ${schemeColors.valueText}`}>
-                  {boundText} <span className="text-xs font-normal text-zinc-400">{unit}</span>
-                </span>
-                {secondary && (
-                  <span className="text-[10px] font-mono truncate" style={{ color: '#d946ef' }}>
-                    ▼ {secondary.label} {secondary.text}
-                  </span>
-                )}
-              </div>
-              <div className="relative pt-2">
-                {secondary?.value !== null && secondary?.value !== undefined && (
-                  <div
-                    className="absolute top-0 -translate-x-1/2 w-0 h-0 border-x-[5px] border-x-transparent border-t-[7px]"
-                    style={{ left: `${at(secondary.value)}%`, borderTopColor: '#d946ef' }}
-                  />
-                )}
-                <div className="w-full bg-zinc-900 h-3 rounded-full overflow-hidden border border-zinc-800 relative">
-                  {(() => {
-                    // A range that spans zero fills from zero, so negative values read as negative.
-                    const origin = min < 0 && max > 0 ? at(0) : 0;
-                    const left = Math.min(origin, pct);
-                    return (
-                      <>
-                        <div
-                          className={`absolute top-0 bottom-0 ${schemeColors.bg} transition-[left,width] duration-150`}
-                          style={{ left: `${left}%`, width: `${Math.abs(pct - origin)}%` }}
-                        />
-                        {origin > 0 && <div className="absolute top-0 bottom-0 w-px bg-zinc-500" style={{ left: `${origin}%` }} />}
-                      </>
-                    );
-                  })()}
-                  {zones.map((z) => (
-                    <div
-                      key={`${z.level}-${z.from}`}
-                      className="absolute bottom-0 h-[3px]"
-                      style={{
-                        left: `${at(z.from)}%`,
-                        width: `${at(z.to) - at(z.from)}%`,
-                        background: ZONE_HEX[z.level],
-                        opacity: z.level === 'normal' ? 0.6 : 0.9,
-                      }}
-                    />
-                  ))}
-                </div>
-                <div className="relative h-3.5 mt-0.5 text-[9px] font-mono text-zinc-500">
-                  {ticks.map((t) => (
-                    <span
-                      key={t}
-                      className="absolute -translate-x-1/2 whitespace-nowrap"
-                      style={{ left: `${at(t)}%` }}
-                    >
-                      {t.toFixed(tickDec)}
-                    </span>
-                  ))}
-                </div>
-              </div>
+        {definition.displayType === 'gauge-linear' &&
+          (isMultiGauge ? (
+            <div className="space-y-2.5">
+              {gaugeItems.map((g) => (
+                <LinearGauge
+                  key={g.key}
+                  label={g.label}
+                  value={g.value}
+                  text={g.text}
+                  unit={g.unit}
+                  min={g.min}
+                  max={g.max}
+                  zoneBinding={g.zoneBinding}
+                  config={definition.gauge}
+                  accent={g.accent}
+                  dimmed={g.dimmed}
+                  compact
+                />
+              ))}
             </div>
-          );
-        })()}
+          ) : (
+            <LinearGauge
+              value={numVal}
+              text={boundText}
+              unit={unit}
+              min={min}
+              max={max}
+              zoneBinding={pb}
+              config={definition.gauge}
+              accent={accentHex}
+              valueClass={schemeColors.valueText}
+              secondary={secondary}
+              dimmed={isStaleAll}
+            />
+          ))}
 
         {/* VALUE LIST */}
         {definition.displayType === 'value-list' && (

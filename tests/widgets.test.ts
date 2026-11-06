@@ -53,6 +53,15 @@ check('stepDecimals: 0.25 → 2, 5 → 0, 0.5 → 1', geo.stepDecimals(0.25) ===
   check('thresholdZones: a threshold beyond max is clipped to the scale', clipped.length === 1 && clipped[0].level === 'normal' && clipped[0].to === 100);
 }
 
+{
+  const a = 232 / 158;
+  check('bestGridColumns: one dial is one column', geo.bestGridColumns(1, 400, 300, a, 16) === 1);
+  check('bestGridColumns: 4 dials in a wide, short card go 4 across', geo.bestGridColumns(4, 900, 220, a, 16) === 4);
+  check('bestGridColumns: 4 dials in a squarer card go 2 × 2', geo.bestGridColumns(4, 440, 420, a, 16) === 2);
+  check('bestGridColumns: 3 dials in a tall narrow card stack', geo.bestGridColumns(3, 300, 700, a, 16) === 1);
+  check('bestGridColumns: unknown size falls back to one column', geo.bestGridColumns(5, 0, 0, a) === 1);
+}
+
 // ------------------------------------------------------------------------------------------------
 // B. Message cache and value pipeline
 // ------------------------------------------------------------------------------------------------
@@ -204,6 +213,9 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   check('sanitize: imported actions always require confirmation', w.action?.confirmation === true);
   const mb = sanitizeWidgetDefinition({ id: 'm', name: 'M', category: 'telemetry', displayType: 'multi-bar', multiBarConfig: { group: 'servo-8-scaled' } });
   check('sanitize: scaled multi-bar groups survive import (previously reset to rc-8)', mb.multiBarConfig?.group === 'servo-8-scaled');
+  const mg = sanitizeWidgetDefinition({ id: 'g', name: 'G', category: 'telemetry', displayType: 'gauge-radial', gauge: { layout: 'multiple' } });
+  const bad = sanitizeWidgetDefinition({ id: 'g', name: 'G', category: 'telemetry', displayType: 'gauge-radial', gauge: { layout: 'grid' as any } });
+  check('sanitize: gauge layout "multiple" is kept, unknown layouts dropped', mg.gauge?.layout === 'multiple' && bad.gauge?.layout === undefined);
   const vl = sanitizeWidgetDefinition({ id: 'v', name: 'V', category: 'telemetry', displayType: 'value-list' });
   check('sanitize: the new value-list type is accepted', vl.displayType === 'value-list');
 }

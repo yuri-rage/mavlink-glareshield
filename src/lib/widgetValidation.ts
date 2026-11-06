@@ -74,6 +74,7 @@ function sanitizeGauge(raw: unknown): WidgetGaugeConfig | undefined {
   const out: WidgetGaugeConfig = {};
   if (g.sweep === 180 || g.sweep === 240 || g.sweep === 270) out.sweep = g.sweep;
   if (g.style === 'arc' || g.style === 'needle' || g.style === 'both') out.style = g.style;
+  if (g.layout === 'marker' || g.layout === 'multiple') out.layout = g.layout;
   const major = finite(g.majorTicks);
   if (major !== undefined) out.majorTicks = Math.max(2, Math.min(12, Math.round(major)));
   const minor = finite(g.minorTicks);

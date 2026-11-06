@@ -134,13 +134,14 @@ Custom widgets are declarative JSON definitions safe from arbitrary code executi
 - **Charts** plot every value as its own series.
 - **Value lists** show one row per value.
 - **Radial and linear gauges and the compass rose** draw the first extra value as a magenta marker, for example a target against the actual value.
+- **Radial and linear gauges with `gauge.layout: "multiple"`** draw one gauge per value: up to 6 dials, which arrange themselves in a grid to fit the card, or up to 8 stacked bars. Each gauge has its own label, multiplier, offset, range and thresholds. A gauge with no min or max uses the first gauge's. The card's border and badge show the worst alert among them.
 
 **Options**
 
 | Key | Applies to | Options |
 |---|---|---|
-| `gauge` | radial gauge | `sweep` (180, 240 or 270), `style` (`arc`, `needle` or `both`), `majorTicks`, `minorTicks`, `showZones` |
-| `gauge` | linear gauge | `majorTicks`, `showZones` |
+| `gauge` | radial gauge | `layout` (`marker` or `multiple`), `sweep` (180, 240 or 270), `style` (`arc`, `needle` or `both`), `majorTicks`, `minorTicks`, `showZones` |
+| `gauge` | linear gauge | `layout`, `majorTicks`, `showZones` |
 | `chart` | time-series chart | `windowSec` (default window; 10 s, 30 s, 1 min or 5 min can be picked on the chart), `yScale` (`auto`, `zero` or `fixed`), `showGrid`, `fill` |
 | `staleAfterSec` | all telemetry widgets | Seconds without the message before values dim and show **Stale** (default 3). |
 | `stateThreshold` | LED, toggle feedback | On when the value is above this (default 0). |

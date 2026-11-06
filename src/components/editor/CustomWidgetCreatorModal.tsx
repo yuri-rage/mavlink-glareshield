@@ -322,7 +322,10 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   const isActionWidget =
     displayType === 'action-button' || displayType === 'toggle-switch' || displayType === 'slider-control';
   const isTelemetryWidget = TELEMETRY_TYPES.includes(displayType);
-  const extraLimit = EXTRA_VALUE_LIMIT[displayType] ?? 0;
+  const isGauge = displayType === 'gauge-radial' || displayType === 'gauge-linear';
+  const multiGauge = isGauge && gauge.layout === 'multiple';
+  // One gauge per value: up to 6 dials or 8 bars in one card.
+  const extraLimit = multiGauge ? (displayType === 'gauge-radial' ? 5 : 7) : EXTRA_VALUE_LIMIT[displayType] ?? 0;
   const extrasUsed = extraBindings.slice(0, extraLimit);
   const usesRange = displayType !== 'value-list' && displayType !== 'stat-card' && displayType !== 'text-display';
 
@@ -346,7 +349,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
       def.binding = cleanBinding({ messageName: binding.messageName, fieldName: binding.fieldName, unit: binding.unit, min: binding.min ?? 0, max: binding.max ?? 100 });
     }
     if (displayType === 'gauge-radial') def.gauge = { ...gauge };
-    if (displayType === 'gauge-linear') def.gauge = { majorTicks: gauge.majorTicks, showZones: gauge.showZones };
+    if (displayType === 'gauge-linear') def.gauge = { layout: gauge.layout, majorTicks: gauge.majorTicks, showZones: gauge.showZones };
     if (displayType === 'sparkline') def.chart = { ...chart };
     if (displayType === 'indicator-led' && stateThreshold !== undefined) def.stateThreshold = stateThreshold;
     if (displayType === 'toggle-switch' && feedbackEnabled) {
@@ -654,7 +657,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
 
         {/* Telemetry binding (primary value) */}
         {isTelemetryWidget && (
-          <Section title={displayType === 'value-list' || displayType === 'sparkline' ? 'Value 1' : 'Telemetry Data Binding'}>
+          <Section title={multiGauge ? 'Gauge 1' : displayType === 'value-list' || displayType === 'sparkline' ? 'Value 1' : 'Telemetry Data Binding'}>
             <BindingEditor
               value={binding}
               onChange={setBinding}
@@ -662,7 +665,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
               observed={observed}
               showRange={usesRange}
               showThresholds={displayType !== 'compass-rose'}
-              showLabel={displayType === 'value-list' || displayType === 'sparkline'}
+              showLabel={displayType === 'value-list' || displayType === 'sparkline' || multiGauge}
               showColor={displayType === 'sparkline'}
               onMessagePicked={(msg) => setBinding((b) => ({ ...b, ...messageDefaults(msg) }))}
             />
@@ -692,49 +695,21 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
           </Section>
         )}
 
-        {/* Additional values */}
-        {isTelemetryWidget && extraLimit > 0 && (
-          <Section
-            title={extraLimit === 1 ? 'Secondary Marker (Optional)' : 'More Values'}
-            right={
-              extrasUsed.length < extraLimit && (
-                <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] gap-1 border-zinc-700" onClick={addExtra}>
-                  <Plus className="h-3 w-3" />
-                  {extraLimit === 1 ? 'Add marker' : 'Add value'}
-                </Button>
-              )
-            }
-          >
-            <p className="text-[10px] text-zinc-500 -mt-1">
-              {displayType === 'sparkline'
-                ? 'Each value is plotted as its own series on the same chart.'
-                : displayType === 'value-list'
-                  ? 'Each value gets its own labelled row.'
-                  : 'Drawn as a magenta marker on the same scale, e.g. a target against the actual value.'}
-            </p>
-            {extrasUsed.map((b, i) => (
-              <div key={i} className="pt-2 border-t border-zinc-800/80 first:border-t-0 first:pt-0">
-                <BindingEditor
-                  title={extraLimit === 1 ? 'Marker value' : `Value ${i + 2}`}
-                  value={b}
-                  onChange={(next) => setExtraBindings((list) => list.map((x, j) => (j === i ? next : x)))}
-                  onRemove={() => setExtraBindings((list) => list.filter((_, j) => j !== i))}
-                  catalog={catalog}
-                  observed={observed}
-                  showRange={false}
-                  showThresholds={displayType === 'value-list'}
-                  showLabel
-                  showColor={displayType === 'sparkline'}
-                />
-              </div>
-            ))}
-          </Section>
-        )}
-
         {/* Radial / linear gauge options */}
         {(displayType === 'gauge-radial' || displayType === 'gauge-linear') && (
           <Section title="Scale">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+              <div className="space-y-1 col-span-2">
+                <label className="text-[11px] font-medium text-zinc-400">Layout</label>
+                <select
+                  value={gauge.layout ?? 'marker'}
+                  onChange={(e) => setGauge({ ...gauge, layout: e.target.value as WidgetGaugeConfig['layout'] })}
+                  className={SELECT_CLASS}
+                >
+                  <option value="marker">One gauge (optional target marker)</option>
+                  <option value="multiple">One gauge per value</option>
+                </select>
+              </div>
               {displayType === 'gauge-radial' && (
                 <>
                   <div className="space-y-1">
@@ -793,6 +768,47 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                 Threshold zones
               </label>
             </div>
+          </Section>
+        )}
+
+        {/* Additional values */}
+        {isTelemetryWidget && extraLimit > 0 && (
+          <Section
+            title={multiGauge ? 'More Gauges' : extraLimit === 1 ? 'Secondary Marker (Optional)' : 'More Values'}
+            right={
+              extrasUsed.length < extraLimit && (
+                <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] gap-1 border-zinc-700" onClick={addExtra}>
+                  <Plus className="h-3 w-3" />
+                  {multiGauge ? 'Add gauge' : extraLimit === 1 ? 'Add marker' : 'Add value'}
+                </Button>
+              )
+            }
+          >
+            <p className="text-[10px] text-zinc-500 -mt-1">
+              {displayType === 'sparkline'
+                ? 'Each value is plotted as its own series on the same chart.'
+                : displayType === 'value-list'
+                  ? 'Each value gets its own labelled row.'
+                  : multiGauge
+                    ? 'Each value gets its own gauge with its own range, thresholds, multiplier and offset. A blank min or max uses the first gauge\'s.'
+                    : 'Drawn as a magenta marker on the same scale, e.g. a target against the actual value.'}
+            </p>
+            {extrasUsed.map((b, i) => (
+              <div key={i} className="pt-2 border-t border-zinc-800/80 first:border-t-0 first:pt-0">
+                <BindingEditor
+                  title={multiGauge ? `Gauge ${i + 2}` : extraLimit === 1 ? 'Marker value' : `Value ${i + 2}`}
+                  value={b}
+                  onChange={(next) => setExtraBindings((list) => list.map((x, j) => (j === i ? next : x)))}
+                  onRemove={() => setExtraBindings((list) => list.filter((_, j) => j !== i))}
+                  catalog={catalog}
+                  observed={observed}
+                  showRange={multiGauge}
+                  showThresholds={displayType === 'value-list' || multiGauge}
+                  showLabel
+                  showColor={displayType === 'sparkline'}
+                />
+              </div>
+            ))}
           </Section>
         )}
 
