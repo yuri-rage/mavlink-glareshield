@@ -265,5 +265,55 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   check('sliderParams: other commands take it in param1', pm.sliderParams(31010, p7, 42)[0] === 42);
 }
 
+// ------------------------------------------------------------------------------------------------
+// Composite widgets: several panels in one card
+// ------------------------------------------------------------------------------------------------
+{
+  const pm = await import('../src/components/widgets/custom/panelModel.ts');
+  const { MAX_PANELS, MAX_COMPOSITE_BINDINGS } = await import('../src/lib/widgetValidation.ts');
+  const gauge = { displayType: 'gauge-radial', title: 'Pressure', span: 6, binding: { messageName: 'SCALED_PRESSURE', fieldName: 'press_diff', min: 0, max: 50 } };
+  const toggle = { displayType: 'toggle-switch', span: 6, action: { label: 'Pump', commandId: 183, params: [9, 1900, 1100, 0, 0, 0, 0], confirmation: false },
+    feedback: { messageName: 'SERVO_OUTPUT_RAW', fieldName: 'servo9_raw' }, stateThreshold: 1500, colorScheme: 'green' };
+  const chart = { displayType: 'sparkline', binding: { messageName: 'SCALED_PRESSURE', fieldName: 'press_diff' } };
+  const card: any = { id: 'pump', name: 'Pump Station', category: 'control', displayType: 'composite', colorScheme: 'blue', staleAfterSec: 5, panels: [gauge, toggle, chart] };
+
+  const panels = pm.cardPanels(card);
+  check('cardPanels: one stand-alone definition per panel', panels.length === 3 && panels.map((p) => p.displayType).join() === 'gauge-radial,toggle-switch,sparkline');
+  check('cardPanels: a panel title becomes its name, otherwise the card name', panels[0].name === 'Pressure' && panels[1].name === 'Pump Station');
+  check('cardPanels: card colour and stale timeout fill in, panel settings win', panels[0].colorScheme === 'blue' && panels[1].colorScheme === 'green' && panels.every((p) => p.staleAfterSec === 5));
+  check('cardPanels: panel ids are unique within the card', new Set(panels.map((p) => p.id)).size === 3);
+  check('cardPanels: a single widget is its own only panel', pm.cardPanels({ id: 'x', name: 'X', category: 'telemetry', displayType: 'stat-card' }).length === 1);
+  check('panelSpan: as set, clamped to 1-12, default full width', pm.panelSpan(card, 0) === 6 && pm.panelSpan(card, 2) === 12 && pm.panelSpan({ ...card, panels: [{ ...gauge, span: 40 }] }, 0) === 12);
+  const ids = pm.requiredMessageIds(card);
+  check('requiredMessageIds: a composite streams every panel\'s messages once', ids.length === 2 && ids.includes(MAVLINK_MSG_ID.SCALED_PRESSURE) && ids.includes(MAVLINK_MSG_ID.SERVO_OUTPUT_RAW));
+
+  const clean = sanitizeWidgetDefinition(card);
+  check('sanitize: composite panels are kept', clean.displayType === 'composite' && clean.panels?.length === 3);
+  check('sanitize: confirmation is forced on every panel\'s command', clean.panels?.[1].action?.confirmation === true);
+  check('sanitize: panel title, span and scheme survive', clean.panels?.[0].title === 'Pressure' && clean.panels?.[0].span === 6 && clean.panels?.[1].colorScheme === 'green');
+  const hostile = sanitizeWidgetDefinition({ ...card, panels: [
+    { displayType: 'composite', panels: [gauge] },
+    { displayType: 'nope' },
+    { ...toggle, colorScheme: 'url(javascript:1)', span: -3, title: 'x'.repeat(500), evil: '<script>' },
+    { displayType: 'param-control', paramControl: { paramId: 'FENCE_ACTION', confirmation: false } },
+    'not a panel',
+    ...Array(20).fill(chart),
+  ] });
+  check('sanitize: composites cannot nest', hostile.panels?.[0].displayType === 'stat-card' && !('panels' in (hostile.panels?.[0] ?? {})));
+  check('sanitize: unknown panel types become stat cards', hostile.panels?.[1].displayType === 'stat-card');
+  const h2: any = hostile.panels?.[2];
+  check('sanitize: bad panel colour dropped, span clamped, title trimmed, unknown keys dropped', h2.colorScheme === undefined && h2.span === 1 && h2.title.length === 40 && !('evil' in h2));
+  check('sanitize: parameter writes in panels are forced to confirm', hostile.panels?.[3].paramControl?.confirmation === true);
+  check(`sanitize: at most ${MAX_PANELS} panels, non-objects dropped`, hostile.panels?.length === MAX_PANELS - 1);
+  const many = sanitizeWidgetDefinition({ ...card, panels: Array(8).fill({ displayType: 'value-list', binding: { messageName: 'A', fieldName: 'a' }, bindings: Array(15).fill({ messageName: 'B', fieldName: 'b' }) }) });
+  const total = (many.panels ?? []).reduce((n, p) => n + 1 + (p.bindings?.length ?? 0), 0);
+  check(`sanitize: a composite reads at most ${MAX_COMPOSITE_BINDINGS} values`, total === MAX_COMPOSITE_BINDINGS && many.panels?.[0].bindings?.length === 15, `total ${total}`);
+  check('sanitize: stray panels are removed from a non-composite widget', !('panels' in sanitizeWidgetDefinition({ id: 's', name: 'S', category: 'telemetry', displayType: 'stat-card', panels: [gauge] } as any)));
+  const act = sanitizeWidgetDefinition({ id: 'a', name: 'A', category: 'control', displayType: 'action-button', action: { label: 'X', commandId: '20' as any, params: [1, 'x', null] as any, confirmation: false } });
+  check('sanitize: a command without a numeric ID is dropped', act.action === undefined);
+  const act2 = sanitizeWidgetDefinition({ id: 'a', name: 'A', category: 'control', displayType: 'action-button', action: { label: 'X', commandId: 20, params: [1, 'x', null, 4] as any, confirmation: false } });
+  check('sanitize: command params become seven finite numbers', act2.action?.params.join() === '1,0,0,4,0,0,0');
+}
+
 console.log(failures.length ? `\n${failures.length} widget check(s) FAILED` : '\nAll widget checks PASSED');
 process.exit(failures.length ? 1 : 0);

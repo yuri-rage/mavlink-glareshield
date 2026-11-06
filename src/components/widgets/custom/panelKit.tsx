@@ -10,8 +10,15 @@ import type { ColorScheme } from './palette';
 /** Re-read bound values at this rate (and on unit / definition changes). */
 const READ_INTERVAL_MS = 125;
 
-/** Binding readings re-evaluated on a fixed clock, so staleness is noticed even when nothing arrives. */
-export function useBindingReadings(bindings: WidgetDataBinding[], system: UnitSystem, staleAfterSec?: number): BindingReading[] {
+/**
+ * Binding readings re-evaluated on a fixed clock, so staleness is noticed even when nothing arrives. `staleAfterSec`
+ * is one timeout for all of them, or one per binding.
+ */
+export function useBindingReadings(
+  bindings: WidgetDataBinding[],
+  system: UnitSystem,
+  staleAfterSec?: number | readonly (number | undefined)[]
+): BindingReading[] {
   const [, setTick] = useState(0);
   useEffect(() => {
     if (bindings.length === 0) return;
@@ -20,7 +27,9 @@ export function useBindingReadings(bindings: WidgetDataBinding[], system: UnitSy
   }, [bindings.length]);
   const state = useTelemetryStore.getState();
   const now = Date.now();
-  return bindings.map((b) => readBinding(b, state, system, staleAfterSec, now));
+  return bindings.map((b, i) =>
+    readBinding(b, state, system, typeof staleAfterSec === 'object' ? staleAfterSec[i] : staleAfterSec, now)
+  );
 }
 
 /** The vehicle's system and component IDs, for addressing commands. */

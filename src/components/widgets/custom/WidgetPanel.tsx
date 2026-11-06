@@ -1,8 +1,8 @@
 // Picks the panel component for a display type.
 
 import React from 'react';
-import type { WidgetDisplayType } from '../../../types/widget';
-import { BarChart3, Compass, Gauge, List, Sliders, TrendingUp, Zap, type LucideIcon } from 'lucide-react';
+import type { PanelDisplayType, WidgetDisplayType } from '../../../types/widget';
+import { BarChart3, Compass, Gauge, LayoutGrid, List, Sliders, TrendingUp, Zap, type LucideIcon } from 'lucide-react';
 import {
   ChartPanel,
   CompassPanel,
@@ -17,7 +17,7 @@ import {
 import { ActionButtonPanel, ParamPanel, SliderPanel, TogglePanel } from './ControlPanels';
 import type { PanelProps } from './panelKit';
 
-const PANELS: Record<WidgetDisplayType, React.FC<PanelProps>> = {
+const PANELS: Record<PanelDisplayType, React.FC<PanelProps>> = {
   'stat-card': StatPanel,
   'text-display': TextPanel,
   'value-list': ValueListPanel,
@@ -48,6 +48,8 @@ export function panelIcon(type: WidgetDisplayType): LucideIcon {
       return List;
     case 'gauge-radial':
       return Gauge;
+    case 'composite':
+      return LayoutGrid;
     default:
       return Zap;
   }
@@ -59,7 +61,7 @@ export function panelFills(type: WidgetDisplayType): boolean {
 }
 
 export const WidgetPanel: React.FC<PanelProps> = (props) => {
-  const Panel = PANELS[props.def.displayType] ?? StatPanel;
+  const Panel = PANELS[props.def.displayType as PanelDisplayType] ?? StatPanel;
   // Keyed by type so a panel's own state (confirmations, slider position) never carries over to another type.
   return <Panel key={props.def.displayType} {...props} />;
 };
