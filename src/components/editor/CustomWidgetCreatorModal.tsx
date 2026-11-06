@@ -6,12 +6,17 @@ import { Input } from '../ui/input';
 import {
   CustomWidgetDefinition,
   MultiBarGroupType,
+  PanelDisplayType,
   WidgetChartConfig,
   WidgetDataBinding,
   WidgetDisplayType,
   WidgetGaugeConfig,
+  WidgetPanelDefinition,
 } from '../../types/widget';
 import { Download, Plus, Save } from 'lucide-react';
+import { CompositePanelList, PANEL_TYPE_OPTIONS, SPAN_OPTIONS, panelValueCount } from './CompositePanelList';
+import { MAX_COMPOSITE_BINDINGS, MAX_PANELS } from '../../lib/widgetValidation';
+import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { BindingEditor, NumberField, SELECT_CLASS } from './BindingEditor';
 import { cleanBinding } from '../../lib/widgetValidation';
 import { getObservedCatalog } from '../../lib/messageCache';
@@ -216,9 +221,21 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [displayType, setDisplayType] = useState<WidgetDisplayType>('stat-card');
+  // The single widget's type, or (for a composite) the selected panel's.
+  const [displayType, setDisplayType] = useState<PanelDisplayType>('stat-card');
   const [category, setCategory] = useState<'telemetry' | 'control' | 'avionics' | 'custom'>('telemetry');
   const [colorScheme, setColorScheme] = useState<'default' | 'green' | 'amber' | 'blue' | 'red'>('default');
+
+  // Composite widgets: the panel list, and which panel the form below is editing. The selected panel's settings live
+  // in the form state; the others in `panels` (see panelsWithCurrent).
+  const [isComposite, setIsComposite] = useState(false);
+  const [panels, setPanels] = useState<WidgetPanelDefinition[]>([]);
+  const [selected, setSelected] = useState(0);
+  const [panelTitle, setPanelTitle] = useState('');
+  const [panelSpan, setPanelSpan] = useState(12);
+  const [panelDescription, setPanelDescription] = useState('');
+  const [panelColor, setPanelColor] = useState<WidgetPanelDefinition['colorScheme']>(undefined);
+  const toSingleConfirm = useConfirmStep();
 
   // Telemetry bindings and display options
   const [binding, setBinding] = useState<WidgetDataBinding>(DEFAULT_BINDING);
@@ -272,14 +289,9 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   }, [observedCatalog]);
   const observed = useMemo(() => new Set(Object.keys(observedCatalog)), [observedCatalog]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const w = initialWidget;
-    setName(w?.name || '');
-    setDescription(w?.description || '');
-    setDisplayType(w?.displayType ?? 'stat-card');
-    setCategory(w?.category || 'telemetry');
-    setColorScheme(w?.colorScheme || 'default');
+  /** Load a widget's (or panel's) display settings into the form. */
+  const loadSettings = (w?: Partial<CustomWidgetDefinition>) => {
+    setDisplayType(w?.displayType && w.displayType !== 'composite' ? w.displayType : 'stat-card');
     setBinding(w?.binding ? { ...w.binding } : { ...DEFAULT_BINDING });
     setExtraBindings((w?.bindings ?? []).map((b) => ({ ...b })));
     setGauge({ ...(w?.gauge ?? {}) });
@@ -307,6 +319,38 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     setParam2(String(a?.params?.[1] ?? 0));
     setParam3(String(a?.params?.[2] ?? 0));
     setRequireConfirm(a?.confirmation ?? true);
+  };
+
+  /** Load a composite panel into the form. */
+  const loadPanel = (p: WidgetPanelDefinition) => {
+    loadSettings(p);
+    setPanelTitle(p.title ?? '');
+    setPanelSpan(p.span ?? 12);
+    setPanelDescription(p.description ?? '');
+    setPanelColor(p.colorScheme);
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const w = initialWidget;
+    setName(w?.name || '');
+    setDescription(w?.description || '');
+    setCategory(w?.category || 'telemetry');
+    setColorScheme(w?.colorScheme || 'default');
+    toSingleConfirm.cancel();
+    if (w?.displayType === 'composite') {
+      const list = (w.panels ?? []).length ? (w.panels ?? []).map((p) => ({ ...p })) : [{ displayType: 'stat-card' as const }];
+      setIsComposite(true);
+      setPanels(list);
+      setSelected(0);
+      loadPanel(list[0]);
+    } else {
+      setIsComposite(false);
+      setPanels([]);
+      setSelected(0);
+      loadSettings(w ?? undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialWidget]);
 
   const isActionWidget =
@@ -319,7 +363,8 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   const extrasUsed = extraBindings.slice(0, extraLimit);
   const usesRange = displayType !== 'value-list' && displayType !== 'stat-card' && displayType !== 'text-display';
 
-  const buildDefinition = (): CustomWidgetDefinition => {
+  /** The form's settings as a single widget (for a composite, the selected panel's settings). */
+  const buildSingle = (): CustomWidgetDefinition => {
     const id = initialWidget?.id || `custom-${Date.now()}`;
     const def: CustomWidgetDefinition = {
       id,
@@ -390,16 +435,120 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     return def;
   };
 
+  /** The selected panel as the form currently has it. */
+  const currentPanel = (): WidgetPanelDefinition => {
+    const { id: _id, name: _name, category: _category, description: _description, colorScheme: _color, ...settings } = buildSingle();
+    const panel: WidgetPanelDefinition = { ...(settings as Omit<WidgetPanelDefinition, 'displayType'>), displayType };
+    if (panelTitle.trim()) panel.title = panelTitle.trim();
+    if (panelSpan !== 12) panel.span = panelSpan;
+    if (panelDescription.trim()) panel.description = panelDescription.trim();
+    if (panelColor) panel.colorScheme = panelColor;
+    return panel;
+  };
+  const panelsWithCurrent = (): WidgetPanelDefinition[] => panels.map((p, i) => (i === selected ? currentPanel() : p));
+
+  const buildDefinition = (): CustomWidgetDefinition => {
+    if (!isComposite) return buildSingle();
+    const list = panelsWithCurrent();
+    const hasControl = list.some((p) => ['action-button', 'toggle-switch', 'slider-control', 'param-control'].includes(p.displayType));
+    return {
+      id: initialWidget?.id || `custom-${Date.now()}`,
+      name: name.trim() || 'Custom Instrument',
+      description: description.trim(),
+      category: hasControl ? 'control' : category,
+      displayType: 'composite',
+      colorScheme,
+      panels: list,
+    };
+  };
+
+  // --- Composite panel list -------------------------------------------------------------------------------------
+  const selectPanel = (i: number) => {
+    if (i === selected) return;
+    const list = panelsWithCurrent();
+    setPanels(list);
+    setSelected(i);
+    loadPanel(list[i]);
+  };
+  const addPanel = () => {
+    const list = panelsWithCurrent();
+    if (list.length >= MAX_PANELS) return;
+    const next: WidgetPanelDefinition = { displayType: 'stat-card', span: 6, binding: { ...DEFAULT_BINDING } };
+    setPanels([...list, next]);
+    setSelected(list.length);
+    loadPanel(next);
+  };
+  const movePanel = (i: number, delta: -1 | 1) => {
+    const j = i + delta;
+    const list = panelsWithCurrent();
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    setPanels(list);
+    // The form keeps editing the same panel wherever it moves.
+    if (selected === i) setSelected(j);
+    else if (selected === j) setSelected(i);
+  };
+  const removePanel = (i: number) => {
+    const list = panelsWithCurrent();
+    if (list.length <= 1) return;
+    list.splice(i, 1);
+    const nextSel = i < selected ? selected - 1 : Math.min(selected, list.length - 1);
+    setPanels(list);
+    setSelected(nextSel);
+    if (i === selected) loadPanel(list[nextSel]);
+  };
+  const setSpanOf = (i: number, span: number) => {
+    if (i === selected) setPanelSpan(span);
+    else
+      setPanels((list) =>
+        list.map((p, j) => {
+          if (j !== i) return p;
+          const { span: _old, ...rest } = p;
+          return span === 12 ? rest : { ...rest, span }; // a full row is the default, so it isn't stored
+        })
+      );
+  };
+  /** Turn the current single widget into the first panel of a composite. */
+  const makeComposite = () => {
+    const first = { ...currentPanel(), span: 12 };
+    // The widget's description and colour stay with the card.
+    delete first.description;
+    delete first.colorScheme;
+    setPanels([first]);
+    setSelected(0);
+    setPanelTitle('');
+    setPanelSpan(12);
+    setPanelDescription('');
+    setPanelColor(undefined);
+    setIsComposite(true);
+  };
+  /** Back to a single widget: the selected panel becomes the widget. */
+  const makeSingle = () => {
+    if (panels.length > 1 && !toSingleConfirm.armed) {
+      toSingleConfirm.arm();
+      return;
+    }
+    toSingleConfirm.cancel();
+    if (!description.trim() && panelDescription.trim()) setDescription(panelDescription.trim());
+    setPanels([]);
+    setSelected(0);
+    setIsComposite(false);
+  };
+
+  const compositeValues = isComposite ? panelsWithCurrent().reduce((n, p) => n + panelValueCount(p), 0) : 0;
+  const overValueLimit = compositeValues > MAX_COMPOSITE_BINDINGS;
+
   const previewJson = JSON.stringify({ ...buildDefinition(), id: `${initialWidget?.id ?? 'new'}-preview` });
   // Keep the preview's definition stable between renders that don't change it (its chart restarts otherwise).
   const previewDefinition = useMemo(() => JSON.parse(previewJson) as CustomWidgetDefinition, [previewJson]);
 
   const handleSaveAndPlace = (e: React.FormEvent) => {
     e.preventDefault();
+    if (overValueLimit) return;
     const def = buildDefinition();
     saveCustomWidget(def);
     if (!isEditing) {
-      addWidgetToActiveTab(def.id, 6);
+      addWidgetToActiveTab(def.id, def.displayType === 'composite' ? 12 : 6);
     }
     onClose();
   };
@@ -431,7 +580,10 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
       title={isEditing ? `Edit Custom Widget: ${initialWidget?.name}` : 'Create Custom Declarative Widget'}
       description="Define a reusable, safe JSON widget bound to MAVLink telemetry fields, a parameter, or a flight command. The preview is live."
     >
-      <form onSubmit={handleSaveAndPlace} className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
+      <form
+        onSubmit={handleSaveAndPlace}
+        className={`grid grid-cols-1 gap-4 items-start ${isComposite ? 'lg:grid-cols-[minmax(0,1fr)_440px]' : 'lg:grid-cols-[minmax(0,1fr)_320px]'}`}
+      >
         <div className="space-y-4 min-w-0">
           {/* Name & Display Type */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -450,30 +602,43 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
             <div className="space-y-1">
               <label className="text-xs font-semibold text-zinc-300">Display UI Type</label>
               <select
-                value={displayType}
+                value={isComposite ? 'composite' : displayType}
                 onChange={(e) => {
-                  const nextType = e.target.value as WidgetDisplayType;
-                  setDisplayType(nextType);
-                  if (nextType === 'compass-rose' && binding.messageName === 'SYS_STATUS') {
+                  const next = e.target.value as WidgetDisplayType;
+                  if (next === 'composite') {
+                    if (!isComposite) makeComposite();
+                    return;
+                  }
+                  if (isComposite) {
+                    makeSingle();
+                    return;
+                  }
+                  setDisplayType(next);
+                  if (next === 'compass-rose' && binding.messageName === 'SYS_STATUS') {
                     setBinding({ ...binding, messageName: 'WIND', fieldName: 'direction', unit: '°', min: 0, max: 360 });
                   }
                 }}
                 className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
               >
-                <option value="stat-card">Stat Card (Digital readout)</option>
-                <option value="value-list">Value List (Several labelled readouts)</option>
-                <option value="gauge-linear">Linear Gauge (Horizontal bar)</option>
-                <option value="gauge-radial">Radial Gauge (Dial with needle)</option>
-                <option value="sparkline">Time-Series Chart (One or more values over time)</option>
-                <option value="compass-rose">Compass / Vector Rose (Heading / Wind / Bearing)</option>
-                <option value="multi-bar">Multi-Channel Bar / PWM Visualizer (RC / Servo / ESC / Vibe)</option>
-                <option value="param-control">Parameter Control (ArduPilot PARAM_SET)</option>
-                <option value="indicator-led">LED Status Indicator (On/Off)</option>
-                <option value="action-button">Action Button (MAVLink Command)</option>
-                <option value="toggle-switch">Toggle Switch (Relay / Servo)</option>
-                <option value="slider-control">Slider Control (PWM / Speed)</option>
-                <option value="text-display">Text Output Display</option>
+                {!isComposite && PANEL_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+                {isComposite && <option value="single">Single widget (keep the selected panel)</option>}
+                <option value="composite">Composite (several panels in one card)</option>
               </select>
+              {toSingleConfirm.armed && (
+                <div className="flex items-center gap-2 text-[11px] text-amber-300">
+                  <span>Keep only panel {selected + 1} and drop the other {panels.length - 1}?</span>
+                  <button type="button" className="font-bold underline" onClick={makeSingle}>
+                    Yes
+                  </button>
+                  <button type="button" className="text-zinc-400 underline" onClick={toSingleConfirm.cancel}>
+                    No
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -504,6 +669,96 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
               </select>
             </div>
           </div>
+
+        {isComposite && (
+          <>
+            <CompositePanelList
+              panels={panelsWithCurrent()}
+              selected={selected}
+              onSelect={selectPanel}
+              onAdd={addPanel}
+              onMove={movePanel}
+              onRemove={removePanel}
+              onSpan={setSpanOf}
+            />
+            <Section title={`Panel ${selected + 1}`}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Panel Type</label>
+                  <select
+                    value={displayType}
+                    onChange={(e) => {
+                      const next = e.target.value as PanelDisplayType;
+                      setDisplayType(next);
+                      if (next === 'compass-rose' && binding.messageName === 'SYS_STATUS') {
+                        setBinding({ ...binding, messageName: 'WIND', fieldName: 'direction', unit: '°', min: 0, max: 360 });
+                      }
+                    }}
+                    className={SELECT_CLASS}
+                    aria-label="Panel type"
+                  >
+                    {PANEL_TYPE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Panel Title (Optional)</label>
+                  <Input
+                    type="text"
+                    maxLength={40}
+                    placeholder="Heading above the panel"
+                    value={panelTitle}
+                    onChange={(e) => setPanelTitle(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Width</label>
+                  <select value={panelSpan} onChange={(e) => setPanelSpan(Number(e.target.value))} className={SELECT_CLASS}>
+                    {SPAN_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Accent Color</label>
+                  <select
+                    value={panelColor ?? ''}
+                    onChange={(e) => setPanelColor((e.target.value || undefined) as WidgetPanelDefinition['colorScheme'])}
+                    className={SELECT_CLASS}
+                  >
+                    <option value="">Same as the card</option>
+                    <option value="default">Sky Blue</option>
+                    <option value="blue">Aviation Cyan-Blue</option>
+                    <option value="green">Emerald Green</option>
+                    <option value="amber">Amber Warning</option>
+                    <option value="red">Crimson Red</option>
+                  </select>
+                </div>
+                {(displayType === 'stat-card' || displayType === 'text-display' || displayType === 'compass-rose') && (
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[11px] font-medium text-zinc-400">
+                      {displayType === 'text-display' ? 'Readout Label' : 'Caption (Optional)'}
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder={displayType === 'text-display' ? 'e.g. HDOP' : 'Shown under the value'}
+                      value={panelDescription}
+                      onChange={(e) => setPanelDescription(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                )}
+              </div>
+              <p className="text-[10px] text-zinc-500">The settings below are for this panel.</p>
+            </Section>
+          </>
+        )}
 
         {/* Multi-Bar Channel Group Configuration */}
         {displayType === 'multi-bar' && (
@@ -1031,6 +1286,8 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                 type="submit"
                 variant="default"
                 size="sm"
+                disabled={overValueLimit}
+                title={overValueLimit ? `A composite widget reads at most ${MAX_COMPOSITE_BINDINGS} values` : undefined}
                 className="bg-sky-500 hover:bg-sky-600 text-white font-bold gap-1 text-xs"
               >
                 <Save className="h-3.5 w-3.5" />
@@ -1044,7 +1301,10 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
         <div className="lg:sticky lg:top-0 space-y-1.5 min-w-0">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Live Preview</div>
           {/* inert: preview controls must never send commands or parameter writes */}
-          <div ref={(el) => el?.setAttribute('inert', '')} className="h-[300px] flex flex-col pointer-events-none select-none">
+          <div
+            ref={(el) => el?.setAttribute('inert', '')}
+            className={`flex flex-col pointer-events-none select-none ${isComposite ? 'min-h-[300px] max-h-[70vh] overflow-hidden' : 'h-[300px]'}`}
+          >
             <CustomWidgetRenderer definition={previewDefinition} />
           </div>
           <p className="text-[10px] text-zinc-500">

@@ -10,7 +10,7 @@ This guide covers:
 - [Data bindings](#data-bindings)
 - [Display types](#display-types), each with an example
 - [Control widgets](#control-widgets): commands, toggles, sliders and parameters
-- [Composite widgets](#composite-widgets): several panels in one card
+- [Composite widgets](#composite-widgets): several panels in one card, in JSON or the creator
 - [Stale data, alerts and colours](#stale-data-alerts-and-colours)
 - [Limits and validation rules](#limits-and-validation-rules)
 - [Troubleshooting](#troubleshooting)
@@ -526,7 +526,16 @@ How a composite card behaves:
 - **Narrow cards.** In a card narrower than about 360 px, such as on a phone, every panel takes a full row.
 - **Import.** The import preview lists every panel and every command or parameter write in it, and confirmation is forced on all of them.
 
-Composite widgets are written as JSON for now: build each panel in the creator, export it, and combine the panels into one file. The creator can't edit a composite widget yet, so its edit buttons are hidden for them. To change one, edit the file and import it again.
+### Building a composite in the creator
+
+1. In the creator, set **Display UI Type** to **Composite (several panels in one card)**. Whatever you had set up becomes panel 1.
+2. **Add panel** adds another, up to 8. Click a panel in the list to edit it: the settings below the list then apply to that panel (its type, title, width, accent colour and everything else).
+3. Set each panel's width in the list, and reorder panels with the arrows. The preview shows the card as laid out.
+4. **Save & Place** adds the card full width. **Export Widget JSON** saves the whole composite as one file.
+
+The card's name, description and accent colour are at the top, as for any widget. A panel left on **Same as the card** uses the card's colour. The list counts the values the card reads; past 32, the card can't be saved until some are removed.
+
+To turn a composite back into a single widget, choose **Single widget** in **Display UI Type**. The selected panel is kept, and the creator asks before dropping any others.
 
 ---
 

@@ -416,7 +416,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                 </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {onEditCustomWidget && cw.displayType !== 'composite' && (
+                    {onEditCustomWidget && (
                       <Button
                         size="sm"
                         variant="outline"
