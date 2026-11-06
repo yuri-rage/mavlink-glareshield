@@ -142,12 +142,17 @@ async def main(url):
         r.startswith("rejected"),
         r,
     )
+    # The site is served by a Cloudflare Worker, not Pages: no pages.dev origin is trusted.
     r = await handshake(url, "https://glareshield.pages.dev")
-    check("Origin https://glareshield.pages.dev is accepted", r == "accepted", r)
+    check(
+        "Origin https://glareshield.pages.dev is refused",
+        r.startswith("rejected"),
+        r,
+    )
     r = await handshake(url, "https://my-branch.glareshield.pages.dev")
     check(
-        "Origin https://my-branch.glareshield.pages.dev is accepted",
-        r == "accepted",
+        "Origin https://my-branch.glareshield.pages.dev is refused",
+        r.startswith("rejected"),
         r,
     )
     r = await handshake(url, "https://anything-i-deploy.pages.dev")
