@@ -706,7 +706,9 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
 
         {/* RADIAL GAUGE */}
         {definition.displayType === 'gauge-radial' && (
-          <div className="flex-1 min-h-[150px] flex items-center justify-center">
+          // The dial is absolutely positioned so it fits the card instead of sizing it: the card's height comes
+          // from its row (neighbouring widgets, or the row-height setting), with a modest minimum.
+          <div className="relative flex-1 min-h-[190px]">
             <RadialGauge
               value={numVal}
               text={boundText}
