@@ -102,7 +102,8 @@ export const MapMissionFooter: React.FC = () => {
         >
           {nav.userWps.map((wp) => (
             <option key={wp.seq} value={wp.seq}>
-              WP {wp.seq}: {getMavCmdName(wp.command).replace(/^(MAV_CMD_)?NAV_/, '')} · {formatAltitude(wp.alt).full}
+              WP {wp.seq}: {getMavCmdName(wp.command).replace(/^(MAV_CMD_)?NAV_/, '')}
+              {nav.showAltitude ? ` · ${formatAltitude(wp.alt).full}` : ''}
               {wp.seq === nav.currentWaypointSeq ? ' ★' : ''}
             </option>
           ))}

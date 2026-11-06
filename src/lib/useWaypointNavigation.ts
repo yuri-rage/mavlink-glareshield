@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTelemetryStore, setMissionCurrentWaypoint } from '../store/telemetryStore';
+import { getVehicleCategory } from '../mavlink/messages';
 
 /** "11s", "2m 05s", "1h 04m"; '--' when unknown or not moving. */
 export function formatEta(distanceM: number, groundspeedMs: number): string {
@@ -10,6 +11,11 @@ export function formatEta(distanceM: number, groundspeedMs: number): string {
   if (total >= 3600) return `${Math.floor(total / 3600)}h ${String(Math.floor((total % 3600) / 60)).padStart(2, '0')}m`;
   if (total >= 60) return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, '0')}s`;
   return `${total}s`;
+}
+
+/** Rovers and boats ignore waypoint altitude, so it is not worth showing for them. */
+export function showsWaypointAltitude(vehicleType: number): boolean {
+  return getVehicleCategory(vehicleType) !== 'rover';
 }
 
 export function useWaypointNavigation() {
@@ -42,6 +48,7 @@ export function useWaypointNavigation() {
 
   return {
     heartbeat,
+    showAltitude: showsWaypointAltitude(heartbeat.type),
     connected,
     missionWaypoints,
     currentWaypointSeq,

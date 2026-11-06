@@ -25,6 +25,7 @@ import {
 export const WaypointControlWidget: React.FC = () => {
   const {
     heartbeat,
+    showAltitude,
     connected,
     currentWaypointSeq,
     userWps,
@@ -236,7 +237,8 @@ export const WaypointControlWidget: React.FC = () => {
                     const isCurr = wp.seq === currentWaypointSeq;
                     return (
                       <option key={wp.seq} value={wp.seq}>
-                        WP {wp.seq}: {cmdLabel} (Alt {formatAltitude(wp.alt).full})
+                        WP {wp.seq}: {cmdLabel}
+                        {showAltitude ? ` (Alt ${formatAltitude(wp.alt).full})` : ''}
                         {isCurr ? ' ★ [ACTIVE]' : ''}
                       </option>
                     );
