@@ -1843,7 +1843,11 @@ useTelemetryStore.subscribe((state) => {
  * Commands the autopilot to navigate immediately to a specified waypoint sequence.
  * Sends MAVLink MISSION_SET_CURRENT (Msg 41) and tracked MAV_CMD_DO_SET_MISSION_CURRENT (324).
  */
-export async function setMissionCurrentWaypoint(seq: number): Promise<boolean> {
+/**
+ * Make `seq` the active mission item. `onAck` receives the vehicle's answer to the accompanying
+ * DO_SET_MISSION_CURRENT (or a NOT_SENT result when the link is down).
+ */
+export async function setMissionCurrentWaypoint(seq: number, onAck?: (ack: CommandAckInfo) => void): Promise<boolean> {
   const hb = useTelemetryStore.getState().heartbeat;
   const sysId = hb.systemId > 0 ? hb.systemId : 1;
   const compId = hb.componentId > 0 ? hb.componentId : 1;
@@ -1876,7 +1880,11 @@ export async function setMissionCurrentWaypoint(seq: number): Promise<boolean> {
     sendTrackedCommand(cmdPkt, {
       label: `Nav to WP ${seq}`,
       targetKey: `action:wp:${seq}`,
-    }).catch(() => {});
+    })
+      .then((ack) => onAck?.(ack))
+      .catch(() => {});
+  } else {
+    onAck?.({ command: MAV_CMD.DO_SET_MISSION_CURRENT, result: -2, resultText: 'NOT_SENT', time: Date.now() });
   }
 
   return sent;

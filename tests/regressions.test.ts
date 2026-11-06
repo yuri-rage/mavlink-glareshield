@@ -650,5 +650,33 @@ for (const [type, landCmd, opts, label] of [
     !showsWaypointAltitude(10) && !showsWaypointAltitude(11) && showsWaypointAltitude(2) && showsWaypointAltitude(1));
 }
 
+// ------------------------------------------------------------------------------------------------
+// Spoken confirmation of commanded waypoint changes; mission complete
+// ------------------------------------------------------------------------------------------------
+{
+  const { describeWaypointJump, jumpAckCallout } = await import('../src/lib/useWaypointNavigation.ts');
+  const { isMissionCompleteText, lastMissionSeq } = await import('../src/lib/audioAlerts.ts');
+  check('jump callout: restart', describeWaypointJump(1, 5, 1) === 'Restarting mission');
+  check('jump callout: next', describeWaypointJump(6, 5, 1) === 'Skipping to waypoint 6');
+  check('jump callout: previous', describeWaypointJump(4, 5, 1) === 'Back to waypoint 4');
+  check('jump callout: go to', describeWaypointJump(8, 5, 1) === 'Going to waypoint 8');
+  const ack = (result: number) => ({ command: 224, result, resultText: '', time: 1 });
+  check('jump callout: spoken when accepted, and when firmware only supports MISSION_SET_CURRENT (UNSUPPORTED)',
+    jumpAckCallout('Restarting mission', ack(0)) === 'Restarting mission' && jumpAckCallout('Restarting mission', ack(3)) === 'Restarting mission');
+  check('jump callout: denied / timeout / link down are said as such',
+    jumpAckCallout('Restarting mission', ack(2)) === 'Waypoint change rejected' &&
+      jumpAckCallout('x', ack(-1)) === 'Waypoint change not confirmed' &&
+      jumpAckCallout('x', ack(-2)) === 'Waypoint change not sent');
+  let notSent: any = null;
+  const origSendN = (mavlinkConnection as any).send;
+  (mavlinkConnection as any).send = () => false;
+  await setMissionCurrentWaypoint(3, (a) => (notSent = a));
+  (mavlinkConnection as any).send = origSendN;
+  check('setMissionCurrentWaypoint reports NOT_SENT to its ack callback when the link is down', notSent?.result === -2);
+  check('mission complete: Rover, Copter and Plane wording recognised',
+    isMissionCompleteText('Mission Complete') && isMissionCompleteText('Mission complete, changing mode to RTL') && !isMissionCompleteText('Mission: 5 WP'));
+  check('mission complete: the final mission item is the highest seq', lastMissionSeq([{ seq: 0 }, { seq: 1 }, { seq: 9 }, { seq: 4 }]) === 9 && lastMissionSeq([]) === 0);
+}
+
 console.log(failures.length ? `\n${failures.length} regression check(s) FAILED` : '\nAll regression checks PASSED');
 process.exit(failures.length ? 1 : 0);

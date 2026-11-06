@@ -271,6 +271,8 @@ async function prewarmCoreCallouts() {
     'Motors disarmed',
     'Telemetry lost',
     'Telemetry restored',
+    'Mission complete',
+    'Restarting mission',
   ];
   for (const phrase of phrases) {
     if (audioBufferCache.has(phrase)) continue;
@@ -621,6 +623,16 @@ export function decideWaypointCallout(i: WaypointCalloutInput): number | null {
   return i.prevSeq;
 }
 
+/** Autopilot status texts that mean the mission has finished (Rover: "Mission Complete"; Copter / Plane: "Mission complete, changing mode to RTL"). */
+export function isMissionCompleteText(text: string): boolean {
+  return /\bmission\s+complete\b/i.test(text);
+}
+
+/** Highest mission item number, i.e. the waypoint whose arrival ends the mission. */
+export function lastMissionSeq(waypoints: { seq: number }[]): number {
+  return waypoints.reduce((m, w) => Math.max(m, w.seq), 0);
+}
+
 export function useAudioAlertListener() {
   const statusMessages = useTelemetryStore((state) => state.statusMessages);
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
@@ -630,6 +642,15 @@ export function useAudioAlertListener() {
   const voiceEnabled = useAudioAlertsStore((state) => state.voiceEnabled);
   const waypointAnnounceEnabled = useAudioAlertsStore((state) => state.waypointAnnounceEnabled);
   const lastReachedWaypointSeq = useTelemetryStore((state) => state.lastReachedWaypointSeq);
+  const finalMissionSeq = useTelemetryStore((state) => lastMissionSeq(state.missionWaypoints));
+  const missionCompleteAtRef = useRef<number>(0);
+  /** "Mission complete", once per completion however many ways the autopilot reports it. */
+  const announceMissionComplete = () => {
+    const now = Date.now();
+    if (now - missionCompleteAtRef.current < 15000) return;
+    missionCompleteAtRef.current = now;
+    speakCallout('Mission complete'); // queued, so it follows the final waypoint callout
+  };
   const currentWaypointSeq = useTelemetryStore((state) => state.currentWaypointSeq);
   const lastSeenIdRef = useRef<string | null>(statusMessages[0]?.id ?? null);
   const prevModeRef = useRef<string>(heartbeat.modeName);
@@ -678,6 +699,8 @@ export function useAudioAlertListener() {
     lastSeenIdRef.current = newest.id;
 
     if (!soundEnabled || newMessages.length === 0) return;
+
+    if (newMessages.some((m) => isMissionCompleteText(m.text))) announceMissionComplete();
 
     // Filter for warnings and above (severity <= 4)
     const alertMsgs = newMessages.filter((m) => m.severity <= 4);
@@ -745,6 +768,7 @@ export function useAudioAlertListener() {
     if (decision !== null) {
       lastSpokenWpRef.current = { seq: decision, time: Date.now() };
       speakCallout(`Reached waypoint ${decision}`);
+      if (finalMissionSeq > 0 && decision === finalMissionSeq) announceMissionComplete();
     }
   }, [
     lastReachedWaypointSeq,

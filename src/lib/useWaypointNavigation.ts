@@ -1,7 +1,8 @@
 // Mission waypoint navigation shared by the Waypoint Control widget and the map's mission footer.
 
 import { useEffect, useState } from 'react';
-import { useTelemetryStore, setMissionCurrentWaypoint } from '../store/telemetryStore';
+import { useTelemetryStore, setMissionCurrentWaypoint, type CommandAckInfo } from '../store/telemetryStore';
+import { speakCallout } from './audioAlerts';
 import { getVehicleCategory } from '../mavlink/messages';
 
 /** "11s", "2m 05s", "1h 04m"; '--' when unknown or not moving. */
@@ -11,6 +12,25 @@ export function formatEta(distanceM: number, groundspeedMs: number): string {
   if (total >= 3600) return `${Math.floor(total / 3600)}h ${String(Math.floor((total % 3600) / 60)).padStart(2, '0')}m`;
   if (total >= 60) return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, '0')}s`;
   return `${total}s`;
+}
+
+/** What a commanded waypoint change is, for its spoken confirmation. */
+export function describeWaypointJump(target: number, current: number, minSeq: number): string {
+  if (target === minSeq && current > minSeq) return 'Restarting mission';
+  if (target === current + 1) return `Skipping to waypoint ${target}`;
+  if (target === current - 1) return `Back to waypoint ${target}`;
+  return `Going to waypoint ${target}`;
+}
+
+/**
+ * The callout once the vehicle answers. UNSUPPORTED still confirms: firmware without DO_SET_MISSION_CURRENT acts on
+ * the MISSION_SET_CURRENT sent alongside it.
+ */
+export function jumpAckCallout(action: string, ack: CommandAckInfo): string {
+  if (ack.result === 0 || ack.result === 3 || ack.result === 5) return action;
+  if (ack.result === -1) return 'Waypoint change not confirmed';
+  if (ack.result === -2) return 'Waypoint change not sent';
+  return 'Waypoint change rejected';
 }
 
 /** Rovers and boats ignore waypoint altitude, so it is not worth showing for them. */
@@ -39,8 +59,12 @@ export function useWaypointNavigation() {
   const navigateTo = async (targetSeq: number) => {
     if (!connected || targetSeq <= 0 || isPending) return;
     setIsPending(true);
+    const action = describeWaypointJump(targetSeq, currentWaypointSeq, minSeq);
     try {
-      await setMissionCurrentWaypoint(targetSeq);
+      await setMissionCurrentWaypoint(targetSeq, (ack) => {
+        const text = jumpAckCallout(action, ack);
+        speakCallout(text, text !== action); // problems interrupt whatever is being said
+      });
     } finally {
       setTimeout(() => setIsPending(false), 500);
     }
