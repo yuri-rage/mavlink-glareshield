@@ -75,9 +75,10 @@ export const RadialGauge: React.FC<RadialGaugeProps> = ({
 
   return (
     <svg
-      viewBox={`0 0 200 ${viewHeight}`}
+      // 16 units of side margin so long tick labels ("3500") are not clipped at 3 and 9 o'clock.
+      viewBox={`-16 0 232 ${viewHeight}`}
       preserveAspectRatio="xMidYMid meet"
-      className={`w-full h-full transition-opacity ${dimmed ? 'opacity-40' : ''}`}
+      className={`absolute inset-0 w-full h-full transition-opacity ${dimmed ? 'opacity-40' : ''}`}
       role="img"
       aria-label={`${text} ${unit}`}
     >
