@@ -279,6 +279,29 @@ For remote internet access, use a **Named Cloudflare Tunnel** protected by **Clo
 
 ---
 
+## Option 5: Direct USB Serial (No Bridge)
+
+Chromium browsers can open a USB serial device themselves, so a telemetry radio or a flight controller's USB port can connect to Glareshield with no bridge, no certificates, and no mixed-content restrictions (the link never leaves the browser).
+
+1. Plug in the telemetry radio or flight controller.
+2. Open **Link & Display Settings**, choose **Link Type → USB Serial**, and pick a baud rate (SiK radios usually use `57600`; a flight controller's own USB port ignores it).
+3. Click **Connect Now** and choose the device in the browser's prompt.
+
+Glareshield remembers the device: automatic reconnects after a cable blip, and later page loads, reopen it without asking again. To use a different device, click **Connect Now** again and pick it.
+
+| Browser | How serial works | What it reaches |
+|---|---|---|
+| Chrome / Edge (desktop) | Web Serial | Any USB serial adapter: SiK radios (FTDI, CP210x), flight controller USB |
+| Chrome (Android) | WebUSB | A flight controller's own USB port (USB CDC-ACM) only; FTDI/CP210x radios are not supported |
+| Firefox, Safari, iOS | Not available | Use the bridge over WebSocket |
+
+Limitations:
+- **NTRIP via the bridge** needs the bridge's WebSocket side channel, so it is not available on a serial link. A USB RTK base station (RTK widget → serial) still works alongside a serial telemetry link.
+- One program at a time can own a serial port. Close Mission Planner (or any other app or tab) that has the port open first.
+- On Android, some devices ship a driver that permanently claims the board's USB interface; there is no way around that from a web page, so use the bridge there.
+
+---
+
 ## Bridge Security & Origin Configuration
 
 [`bridge/bridge.py`](../bridge/bridge.py) guards against Cross-Site WebSocket Hijacking by inspecting the `Origin` header during the initial HTTP handshake.

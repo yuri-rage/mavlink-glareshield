@@ -56,6 +56,8 @@ Choose either Mission Planner or the Docker bridge:
    - **Local network (Docker)**: `wss://<bridge-ip>:56781/`
 4. Click **Connect Now**.
 
+**USB serial, no bridge (Chrome / Edge, or Chrome on Android):** in the same dialog choose **Link Type → USB Serial**, pick the baud rate, click **Connect Now**, and select your telemetry radio or flight controller. See [Direct USB Serial](docs/connection-guide.md#option-5-direct-usb-serial-no-bridge).
+
 📖 **For detailed setup (including USB Serial radios, TCP, direct Python bridge usage, self-signed certificate acceptance, and remote tunnels), see the [Browser & Network Connection Guide](docs/connection-guide.md).**
 
 ---
@@ -130,3 +132,9 @@ Action buttons enforce confirmation on execution:
   }
 }
 ```
+
+---
+
+## Acknowledgements
+
+The link transports in `src/mavlink/transport/` (WebSocket, Web Serial, and serial over WebUSB for Android) are adapted from [ArduConfigurator](https://github.com/j-w9/arduconfigurator) (GPL-3.0-only). Each adapted file names its source and what was changed.
