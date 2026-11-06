@@ -225,5 +225,45 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   check('sanitize: the new value-list type is accepted', vl.displayType === 'value-list');
 }
 
+// ------------------------------------------------------------------------------------------------
+// Panel model: what a panel shows, its alert and staleness, and what its controls send
+// ------------------------------------------------------------------------------------------------
+{
+  const pm = await import('../src/components/widgets/custom/panelModel.ts');
+  const base = { id: 'p', name: 'P', category: 'telemetry' as const };
+  const a = { messageName: 'VFR_HUD', fieldName: 'groundspeed', warnThreshold: 5, critThreshold: 8 };
+  const b = { messageName: 'ATTITUDE', fieldName: 'rollDeg', warnThreshold: 20, critThreshold: 40 };
+  const reading = (v: number | null, stale = false, ageMs = 0) => ({ base: v, value: v, text: String(v), unit: '', stale, ageMs });
+
+  check('panelBindings: a stat card shows only its first value', pm.panelBindings({ ...base, displayType: 'stat-card', binding: a, bindings: [b] }).length === 1);
+  check('panelBindings: a chart shows every value', pm.panelBindings({ ...base, displayType: 'sparkline', binding: a, bindings: [b] }).length === 2);
+  check('panelBindings: control panels read no values', pm.panelBindings({ ...base, displayType: 'slider-control', binding: a }).length === 0);
+  check('feedbackBinding: only toggles have one', pm.feedbackBinding({ ...base, displayType: 'toggle-switch', feedback: b }) === b && pm.feedbackBinding({ ...base, displayType: 'stat-card', feedback: b }) === undefined);
+
+  const single = { ...base, displayType: 'gauge-radial' as const, binding: a, bindings: [b] };
+  check('panelAlert: a single gauge alerts on its primary value only', pm.panelAlert(single, [a, b], [reading(1), reading(50)]) === 'normal');
+  const multiG = { ...single, gauge: { layout: 'multiple' as const } };
+  check('panelAlert: a multiple-gauge panel takes its worst gauge', pm.panelAlert(multiG, [a, b], [reading(1), reading(50)]) === 'crit' && pm.panelAlert(multiG, [a, b], [reading(6), reading(1)]) === 'warn');
+
+  const st = pm.staleSummary([a, b], [reading(1, true, 4200), reading(2)]);
+  check('staleSummary: counts stale readings, names their messages, reports the oldest', st.count === 1 && !st.all && st.messages.join() === 'VFR_HUD' && st.ageSec === 4);
+  check('staleSummary: all stale dims the panel', pm.staleSummary([a], [reading(1, true)]).all);
+  check('effectiveScheme: alerts override the panel colour', pm.effectiveScheme('crit', 'green') === 'red' && pm.effectiveScheme('normal', 'green') === 'green' && pm.effectiveScheme('normal', undefined) === 'default');
+
+  const ids = pm.requiredMessageIds({ ...base, displayType: 'toggle-switch', feedback: { messageName: 'SERVO_OUTPUT_RAW', fieldName: 'servo9_raw' } });
+  check('requiredMessageIds: includes a toggle\'s feedback message', ids.includes(MAVLINK_MSG_ID.SERVO_OUTPUT_RAW));
+  check('requiredMessageIds: multi-bar uses its group\'s message', pm.requiredMessageIds({ ...base, displayType: 'multi-bar', multiBarConfig: { group: 'vibration-xyz' } })[0] === MAVLINK_MSG_ID.VIBRATION);
+  check('requiredMessageIds: scaled pseudo-messages map to the real one', pm.requiredMessageIds({ ...base, displayType: 'stat-card', binding: { messageName: 'RC_CHANNELS (scaled)', fieldName: 'chan1_scaled' } })[0] === MAVLINK_MSG_ID.RC_CHANNELS);
+
+  const p7 = [9, 0, 0, 0, 0, 0, 0];
+  check('toggleParams: DO_SET_RELAY puts 1 / 0 in param2', pm.toggleParams(181, [2, 0, 0, 0, 0, 0, 0], true)[1] === 1 && pm.toggleParams(181, [2, 0, 0, 0, 0, 0, 0], false)[1] === 0);
+  check('toggleParams: DO_SET_SERVO defaults to 1900 / 1100', pm.toggleParams(183, p7, true)[1] === 1900 && pm.toggleParams(183, p7, false)[1] === 1100);
+  check('toggleParams: DO_SET_SERVO uses the configured ON / OFF PWM', pm.toggleParams(183, [9, 2000, 1000, 0, 0, 0, 0], true)[1] === 2000 && pm.toggleParams(183, [9, 2000, 1000, 0, 0, 0, 0], false)[1] === 1000);
+  check('toggleParams: other commands put 1 / 0 in param1 and keep the rest', (() => { const o = pm.toggleParams(400, [0, 21196, 0, 0, 0, 0, 0], true); return o[0] === 1 && o[1] === 21196; })());
+  check('toggleParams: does not modify the definition', p7[1] === 0);
+  check('sliderParams: DO_CHANGE_SPEED / relay / servo take the value in param2', [178, 181, 183].every((c) => pm.sliderParams(c, p7, 3.5)[1] === 3.5));
+  check('sliderParams: other commands take it in param1', pm.sliderParams(31010, p7, 42)[0] === 42);
+}
+
 console.log(failures.length ? `\n${failures.length} widget check(s) FAILED` : '\nAll widget checks PASSED');
 process.exit(failures.length ? 1 : 0);
