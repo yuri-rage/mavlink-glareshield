@@ -10,7 +10,9 @@ export type WidgetDisplayType =
   | 'multi-bar'
   | 'param-control'
   | 'compass-rose'
-  | 'sparkline';
+  // Rendered as the time-series chart; the id is kept so saved profiles keep working.
+  | 'sparkline'
+  | 'value-list';
 
 export type MultiBarGroupType =
   | 'rc-8'
@@ -24,6 +26,9 @@ export type MultiBarGroupType =
   | 'ekf-variances'
   | 'battery-cells';
 
+/** Converts a bound SI value into the user's display units (Link & Display Settings). */
+export type WidgetUnitKind = 'none' | 'speed' | 'altitude' | 'distance';
+
 export interface WidgetDataBinding {
   messageName: string; // e.g. "ATTITUDE", "BATTERY_STATUS", "VFR_HUD"
   fieldName: string; // e.g. "roll", "voltage_battery", "groundspeed"
@@ -35,6 +40,30 @@ export interface WidgetDataBinding {
   warnThreshold?: number;
   critThreshold?: number;
   thresholdInvert?: boolean; // true if lower values trigger warning/critical (e.g., voltage, battery_remaining)
+  offset?: number; // added after the multiplier: displayed = raw * multiplier + offset
+  /** When set, the value (in m/s or m after multiplier/offset) is shown in the user's chosen units. */
+  unitKind?: WidgetUnitKind;
+  label?: string; // series / row label for multi-value widgets
+  color?: string; // series color (CSS color) for charts
+}
+
+export interface WidgetGaugeConfig {
+  /** Dial sweep in degrees, centred on 12 o'clock. */
+  sweep?: 180 | 240 | 270;
+  style?: 'arc' | 'needle' | 'both';
+  /** Approximate number of labelled major ticks (rounded to "nice" values). */
+  majorTicks?: number;
+  /** Minor ticks between each pair of major ticks. */
+  minorTicks?: number;
+  /** Draw green / amber / red bands from the binding's thresholds. */
+  showZones?: boolean;
+}
+
+export interface WidgetChartConfig {
+  windowSec?: number; // visible time window
+  yScale?: 'auto' | 'fixed' | 'zero'; // fixed uses the primary binding's min/max
+  showGrid?: boolean;
+  fill?: boolean; // shade under the first series
 }
 
 export interface WidgetAction {
@@ -68,6 +97,22 @@ export interface CustomWidgetDefinition {
   action?: WidgetAction;
   paramControl?: WidgetParamControl;
   multiBarConfig?: WidgetMultiBarConfig;
+  /**
+   * Further values after `binding`. Charts plot them all, the value list shows them all, and the radial gauge,
+   * linear gauge and compass rose use the first one as a secondary marker (e.g. a target).
+   */
+  bindings?: WidgetDataBinding[];
+  gauge?: WidgetGaugeConfig;
+  chart?: WidgetChartConfig;
+  /**
+   * Toggle switch: the vehicle field that reports the real state, so the switch shows what the vehicle is doing
+   * rather than what was last sent.
+   */
+  feedback?: WidgetDataBinding;
+  /** LED and toggle feedback: on when the value is greater than this (default 0). */
+  stateThreshold?: number;
+  /** Seconds without the bound message before the value is shown as stale (default 3). */
+  staleAfterSec?: number;
   colorScheme?: 'default' | 'green' | 'amber' | 'blue' | 'red';
   minWidth?: number;
   minHeight?: number;
