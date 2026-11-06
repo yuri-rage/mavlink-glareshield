@@ -1,10 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { Modal } from '../ui/modal';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { CustomWidgetDefinition, MultiBarGroupType, WidgetDisplayType } from '../../types/widget';
-import { Download, Save } from 'lucide-react';
+import {
+  CustomWidgetDefinition,
+  MultiBarGroupType,
+  WidgetChartConfig,
+  WidgetDataBinding,
+  WidgetDisplayType,
+  WidgetGaugeConfig,
+} from '../../types/widget';
+import { Download, Plus, Save } from 'lucide-react';
+import { BindingEditor, NumberField, SELECT_CLASS } from './BindingEditor';
+import { getObservedCatalog } from '../../lib/messageCache';
+import { CustomWidgetRenderer } from '../widgets/CustomWidgetRenderer';
+import { WINDOW_CHOICES } from '../widgets/custom/TimeSeriesChart';
 
 interface CustomWidgetCreatorModalProps {
   isOpen: boolean;
@@ -141,6 +152,70 @@ export const COMMON_FIELDS: Record<string, string[]> = {
   HEARTBEAT: ['customMode', 'isArmed', 'systemStatus'],
 };
 
+const TELEMETRY_TYPES: WidgetDisplayType[] = [
+  'stat-card',
+  'gauge-linear',
+  'gauge-radial',
+  'indicator-led',
+  'text-display',
+  'compass-rose',
+  'sparkline',
+  'value-list',
+];
+/** How many values after the first each type uses. */
+const EXTRA_VALUE_LIMIT: Partial<Record<WidgetDisplayType, number>> = {
+  sparkline: 7,
+  'value-list': 15,
+  'gauge-radial': 1,
+  'gauge-linear': 1,
+  'compass-rose': 1,
+};
+
+const DEFAULT_BINDING: WidgetDataBinding = {
+  messageName: 'SYS_STATUS',
+  fieldName: 'voltage_battery',
+  unit: 'V',
+  multiplier: 1,
+  decimals: 1,
+  min: 0,
+  max: 100,
+};
+
+/** Drop undefined / empty keys so saved JSON stays tidy. */
+function cleanBinding(b: WidgetDataBinding, keepRange = true): WidgetDataBinding {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(b)) {
+    if (v === undefined || v === '') continue;
+    if (!keepRange && (k === 'min' || k === 'max')) continue;
+    out[k] = v;
+  }
+  return out as unknown as WidgetDataBinding;
+}
+
+/** Message-specific defaults when the user picks a message for a binding. */
+function messageDefaults(msg: string): Partial<WidgetDataBinding> {
+  if (msg === 'RC_CHANNELS (scaled)' || msg === 'SERVO_OUTPUT_RAW (scaled)') return { min: -1, max: 1, unit: '', decimals: 2 };
+  if (msg === 'RC_CHANNELS' || msg === 'SERVO_OUTPUT_RAW') return { min: 1000, max: 2000, unit: 'µs', decimals: 0 };
+  return {};
+}
+
+const Section: React.FC<{ title: string; tone?: 'sky' | 'amber'; right?: React.ReactNode; children: React.ReactNode }> = ({
+  title,
+  tone = 'sky',
+  right,
+  children,
+}) => (
+  <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-3">
+    <div className="flex items-center justify-between gap-2">
+      <h4 className={`text-xs font-bold uppercase tracking-wider ${tone === 'amber' ? 'text-amber-400' : 'text-sky-400'}`}>
+        {title}
+      </h4>
+      {right}
+    </div>
+    {children}
+  </div>
+);
+
 export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> = ({
   isOpen,
   onClose,
@@ -155,17 +230,19 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   const [category, setCategory] = useState<'telemetry' | 'control' | 'avionics' | 'custom'>('telemetry');
   const [colorScheme, setColorScheme] = useState<'default' | 'green' | 'amber' | 'blue' | 'red'>('default');
 
-  // Telemetry Binding
-  const [messageName, setMessageName] = useState('SYS_STATUS');
-  const [fieldName, setFieldName] = useState('voltage_battery');
-  const [unit, setUnit] = useState('V');
-  const [multiplier, setMultiplier] = useState('1');
-  const [decimals, setDecimals] = useState('1');
-  const [minVal, setMinVal] = useState('0');
-  const [maxVal, setMaxVal] = useState('100');
-  const [warnThreshold, setWarnThreshold] = useState('');
-  const [critThreshold, setCritThreshold] = useState('');
-  const [thresholdInvert, setThresholdInvert] = useState(false);
+  // Telemetry bindings and display options
+  const [binding, setBinding] = useState<WidgetDataBinding>(DEFAULT_BINDING);
+  const [extraBindings, setExtraBindings] = useState<WidgetDataBinding[]>([]);
+  const [gauge, setGauge] = useState<WidgetGaugeConfig>({});
+  const [chart, setChart] = useState<WidgetChartConfig>({});
+  const [feedbackEnabled, setFeedbackEnabled] = useState(false);
+  const [feedback, setFeedback] = useState<WidgetDataBinding>({
+    messageName: 'SERVO_OUTPUT_RAW',
+    fieldName: 'servo9_raw',
+    decimals: 0,
+  });
+  const [stateThreshold, setStateThreshold] = useState<number | undefined>(undefined);
+  const [staleAfterSec, setStaleAfterSec] = useState<number | undefined>(undefined);
 
   // Multi-bar config
   const [multiBarGroup, setMultiBarGroup] = useState<MultiBarGroupType>('rc-8');
@@ -187,96 +264,67 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   const [param3, setParam3] = useState('0');
   const [requireConfirm, setRequireConfirm] = useState(true);
 
+  // Field picker: the curated list plus every field the vehicle has actually sent (refreshed on open).
+  const [observedCatalog, setObservedCatalog] = useState<Record<string, string[]>>({});
   useEffect(() => {
     if (!isOpen) return;
-    if (initialWidget) {
-      setName(initialWidget.name || '');
-      setDescription(initialWidget.description || '');
-      setDisplayType(initialWidget.displayType);
-      setCategory(initialWidget.category || 'telemetry');
-      setColorScheme(initialWidget.colorScheme || 'default');
-
-      if (initialWidget.binding) {
-        setMessageName(initialWidget.binding.messageName || 'SYS_STATUS');
-        setFieldName(initialWidget.binding.fieldName || 'voltage_battery');
-        setUnit(initialWidget.binding.unit ?? '');
-        setMultiplier(String(initialWidget.binding.multiplier ?? 1));
-        setDecimals(String(initialWidget.binding.decimals ?? 1));
-        setMinVal(String(initialWidget.binding.min ?? 0));
-        setMaxVal(String(initialWidget.binding.max ?? 100));
-        setWarnThreshold(
-          initialWidget.binding.warnThreshold !== undefined ? String(initialWidget.binding.warnThreshold) : ''
-        );
-        setCritThreshold(
-          initialWidget.binding.critThreshold !== undefined ? String(initialWidget.binding.critThreshold) : ''
-        );
-        setThresholdInvert(Boolean(initialWidget.binding.thresholdInvert));
-      }
-
-      if (initialWidget.multiBarConfig) {
-        setMultiBarGroup(initialWidget.multiBarConfig.group);
-      }
-
-      if (initialWidget.paramControl) {
-        setParamId(initialWidget.paramControl.paramId || 'WPNAV_SPEED');
-        setParamUnit(initialWidget.paramControl.unit ?? '');
-        setParamMin(initialWidget.paramControl.min !== undefined ? String(initialWidget.paramControl.min) : '');
-        setParamMax(initialWidget.paramControl.max !== undefined ? String(initialWidget.paramControl.max) : '');
-        setParamStep(initialWidget.paramControl.step !== undefined ? String(initialWidget.paramControl.step) : '1');
-        setParamConfirm(initialWidget.paramControl.confirmation ?? true);
-        setParamOptionsText(
-          initialWidget.paramControl.options
-            ? initialWidget.paramControl.options.map((o) => `${o.label}:${o.value}`).join(', ')
-            : ''
-        );
-      }
-
-      if (initialWidget.action) {
-        setActionLabel(initialWidget.action.label || 'Trigger Command');
-        setCommandId(String(initialWidget.action.commandId || 20));
-        setParam1(String(initialWidget.action.params?.[0] ?? 0));
-        setParam2(String(initialWidget.action.params?.[1] ?? 0));
-        setParam3(String(initialWidget.action.params?.[2] ?? 0));
-        setRequireConfirm(initialWidget.action.confirmation ?? true);
-      }
-    } else {
-      setName('');
-      setDescription('');
-      setDisplayType('stat-card');
-      setCategory('telemetry');
-      setColorScheme('default');
-      setMessageName('SYS_STATUS');
-      setFieldName('voltage_battery');
-      setUnit('V');
-      setMultiplier('1');
-      setDecimals('1');
-      setMinVal('0');
-      setMaxVal('100');
-      setWarnThreshold('');
-      setCritThreshold('');
-      setThresholdInvert(false);
-      setMultiBarGroup('rc-8');
-      setParamId('WPNAV_SPEED');
-      setParamUnit('cm/s');
-      setParamMin('50');
-      setParamMax('2000');
-      setParamStep('10');
-      setParamOptionsText('');
-      setParamConfirm(true);
+    setObservedCatalog(getObservedCatalog());
+    const timer = setInterval(() => setObservedCatalog(getObservedCatalog()), 3000);
+    return () => clearInterval(timer);
+  }, [isOpen]);
+  const catalog = useMemo(() => {
+    const merged: Record<string, string[]> = {};
+    for (const [m, fields] of Object.entries(COMMON_FIELDS)) merged[m] = [...fields];
+    for (const [m, fields] of Object.entries(observedCatalog)) {
+      merged[m] = [...new Set([...(merged[m] ?? []), ...fields])];
     }
+    return merged;
+  }, [observedCatalog]);
+  const observed = useMemo(() => new Set(Object.keys(observedCatalog)), [observedCatalog]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const w = initialWidget;
+    setName(w?.name || '');
+    setDescription(w?.description || '');
+    setDisplayType(w?.displayType ?? 'stat-card');
+    setCategory(w?.category || 'telemetry');
+    setColorScheme(w?.colorScheme || 'default');
+    setBinding(w?.binding ? { ...w.binding } : { ...DEFAULT_BINDING });
+    setExtraBindings((w?.bindings ?? []).map((b) => ({ ...b })));
+    setGauge({ ...(w?.gauge ?? {}) });
+    setChart({ ...(w?.chart ?? {}) });
+    setFeedbackEnabled(Boolean(w?.feedback));
+    setFeedback(w?.feedback ? { ...w.feedback } : { messageName: 'SERVO_OUTPUT_RAW', fieldName: 'servo9_raw', decimals: 0 });
+    setStateThreshold(w?.stateThreshold);
+    setStaleAfterSec(w?.staleAfterSec);
+
+    setMultiBarGroup(w?.multiBarConfig?.group ?? 'rc-8');
+
+    const pc = w?.paramControl;
+    setParamId(pc?.paramId || 'WPNAV_SPEED');
+    setParamUnit(pc ? pc.unit ?? '' : 'cm/s');
+    setParamMin(pc ? (pc.min !== undefined ? String(pc.min) : '') : '50');
+    setParamMax(pc ? (pc.max !== undefined ? String(pc.max) : '') : '2000');
+    setParamStep(pc ? (pc.step !== undefined ? String(pc.step) : '1') : '10');
+    setParamConfirm(pc?.confirmation ?? true);
+    setParamOptionsText(pc?.options ? pc.options.map((o) => `${o.label}:${o.value}`).join(', ') : '');
+
+    const a = w?.action;
+    setActionLabel(a?.label || 'Trigger Command');
+    setCommandId(String(a?.commandId || 20));
+    setParam1(String(a?.params?.[0] ?? 0));
+    setParam2(String(a?.params?.[1] ?? 0));
+    setParam3(String(a?.params?.[2] ?? 0));
+    setRequireConfirm(a?.confirmation ?? true);
   }, [isOpen, initialWidget]);
 
   const isActionWidget =
     displayType === 'action-button' || displayType === 'toggle-switch' || displayType === 'slider-control';
-  const isTelemetryWidget =
-    displayType === 'stat-card' ||
-    displayType === 'gauge-linear' ||
-    displayType === 'gauge-radial' ||
-    displayType === 'indicator-led' ||
-    displayType === 'text-display' ||
-    displayType === 'slider-control' ||
-    displayType === 'compass-rose' ||
-    displayType === 'sparkline';
+  const isTelemetryWidget = TELEMETRY_TYPES.includes(displayType);
+  const extraLimit = EXTRA_VALUE_LIMIT[displayType] ?? 0;
+  const extrasUsed = extraBindings.slice(0, extraLimit);
+  const usesRange = displayType !== 'value-list' && displayType !== 'stat-card' && displayType !== 'text-display';
 
   const buildDefinition = (): CustomWidgetDefinition => {
     const id = initialWidget?.id || `custom-${Date.now()}`;
@@ -290,20 +338,21 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     };
 
     if (isTelemetryWidget) {
-      const warnNum = warnThreshold.trim() !== '' ? parseFloat(warnThreshold) : undefined;
-      const critNum = critThreshold.trim() !== '' ? parseFloat(critThreshold) : undefined;
-      def.binding = {
-        messageName,
-        fieldName,
-        unit: unit.trim(),
-        multiplier: parseFloat(multiplier) || 1,
-        min: parseFloat(minVal) || 0,
-        max: parseFloat(maxVal) || 100,
-        decimals: parseInt(decimals, 10) >= 0 ? parseInt(decimals, 10) : 1,
-        ...(warnNum !== undefined && !isNaN(warnNum) ? { warnThreshold: warnNum } : {}),
-        ...(critNum !== undefined && !isNaN(critNum) ? { critThreshold: critNum } : {}),
-        ...(thresholdInvert ? { thresholdInvert: true } : {}),
-      };
+      def.binding = cleanBinding({ ...binding, multiplier: binding.multiplier ?? 1 });
+      if (extrasUsed.length) def.bindings = extrasUsed.map((b) => cleanBinding(b, false));
+      if (staleAfterSec !== undefined) def.staleAfterSec = staleAfterSec;
+    }
+    if (displayType === 'slider-control') {
+      def.binding = cleanBinding({ messageName: binding.messageName, fieldName: binding.fieldName, unit: binding.unit, min: binding.min ?? 0, max: binding.max ?? 100 });
+    }
+    if (displayType === 'gauge-radial') def.gauge = { ...gauge };
+    if (displayType === 'gauge-linear') def.gauge = { majorTicks: gauge.majorTicks, showZones: gauge.showZones };
+    if (displayType === 'sparkline') def.chart = { ...chart };
+    if (displayType === 'indicator-led' && stateThreshold !== undefined) def.stateThreshold = stateThreshold;
+    if (displayType === 'toggle-switch' && feedbackEnabled) {
+      def.feedback = cleanBinding(feedback, false);
+      if (stateThreshold !== undefined) def.stateThreshold = stateThreshold;
+      if (staleAfterSec !== undefined) def.staleAfterSec = staleAfterSec;
     }
 
     if (displayType === 'multi-bar') {
@@ -339,21 +388,17 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
       def.action = {
         label: actionLabel,
         commandId: parseInt(commandId, 10) || 0,
-        params: [
-          parseFloat(param1) || 0,
-          parseFloat(param2) || 0,
-          parseFloat(param3) || 0,
-          0,
-          0,
-          0,
-          0,
-        ],
+        params: [parseFloat(param1) || 0, parseFloat(param2) || 0, parseFloat(param3) || 0, 0, 0, 0, 0],
         confirmation: requireConfirm,
       };
     }
 
     return def;
   };
+
+  const previewJson = JSON.stringify({ ...buildDefinition(), id: `${initialWidget?.id ?? 'new'}-preview` });
+  // Keep the preview's definition stable between renders that don't change it (its chart restarts otherwise).
+  const previewDefinition = useMemo(() => JSON.parse(previewJson) as CustomWidgetDefinition, [previewJson]);
 
   const handleSaveAndPlace = (e: React.FormEvent) => {
     e.preventDefault();
@@ -376,88 +421,95 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     URL.revokeObjectURL(url);
   };
 
+  const addExtra = () => {
+    const last = extraBindings[extraBindings.length - 1] ?? binding;
+    setExtraBindings((list) => [
+      ...list.slice(0, extraLimit),
+      { messageName: last.messageName, fieldName: last.fieldName, unit: last.unit, unitKind: last.unitKind, multiplier: last.multiplier, decimals: last.decimals },
+    ]);
+  };
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
+      size="xl"
       title={isEditing ? `Edit Custom Widget: ${initialWidget?.name}` : 'Create Custom Declarative Widget'}
-      description="Define a reusable, safe JSON widget bound to any MAVLink telemetry field, parameter, or flight command."
+      description="Define a reusable, safe JSON widget bound to MAVLink telemetry fields, a parameter, or a flight command. The preview is live."
     >
-      <form onSubmit={handleSaveAndPlace} className="space-y-4">
-        {/* Name & Display Type */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-zinc-300">Widget Name</label>
-            <Input
-              type="text"
-              required
-              placeholder="e.g. Bus Voltmeter, RC Monitor, WP Speed"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="text-xs"
-            />
+      <form onSubmit={handleSaveAndPlace} className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
+        <div className="space-y-4 min-w-0">
+          {/* Name & Display Type */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-zinc-300">Widget Name</label>
+              <Input
+                type="text"
+                required
+                placeholder="e.g. Bus Voltmeter, RC Monitor, WP Speed"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="text-xs"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-zinc-300">Display UI Type</label>
+              <select
+                value={displayType}
+                onChange={(e) => {
+                  const nextType = e.target.value as WidgetDisplayType;
+                  setDisplayType(nextType);
+                  if (nextType === 'compass-rose' && binding.messageName === 'SYS_STATUS') {
+                    setBinding({ ...binding, messageName: 'WIND', fieldName: 'direction', unit: '°', min: 0, max: 360 });
+                  }
+                }}
+                className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
+              >
+                <option value="stat-card">Stat Card (Digital readout)</option>
+                <option value="value-list">Value List (Several labelled readouts)</option>
+                <option value="gauge-linear">Linear Gauge (Horizontal bar)</option>
+                <option value="gauge-radial">Radial Gauge (Dial with needle)</option>
+                <option value="sparkline">Time-Series Chart (One or more values over time)</option>
+                <option value="compass-rose">Compass / Vector Rose (Heading / Wind / Bearing)</option>
+                <option value="multi-bar">Multi-Channel Bar / PWM Visualizer (RC / Servo / ESC / Vibe)</option>
+                <option value="param-control">Parameter Control (ArduPilot PARAM_SET)</option>
+                <option value="indicator-led">LED Status Indicator (On/Off)</option>
+                <option value="action-button">Action Button (MAVLink Command)</option>
+                <option value="toggle-switch">Toggle Switch (Relay / Servo)</option>
+                <option value="slider-control">Slider Control (PWM / Speed)</option>
+                <option value="text-display">Text Output Display</option>
+              </select>
+            </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-zinc-300">Display UI Type</label>
-            <select
-              value={displayType}
-              onChange={(e) => {
-                const nextType = e.target.value as WidgetDisplayType;
-                setDisplayType(nextType);
-                if (nextType === 'compass-rose' && messageName === 'SYS_STATUS') {
-                  setMessageName('WIND');
-                  setFieldName('direction');
-                  setUnit('°');
-                  setMinVal('0');
-                  setMaxVal('360');
-                }
-              }}
-              className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
-            >
-              <option value="stat-card">Stat Card (Digital readout)</option>
-              <option value="gauge-linear">Linear Gauge (Horizontal bar)</option>
-              <option value="gauge-radial">Radial Gauge (Circular dial)</option>
-              <option value="sparkline">Sparkline Mini-Chart (Rolling trend)</option>
-              <option value="compass-rose">Compass / Vector Rose (Heading / Wind / Bearing)</option>
-              <option value="multi-bar">Multi-Channel Bar / PWM Visualizer (RC / Servo / ESC / Vibe)</option>
-              <option value="param-control">Parameter Control (ArduPilot PARAM_SET)</option>
-              <option value="indicator-led">LED Status Indicator (On/Off)</option>
-              <option value="action-button">Action Button (MAVLink Command)</option>
-              <option value="toggle-switch">Toggle Switch (Relay / Servo)</option>
-              <option value="slider-control">Slider Control (PWM / Speed)</option>
-              <option value="text-display">Text Output Display</option>
-            </select>
-          </div>
-        </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-2 space-y-1">
+              <label className="text-xs font-semibold text-zinc-300">Description (Optional)</label>
+              <Input
+                type="text"
+                placeholder="Brief explanation of this widget"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="text-xs"
+              />
+            </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="sm:col-span-2 space-y-1">
-            <label className="text-xs font-semibold text-zinc-300">Description (Optional)</label>
-            <Input
-              type="text"
-              placeholder="Brief explanation of this widget"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="text-xs"
-            />
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-zinc-300">Accent Color</label>
+              <select
+                value={colorScheme}
+                onChange={(e) => setColorScheme(e.target.value as any)}
+                className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
+              >
+                <option value="default">Sky Blue (Default)</option>
+                <option value="blue">Aviation Cyan-Blue</option>
+                <option value="green">Emerald Green</option>
+                <option value="amber">Amber Warning</option>
+                <option value="red">Crimson Red</option>
+              </select>
+            </div>
           </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-zinc-300">Accent Color</label>
-            <select
-              value={colorScheme}
-              onChange={(e) => setColorScheme(e.target.value as any)}
-              className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
-            >
-              <option value="default">Sky Blue (Default)</option>
-              <option value="blue">Aviation Cyan-Blue</option>
-              <option value="green">Emerald Green</option>
-              <option value="amber">Amber Warning</option>
-              <option value="red">Crimson Red</option>
-            </select>
-          </div>
-        </div>
 
         {/* Multi-Bar Channel Group Configuration */}
         {displayType === 'multi-bar' && (
@@ -600,161 +652,268 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
           </div>
         )}
 
-        {/* Telemetry Binding Settings (for stat, gauge, led, text, slider, compass-rose, sparkline) */}
+        {/* Telemetry binding (primary value) */}
         {isTelemetryWidget && (
-          <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400">
-              {displayType === 'slider-control' ? 'Slider Range & Unit' : 'Telemetry Data Binding'}
-            </h4>
-
-            {displayType !== 'slider-control' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-zinc-400">MAVLink Message</label>
-                  <select
-                    value={messageName}
-                    onChange={(e) => {
-                      const msg = e.target.value;
-                      setMessageName(msg);
-                      if (COMMON_FIELDS[msg]?.length) {
-                        setFieldName(COMMON_FIELDS[msg][0]);
-                      }
-                      if (msg === 'RC_CHANNELS (scaled)' || msg === 'SERVO_OUTPUT_RAW (scaled)') {
-                        setMinVal('-1');
-                        setMaxVal('1');
-                        setUnit('');
-                        setDecimals('2');
-                      } else if (msg === 'RC_CHANNELS' || msg === 'SERVO_OUTPUT_RAW') {
-                        setMinVal('1000');
-                        setMaxVal('2000');
-                        setUnit('µs');
-                        setDecimals('0');
-                      }
-                    }}
-                    className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs font-mono text-zinc-200"
-                  >
-                    {Object.keys(COMMON_FIELDS).map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-zinc-400">Target Field</label>
-                  <select
-                    value={fieldName}
-                    onChange={(e) => setFieldName(e.target.value)}
-                    className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs font-mono text-zinc-200"
-                  >
-                    {(COMMON_FIELDS[messageName] || []).map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+          <Section title={displayType === 'value-list' || displayType === 'sparkline' ? 'Value 1' : 'Telemetry Data Binding'}>
+            <BindingEditor
+              value={binding}
+              onChange={setBinding}
+              catalog={catalog}
+              observed={observed}
+              showRange={usesRange}
+              showThresholds={displayType !== 'compass-rose'}
+              showLabel={displayType === 'value-list' || displayType === 'sparkline'}
+              showColor={displayType === 'sparkline'}
+              onMessagePicked={(msg) => setBinding((b) => ({ ...b, ...messageDefaults(msg) }))}
+            />
+            {displayType === 'sparkline' && (
+              <p className="text-[10px] text-zinc-500">Min and max are only used when the chart scale is set to Fixed.</p>
             )}
+          </Section>
+        )}
 
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        {/* Slider range */}
+        {displayType === 'slider-control' && (
+          <Section title="Slider Range & Unit">
+            <div className="grid grid-cols-3 gap-2">
               <div className="space-y-1">
                 <label className="text-[11px] font-medium text-zinc-400">Unit Label</label>
                 <Input
                   type="text"
-                  placeholder="V, m/s, %"
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
+                  placeholder="µs, m/s"
+                  value={binding.unit ?? ''}
+                  onChange={(e) => setBinding({ ...binding, unit: e.target.value })}
                   className="h-8 text-xs font-mono"
                 />
               </div>
+              <NumberField label="Min Value" value={binding.min} onChange={(v) => setBinding({ ...binding, min: v })} />
+              <NumberField label="Max Value" value={binding.max} onChange={(v) => setBinding({ ...binding, max: v })} />
+            </div>
+          </Section>
+        )}
 
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Min Value</label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={minVal}
-                  onChange={(e) => setMinVal(e.target.value)}
-                  className="h-8 text-xs font-mono"
+        {/* Additional values */}
+        {isTelemetryWidget && extraLimit > 0 && (
+          <Section
+            title={extraLimit === 1 ? 'Secondary Marker (Optional)' : 'More Values'}
+            right={
+              extrasUsed.length < extraLimit && (
+                <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] gap-1 border-zinc-700" onClick={addExtra}>
+                  <Plus className="h-3 w-3" />
+                  {extraLimit === 1 ? 'Add marker' : 'Add value'}
+                </Button>
+              )
+            }
+          >
+            <p className="text-[10px] text-zinc-500 -mt-1">
+              {displayType === 'sparkline'
+                ? 'Each value is plotted as its own series on the same chart.'
+                : displayType === 'value-list'
+                  ? 'Each value gets its own labelled row.'
+                  : 'Drawn as a magenta marker on the same scale, e.g. a target against the actual value.'}
+            </p>
+            {extrasUsed.map((b, i) => (
+              <div key={i} className="pt-2 border-t border-zinc-800/80 first:border-t-0 first:pt-0">
+                <BindingEditor
+                  title={extraLimit === 1 ? 'Marker value' : `Value ${i + 2}`}
+                  value={b}
+                  onChange={(next) => setExtraBindings((list) => list.map((x, j) => (j === i ? next : x)))}
+                  onRemove={() => setExtraBindings((list) => list.filter((_, j) => j !== i))}
+                  catalog={catalog}
+                  observed={observed}
+                  showRange={false}
+                  showThresholds={displayType === 'value-list'}
+                  showLabel
+                  showColor={displayType === 'sparkline'}
                 />
               </div>
+            ))}
+          </Section>
+        )}
 
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Max Value</label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={maxVal}
-                  onChange={(e) => setMaxVal(e.target.value)}
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-
-              {displayType !== 'slider-control' && (
+        {/* Radial / linear gauge options */}
+        {(displayType === 'gauge-radial' || displayType === 'gauge-linear') && (
+          <Section title="Scale">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+              {displayType === 'gauge-radial' && (
                 <>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-zinc-400">Scale Mult</label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={multiplier}
-                      onChange={(e) => setMultiplier(e.target.value)}
-                      className="h-8 text-xs font-mono"
-                    />
+                    <label className="text-[11px] font-medium text-zinc-400">Sweep</label>
+                    <select
+                      value={gauge.sweep ?? 240}
+                      onChange={(e) => setGauge({ ...gauge, sweep: Number(e.target.value) as 180 | 240 | 270 })}
+                      className={SELECT_CLASS}
+                    >
+                      <option value={180}>180° (half dial)</option>
+                      <option value={240}>240°</option>
+                      <option value={270}>270°</option>
+                    </select>
                   </div>
-
                   <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-zinc-400">Decimals</label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="6"
-                      value={decimals}
-                      onChange={(e) => setDecimals(e.target.value)}
-                      className="h-8 text-xs font-mono"
-                    />
+                    <label className="text-[11px] font-medium text-zinc-400">Indicator</label>
+                    <select
+                      value={gauge.style ?? 'both'}
+                      onChange={(e) => setGauge({ ...gauge, style: e.target.value as WidgetGaugeConfig['style'] })}
+                      className={SELECT_CLASS}
+                    >
+                      <option value="both">Arc + needle</option>
+                      <option value="needle">Needle</option>
+                      <option value="arc">Arc</option>
+                    </select>
                   </div>
                 </>
               )}
+              <NumberField
+                label="Major ticks (approx.)"
+                value={gauge.majorTicks}
+                placeholder="5"
+                step="1"
+                min={2}
+                max={12}
+                onChange={(v) => setGauge({ ...gauge, majorTicks: v })}
+              />
+              {displayType === 'gauge-radial' && (
+                <NumberField
+                  label="Minor per major"
+                  value={gauge.minorTicks}
+                  placeholder="4"
+                  step="1"
+                  min={0}
+                  max={9}
+                  onChange={(v) => setGauge({ ...gauge, minorTicks: v })}
+                />
+              )}
+              <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none h-8">
+                <input
+                  type="checkbox"
+                  checked={gauge.showZones ?? true}
+                  onChange={(e) => setGauge({ ...gauge, showZones: e.target.checked })}
+                  className="rounded border-zinc-700 bg-zinc-900 accent-sky-500"
+                />
+                Threshold zones
+              </label>
             </div>
+          </Section>
+        )}
 
-            {displayType !== 'slider-control' && (
-              <div className="pt-2 border-t border-zinc-800/80 grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-amber-400/90">Warning Threshold (Opt)</label>
-                  <Input
-                    type="number"
-                    step="any"
-                    placeholder="e.g. 14.4 or 35"
-                    value={warnThreshold}
-                    onChange={(e) => setWarnThreshold(e.target.value)}
-                    className="h-8 text-xs font-mono"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-red-400/90">Critical Threshold (Opt)</label>
-                  <Input
-                    type="number"
-                    step="any"
-                    placeholder="e.g. 13.8 or 50"
-                    value={critThreshold}
-                    onChange={(e) => setCritThreshold(e.target.value)}
-                    className="h-8 text-xs font-mono"
-                  />
-                </div>
-                <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none h-8 pb-1">
-                  <input
-                    type="checkbox"
-                    checked={thresholdInvert}
-                    onChange={(e) => setThresholdInvert(e.target.checked)}
-                    className="rounded border-zinc-700 bg-zinc-900 accent-amber-500"
-                  />
-                  Alert when below threshold (e.g. Voltage)
-                </label>
+        {/* Chart options */}
+        {displayType === 'sparkline' && (
+          <Section title="Chart">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-zinc-400">Default window</label>
+                <select
+                  value={chart.windowSec ?? 30}
+                  onChange={(e) => setChart({ ...chart, windowSec: Number(e.target.value) })}
+                  className={SELECT_CLASS}
+                >
+                  {WINDOW_CHOICES.map((s) => (
+                    <option key={s} value={s}>
+                      {s >= 60 ? `${s / 60} min` : `${s} s`}
+                    </option>
+                  ))}
+                </select>
               </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-zinc-400">Vertical scale</label>
+                <select
+                  value={chart.yScale ?? 'auto'}
+                  onChange={(e) => setChart({ ...chart, yScale: e.target.value as WidgetChartConfig['yScale'] })}
+                  className={SELECT_CLASS}
+                >
+                  <option value="auto">Auto (fit data)</option>
+                  <option value="zero">Auto, include zero</option>
+                  <option value="fixed">Fixed (min / max)</option>
+                </select>
+              </div>
+              <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none h-8">
+                <input
+                  type="checkbox"
+                  checked={chart.showGrid ?? true}
+                  onChange={(e) => setChart({ ...chart, showGrid: e.target.checked })}
+                  className="rounded border-zinc-700 bg-zinc-900 accent-sky-500"
+                />
+                Grid
+              </label>
+              <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none h-8">
+                <input
+                  type="checkbox"
+                  checked={chart.fill ?? false}
+                  onChange={(e) => setChart({ ...chart, fill: e.target.checked })}
+                  className="rounded border-zinc-700 bg-zinc-900 accent-sky-500"
+                />
+                Shade first series
+              </label>
+            </div>
+          </Section>
+        )}
+
+        {/* LED on-threshold */}
+        {displayType === 'indicator-led' && (
+          <Section title="LED State">
+            <div className="grid grid-cols-2 gap-2">
+              <NumberField
+                label="On when value is above"
+                value={stateThreshold}
+                placeholder="0"
+                onChange={setStateThreshold}
+              />
+            </div>
+          </Section>
+        )}
+
+        {/* Toggle feedback */}
+        {displayType === 'toggle-switch' && (
+          <Section
+            title="Vehicle State Feedback"
+            right={
+              <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={feedbackEnabled}
+                  onChange={(e) => setFeedbackEnabled(e.target.checked)}
+                  className="rounded border-zinc-700 bg-zinc-900 accent-sky-500"
+                />
+                Follow a vehicle field
+              </label>
+            }
+          >
+            <p className="text-[10px] text-zinc-500 -mt-1">
+              With feedback the switch shows what the vehicle reports (e.g. the servo output it drives) instead of what was
+              last sent.
+            </p>
+            {feedbackEnabled && (
+              <>
+                <BindingEditor
+                  value={feedback}
+                  onChange={setFeedback}
+                  catalog={catalog}
+                  observed={observed}
+                  showRange={false}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <NumberField
+                    label="On when value is above"
+                    value={stateThreshold}
+                    placeholder="0 (e.g. 1500 for PWM)"
+                    onChange={setStateThreshold}
+                  />
+                </div>
+              </>
             )}
+          </Section>
+        )}
+
+        {/* Staleness */}
+        {(isTelemetryWidget || (displayType === 'toggle-switch' && feedbackEnabled)) && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <NumberField
+              label="Stale after (s)"
+              value={staleAfterSec}
+              placeholder="3"
+              min={0.5}
+              onChange={setStaleAfterSec}
+            />
           </div>
         )}
 
@@ -844,33 +1003,46 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="flex items-center justify-between pt-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleDownloadWidgetJson}
-            className="gap-1.5 text-xs border-zinc-700"
-          >
-            <Download className="h-3.5 w-3.5 text-sky-400" />
-            Export Widget JSON
-          </Button>
-
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={onClose} className="text-xs">
-              Cancel
-            </Button>
+          {/* Action Buttons */}
+          <div className="flex items-center justify-between pt-2">
             <Button
-              type="submit"
-              variant="default"
+              type="button"
+              variant="outline"
               size="sm"
-              className="bg-sky-500 hover:bg-sky-600 text-white font-bold gap-1 text-xs"
+              onClick={handleDownloadWidgetJson}
+              className="gap-1.5 text-xs border-zinc-700"
             >
-              <Save className="h-3.5 w-3.5" />
-              {isEditing ? 'Save Changes' : 'Save & Place'}
+              <Download className="h-3.5 w-3.5 text-sky-400" />
+              Export Widget JSON
             </Button>
+
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="ghost" size="sm" onClick={onClose} className="text-xs">
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="default"
+                size="sm"
+                className="bg-sky-500 hover:bg-sky-600 text-white font-bold gap-1 text-xs"
+              >
+                <Save className="h-3.5 w-3.5" />
+                {isEditing ? 'Save Changes' : 'Save & Place'}
+              </Button>
+            </div>
           </div>
+        </div>
+
+        {/* Live preview */}
+        <div className="lg:sticky lg:top-0 space-y-1.5 min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Live Preview</div>
+          {/* inert: preview controls must never send commands or parameter writes */}
+          <div ref={(el) => el?.setAttribute('inert', '')} className="h-[300px] flex flex-col pointer-events-none select-none">
+            <CustomWidgetRenderer definition={previewDefinition} />
+          </div>
+          <p className="text-[10px] text-zinc-500">
+            Shows live telemetry when connected. Controls are disabled in the preview.
+          </p>
         </div>
       </form>
     </Modal>
