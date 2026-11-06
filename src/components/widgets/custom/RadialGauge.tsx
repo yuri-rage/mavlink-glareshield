@@ -16,6 +16,10 @@ export interface RadialGaugeProps {
   accent: string;
   secondary?: { value: number | null; text: string; label: string } | null;
   dimmed?: boolean;
+  /** Small dial (multi-gauge grids): no minor ticks, and only the end labels. */
+  compact?: boolean;
+  /** Pin the dial to the top of its box (grid cells, so the caption sits right above it). */
+  alignTop?: boolean;
 }
 
 const CX = 100;
@@ -23,7 +27,7 @@ const CY = 100;
 const R = 70;
 
 /** viewBox height per sweep, so the dial fills its box without empty space below the arc ends. */
-const VIEW_HEIGHT: Record<number, number> = { 180: 150, 240: 158, 270: 172 };
+export const VIEW_HEIGHT: Record<number, number> = { 180: 150, 240: 158, 270: 172 };
 
 export const RadialGauge: React.FC<RadialGaugeProps> = ({
   value,
@@ -36,6 +40,8 @@ export const RadialGauge: React.FC<RadialGaugeProps> = ({
   accent,
   secondary,
   dimmed,
+  compact,
+  alignTop,
 }) => {
   const colors = useChromeColors();
   const sweep = config?.sweep ?? 240;
@@ -53,7 +59,7 @@ export const RadialGauge: React.FC<RadialGaugeProps> = ({
   const majorCount = Math.max(2, Math.min(12, config?.majorTicks ?? 5));
   const majors = niceTicks(lo, hi, majorCount);
   const step = niceStep(lo, hi, majorCount);
-  const minorPer = Math.max(0, Math.min(9, config?.minorTicks ?? 4));
+  const minorPer = compact ? 0 : Math.max(0, Math.min(9, config?.minorTicks ?? 4));
   const minors: number[] = [];
   if (minorPer > 0) {
     const minorStep = step / (minorPer + 1);
@@ -77,7 +83,7 @@ export const RadialGauge: React.FC<RadialGaugeProps> = ({
     <svg
       // 16 units of side margin so long tick labels ("3500") are not clipped at 3 and 9 o'clock.
       viewBox={`-16 0 232 ${viewHeight}`}
-      preserveAspectRatio="xMidYMid meet"
+      preserveAspectRatio={alignTop ? 'xMidYMin meet' : 'xMidYMid meet'}
       className={`absolute inset-0 w-full h-full transition-opacity ${dimmed ? 'opacity-40' : ''}`}
       role="img"
       aria-label={`${text} ${unit}`}
@@ -109,25 +115,26 @@ export const RadialGauge: React.FC<RadialGaugeProps> = ({
         const p2 = polar(CX, CY, R + 9.5, a);
         return <line key={`m${v}`} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={colors.tickMinor} strokeWidth={1} />;
       })}
-      {majors.map((v) => {
+      {majors.map((v, i) => {
         const a = valueToAngle(v, lo, hi, sweep);
+        const showLabel = !compact || i === 0 || i === majors.length - 1;
         const p1 = polar(CX, CY, R + 5, a);
         const p2 = polar(CX, CY, R + 12, a);
         const lp = polar(CX, CY, R + 21, a);
         return (
           <g key={`M${v}`}>
             <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={colors.tick} strokeWidth={1.6} />
-            <text
+            {showLabel && <text
               x={lp.x}
               y={lp.y}
               fill={colors.label}
-              fontSize={10}
+              fontSize={compact ? 12 : 10}
               fontFamily="ui-monospace, monospace"
               textAnchor="middle"
               dominantBaseline="central"
             >
               {v.toFixed(labelDecimals)}
-            </text>
+            </text>}
           </g>
         );
       })}
@@ -168,7 +175,7 @@ export const RadialGauge: React.FC<RadialGaugeProps> = ({
         x={CX}
         y={valueY}
         fill={colors.text}
-        fontSize={sweep === 180 ? 20 : 22}
+        fontSize={compact ? 26 : sweep === 180 ? 20 : 22}
         fontWeight={700}
         stroke={colors.backdrop}
         strokeWidth={4}

@@ -101,3 +101,25 @@ export function thresholdZones(binding: WidgetDataBinding | undefined, min: numb
   }
   return zones;
 }
+
+/**
+ * Column count for laying out `n` dials in a width × height box so each dial is as large as possible.
+ * `aspect` is a dial's width / height; `labelHeight` is reserved above each dial for its caption.
+ */
+export function bestGridColumns(n: number, width: number, height: number, aspect: number, labelHeight = 0): number {
+  if (n <= 1 || !(width > 0) || !(height > 0)) return 1;
+  let best = 1;
+  let bestScale = -1;
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const cellW = width / cols;
+    const cellH = height / rows - labelHeight;
+    const scale = Math.min(cellW / aspect, cellH);
+    // Prefer fewer empty cells when sizes tie.
+    if (scale > bestScale + 0.5) {
+      bestScale = scale;
+      best = cols;
+    }
+  }
+  return best;
+}
