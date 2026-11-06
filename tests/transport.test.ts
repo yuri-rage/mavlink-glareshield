@@ -11,6 +11,8 @@
  */
 export {};
 const memoryStorage = new Map<string, string>();
+// Node < 21 has no global navigator; the transports feature-detect on it.
+(globalThis as any).navigator ??= {};
 (globalThis as any).localStorage ??= {
   getItem: (k: string) => memoryStorage.get(k) ?? null,
   setItem: (k: string, v: string) => void memoryStorage.set(k, String(v)),
