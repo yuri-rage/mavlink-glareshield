@@ -744,7 +744,7 @@ export function useAudioAlertListener() {
     lastAnnouncedReachedAtRef.current = lastReachedAt;
     if (decision !== null) {
       lastSpokenWpRef.current = { seq: decision, time: Date.now() };
-      speakCallout(`Waypoint ${decision}`);
+      speakCallout(`Reached waypoint ${decision}`);
     }
   }, [
     lastReachedWaypointSeq,
