@@ -363,6 +363,43 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   conn.disconnect();
 }
 
+{
+  // Silent-link watchdog: an open socket that delivers nothing is reopened, with growing patience.
+  const { LINK_SILENCE_TIMEOUT_MS } = await import('../src/mavlink/connection.ts');
+  const conn = new MavlinkConnection('ws://silent:1');
+  conn.connect();
+  await waitFor(() => conn.getStatus() === 'connected');
+  const t0 = Date.now();
+  conn.checkLinkSilence(t0 + LINK_SILENCE_TIMEOUT_MS - 1000);
+  check('watchdog: a quiet link inside the timeout is left alone', conn.getStatus() === 'connected');
+  const sockets = FakeWebSocket.instances.length;
+  conn.checkLinkSilence(t0 + LINK_SILENCE_TIMEOUT_MS + 1500);
+  check('watchdog: a link silent past the timeout is closed and not marked manual', conn.getStatus() === 'disconnected' && !conn.isManualDisconnect);
+  await waitFor(() => conn.getStatus() === 'connected', 3000);
+  check('watchdog: ...and reopened automatically', FakeWebSocket.instances.length === sockets + 1 && conn.getStatus() === 'connected');
+  const t1 = Date.now();
+  conn.checkLinkSilence(t1 + LINK_SILENCE_TIMEOUT_MS + 1500);
+  check('watchdog: after a silent reopen it waits longer (backoff) before trying again', conn.getStatus() === 'connected');
+  last(FakeWebSocket.instances).serverMessage(vehicleHeartbeat().buffer);
+  conn.checkLinkSilence(Date.now() + LINK_SILENCE_TIMEOUT_MS - 1000);
+  check('watchdog: data resets the timer', conn.getStatus() === 'connected');
+
+  // Network back / page visible again
+  last(FakeWebSocket.instances).serverMessage(vehicleHeartbeat().buffer);
+  conn.checkLinkNow(Date.now() + 1000);
+  check('checkLinkNow: a link that is still delivering is left alone', conn.getStatus() === 'connected');
+  const before = FakeWebSocket.instances.length;
+  conn.checkLinkNow(Date.now() + 4000);
+  check('checkLinkNow: an open but silent link is reopened at once', conn.getStatus() === 'disconnected');
+  const waitingSockets = FakeWebSocket.instances.length;
+  conn.checkLinkNow();
+  await waitFor(() => conn.getStatus() === 'connected', 1000);
+  check('checkLinkNow: a link waiting to retry reconnects immediately instead of after the retry delay', conn.getStatus() === 'connected' && FakeWebSocket.instances.length === waitingSockets + 1 && waitingSockets === before);
+  conn.disconnect();
+  conn.checkLinkNow();
+  check('checkLinkNow: never reopens a link the user disconnected', conn.getStatus() === 'disconnected');
+}
+
 // ------------------------------------------------------------------------------------------------
 // C. Serial over Web Serial
 // ------------------------------------------------------------------------------------------------

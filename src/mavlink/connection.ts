@@ -38,6 +38,14 @@ export type LinkConfig = { kind: 'websocket'; url: string } | { kind: 'serial'; 
 export const DEFAULT_SERIAL_BAUD = 57600;
 export const SERIAL_BAUD_RATES = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 500000, 921600] as const;
 
+/**
+ * A link that is open but silent for this long is presumed dead and reopened. Browsers do not notice a
+ * half-open WebSocket (Wi-Fi change, laptop or phone sleep, NAT timeout) until TCP gives up, which can take
+ * minutes, so the only reliable sign is that nothing arrives. Doubles after each silent reopen, up to the max.
+ */
+export const LINK_SILENCE_TIMEOUT_MS = 10000;
+export const LINK_SILENCE_TIMEOUT_MAX_MS = 60000;
+
 const MIXED_CONTENT_MESSAGE =
   'Mixed Content: HTTPS pages block unencrypted ws://. Use wss:// or permit insecure WebSockets.';
 
@@ -119,10 +127,47 @@ export class MavlinkConnection {
     packetsPerSecond: 0,
   };
   private lastPacketCount = 0;
+  /** When bytes last arrived on the current link. */
+  private lastRxAt = 0;
+  private silenceTimeoutMs = LINK_SILENCE_TIMEOUT_MS;
 
   constructor(url = getDefaultWsUrl()) {
     this.url = url;
     this.link = { kind: 'websocket', url };
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      // Coming back from sleep or a network change: check the link now rather than waiting for timers.
+      let hiddenAt = 0;
+      window.addEventListener('online', () => this.checkLinkNow());
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+        else if (hiddenAt && Date.now() - hiddenAt > 5000) this.checkLinkNow();
+      });
+    }
+  }
+
+  /**
+   * Reconnect right away if the link is down and waiting to retry, or open but silent for a few seconds.
+   * Called when the browser reports the network is back or the page becomes visible again.
+   */
+  public checkLinkNow(now = Date.now()) {
+    if (this.isManualDisconnect || !this.shouldReconnect || this.isReconnectPaused) return;
+    if (this.status === 'disconnected' && this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+      this.connect();
+    } else if (this.status === 'connected' && now - this.lastRxAt > 3000) {
+      this.handleLinkLoss('Link silent after network change; reconnecting');
+    }
+  }
+
+  /** Watchdog tick (every second while connected; exposed for tests). */
+  public checkLinkSilence(now = Date.now()) {
+    if (this.status !== 'connected' || !this.transport) return;
+    if (now - this.lastRxAt <= this.silenceTimeoutMs) return;
+    const seconds = Math.round((now - this.lastRxAt) / 1000);
+    this.silenceTimeoutMs = Math.min(LINK_SILENCE_TIMEOUT_MAX_MS, this.silenceTimeoutMs * 2);
+    console.warn(`MAVLink link silent for ${seconds}s; reopening it.`);
+    this.handleLinkLoss(`No data for ${seconds} s; reconnecting`);
   }
 
   /** Select a WebSocket link to this URL (reconnecting if a link is active). */
@@ -275,6 +320,8 @@ export class MavlinkConnection {
   private handleChunk(transport: Transport, chunk: Uint8Array) {
     if (this.transport !== transport) return;
     this.stats.bytesReceived += chunk.length;
+    this.lastRxAt = Date.now();
+    this.silenceTimeoutMs = LINK_SILENCE_TIMEOUT_MS;
 
     const packets = this.parser.parse(chunk);
     this.stats.packetsReceived += packets.length;
@@ -305,6 +352,7 @@ export class MavlinkConnection {
     if (this.transport !== transport) return;
     switch (status.kind) {
       case 'connected':
+        this.lastRxAt = Date.now();
         this.setStatus('connected');
         this.startHeartbeat();
         this.startStats();
@@ -422,6 +470,7 @@ export class MavlinkConnection {
       const diff = this.stats.packetsReceived - this.lastPacketCount;
       this.lastPacketCount = this.stats.packetsReceived;
       this.stats.packetsPerSecond = diff;
+      this.checkLinkSilence();
     }, 1000);
   }
 

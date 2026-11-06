@@ -1,3 +1,5 @@
+import { CameraFeed, type CameraStatus } from './CameraFeed';
+import { mavlinkConnection } from '../../mavlink/connection';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
@@ -144,8 +146,8 @@ export const HudWidget: React.FC = () => {
 
   const [videoConfig, setVideoConfig] = useState<HudVideoConfig>(loadHudVideoConfig);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [streamError, setStreamError] = useState(false);
-  const [snapshotSrc, setSnapshotSrc] = useState<string>('');
+  const [cameraStatus, setCameraStatus] = useState<CameraStatus>({ state: 'connecting', method: 'img' });
+  const [cameraReconnectKey, setCameraReconnectKey] = useState(0);
   const [flashTick, setFlashTick] = useState(0);
 
   const isFailsafe = isFailsafeActive(heartbeat, statusMessages);
@@ -159,19 +161,29 @@ export const HudWidget: React.FC = () => {
     return () => clearInterval(timer);
   }, [isFailsafe]);
 
-  // Auto-refresh timer when Snapshot mode is active
+  // Reconnect the camera when it is most likely to have dropped: the tab or phone waking after being hidden,
+  // the network coming back, or the vehicle link reconnecting (same network path, often the same outage).
   useEffect(() => {
-    if (!videoConfig.enabled || !videoConfig.url.trim() || videoConfig.type !== 'snapshot') {
-      return;
-    }
-    const updateSnapshot = () => {
-      const sep = videoConfig.url.includes('?') ? '&' : '?';
-      setSnapshotSrc(`${videoConfig.url}${sep}_t=${Date.now()}`);
+    const reconnect = () => setCameraReconnectKey((k) => k + 1);
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+      else if (hiddenAt && Date.now() - hiddenAt > 5000) reconnect();
     };
-    updateSnapshot();
-    const interval = setInterval(updateSnapshot, Math.max(videoConfig.snapshotIntervalMs, 50));
-    return () => clearInterval(interval);
-  }, [videoConfig.enabled, videoConfig.url, videoConfig.type, videoConfig.snapshotIntervalMs]);
+    let wasConnected = mavlinkConnection.getStatus() === 'connected';
+    const unsubscribe = mavlinkConnection.onStatus((st) => {
+      const isConnected = st === 'connected';
+      if (isConnected && !wasConnected) reconnect();
+      wasConnected = isConnected;
+    });
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('online', reconnect);
+    return () => {
+      unsubscribe();
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('online', reconnect);
+    };
+  }, []);
 
   const handleUpdateConfig = (updates: Partial<HudVideoConfig>) => {
     setVideoConfig((prev) => {
@@ -179,7 +191,6 @@ export const HudWidget: React.FC = () => {
       saveHudVideoConfig(next);
       return next;
     });
-    setStreamError(false);
   };
 
   // Register subscription for high-frequency attitude, VFR, NAV_CONTROLLER, IMU, and STATUSTEXT
@@ -1020,22 +1031,31 @@ export const HudWidget: React.FC = () => {
         </CardTitle>
         <div className="flex items-center gap-2">
           {videoConfig.enabled && Boolean(videoConfig.url.trim()) && (
-            <span
+            <button
+              type="button"
+              onClick={() => setCameraReconnectKey((k) => k + 1)}
+              title={`Camera ${cameraStatus.state}${cameraStatus.detail ? `: ${cameraStatus.detail}` : ''}. Click to reconnect.`}
               className={clsx(
                 "flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded border",
-                streamError
+                cameraStatus.state === 'error'
                   ? "bg-red-950/80 text-red-400 border-red-800/60"
-                  : "bg-emerald-950/80 text-emerald-400 border-emerald-800/60"
+                  : cameraStatus.state === 'live'
+                    ? "bg-emerald-950/80 text-emerald-400 border-emerald-800/60"
+                    : "bg-amber-950/80 text-amber-300 border-amber-800/60"
               )}
             >
               <span
                 className={clsx(
                   "w-1.5 h-1.5 rounded-full",
-                  streamError ? "bg-red-400" : "bg-emerald-400 animate-pulse"
+                  cameraStatus.state === 'error'
+                    ? "bg-red-400"
+                    : cameraStatus.state === 'live'
+                      ? "bg-emerald-400 animate-pulse"
+                      : "bg-amber-400 animate-pulse"
                 )}
               />
-              {streamError ? 'CAM ERR' : 'CAM'}
-            </span>
+              {cameraStatus.state === 'error' ? 'CAM ERR' : cameraStatus.state === 'live' ? 'CAM' : 'CAM …'}
+            </button>
           )}
           <span className="text-[10px] font-mono text-zinc-500 uppercase">
             {altitudeMode.toUpperCase()} • {unitSystem.toUpperCase()}
@@ -1059,34 +1079,15 @@ export const HudWidget: React.FC = () => {
         {/* Live Camera Video / Stream Layer */}
         {videoConfig.enabled && Boolean(videoConfig.url.trim()) && (
           <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none">
-            {videoConfig.type === 'video' ? (
-              <video
-                src={videoConfig.url.trim()}
-                autoPlay
-                playsInline
-                muted
-                loop
-                className={clsx(
-                  'w-full h-full',
-                  videoConfig.fit === 'contain' ? 'object-contain' : 'object-cover'
-                )}
-                style={{ opacity: videoConfig.opacity }}
-                onError={() => setStreamError(true)}
-                onLoadedData={() => setStreamError(false)}
-              />
-            ) : (
-              <img
-                src={videoConfig.type === 'snapshot' ? snapshotSrc : videoConfig.url.trim()}
-                alt="HUD Video Feed"
-                className={clsx(
-                  'w-full h-full',
-                  videoConfig.fit === 'contain' ? 'object-contain' : 'object-cover'
-                )}
-                style={{ opacity: videoConfig.opacity }}
-                onError={() => setStreamError(true)}
-                onLoad={() => setStreamError(false)}
-              />
-            )}
+            <CameraFeed
+              url={videoConfig.url.trim()}
+              type={videoConfig.type}
+              fit={videoConfig.fit}
+              opacity={videoConfig.opacity}
+              snapshotIntervalMs={videoConfig.snapshotIntervalMs}
+              reconnectKey={cameraReconnectKey}
+              onStatus={setCameraStatus}
+            />
           </div>
         )}
 
@@ -1231,6 +1232,16 @@ export const HudWidget: React.FC = () => {
               />
               <p className="text-[10px] text-zinc-500 leading-relaxed">
                 Tip: For Amcrest, Dahua, or Axis cameras, open the camera web UI in another browser tab and log in once to authorize your browser session before streaming.
+              </p>
+              <p className="text-[10px] text-zinc-500 leading-relaxed">
+                Reconnects on its own. MJPEG streams that allow CORS are watched frame by frame, so a frozen stream is
+                caught within seconds (go2rtc: <code className="text-zinc-400">api: origin: "*"</code>, or an
+                <code className="text-zinc-400"> Access-Control-Allow-Origin</code> header on your proxy). Without CORS it
+                still reconnects on errors and when the camera drops off the network and returns. Click the CAM badge to
+                reconnect by hand.
+                {videoConfig.enabled && cameraStatus.method === 'img' && videoConfig.type === 'mjpeg' && (
+                  <span className="text-amber-400/90"> This camera does not allow CORS.</span>
+                )}
               </p>
             </div>
 
