@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import type { WidgetDataBinding, WidgetUnitKind } from '../../types/widget';
 import { Input } from '../ui/input';
@@ -77,7 +77,6 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
   onRemove,
   title,
 }) => {
-  const fieldListId = useId();
   const set = (patch: Partial<WidgetDataBinding>) => onChange({ ...value, ...patch });
   const messages = Object.keys(catalog).sort((a, b) => {
     const oa = observed.has(a) ? 0 : 1;
@@ -86,6 +85,9 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
   });
   if (value.messageName && !messages.includes(value.messageName)) messages.unshift(value.messageName);
   const fields = catalog[value.messageName] ?? [];
+  // A field outside the list (typed by hand, or not received yet) opens in free-text mode.
+  const [customField, setCustomField] = useState(() => Boolean(value.fieldName) && !fields.includes(value.fieldName));
+  const OTHER = '__other__';
 
   return (
     <div className="space-y-2.5">
@@ -114,6 +116,7 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
               const msg = e.target.value;
               const first = catalog[msg]?.[0];
               set({ messageName: msg, ...(first ? { fieldName: first } : {}) });
+              setCustomField(!first);
               onMessagePicked?.(msg);
             }}
             className={SELECT_CLASS}
@@ -126,20 +129,51 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
           </select>
         </div>
         <div className="space-y-1 min-w-0">
-          <label className="text-[11px] font-medium text-zinc-400">Field (pick or type any decoded field)</label>
-          <Input
-            type="text"
-            list={fieldListId}
-            value={value.fieldName}
-            onChange={(e) => set({ fieldName: e.target.value.trim() })}
-            className="h-8 text-xs font-mono"
-            spellCheck={false}
-          />
-          <datalist id={fieldListId}>
-            {fields.map((f) => (
-              <option key={f} value={f} />
-            ))}
-          </datalist>
+          <label className="text-[11px] font-medium text-zinc-400">Field</label>
+          {customField || fields.length === 0 ? (
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="text"
+                value={value.fieldName}
+                placeholder="decoded field name, e.g. remrssi"
+                onChange={(e) => set({ fieldName: e.target.value.trim() })}
+                className="h-8 text-xs font-mono"
+                spellCheck={false}
+                autoFocus={customField}
+              />
+              {fields.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomField(false);
+                    if (!fields.includes(value.fieldName)) set({ fieldName: fields[0] });
+                  }}
+                  className="shrink-0 text-[10px] text-sky-400 hover:text-sky-300"
+                >
+                  List
+                </button>
+              )}
+            </div>
+          ) : (
+            <select
+              value={value.fieldName}
+              onChange={(e) => {
+                if (e.target.value === OTHER) setCustomField(true);
+                else set({ fieldName: e.target.value });
+              }}
+              className={SELECT_CLASS}
+            >
+              {value.fieldName && !fields.includes(value.fieldName) && (
+                <option value={value.fieldName}>{value.fieldName} (not received yet)</option>
+              )}
+              {fields.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+              <option value={OTHER}>Other field…</option>
+            </select>
+          )}
         </div>
       </div>
 
