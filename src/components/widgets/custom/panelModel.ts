@@ -16,6 +16,7 @@ import {
   type UnitSystem,
 } from '../../../lib/widgetValues';
 import { baseMessageName } from '../../../lib/messageCache';
+import { MAX_PANELS } from '../../../lib/widgetValidation';
 import { MAVLINK_MSG_ID } from '../../../mavlink/messages';
 import type { ColorScheme } from './palette';
 
@@ -38,6 +39,32 @@ export const MULTI_VALUE_TYPES: ReadonlySet<WidgetDisplayType> = new Set<WidgetD
   'gauge-linear',
   'compass-rose',
 ]);
+
+
+/**
+ * The panels a card draws, each as a stand-alone definition: a composite card's panels with the card's name, colour
+ * scheme and stale timeout filled in where a panel sets none, or the card itself for every other type.
+ */
+export function cardPanels(def: CustomWidgetDefinition): CustomWidgetDefinition[] {
+  if (def.displayType !== 'composite') return [def];
+  return (def.panels ?? []).slice(0, MAX_PANELS).map((p, i) => {
+    const { title, span: _span, ...settings } = p;
+    return {
+      ...settings,
+      id: `${def.id}#${i}`,
+      name: title?.trim() || def.name,
+      category: def.category,
+      colorScheme: p.colorScheme ?? def.colorScheme,
+      staleAfterSec: p.staleAfterSec ?? def.staleAfterSec,
+    };
+  });
+}
+
+/** A composite panel's width in twelfths of the card (default: a full row). */
+export function panelSpan(def: CustomWidgetDefinition, index: number): number {
+  const span = def.displayType === 'composite' ? def.panels?.[index]?.span : undefined;
+  return span !== undefined && Number.isFinite(span) ? Math.max(1, Math.min(12, Math.round(span))) : 12;
+}
 
 /** The values a panel displays, in order (the first is the primary value). */
 export function panelBindings(def: CustomWidgetDefinition): WidgetDataBinding[] {
@@ -290,8 +317,9 @@ export function multiBarGroup(def: CustomWidgetDefinition): MultiBarGroupType {
   return def.multiBarConfig?.group ?? 'rc-8';
 }
 
-/** MAVLink message IDs a panel needs the vehicle to stream. */
+/** MAVLink message IDs a card needs the vehicle to stream (every panel's, for a composite card). */
 export function requiredMessageIds(def: CustomWidgetDefinition): number[] {
+  if (def.displayType === 'composite') return [...new Set(cardPanels(def).flatMap(requiredMessageIds))];
   if (def.displayType === 'multi-bar') {
     const id = MULTI_BAR_MSG_ID[multiBarGroup(def)];
     return id !== undefined ? [id] : [];

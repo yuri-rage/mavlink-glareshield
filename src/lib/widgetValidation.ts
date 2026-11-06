@@ -5,6 +5,9 @@
 import type {
   CustomWidgetDefinition,
   MultiBarGroupType,
+  PanelDisplayType,
+  WidgetAction,
+  WidgetPanelDefinition,
   WidgetChartConfig,
   WidgetDataBinding,
   WidgetDisplayType,
@@ -25,6 +28,7 @@ export const VALID_DISPLAY_TYPES = new Set<WidgetDisplayType>([
   'compass-rose',
   'sparkline',
   'value-list',
+  'composite',
 ]);
 
 export const VALID_MULTI_BAR_GROUPS = new Set<MultiBarGroupType>([
@@ -41,6 +45,12 @@ export const VALID_MULTI_BAR_GROUPS = new Set<MultiBarGroupType>([
 ]);
 
 const MAX_EXTRA_BINDINGS = 16;
+/** Panels a composite widget may hold. */
+export const MAX_PANELS = 8;
+/** Bound values across all panels of a composite widget (each is read 8 times a second). */
+export const MAX_COMPOSITE_BINDINGS = 32;
+
+const COLOR_SCHEMES = new Set(['default', 'green', 'amber', 'blue', 'red']);
 
 /** Drop undefined / empty keys so saved JSON stays tidy. Every set value, including min and max, is kept. */
 export function cleanBinding(b: WidgetDataBinding): WidgetDataBinding {
@@ -105,6 +115,51 @@ function sanitizeChart(raw: unknown): WidgetChartConfig | undefined {
   return out;
 }
 
+/** A command with a numeric ID and exactly seven finite parameters (missing ones are 0). */
+function sanitizeAction(raw: unknown): WidgetAction | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const a = raw as Record<string, unknown>;
+  const commandId = finite(a.commandId);
+  if (commandId === undefined) return undefined;
+  const src = Array.isArray(a.params) ? a.params : [];
+  const params = Array.from({ length: 7 }, (_, i) => finite(src[i]) ?? 0) as WidgetAction['params'];
+  return { label: text(a.label) ?? '', commandId: Math.round(commandId), params, confirmation: a.confirmation === true };
+}
+
+function sanitizePanel(raw: unknown): WidgetPanelDefinition | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  // A panel is cleaned exactly as a widget would be; composites can't nest.
+  const type = r.displayType === 'composite' ? 'stat-card' : (r.displayType as WidgetDisplayType);
+  const clean = sanitizeWidgetDefinition({ ...(r as object), id: 'panel', name: 'panel', category: 'custom', displayType: type } as CustomWidgetDefinition);
+  const out: WidgetPanelDefinition = { displayType: clean.displayType as PanelDisplayType };
+  const title = text(r.title, 40);
+  if (title) out.title = title;
+  const span = finite(r.span);
+  if (span !== undefined) out.span = Math.max(1, Math.min(12, Math.round(span)));
+  const description = text(r.description, 200);
+  if (description) out.description = description;
+  if (typeof r.colorScheme === 'string' && COLOR_SCHEMES.has(r.colorScheme)) out.colorScheme = r.colorScheme as WidgetPanelDefinition['colorScheme'];
+  for (const key of ['binding', 'bindings', 'action', 'paramControl', 'multiBarConfig', 'gauge', 'chart', 'feedback', 'stateThreshold', 'staleAfterSec'] as const) {
+    if (clean[key] !== undefined) (out as unknown as Record<string, unknown>)[key] = clean[key];
+  }
+  return out;
+}
+
+/** Trim extra bindings, last panels first, until the composite reads at most MAX_COMPOSITE_BINDINGS values. */
+function capCompositeBindings(panels: WidgetPanelDefinition[]): WidgetPanelDefinition[] {
+  const count = (p: WidgetPanelDefinition) => (p.binding ? 1 : 0) + (p.bindings?.length ?? 0) + (p.feedback ? 1 : 0);
+  let total = panels.reduce((n, p) => n + count(p), 0);
+  for (let i = panels.length - 1; i >= 0 && total > MAX_COMPOSITE_BINDINGS; i--) {
+    const extra = panels[i].bindings;
+    if (!extra?.length) continue;
+    const keep = Math.max(0, extra.length - (total - MAX_COMPOSITE_BINDINGS));
+    total -= extra.length - keep;
+    panels[i] = { ...panels[i], bindings: extra.slice(0, keep) };
+  }
+  return panels;
+}
+
 /** Normalise an untrusted widget definition in place-safe fashion (returns a cleaned copy). */
 export function sanitizeWidgetDefinition(raw: CustomWidgetDefinition): CustomWidgetDefinition {
   const w: CustomWidgetDefinition = { ...raw };
@@ -129,6 +184,13 @@ export function sanitizeWidgetDefinition(raw: CustomWidgetDefinition): CustomWid
     const s = finite(raw.staleAfterSec);
     w.staleAfterSec = s === undefined ? undefined : Math.max(0.5, Math.min(600, s));
   }
+  if (w.displayType === 'composite') {
+    const panels = Array.isArray(raw.panels) ? raw.panels.slice(0, MAX_PANELS) : [];
+    w.panels = capCompositeBindings(panels.map(sanitizePanel).filter((p): p is WidgetPanelDefinition => Boolean(p)));
+  } else if ('panels' in w) {
+    delete w.panels;
+  }
+  if (raw.action !== undefined) w.action = sanitizeAction(raw.action);
   if (w.action) w.action = { ...w.action, confirmation: true };
   if (w.paramControl) w.paramControl = { ...w.paramControl, confirmation: true };
   return w;

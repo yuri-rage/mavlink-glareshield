@@ -10,6 +10,7 @@ This guide covers:
 - [Data bindings](#data-bindings)
 - [Display types](#display-types), each with an example
 - [Control widgets](#control-widgets): commands, toggles, sliders and parameters
+- [Composite widgets](#composite-widgets): several panels in one card
 - [Stale data, alerts and colours](#stale-data-alerts-and-colours)
 - [Limits and validation rules](#limits-and-validation-rules)
 - [Troubleshooting](#troubleshooting)
@@ -101,6 +102,7 @@ The smallest useful widget:
 | `stateThreshold` | number | | `indicator-led` and toggle `feedback`: "on" means the value is above this. Default `0`. |
 | `staleAfterSec` | number | | Seconds without the message before the widget shows **Stale**. Default `3`. |
 | `colorScheme` | `default` \| `green` \| `amber` \| `blue` \| `red` | | The widget's accent colour. |
+| `panels` | panel[] | `composite` | The panels of a [composite widget](#composite-widgets). |
 | `minWidth`, `minHeight` | number | | Reserved. Not used yet. |
 
 ---
@@ -487,6 +489,47 @@ Reads a vehicle parameter and writes a new value to it. The widget shows the par
 
 ---
 
+## Composite widgets
+
+A composite widget puts several panels in one card: a gauge, a toggle and a chart, for example. Set `displayType` to `composite` and list the panels in `panels`. Each panel takes the same settings as a single widget of that type (`displayType`, `binding`, `bindings`, `gauge`, `chart`, `action`, `paramControl`, `feedback`, and so on), plus two of its own:
+
+| Panel field | Meaning |
+|---|---|
+| `title` | Small heading above the panel. Control panels also use it to name what they send. |
+| `span` | Width in twelfths of the card: `12` (the default) is a full row, `6` is half and `4` is a third. Panels fill rows left to right. |
+
+The card's `name`, `category`, `colorScheme` and `staleAfterSec` apply to every panel that doesn't set its own.
+
+```json
+{
+  "id": "custom-pump-station",
+  "name": "Pump Station",
+  "category": "control",
+  "displayType": "composite",
+  "panels": [
+    { "title": "Pressure", "span": 6, "displayType": "gauge-radial",
+      "binding": { "messageName": "SCALED_PRESSURE", "fieldName": "press_diff", "unit": "hPa", "min": 0, "max": 50, "warnThreshold": 40 } },
+    { "title": "Pump", "span": 6, "displayType": "toggle-switch",
+      "action": { "label": "Pump", "commandId": 183, "params": [9, 1900, 1100, 0, 0, 0, 0], "confirmation": true },
+      "feedback": { "messageName": "SERVO_OUTPUT_RAW", "fieldName": "servo9_raw" }, "stateThreshold": 1500 },
+    { "title": "Pressure history", "displayType": "sparkline",
+      "binding": { "messageName": "SCALED_PRESSURE", "fieldName": "press_diff", "label": "Pressure" }, "chart": { "windowSec": 60 } }
+  ]
+}
+```
+
+How a composite card behaves:
+
+- **Alerts.** Each panel's border turns amber or red with its own thresholds. The card's border and badge show the worst panel.
+- **Stale data.** The card's **Stale** badge covers every panel's values. Each panel dims on its own.
+- **Controls.** Each control panel confirms, sends and shows the vehicle's acknowledgement on its own. Arming one never affects another.
+- **Narrow cards.** In a card narrower than about 360 px, such as on a phone, every panel takes a full row.
+- **Import.** The import preview lists every panel and every command or parameter write in it, and confirmation is forced on all of them.
+
+Composite widgets are written as JSON for now: build each panel in the creator, export it, and combine the panels into one file. The creator can't edit a composite widget yet, so its edit buttons are hidden for them. To change one, edit the file and import it again.
+
+---
+
 ## Stale data, alerts and colours
 
 **Stale data.** If a widget's message hasn't arrived for `staleAfterSec` seconds (default 3), the value dims and the card shows **Stale**. A stale value never lights an LED, and it never drives a toggle's feedback state. Raise `staleAfterSec` for messages the vehicle sends slowly, such as `BATTERY_STATUS` at 1 Hz or less.
@@ -504,6 +547,9 @@ These rules apply to everything imported, and to everything saved from the creat
 | Item | Rule |
 |---|---|
 | `displayType` | Must be a known type, otherwise it becomes `stat-card`. |
+| `panels` | At most 8, each cleaned by these same rules. A panel can't be `composite`. A composite reads at most 32 values in all; extra values are trimmed from the last panels first. |
+| `action` | Needs a numeric `commandId`, otherwise it is dropped. `params` always becomes seven numbers; missing or invalid ones are 0. |
+| `span` | 1–12 |
 | `multiBarConfig.group` | Must be a known group, otherwise it becomes `rc-8`. |
 | `bindings` | At most 16. The display type then uses as many as it supports (see [Display types](#display-types)). |
 | `decimals` | 0–6 |

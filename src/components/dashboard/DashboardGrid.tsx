@@ -506,7 +506,8 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                       <div className="h-3 w-px bg-zinc-700 mx-0.5" />
 
                       {/* Edit Custom Widget button */}
-                      {customDef && onEditCustomWidget && (
+                      {/* Composite widgets can't be edited in the creator yet: import an edited JSON file instead. */}
+                      {customDef && onEditCustomWidget && customDef.displayType !== 'composite' && (
                         <>
                           <button
                             onClick={() => onEditCustomWidget(customDef)}

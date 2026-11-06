@@ -12,7 +12,12 @@ export type WidgetDisplayType =
   | 'compass-rose'
   // Rendered as the time-series chart; the id is kept so saved profiles keep working.
   | 'sparkline'
-  | 'value-list';
+  | 'value-list'
+  // Several of the types above in one card: see `panels`.
+  | 'composite';
+
+/** Display types a single panel can use (everything except composite). */
+export type PanelDisplayType = Exclude<WidgetDisplayType, 'composite'>;
 
 export type MultiBarGroupType =
   | 'rc-8'
@@ -122,6 +127,32 @@ export interface CustomWidgetDefinition {
   colorScheme?: 'default' | 'green' | 'amber' | 'blue' | 'red';
   minWidth?: number;
   minHeight?: number;
+  /** Composite widgets: the panels in the card, laid out left to right on a 12-column grid. */
+  panels?: WidgetPanelDefinition[];
+}
+
+/**
+ * One panel of a composite widget: a display type with its own settings, exactly as a single widget would have
+ * them. Card-level `colorScheme`, `staleAfterSec` and `name` apply where a panel sets none.
+ */
+export interface WidgetPanelDefinition {
+  displayType: PanelDisplayType;
+  /** Small heading above the panel. Controls also use it to name the command they send. */
+  title?: string;
+  /** Width in twelfths of the card (default 12, a full row). Narrow cards stack every panel full width. */
+  span?: number;
+  description?: string;
+  binding?: WidgetDataBinding;
+  bindings?: WidgetDataBinding[];
+  action?: WidgetAction;
+  paramControl?: WidgetParamControl;
+  multiBarConfig?: WidgetMultiBarConfig;
+  gauge?: WidgetGaugeConfig;
+  chart?: WidgetChartConfig;
+  feedback?: WidgetDataBinding;
+  stateThreshold?: number;
+  staleAfterSec?: number;
+  colorScheme?: CustomWidgetDefinition['colorScheme'];
 }
 
 export interface PlacedWidget {

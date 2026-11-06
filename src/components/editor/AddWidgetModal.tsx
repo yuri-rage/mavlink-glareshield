@@ -148,6 +148,74 @@ const BUILT_IN_CATALOG = [
   },
 ];
 
+/** What an import preview lists: the widget itself, or each panel of a composite widget. */
+interface ImportPart {
+  heading?: string;
+  binding?: CustomWidgetDefinition['binding'];
+  extraCount: number;
+  action?: CustomWidgetDefinition['action'];
+  paramControl?: CustomWidgetDefinition['paramControl'];
+}
+
+function importParts(w: CustomWidgetDefinition): ImportPart[] {
+  const part = (p: Pick<CustomWidgetDefinition, 'binding' | 'bindings' | 'action' | 'paramControl'>, heading?: string): ImportPart => ({
+    heading,
+    binding: p.binding,
+    extraCount: p.bindings?.length ?? 0,
+    action: p.action,
+    paramControl: p.paramControl,
+  });
+  if (w.displayType !== 'composite') return [part(w)];
+  return (w.panels ?? []).map((p, i) => part(p, `Panel ${i + 1}${p.title ? `: ${p.title}` : ''} (${p.displayType})`));
+}
+
+const ImportPartDetails: React.FC<{ part: ImportPart }> = ({ part }) => (
+  <div className={part.heading ? 'mt-2 pl-2 border-l-2 border-zinc-700 space-y-1' : 'space-y-1'}>
+    {part.heading && <div className="text-zinc-200 font-bold">{part.heading}</div>}
+    {part.binding && (
+      <div className="p-2 bg-zinc-950 rounded border border-zinc-800 mt-2 space-y-0.5">
+        <div className="text-zinc-300 font-bold">Telemetry Binding:</div>
+        <div>Message: {part.binding.messageName}</div>
+        <div>Field: {part.binding.fieldName}</div>
+        <div>Unit: {part.binding.unit || 'none'}</div>
+        {part.extraCount > 0 && <div>+ {part.extraCount} more value{part.extraCount === 1 ? '' : 's'}</div>}
+      </div>
+    )}
+    {part.action && (
+      <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded mt-2 space-y-1 text-amber-200">
+        <div className="font-bold flex items-center gap-1.5 text-amber-300">
+          <AlertTriangle className="h-4 w-4" />
+          Autopilot Action Command:
+        </div>
+        <div>Label: <b className="text-zinc-100">{part.action.label}</b></div>
+        <div>MAV_CMD: <b className="text-zinc-100">{getMavCmdName(part.action.commandId)} ({part.action.commandId})</b></div>
+        <div>Parameters: [{part.action.params.join(', ')}]</div>
+        <div className="text-[11px] text-amber-400 mt-1">
+          * Confirmation is enforced on imported actions to prevent accidental autopilot commands.
+        </div>
+      </div>
+    )}
+    {part.paramControl && (
+      <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded mt-2 space-y-1 text-amber-200">
+        <div className="font-bold flex items-center gap-1.5 text-amber-300">
+          <AlertTriangle className="h-4 w-4" />
+          Autopilot Parameter Control:
+        </div>
+        <div>Target Parameter: <b className="text-zinc-100 font-mono">{part.paramControl.paramId}</b></div>
+        {part.paramControl.min !== undefined && part.paramControl.max !== undefined && (
+          <div>Allowed Range: <b className="text-zinc-100 font-mono">[{part.paramControl.min}, {part.paramControl.max}] {part.paramControl.unit || ''}</b></div>
+        )}
+        {part.paramControl.options && part.paramControl.options.length > 0 && (
+          <div>Options: <b className="text-zinc-100 font-mono">{part.paramControl.options.map((o) => `${o.label}:${o.value}`).join(', ')}</b></div>
+        )}
+        <div className="text-[11px] text-amber-400 mt-1">
+          * Confirmation is enforced on imported parameter controls to prevent unintended vehicle configuration changes.
+        </div>
+      </div>
+    )}
+  </div>
+);
+
 export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
   isOpen,
   onClose,
@@ -173,13 +241,13 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const parsed = JSON.parse(event.target?.result as string) as CustomWidgetDefinition;
-        if (parsed.id && parsed.name && parsed.displayType) {
-          if (!VALID_DISPLAY_TYPES.has(parsed.displayType)) {
-            alert(`Invalid custom widget displayType: ${parsed.displayType}`);
+        const raw = JSON.parse(event.target?.result as string) as CustomWidgetDefinition;
+        if (raw.id && raw.name && raw.displayType) {
+          if (!VALID_DISPLAY_TYPES.has(raw.displayType)) {
+            alert(`Invalid custom widget displayType: ${raw.displayType}`);
             return;
           }
-          Object.assign(parsed, sanitizeWidgetDefinition(parsed));
+          const parsed = sanitizeWidgetDefinition(raw);
 
           // Check if ID collides with built-in or existing custom widgets
           const existingWidgets = useDashboardStore.getState().profile.customWidgets;
@@ -235,47 +303,10 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
               <div><b className="text-zinc-300">Display Type:</b> {pendingImportWidget.displayType}</div>
               <div><b className="text-zinc-300">Category:</b> {pendingImportWidget.category}</div>
               {pendingImportWidget.description && <div><b className="text-zinc-300">Description:</b> {pendingImportWidget.description}</div>}
-              {pendingImportWidget.binding && (
-                <div className="p-2 bg-zinc-950 rounded border border-zinc-800 mt-2 space-y-0.5">
-                  <div className="text-zinc-300 font-bold">Telemetry Binding:</div>
-                  <div>Message: {pendingImportWidget.binding.messageName}</div>
-                  <div>Field: {pendingImportWidget.binding.fieldName}</div>
-                  <div>Unit: {pendingImportWidget.binding.unit || 'none'}</div>
-                </div>
-              )}
-              {pendingImportWidget.action && (
-                <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded mt-2 space-y-1 text-amber-200">
-                  <div className="font-bold flex items-center gap-1.5 text-amber-300">
-                    <AlertTriangle className="h-4 w-4" />
-                    Autopilot Action Command:
-                  </div>
-                  <div>Label: <b className="text-zinc-100">{pendingImportWidget.action.label}</b></div>
-                  <div>MAV_CMD: <b className="text-zinc-100">{getMavCmdName(pendingImportWidget.action.commandId)} ({pendingImportWidget.action.commandId})</b></div>
-                  <div>Parameters: [{pendingImportWidget.action.params.join(', ')}]</div>
-                  <div className="text-[11px] text-amber-400 mt-1">
-                    * Confirmation is enforced on imported actions to prevent accidental autopilot commands.
-                  </div>
-                </div>
-              )}
-              {pendingImportWidget.paramControl && (
-                <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded mt-2 space-y-1 text-amber-200">
-                  <div className="font-bold flex items-center gap-1.5 text-amber-300">
-                    <AlertTriangle className="h-4 w-4" />
-                    Autopilot Parameter Control:
-                  </div>
-                  <div>Target Parameter: <b className="text-zinc-100 font-mono">{pendingImportWidget.paramControl.paramId}</b></div>
-                  {pendingImportWidget.paramControl.min !== undefined && pendingImportWidget.paramControl.max !== undefined && (
-                    <div>Allowed Range: <b className="text-zinc-100 font-mono">[{pendingImportWidget.paramControl.min}, {pendingImportWidget.paramControl.max}] {pendingImportWidget.paramControl.unit || ''}</b></div>
-                  )}
-                  {pendingImportWidget.paramControl.options && pendingImportWidget.paramControl.options.length > 0 && (
-                    <div>Options: <b className="text-zinc-100 font-mono">{pendingImportWidget.paramControl.options.map((o) => `${o.label}:${o.value}`).join(', ')}</b></div>
-                  )}
-                  <div className="text-[11px] text-amber-400 mt-1">
-                    * Confirmation is enforced on imported parameter controls to prevent unintended vehicle configuration changes.
-                  </div>
-                </div>
-              )}
-              {!pendingImportWidget.action && !pendingImportWidget.paramControl && (
+              {importParts(pendingImportWidget).map((part, i) => (
+                <ImportPartDetails key={i} part={part} />
+              ))}
+              {!importParts(pendingImportWidget).some((p) => p.action || p.paramControl) && (
                 <div className="text-zinc-500 italic mt-1">No autopilot actions or parameter controls (read-only instrument).</div>
               )}
             </div>
@@ -286,7 +317,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
                 onClick={() => {
                   saveCustomWidget(pendingImportWidget);
-                  addWidgetToActiveTab(pendingImportWidget.id, 6);
+                  addWidgetToActiveTab(pendingImportWidget.id, pendingImportWidget.displayType === 'composite' ? 12 : 6);
                   setPendingImportWidget(null);
                   onClose();
                 }}
@@ -385,7 +416,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                 </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {onEditCustomWidget && (
+                    {onEditCustomWidget && cw.displayType !== 'composite' && (
                       <Button
                         size="sm"
                         variant="outline"
