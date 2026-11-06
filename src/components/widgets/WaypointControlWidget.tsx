@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
-import { formatEta, useWaypointNavigation } from '../../lib/useWaypointNavigation';
+import { formatEta, useConfirmStep, useWaypointNavigation } from '../../lib/useWaypointNavigation';
 import { useUnitsStore } from '../../store/unitsStore';
 import { useAudioAlertsStore } from '../../lib/audioAlerts';
 import { missionManager } from '../../mavlink/missionManager';
@@ -51,6 +51,7 @@ export const WaypointControlWidget: React.FC = () => {
 
   const [selectedWpInput, setSelectedWpInput] = useState<number>(() => currentWaypointSeq || 1);
   const isAutoMode = heartbeat.modeName === 'AUTO';
+  const restartConfirm = useConfirmStep();
   const etaFormatted = formatEta(navController.wpDist, vfr.groundspeed);
 
   const handleNavigateTo = async (targetSeq: number) => {
@@ -164,17 +165,36 @@ export const WaypointControlWidget: React.FC = () => {
                 <span className="hidden sm:inline">Prev</span> WP {hasPrev ? prevSeq : ''}
               </Button>
 
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!connected || currentWaypointSeq === minSeq || isPending}
-                onClick={() => handleNavigateTo(minSeq)}
-                className="h-8 text-xs font-bold gap-1 border-zinc-800 hover:bg-zinc-900 text-amber-300 hover:text-amber-200 disabled:opacity-40"
-                title={`Restart flight plan from first mission waypoint (WP ${minSeq})`}
-              >
-                <RotateCcw className="h-3.5 w-3.5 text-amber-400" />
-                <span>WP {minSeq}</span>
-              </Button>
+              {restartConfirm.armed ? (
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={!connected || isPending}
+                  onClick={() => {
+                    restartConfirm.cancel();
+                    void handleNavigateTo(minSeq);
+                  }}
+                  onBlur={restartConfirm.cancel}
+                  className="h-8 text-xs font-bold gap-1 bg-amber-600 hover:bg-amber-500 text-white animate-pulse"
+                  title={`Confirm: restart the flight plan from WP ${minSeq}`}
+                  autoFocus
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>Confirm WP {minSeq}?</span>
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!connected || currentWaypointSeq === minSeq || isPending}
+                  onClick={restartConfirm.arm}
+                  className="h-8 text-xs font-bold gap-1 border-zinc-800 hover:bg-zinc-900 text-amber-300 hover:text-amber-200 disabled:opacity-40"
+                  title={`Restart flight plan from first mission waypoint (WP ${minSeq}); asks to confirm`}
+                >
+                  <RotateCcw className="h-3.5 w-3.5 text-amber-400" />
+                  <span>WP {minSeq}</span>
+                </Button>
+              )}
 
               <Button
                 variant="default"

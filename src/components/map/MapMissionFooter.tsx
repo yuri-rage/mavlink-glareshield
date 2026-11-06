@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Navigation, RotateCcw, SkipForward } from 'lucide-react';
+import { Navigation, RotateCcw, SkipForward, X } from 'lucide-react';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { getMavCmdName } from '../../mavlink/messages';
-import { formatEta, useWaypointNavigation } from '../../lib/useWaypointNavigation';
+import { formatEta, useConfirmStep, useWaypointNavigation } from '../../lib/useWaypointNavigation';
 
 /** One readout in a fixed-width slot, so changing numbers never resize the strip. */
 const Stat: React.FC<{ label: string; value: string; width: string; tone: string }> = ({ label, value, width, tone }) => (
@@ -26,6 +26,7 @@ export const MapMissionFooter: React.FC = () => {
   const { formatDistance, formatCrosstrack, formatAltitude } = useUnitsStore();
   const [selected, setSelected] = useState<number>(nav.currentWaypointSeq || nav.minSeq);
   const selectRef = useRef<HTMLSelectElement>(null);
+  const restartConfirm = useConfirmStep();
 
   // Follow the active waypoint unless the user is choosing one.
   useEffect(() => {
@@ -51,17 +52,45 @@ export const MapMissionFooter: React.FC = () => {
       </div>
 
       <div className="flex items-center gap-1 shrink-0 font-sans">
-        <button
-          type="button"
-          disabled={controlsDisabled || nav.currentWaypointSeq === nav.minSeq}
-          onClick={() => void nav.navigateTo(nav.minSeq)}
-          className="h-7 px-2 rounded-md border border-zinc-800 text-amber-300 hover:bg-zinc-800 disabled:opacity-40 flex items-center gap-1 text-[11px] font-semibold"
-          title={`Restart the mission from WP ${nav.minSeq}`}
-          aria-label="Restart mission"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Restart</span>
-        </button>
+        {restartConfirm.armed ? (
+          <span className="flex items-center gap-0.5">
+            <button
+              type="button"
+              disabled={controlsDisabled}
+              onClick={() => {
+                restartConfirm.cancel();
+                void nav.navigateTo(nav.minSeq);
+              }}
+              className="h-7 px-2 rounded-md bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-40 flex items-center gap-1 text-[11px] font-bold animate-pulse"
+              title={`Confirm: restart the mission from WP ${nav.minSeq}`}
+              autoFocus
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Restart to WP {nav.minSeq}?
+            </button>
+            <button
+              type="button"
+              onClick={restartConfirm.cancel}
+              className="h-7 w-7 rounded-md border border-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center justify-center"
+              aria-label="Cancel restart"
+              title="Cancel"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            disabled={controlsDisabled || nav.currentWaypointSeq === nav.minSeq}
+            onClick={restartConfirm.arm}
+            className="h-7 px-2 rounded-md border border-zinc-800 text-amber-300 hover:bg-zinc-800 disabled:opacity-40 flex items-center gap-1 text-[11px] font-semibold"
+            title={`Restart the mission from WP ${nav.minSeq} (asks to confirm)`}
+            aria-label="Restart mission"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Restart</span>
+          </button>
+        )}
 
         <select
           ref={selectRef}
