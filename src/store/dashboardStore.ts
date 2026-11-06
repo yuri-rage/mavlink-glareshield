@@ -1,3 +1,4 @@
+import { sanitizeWidgetDefinition } from '../lib/widgetValidation';
 import { create } from 'zustand';
 import {
   DashboardProfile,
@@ -422,49 +423,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       if (parsed && Array.isArray(parsed.tabs)) {
         // Enforce confirmation and validate any imported custom widget actions and param controls for safety
         if (Array.isArray(parsed.customWidgets)) {
-          const VALID_DISPLAY_TYPES = new Set<WidgetDisplayType>([
-            'stat-card',
-            'gauge-radial',
-            'gauge-linear',
-            'indicator-led',
-            'toggle-switch',
-            'action-button',
-            'slider-control',
-            'text-display',
-            'multi-bar',
-            'param-control',
-            'compass-rose',
-            'sparkline',
-          ]);
-          const VALID_MULTI_BAR_GROUPS = new Set<MultiBarGroupType>([
-            'rc-8',
-            'rc-8-scaled',
-            'servo-8',
-            'servo-8-scaled',
-            'esc-rpm',
-            'esc-temp',
-            'esc-current',
-            'vibration-xyz',
-            'ekf-variances',
-            'battery-cells',
-          ]);
-
-          parsed.customWidgets.forEach((w) => {
-            if (!VALID_DISPLAY_TYPES.has(w.displayType)) {
-              w.displayType = 'stat-card';
-            }
-            if (w.displayType === 'multi-bar') {
-              if (!w.multiBarConfig || !VALID_MULTI_BAR_GROUPS.has(w.multiBarConfig.group)) {
-                w.multiBarConfig = { group: 'rc-8' };
-              }
-            }
-            if (w.action) {
-              w.action.confirmation = true;
-            }
-            if (w.paramControl) {
-              w.paramControl.confirmation = true;
-            }
-          });
+          parsed.customWidgets = parsed.customWidgets.map((w) => sanitizeWidgetDefinition(w));
         }
         saveProfileToStorage(parsed);
         set({

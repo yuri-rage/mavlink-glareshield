@@ -1,3 +1,4 @@
+import { VALID_DISPLAY_TYPES, sanitizeWidgetDefinition } from '../../lib/widgetValidation';
 import React, { useState } from 'react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { Modal } from '../ui/modal';
@@ -174,35 +175,11 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
       try {
         const parsed = JSON.parse(event.target?.result as string) as CustomWidgetDefinition;
         if (parsed.id && parsed.name && parsed.displayType) {
-          const VALID_DISPLAY_TYPES = new Set<WidgetDisplayType>([
-            'stat-card',
-            'gauge-radial',
-            'gauge-linear',
-            'indicator-led',
-            'toggle-switch',
-            'action-button',
-            'slider-control',
-            'text-display',
-            'multi-bar',
-            'param-control',
-            'compass-rose',
-            'sparkline',
-          ]);
-          const VALID_MULTI_BAR_GROUPS = new Set([
-            'rc-8', 'servo-8', 'esc-rpm', 'esc-temp', 'esc-current',
-            'vibration-xyz', 'ekf-variances', 'battery-cells',
-          ]);
-
           if (!VALID_DISPLAY_TYPES.has(parsed.displayType)) {
             alert(`Invalid custom widget displayType: ${parsed.displayType}`);
             return;
           }
-
-          if (parsed.displayType === 'multi-bar') {
-            if (!parsed.multiBarConfig || !VALID_MULTI_BAR_GROUPS.has(parsed.multiBarConfig.group)) {
-              parsed.multiBarConfig = { group: 'rc-8' };
-            }
-          }
+          Object.assign(parsed, sanitizeWidgetDefinition(parsed));
 
           // Check if ID collides with built-in or existing custom widgets
           const existingWidgets = useDashboardStore.getState().profile.customWidgets;
@@ -223,14 +200,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
             parsed.name = `${parsed.name} (imported)`;
           }
 
-          // If the widget defines an action or paramControl, enforce confirmation for flight safety
-          if (parsed.action) {
-            parsed.action.confirmation = true;
-          }
-          if (parsed.paramControl) {
-            parsed.paramControl.confirmation = true;
-          }
-
+          // sanitizeWidgetDefinition() above already forced confirmation on actions and parameter writes.
           setPendingImportWidget(parsed);
         } else {
           alert('Invalid custom widget format: missing id, name, or displayType.');
