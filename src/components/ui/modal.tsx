@@ -9,9 +9,11 @@ interface ModalProps {
   title: string;
   description?: string;
   children: React.ReactNode;
+  /** 'xl' widens the dialog for side-by-side layouts (e.g. an editor with a live preview). */
+  size?: 'md' | 'xl';
 }
 
-export function Modal({ isOpen, onClose, title, description, children }: ModalProps) {
+export function Modal({ isOpen, onClose, title, description, children, size = 'md' }: ModalProps) {
   const dialogRef = React.useRef<HTMLDivElement | null>(null);
   const previousActiveElementRef = React.useRef<HTMLElement | null>(null);
   const onCloseRef = React.useRef(onClose);
@@ -124,7 +126,7 @@ export function Modal({ isOpen, onClose, title, description, children }: ModalPr
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto focus:outline-none"
+        className={`w-full ${size === 'xl' ? 'max-w-5xl' : 'max-w-lg'} rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto focus:outline-none`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">

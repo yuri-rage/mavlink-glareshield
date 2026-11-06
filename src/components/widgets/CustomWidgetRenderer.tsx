@@ -1,12 +1,28 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { CustomWidgetDefinition, MultiBarGroupType } from '../../types/widget';
-import { useTelemetryStore } from '../../store/telemetryStore';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { CustomWidgetDefinition, MultiBarGroupType, WidgetDataBinding } from '../../types/widget';
+import { useTelemetryStore, sendTrackedCommand, type CommandAckInfo } from '../../store/telemetryStore';
+import { useUnitsStore } from '../../store/unitsStore';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { MAVLINK_MSG_ID, getMavCmdName } from '../../mavlink/messages';
+import {
+  evaluateAlert,
+  getAllBindings,
+  readBinding,
+  scalePwmToUnitRange,
+  toDisplayUnits,
+  type BindingReading,
+  type UnitSystem,
+} from '../../lib/widgetValues';
+import { baseMessageName } from '../../lib/messageCache';
+import { valueSampler } from '../../lib/valueSampler';
+import { clamp, niceTicks, stepDecimals, niceStep, thresholdZones } from '../../lib/gaugeGeometry';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { RadialGauge } from './custom/RadialGauge';
+import { TimeSeriesChart, type ChartSeries } from './custom/TimeSeriesChart';
+import { ACCENT_HEX, SERIES_HEX, ZONE_HEX, useChromeColors, type ColorScheme } from './custom/palette';
 import {
   Play,
   Zap,
@@ -19,198 +35,90 @@ import {
   TrendingUp,
   RefreshCw,
   Check,
+  List,
+  Gauge,
 } from 'lucide-react';
+
+// The binding helpers moved to lib/widgetValues; re-exported for existing imports.
+export { extractBoundValueFromState, scalePwmToUnitRange } from '../../lib/widgetValues';
+
+valueSampler.setStateGetter(() => useTelemetryStore.getState());
 
 interface CustomWidgetRendererProps {
   definition: CustomWidgetDefinition;
 }
 
-/**
- * Scales a raw PWM value using ArduPilot min, max, and trim parameters to the [-1, 1] range.
- * If pwm <= trim: (pwm - trim) / (trim - min)
- * If pwm > trim: (pwm - trim) / (max - trim)
- * Falls back to min=1000, trim=1500, max=2000 if parameters are missing.
- */
-export function scalePwmToUnitRange(
-  pwm: number,
-  minParam: number = 1000,
-  maxParam: number = 2000,
-  trimParam: number = 1500
-): number {
-  if (pwm <= trimParam) {
-    if (trimParam > minParam) {
-      const scaled = (pwm - trimParam) / (trimParam - minParam);
-      return Math.max(-1, Math.min(1, scaled));
-    }
-    return 0;
-  } else {
-    if (maxParam > trimParam) {
-      const scaled = (pwm - trimParam) / (maxParam - trimParam);
-      return Math.max(-1, Math.min(1, scaled));
-    }
-    return 0;
-  }
+const TELEMETRY_TYPES = new Set([
+  'stat-card',
+  'gauge-radial',
+  'gauge-linear',
+  'indicator-led',
+  'text-display',
+  'compass-rose',
+  'sparkline',
+  'value-list',
+]);
+
+/** Display types that use bindings after the first. */
+const MULTI_VALUE_TYPES = new Set(['sparkline', 'value-list', 'gauge-radial', 'gauge-linear', 'compass-rose']);
+
+/** Re-read bound values at this rate (and on unit / definition changes). */
+const READ_INTERVAL_MS = 125;
+
+type AckView = { status: 'pending' | 'accepted' | 'progress' | 'rejected'; text: string; time: number };
+
+export function describeAck(info: CommandAckInfo): AckView {
+  if (info.result === 0) return { status: 'accepted', text: 'Accepted', time: info.time };
+  if (info.result === 5) return { status: 'progress', text: 'In progress', time: info.time };
+  if (info.result === -1) return { status: 'rejected', text: 'No response (timeout)', time: info.time };
+  if (info.result === -2) return { status: 'rejected', text: 'Not sent (link down)', time: info.time };
+  const text = info.resultText.replace(/_/g, ' ').toLowerCase();
+  return { status: 'rejected', text: text.charAt(0).toUpperCase() + text.slice(1), time: info.time };
 }
 
-export function extractBoundValueFromState(
-  binding: CustomWidgetDefinition['binding'],
-  state: any
-): number | string | null {
-  if (!binding) return null;
-  const { messageName, fieldName, multiplier = 1, decimals = 1 } = binding;
-  const msg = messageName.toUpperCase();
-  const isRcScaled = msg === 'RC_CHANNELS (SCALED)' || (msg.startsWith('RC_CHANNELS') && fieldName.includes('scaled'));
-  const isServoScaled = msg === 'SERVO_OUTPUT_RAW (SCALED)' || (msg.startsWith('SERVO_OUTPUT_RAW') && fieldName.includes('scaled'));
+const AckChip: React.FC<{ ack: AckView | null }> = ({ ack }) => {
+  if (!ack) return null;
+  const tone =
+    ack.status === 'accepted'
+      ? 'text-emerald-400 bg-emerald-950/40 border-emerald-800/40'
+      : ack.status === 'rejected'
+        ? 'text-red-400 bg-red-950/40 border-red-800/40'
+        : 'text-amber-400 bg-amber-950/40 border-amber-800/40';
+  return (
+    <p className={`text-[10px] font-mono text-center px-1.5 py-0.5 rounded border ${tone} ${ack.status === 'pending' ? 'animate-pulse' : ''}`}>
+      {ack.text} · {new Date(ack.time).toLocaleTimeString()}
+    </p>
+  );
+};
 
-  const fieldAliases: Record<string, string> = {
-    voltage_battery: 'voltage',
-    current_battery: 'current',
-    battery_remaining: 'remaining',
-    current_consumed: 'consumedMah',
-    drop_rate_comm: 'dropRateComm',
-    errors_comm: 'errorsComm',
-    satellites_visible: 'satellites',
-    eph: 'hdop',
-    epv: 'vdop',
-    vel: 'groundspeed',
-    relative_alt: 'relativeAlt',
-    roll_deg: 'rollDeg',
-    pitch_deg: 'pitchDeg',
-    yaw_deg: 'yawDeg',
-    nav_roll: 'navRoll',
-    nav_pitch: 'navPitch',
-    nav_bearing: 'navBearing',
-    target_bearing: 'targetBearing',
-    wp_dist: 'wpDist',
-    alt_error: 'altError',
-    aspd_error: 'aspdError',
-    xtrack_error: 'xtrackError',
-    speed_z: 'speedZ',
-    vibration_x: 'vibrationX',
-    vibration_y: 'vibrationY',
-    vibration_z: 'vibrationZ',
-    clipping_0: 'clipping0',
-    clipping_1: 'clipping1',
-    clipping_2: 'clipping2',
-    velocity_variance: 'velocityVariance',
-    pos_horiz_variance: 'posHorizVariance',
-    pos_vert_variance: 'posVertVariance',
-    compass_variance: 'compassVariance',
-    terrain_alt_variance: 'terrainAltVariance',
-    airspeed_variance: 'airspeedVariance',
-    current_distance: 'distance',
-    min_distance: 'minDistance',
-    max_distance: 'maxDistance',
-    signal_quality: 'signalQuality',
-    Vcc: 'vcc',
-    Vservo: 'vservo',
-    press_abs: 'pressAbs',
-    press_diff: 'pressDiff',
+/** Seriesless binding readings re-evaluated on a fixed clock, so staleness is noticed even when nothing arrives. */
+function useBindingReadings(bindings: WidgetDataBinding[], system: UnitSystem, staleAfterSec?: number): BindingReading[] {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (bindings.length === 0) return;
+    const timer = setInterval(() => setTick((t) => (t + 1) % 1_000_000), READ_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [bindings.length]);
+  const state = useTelemetryStore.getState();
+  const now = Date.now();
+  return bindings.map((b) => readBinding(b, state, system, staleAfterSec, now));
+}
+
+/** Binding with min/max/thresholds converted from base units to display units. */
+function displayBinding(binding: WidgetDataBinding | undefined, system: UnitSystem): WidgetDataBinding | undefined {
+  if (!binding) return undefined;
+  const conv = (v: number | undefined) => (v === undefined ? undefined : toDisplayUnits(v, binding, system));
+  return {
+    ...binding,
+    min: conv(binding.min),
+    max: conv(binding.max),
+    warnThreshold: conv(binding.warnThreshold),
+    critThreshold: conv(binding.critThreshold),
   };
-  const targetKey = fieldAliases[fieldName] || fieldName;
+}
 
-  let rawVal: any = undefined;
-
-  if (msg === 'ATTITUDE') {
-    rawVal = state.attitude?.[targetKey] ?? state.attitude?.[fieldName];
-  } else if (msg === 'GLOBAL_POSITION_INT') {
-    rawVal = state.position?.[targetKey] ?? state.position?.[fieldName];
-  } else if (msg === 'VFR_HUD') {
-    rawVal = state.vfr?.[targetKey] ?? state.vfr?.[fieldName];
-  } else if (msg === 'SYS_STATUS') {
-    rawVal =
-      state.battery?.[targetKey] ??
-      state.sysStatus?.[targetKey] ??
-      state.battery?.[fieldName] ??
-      state.sysStatus?.[fieldName];
-  } else if (msg === 'BATTERY_STATUS') {
-    rawVal = state.battery?.[targetKey] ?? state.battery?.[fieldName];
-  } else if (msg === 'GPS_RAW_INT') {
-    rawVal = state.gps?.[targetKey] ?? state.gps?.[fieldName];
-  } else if (msg === 'HEARTBEAT') {
-    rawVal = state.heartbeat?.[targetKey] ?? state.heartbeat?.[fieldName];
-  } else if (msg === 'RAW_IMU' || msg === 'SCALED_IMU' || msg === 'HIGHRES_IMU') {
-    rawVal = state.imu?.[targetKey] ?? state.imu?.[fieldName];
-  } else if (msg === 'RC_CHANNELS' || msg === 'RC_CHANNELS_RAW' || msg === 'RC_CHANNELS (SCALED)') {
-    if (fieldName === 'rssi') {
-      const rssi = state.rc?.rssi;
-      return (rssi === 255 || rssi === undefined) ? '--' : String(rssi);
-    }
-    const chanMatch = fieldName.match(/^chan(\d+)(?:_raw|_scaled)?$/i);
-    if (chanMatch) {
-      const chNum = parseInt(chanMatch[1], 10);
-      const idx = chNum - 1;
-      const chancount = state.rc?.chancount ?? 18;
-      if (idx >= chancount) return '--';
-      const val = state.rc?.channels?.[idx];
-      if (val === 65535 || val === undefined || (isRcScaled && val === 0)) return '--';
-      if (isRcScaled) {
-        const minP = state.parameters?.[`RC${chNum}_MIN`]?.value ?? 1000;
-        const maxP = state.parameters?.[`RC${chNum}_MAX`]?.value ?? 2000;
-        const trimP = state.parameters?.[`RC${chNum}_TRIM`]?.value ?? 1500;
-        rawVal = scalePwmToUnitRange(val, minP, maxP, trimP);
-      } else {
-        return String(val);
-      }
-    } else {
-      rawVal = state.rc?.[targetKey] ?? state.rc?.[fieldName];
-      if (fieldName === 'rssi' && (rawVal === 255 || rawVal === undefined)) return '--';
-    }
-  } else if (msg === 'SERVO_OUTPUT_RAW' || msg === 'SERVO_OUTPUT_RAW (SCALED)') {
-    const srvMatch = fieldName.match(/^servo(\d+)(?:_raw|_scaled)?$/i);
-    if (srvMatch) {
-      const svNum = parseInt(srvMatch[1], 10);
-      const idx = svNum - 1;
-      const val = state.servo?.servos?.[idx];
-      if (val === 0 || val === 65535 || val === undefined) return '--';
-      if (isServoScaled) {
-        const minP = state.parameters?.[`SERVO${svNum}_MIN`]?.value ?? state.parameters?.[`RC${svNum}_MIN`]?.value ?? 1000;
-        const maxP = state.parameters?.[`SERVO${svNum}_MAX`]?.value ?? state.parameters?.[`RC${svNum}_MAX`]?.value ?? 2000;
-        const trimP = state.parameters?.[`SERVO${svNum}_TRIM`]?.value ?? state.parameters?.[`RC${svNum}_TRIM`]?.value ?? 1500;
-        rawVal = scalePwmToUnitRange(val, minP, maxP, trimP);
-      } else {
-        rawVal = val;
-      }
-    } else {
-      rawVal = state.servo?.[targetKey] ?? state.servo?.[fieldName];
-    }
-  } else if (msg === 'NAV_CONTROLLER_OUTPUT') {
-    rawVal = state.navController?.[targetKey] ?? state.navController?.[fieldName];
-  } else if (msg === 'WIND') {
-    rawVal = state.wind?.[targetKey] ?? state.wind?.[fieldName];
-  } else if (msg === 'VIBRATION') {
-    rawVal = state.vibration?.[targetKey] ?? state.vibration?.[fieldName];
-  } else if (msg === 'EKF_STATUS_REPORT') {
-    rawVal = state.ekf?.[targetKey] ?? state.ekf?.[fieldName];
-  } else if (msg === 'RANGEFINDER' || msg === 'DISTANCE_SENSOR') {
-    rawVal = state.rangefinder?.[targetKey] ?? state.rangefinder?.[fieldName];
-  } else if (msg === 'RPM') {
-    rawVal = state.rpm?.[targetKey] ?? state.rpm?.[fieldName];
-  } else if (msg === 'ESC_TELEMETRY_1_TO_4') {
-    const escMatch = fieldName.match(/^(rpm|temp|curr|volt)(\d)$/);
-    if (escMatch) {
-      const kind = escMatch[1];
-      const idx = parseInt(escMatch[2], 10) - 1;
-      if (kind === 'rpm') rawVal = state.esc?.rpm?.[idx];
-      else if (kind === 'temp') rawVal = state.esc?.temperature?.[idx];
-      else if (kind === 'curr') rawVal = state.esc?.current?.[idx];
-      else if (kind === 'volt') rawVal = state.esc?.voltage?.[idx];
-    } else {
-      rawVal = state.esc?.[targetKey] ?? state.esc?.[fieldName];
-    }
-  } else if (msg === 'POWER_STATUS') {
-    rawVal = state.power?.[targetKey] ?? state.power?.[fieldName];
-  } else if (msg === 'SCALED_PRESSURE') {
-    rawVal = state.pressure?.[targetKey] ?? state.pressure?.[fieldName];
-  }
-
-  if (rawVal === undefined || rawVal === null) return '--';
-
-  if (typeof rawVal === 'number') {
-    const transformed = rawVal * multiplier;
-    return decimals !== undefined ? transformed.toFixed(decimals) : transformed;
-  }
-  return rawVal;
+function seriesLabel(binding: WidgetDataBinding): string {
+  return binding.label?.trim() || binding.fieldName;
 }
 
 interface MultiBarItem {
@@ -385,7 +293,22 @@ const MULTI_BAR_MSG_ID: Record<MultiBarGroupType, number> = {
 };
 
 export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ definition }) => {
-  const boundValue = useTelemetryStore((s) => extractBoundValueFromState(definition.binding, s));
+  const system = useUnitsStore((s) => s.system) as UnitSystem;
+  const chrome = useChromeColors();
+  const isTelemetry = TELEMETRY_TYPES.has(definition.displayType);
+  const bindings = useMemo(() => {
+    if (!isTelemetry) return [];
+    const all = getAllBindings(definition);
+    return MULTI_VALUE_TYPES.has(definition.displayType) ? all : all.slice(0, 1);
+  }, [definition, isTelemetry]);
+  const readings = useBindingReadings(bindings, system, definition.staleAfterSec);
+  const feedbackBindings = useMemo(
+    () => (definition.displayType === 'toggle-switch' && definition.feedback?.messageName ? [definition.feedback] : []),
+    [definition.displayType, definition.feedback]
+  );
+  const [feedbackReading] = useBindingReadings(feedbackBindings, system, definition.staleAfterSec);
+  const primary = readings[0];
+
   const multiBarGroup: MultiBarGroupType = definition.multiBarConfig?.group ?? 'rc-8';
   const multiBarItems = useTelemetryStore((s) =>
     definition.displayType === 'multi-bar' ? extractMultiBarItems(multiBarGroup, s) : []
@@ -398,7 +321,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
   const compId = useTelemetryStore((s) => s.heartbeat.componentId || 1);
 
   const [toggleState, setToggleState] = useState(false);
-  const [lastActionTime, setLastActionTime] = useState<number | null>(null);
+  const [ack, setAck] = useState<AckView | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [sliderVal, setSliderVal] = useState<number>(definition.binding?.min ?? 0);
   const [isConfirmingSlider, setIsConfirmingSlider] = useState(false);
@@ -455,55 +378,65 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
     return () => clearTimeout(timer);
   }, [paramStatusMsg, paramId]);
 
-  // Sparkline history buffer
-  const sparkHistoryRef = useRef<number[]>([]);
-  const [, setSparkTick] = useState(0);
+  // Ask the vehicle to stream every message this widget reads.
+  const requiredMessages = useMemo(() => {
+    if (definition.displayType === 'multi-bar') {
+      const id = MULTI_BAR_MSG_ID[multiBarGroup];
+      return id !== undefined ? [id] : [];
+    }
+    const ids = new Set<number>();
+    for (const b of [...bindings, ...feedbackBindings]) {
+      const id = (MAVLINK_MSG_ID as Record<string, number>)[baseMessageName(b.messageName)];
+      if (id !== undefined) ids.add(id);
+    }
+    return [...ids];
+  }, [definition.displayType, multiBarGroup, bindings, feedbackBindings]);
 
-  const numVal = typeof boundValue === 'string' ? parseFloat(boundValue) : boundValue;
+  useEffect(() => {
+    if (requiredMessages.length === 0) return;
+    const key = `custom-${definition.id}`;
+    requiredMessages.forEach((id) => messageRateManager.registerRequirement(key, id));
+    return () => messageRateManager.unregisterRequirement(key);
+  }, [definition.id, requiredMessages]);
+
+  // Time-series: one shared sampler ring per bound series.
+  const chartSeries = useMemo<ChartSeries[]>(() => {
+    if (definition.displayType !== 'sparkline') return [];
+    return bindings.map((b, i) => {
+      const { key, ring } = valueSampler.seriesFor(b, definition.staleAfterSec);
+      return {
+        key,
+        ring,
+        label: seriesLabel(b),
+        color: b.color || (i === 0 ? ACCENT_HEX[(definition.colorScheme ?? 'default') as ColorScheme] : SERIES_HEX[i % SERIES_HEX.length]),
+        unit: readings[i]?.unit ?? b.unit ?? '',
+        decimals: b.decimals ?? 1,
+        toDisplay: (base: number) => toDisplayUnits(base, b, system),
+      };
+    });
+    // readings[i].unit only changes with the unit system, which is a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [definition.displayType, bindings, system, definition.colorScheme, definition.staleAfterSec]);
 
   useEffect(() => {
     if (definition.displayType !== 'sparkline') return;
-    if (typeof numVal === 'number' && !isNaN(numVal)) {
-      const next = [...sparkHistoryRef.current.slice(-39), numVal];
-      sparkHistoryRef.current = next;
-      setSparkTick((t) => t + 1);
-    }
-  }, [definition.displayType, numVal]);
+    // Sample while mounted; the history itself is kept for when the widget comes back.
+    const handles = bindings.map((b) => valueSampler.acquire(b, definition.staleAfterSec));
+    return () => handles.forEach((h) => h.release());
+  }, [definition.displayType, bindings, definition.staleAfterSec]);
 
-  // Register message rate subscription if bound to a telemetry stream or multi-bar group
-  useEffect(() => {
-    if (definition.displayType === 'multi-bar') {
-      const msgId = MULTI_BAR_MSG_ID[multiBarGroup];
-      if (msgId !== undefined) {
-        messageRateManager.registerRequirement(`custom-${definition.id}`, msgId);
-        return () => {
-          messageRateManager.unregisterRequirement(`custom-${definition.id}`);
-        };
-      }
-      return;
-    }
-    if (!definition.binding?.messageName) return;
-    const cleanMsg = definition.binding.messageName.replace(/\s*\(scaled\)$/i, '').trim().toUpperCase();
-    const msgId = (MAVLINK_MSG_ID as any)[cleanMsg];
-    if (msgId !== undefined) {
-      messageRateManager.registerRequirement(`custom-${definition.id}`, msgId);
-      return () => {
-        messageRateManager.unregisterRequirement(`custom-${definition.id}`);
-      };
-    }
-  }, [definition.id, definition.displayType, definition.binding?.messageName, multiBarGroup]);
+  /** Send a command and show the vehicle's COMMAND_ACK (or timeout) under the control. */
+  const sendCommand = (packet: Uint8Array, label: string) => {
+    const sentAt = Date.now();
+    setAck({ status: 'pending', text: 'Sent, awaiting acknowledgement', time: sentAt });
+    void sendTrackedCommand(packet, { label }).then((info) => setAck(describeAck(info)));
+  };
 
   const executeAction = () => {
     if (!definition.action) return;
     const encoder = mavlinkConnection.getEncoder();
-    const cmd = encoder.createCommandLong(
-      sysId,
-      compId,
-      definition.action.commandId,
-      definition.action.params
-    );
-    mavlinkConnection.send(cmd);
-    setLastActionTime(Date.now());
+    const cmd = encoder.createCommandLong(sysId, compId, definition.action.commandId, definition.action.params);
+    sendCommand(cmd, definition.action.label || definition.name);
   };
 
   const handleTriggerAction = () => {
@@ -515,6 +448,14 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
     setIsConfirming(false);
     executeAction();
   };
+
+  const stateThreshold = definition.stateThreshold ?? 0;
+  /** Vehicle-reported switch state when a feedback field is configured, otherwise what was last sent. */
+  const feedbackOn =
+    feedbackReading && feedbackReading.base !== null && !feedbackReading.stale
+      ? feedbackReading.base > stateThreshold
+      : null;
+  const switchOn = feedbackOn ?? toggleState;
 
   const executeToggleAction = (next: boolean) => {
     setToggleState(next);
@@ -534,13 +475,12 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
       }
       const encoder = mavlinkConnection.getEncoder();
       const cmd = encoder.createCommandLong(sysId, compId, cmdId, params);
-      mavlinkConnection.send(cmd);
-      setLastActionTime(Date.now());
+      sendCommand(cmd, `${definition.action.label || definition.name}: ${next ? 'ON' : 'OFF'}`);
     }
   };
 
   const handleToggleClick = () => {
-    const next = !toggleState;
+    const next = !switchOn;
     if (definition.action?.confirmation) {
       setPendingToggleVal(next);
       setIsConfirmingToggle(true);
@@ -561,8 +501,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
       }
       const encoder = mavlinkConnection.getEncoder();
       const cmd = encoder.createCommandLong(sysId, compId, cmdId, params);
-      mavlinkConnection.send(cmd);
-      setLastActionTime(Date.now());
+      sendCommand(cmd, `${definition.action.label || definition.name}: ${val}`);
     }
     setIsConfirmingSlider(false);
   };
@@ -620,34 +559,28 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
     setIsConfirmingOutOfBounds(false);
   };
 
-  const unit = definition.binding?.unit ?? '';
-  const min = definition.binding?.min ?? 0;
-  const max = definition.binding?.max ?? 100;
+  // Display-unit view of the primary binding (min / max / thresholds are configured in base units).
+  const pb = displayBinding(definition.binding, system);
+  const unit = primary?.unit ?? definition.binding?.unit ?? '';
+  const min = pb?.min ?? 0;
+  const max = pb?.max ?? 100;
+  const numVal = primary?.value ?? null;
+  const boundText = primary?.text ?? '--';
+  const pct = numVal !== null && max > min ? clamp(((numVal - min) / (max - min)) * 100, 0, 100) : 0;
+  const secondary =
+    bindings.length > 1 && readings[1]
+      ? { value: readings[1].value, text: `${readings[1].text} ${readings[1].unit}`.trim(), label: seriesLabel(bindings[1]) }
+      : null;
 
-  const pct =
-    !isNaN(numVal as number) && max > min
-      ? Math.max(0, Math.min(100, (((numVal as number) - min) / (max - min)) * 100))
-      : 0;
+  const alertState = evaluateAlert(primary?.base ?? null, definition.binding);
+  const staleReadings = readings.filter((r) => r.stale);
+  const isStaleAll = readings.length > 0 && staleReadings.length === readings.length;
+  const staleMessages = [...new Set(bindings.filter((_, i) => readings[i]?.stale).map((b) => b.messageName))];
+  const staleAgeSec = staleReadings.length ? Math.round(Math.max(...staleReadings.map((r) => r.ageMs ?? 0)) / 1000) : 0;
 
-  // Evaluate threshold alert state
-  let alertState: 'normal' | 'warn' | 'crit' = 'normal';
-  if (typeof numVal === 'number' && !isNaN(numVal) && definition.binding) {
-    const { warnThreshold, critThreshold, thresholdInvert } = definition.binding;
-    if (thresholdInvert) {
-      if (critThreshold !== undefined && numVal <= critThreshold) alertState = 'crit';
-      else if (warnThreshold !== undefined && numVal <= warnThreshold) alertState = 'warn';
-    } else {
-      if (critThreshold !== undefined && numVal >= critThreshold) alertState = 'crit';
-      else if (warnThreshold !== undefined && numVal >= warnThreshold) alertState = 'warn';
-    }
-  }
-
-  const effectiveScheme =
-    alertState === 'crit'
-      ? 'red'
-      : alertState === 'warn'
-        ? 'amber'
-        : definition.colorScheme || 'default';
+  const effectiveScheme: ColorScheme =
+    alertState === 'crit' ? 'red' : alertState === 'warn' ? 'amber' : ((definition.colorScheme || 'default') as ColorScheme);
+  const accentHex = ACCENT_HEX[effectiveScheme];
 
   const schemeColors = {
     default: {
@@ -711,7 +644,13 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
           ? BarChart3
           : definition.displayType === 'sparkline'
             ? TrendingUp
-            : Zap;
+            : definition.displayType === 'value-list'
+              ? List
+              : definition.displayType === 'gauge-radial'
+                ? Gauge
+                : Zap;
+
+  const fills = definition.displayType === 'gauge-radial' || definition.displayType === 'sparkline';
 
   return (
     <Card
@@ -730,7 +669,16 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
             <span className="truncate">{definition.name}</span>
           </CardTitle>
           <div className="flex items-center gap-1 shrink-0">
-            {alertState !== 'normal' && (
+            {staleReadings.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="text-[9px] px-1.5 py-0 font-mono uppercase"
+                title={`No ${staleMessages.join(', ')} received for ${staleAgeSec}s`}
+              >
+                Stale {staleAgeSec}s
+              </Badge>
+            )}
+            {alertState !== 'normal' && !isStaleAll && (
               <Badge
                 variant={alertState === 'crit' ? 'destructive' : 'warning'}
                 className="text-[9px] px-1.5 py-0 font-mono uppercase animate-pulse"
@@ -745,71 +693,126 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
         </div>
       </CardHeader>
 
-      <CardContent className="p-4 space-y-3 flex-1 flex flex-col justify-center">
+      <CardContent className={`p-3 sm:p-4 space-y-3 flex-1 flex flex-col min-h-0 ${fills ? '' : 'justify-center'}`}>
         {/* STAT CARD */}
         {definition.displayType === 'stat-card' && (
-          <div className="text-center py-2">
+          <div className={`text-center py-2 transition-opacity ${isStaleAll ? 'opacity-40' : ''}`}>
             <div className={`text-3xl font-mono font-bold ${schemeColors.valueText}`}>
-              {boundValue} <span className="text-sm font-normal text-zinc-400">{unit}</span>
+              {boundText} <span className="text-sm font-normal text-zinc-400">{unit}</span>
             </div>
-            {definition.description && (
-              <p className="text-[11px] text-zinc-500 mt-1">{definition.description}</p>
-            )}
+            {definition.description && <p className="text-[11px] text-zinc-500 mt-1">{definition.description}</p>}
           </div>
         )}
 
         {/* RADIAL GAUGE */}
         {definition.displayType === 'gauge-radial' && (
-          <div className="flex flex-col items-center justify-center py-2">
-            <div className="relative w-28 h-28 flex items-center justify-center">
-              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  className="stroke-zinc-800"
-                  strokeWidth="8"
-                  fill="transparent"
-                />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="38"
-                  className={`${schemeColors.stroke} transition-all duration-300`}
-                  strokeWidth="8"
-                  strokeDasharray={2 * Math.PI * 38}
-                  strokeDashoffset={2 * Math.PI * 38 * (1 - pct / 100)}
-                  strokeLinecap="round"
-                  fill="transparent"
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center font-mono">
-                <span className={`text-xl font-bold ${schemeColors.valueText}`}>{boundValue}</span>
-                <span className="text-[10px] text-zinc-400">{unit}</span>
-              </div>
-            </div>
-            <div className="flex justify-between w-full px-4 text-[10px] text-zinc-500 font-mono mt-1">
-              <span>{min} {unit}</span>
-              <span>{max} {unit}</span>
-            </div>
+          <div className="flex-1 min-h-[150px] flex items-center justify-center">
+            <RadialGauge
+              value={numVal}
+              text={boundText}
+              unit={unit}
+              min={min}
+              max={max}
+              zoneBinding={pb}
+              config={definition.gauge}
+              accent={accentHex}
+              secondary={secondary}
+              dimmed={isStaleAll}
+            />
           </div>
         )}
 
         {/* LINEAR GAUGE */}
-        {definition.displayType === 'gauge-linear' && (
-          <div className="space-y-2">
-            <div className="flex justify-between items-baseline font-mono">
-              <span className={`text-2xl font-bold ${schemeColors.valueText}`}>
-                {boundValue} <span className="text-xs font-normal text-zinc-400">{unit}</span>
-              </span>
-              <span className="text-[10px] text-zinc-500">{min} - {max} {unit}</span>
+        {definition.displayType === 'gauge-linear' && (() => {
+          const zones = (definition.gauge?.showZones ?? true) ? thresholdZones(pb, min, max) : [];
+          const ticks = niceTicks(min, max, definition.gauge?.majorTicks ?? 5);
+          const tickDec = stepDecimals(niceStep(min, max, definition.gauge?.majorTicks ?? 5));
+          const at = (v: number) => (max > min ? clamp(((v - min) / (max - min)) * 100, 0, 100) : 0);
+          return (
+            <div className={`space-y-1.5 transition-opacity ${isStaleAll ? 'opacity-40' : ''}`}>
+              <div className="flex justify-between items-baseline font-mono gap-2">
+                <span className={`text-2xl font-bold ${schemeColors.valueText}`}>
+                  {boundText} <span className="text-xs font-normal text-zinc-400">{unit}</span>
+                </span>
+                {secondary && (
+                  <span className="text-[10px] font-mono truncate" style={{ color: '#d946ef' }}>
+                    ▼ {secondary.label} {secondary.text}
+                  </span>
+                )}
+              </div>
+              <div className="relative pt-2">
+                {secondary?.value !== null && secondary?.value !== undefined && (
+                  <div
+                    className="absolute top-0 -translate-x-1/2 w-0 h-0 border-x-[5px] border-x-transparent border-t-[7px]"
+                    style={{ left: `${at(secondary.value)}%`, borderTopColor: '#d946ef' }}
+                  />
+                )}
+                <div className="w-full bg-zinc-900 h-3 rounded-full overflow-hidden border border-zinc-800 relative">
+                  {(() => {
+                    // A range that spans zero fills from zero, so negative values read as negative.
+                    const origin = min < 0 && max > 0 ? at(0) : 0;
+                    const left = Math.min(origin, pct);
+                    return (
+                      <>
+                        <div
+                          className={`absolute top-0 bottom-0 ${schemeColors.bg} transition-[left,width] duration-150`}
+                          style={{ left: `${left}%`, width: `${Math.abs(pct - origin)}%` }}
+                        />
+                        {origin > 0 && <div className="absolute top-0 bottom-0 w-px bg-zinc-500" style={{ left: `${origin}%` }} />}
+                      </>
+                    );
+                  })()}
+                  {zones.map((z) => (
+                    <div
+                      key={`${z.level}-${z.from}`}
+                      className="absolute bottom-0 h-[3px]"
+                      style={{
+                        left: `${at(z.from)}%`,
+                        width: `${at(z.to) - at(z.from)}%`,
+                        background: ZONE_HEX[z.level],
+                        opacity: z.level === 'normal' ? 0.6 : 0.9,
+                      }}
+                    />
+                  ))}
+                </div>
+                <div className="relative h-3.5 mt-0.5 text-[9px] font-mono text-zinc-500">
+                  {ticks.map((t) => (
+                    <span
+                      key={t}
+                      className="absolute -translate-x-1/2 whitespace-nowrap"
+                      style={{ left: `${at(t)}%` }}
+                    >
+                      {t.toFixed(tickDec)}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="w-full bg-zinc-900 h-2.5 rounded-full overflow-hidden border border-zinc-800">
-              <div
-                className={`h-full ${schemeColors.bg} transition-all duration-300`}
-                style={{ width: `${pct}%` }}
-              />
-            </div>
+          );
+        })()}
+
+        {/* VALUE LIST */}
+        {definition.displayType === 'value-list' && (
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 font-mono text-xs">
+            {bindings.map((b, i) => {
+              const r = readings[i];
+              const level = evaluateAlert(r?.base ?? null, b);
+              return (
+                <React.Fragment key={`${b.messageName}.${b.fieldName}.${i}`}>
+                  <span className={`text-zinc-400 truncate ${r?.stale ? 'opacity-40' : ''}`} title={`${b.messageName}.${b.fieldName}`}>
+                    {seriesLabel(b)}
+                  </span>
+                  <span
+                    className={`text-right font-bold ${r?.stale ? 'opacity-40' : ''} ${
+                      level === 'crit' ? 'text-red-400' : level === 'warn' ? 'text-amber-300' : 'text-zinc-100'
+                    }`}
+                  >
+                    {r?.text ?? '--'} <span className="text-[10px] font-normal text-zinc-500">{r?.unit}</span>
+                  </span>
+                </React.Fragment>
+              );
+            })}
+            {bindings.length === 0 && <span className="text-zinc-500 col-span-2">No values configured.</span>}
           </div>
         )}
 
@@ -857,88 +860,71 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
 
         {/* COMPASS / WIND / HEADING VECTOR ROSE */}
         {definition.displayType === 'compass-rose' && (
-          <div className="flex items-center justify-around gap-3 py-1">
+          <div className={`flex items-center justify-around gap-3 py-1 transition-opacity ${isStaleAll ? 'opacity-40' : ''}`}>
             <div className="relative w-24 h-24 shrink-0">
               <svg viewBox="0 0 100 100" className="w-full h-full">
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="44"
-                  className="stroke-zinc-800 fill-zinc-900/60"
-                  strokeWidth="2"
-                />
-                {/* Cardinal ticks & labels */}
-                <text x="50" y="15" textAnchor="middle" className="fill-sky-400 text-[9px] font-bold font-mono">N</text>
-                <text x="88" y="53" textAnchor="middle" className="fill-zinc-500 text-[8px] font-mono">E</text>
-                <text x="50" y="92" textAnchor="middle" className="fill-zinc-500 text-[8px] font-mono">S</text>
-                <text x="12" y="53" textAnchor="middle" className="fill-zinc-500 text-[8px] font-mono">W</text>
-                {/* Rotating pointer */}
-                <g transform={`rotate(${Number(numVal) || 0} 50 50)`}>
-                  <polygon points="50,18 45,54 50,48 55,54" className="fill-sky-400" />
-                  <polygon points="50,82 46,54 50,48 54,54" className="fill-zinc-600" />
+                <circle cx="50" cy="50" r="44" stroke={chrome.track} fill={chrome.panel} strokeWidth="2" />
+                {Array.from({ length: 36 }, (_, i) => {
+                  const a = (i * 10 * Math.PI) / 180;
+                  const r1 = i % 9 === 0 ? 36 : i % 3 === 0 ? 39 : 41;
+                  return (
+                    <line
+                      key={i}
+                      x1={50 + r1 * Math.sin(a)}
+                      y1={50 - r1 * Math.cos(a)}
+                      x2={50 + 43 * Math.sin(a)}
+                      y2={50 - 43 * Math.cos(a)}
+                      stroke={i % 9 === 0 ? chrome.tick : chrome.tickMinor}
+                      strokeWidth={i % 9 === 0 ? 1.4 : 0.7}
+                    />
+                  );
+                })}
+                <text x="50" y="22" textAnchor="middle" className="fill-sky-400 text-[9px] font-bold font-mono">N</text>
+                <text x="80" y="53" textAnchor="middle" fill={chrome.label} className="text-[8px] font-mono">E</text>
+                <text x="50" y="84" textAnchor="middle" fill={chrome.label} className="text-[8px] font-mono">S</text>
+                <text x="20" y="53" textAnchor="middle" fill={chrome.label} className="text-[8px] font-mono">W</text>
+                {secondary?.value !== null && secondary?.value !== undefined && (
+                  <g transform={`rotate(${secondary.value} 50 50)`}>
+                    <polygon points="50,6 46,14 54,14" fill="#d946ef" />
+                  </g>
+                )}
+                <g transform={`rotate(${numVal ?? 0} 50 50)`}>
+                  <polygon points="50,18 45,54 50,48 55,54" style={{ fill: accentHex }} />
+                  <polygon points="50,82 46,54 50,48 54,54" fill={chrome.tickMinor} />
                 </g>
-                <circle cx="50" cy="50" r="3.5" className="fill-zinc-200" />
+                <circle cx="50" cy="50" r="3.5" fill={chrome.pivot} />
               </svg>
             </div>
-            <div className="text-right font-mono">
+            <div className="text-right font-mono min-w-0">
               <div className={`text-2xl font-bold ${schemeColors.valueText}`}>
-                {boundValue}
+                {boundText}
                 <span className="text-xs font-normal text-zinc-400 ml-0.5">{unit || '°'}</span>
               </div>
+              {secondary && (
+                <div className="text-[10px] mt-0.5 truncate" style={{ color: '#d946ef' }}>
+                  ▲ {secondary.label} {secondary.text}
+                </div>
+              )}
               <div className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">
                 {definition.binding?.messageName || 'VECTOR'} · {definition.binding?.fieldName || 'deg'}
               </div>
-              {definition.description && (
-                <div className="text-[10px] text-zinc-400 mt-1">{definition.description}</div>
-              )}
+              {definition.description && <div className="text-[10px] text-zinc-400 mt-1">{definition.description}</div>}
             </div>
           </div>
         )}
 
-        {/* SPARKLINE MINI-CHART */}
-        {definition.displayType === 'sparkline' && (() => {
-          const samples = sparkHistoryRef.current;
-          const sMin = samples.length > 0 ? Math.min(...samples) : min;
-          const sMax = samples.length > 0 ? Math.max(...samples) : max;
-          const span = Math.max(0.0001, sMax - sMin);
-          const pts =
-            samples.length > 1
-              ? samples
-                  .map((v, i) => {
-                    const x = (i / (samples.length - 1)) * 200;
-                    const y = 46 - ((v - sMin) / span) * 40;
-                    return `${x.toFixed(1)},${y.toFixed(1)}`;
-                  })
-                  .join(' ')
-              : '0,25 200,25';
-
-          return (
-            <div className="space-y-1.5 py-0.5">
-              <div className="flex items-baseline justify-between font-mono">
-                <span className={`text-2xl font-bold ${schemeColors.valueText}`}>
-                  {boundValue} <span className="text-xs font-normal text-zinc-400">{unit}</span>
-                </span>
-                {samples.length > 0 && (
-                  <span className="text-[10px] text-zinc-500">
-                    min {sMin.toFixed(1)} · max {sMax.toFixed(1)}
-                  </span>
-                )}
-              </div>
-              <div className="w-full h-12 bg-zinc-900/70 border border-zinc-800/80 rounded-lg p-1 overflow-hidden">
-                <svg viewBox="0 0 200 50" preserveAspectRatio="none" className="w-full h-full">
-                  <polyline
-                    fill="none"
-                    className={schemeColors.stroke}
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    points={pts}
-                  />
-                </svg>
-              </div>
-            </div>
-          );
-        })()}
+        {/* TIME-SERIES CHART (displayType 'sparkline') */}
+        {definition.displayType === 'sparkline' && (
+          <div className="flex-1 min-h-[170px] flex flex-col">
+            <TimeSeriesChart
+              series={chartSeries}
+              config={{ yScale: 'auto', ...definition.chart }}
+              fixedMin={min}
+              fixedMax={max}
+              dimmed={isStaleAll}
+            />
+          </div>
+        )}
 
         {/* PARAMETER SETTER / SELECTOR CONTROL */}
         {definition.displayType === 'param-control' && (
@@ -1109,85 +1095,92 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
         )}
 
         {/* SLIDER CONTROL */}
-        {definition.displayType === 'slider-control' && (
-          <div className="space-y-3 py-1">
-            <div className="flex justify-between items-baseline font-mono">
-              <span className="text-xs text-zinc-400">Control Target</span>
-              <span className="text-lg font-bold text-zinc-100">
-                {sliderVal} <span className="text-xs text-zinc-400">{unit}</span>
-              </span>
-            </div>
-            <input
-              type="range"
-              min={min}
-              max={max}
-              step={(max - min) / 100 || 1}
-              value={sliderVal}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                setSliderVal(val);
-                if (definition.action?.confirmation) {
-                  setIsConfirmingSlider(true);
-                }
-              }}
-              onPointerUp={() => {
-                if (!definition.action?.confirmation) {
-                  executeSliderAction(sliderVal);
-                }
-              }}
-              className={`w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer ${schemeColors.accent}`}
-            />
-            <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
-              <span>{min} {unit}</span>
-              <span>{max} {unit}</span>
-            </div>
-            {definition.action?.confirmation && isConfirmingSlider && (
-              <div className="flex items-center gap-2 pt-1">
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs h-7 gap-1"
-                  onClick={() => executeSliderAction(sliderVal)}
-                >
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">
-                    Apply: {sliderVal} {unit}
-                    {definition.action ? ` — ${getMavCmdName(definition.action.commandId)}` : ''}
-                  </span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-xs text-zinc-400 h-7"
-                  onClick={() => setIsConfirmingSlider(false)}
-                >
-                  Cancel
-                </Button>
+        {definition.displayType === 'slider-control' && (() => {
+          const sMin = definition.binding?.min ?? 0;
+          const sMax = definition.binding?.max ?? 100;
+          const sUnit = definition.binding?.unit ?? '';
+          return (
+            <div className="space-y-3 py-1">
+              <div className="flex justify-between items-baseline font-mono">
+                <span className="text-xs text-zinc-400">Control Target</span>
+                <span className="text-lg font-bold text-zinc-100">
+                  {sliderVal} <span className="text-xs text-zinc-400">{sUnit}</span>
+                </span>
               </div>
-            )}
-          </div>
-        )}
+              <input
+                type="range"
+                min={sMin}
+                max={sMax}
+                step={(sMax - sMin) / 100 || 1}
+                value={sliderVal}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setSliderVal(val);
+                  if (definition.action?.confirmation) {
+                    setIsConfirmingSlider(true);
+                  }
+                }}
+                onPointerUp={() => {
+                  if (!definition.action?.confirmation) {
+                    executeSliderAction(sliderVal);
+                  }
+                }}
+                className={`w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer ${schemeColors.accent}`}
+              />
+              <div className="flex justify-between text-[10px] text-zinc-500 font-mono">
+                <span>{sMin} {sUnit}</span>
+                <span>{sMax} {sUnit}</span>
+              </div>
+              {definition.action?.confirmation && isConfirmingSlider && (
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs h-7 gap-1"
+                    onClick={() => executeSliderAction(sliderVal)}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">
+                      Apply: {sliderVal} {sUnit}
+                      {definition.action ? ` — ${getMavCmdName(definition.action.commandId)}` : ''}
+                    </span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs text-zinc-400 h-7"
+                    onClick={() => setIsConfirmingSlider(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+              <AckChip ack={ack} />
+            </div>
+          );
+        })()}
 
         {/* LED INDICATOR */}
-        {definition.displayType === 'indicator-led' && (
-          <div className="flex items-center gap-3 py-2">
-            <div
-              className={`h-5 w-5 rounded-full border shadow-lg ${
-                Number(boundValue) > 0
-                  ? `${schemeColors.ledActive} animate-pulse`
-                  : 'bg-zinc-800 border-zinc-700'
-              }`}
-            />
-            <div>
-              <span className="text-sm font-bold text-zinc-200">
-                {Number(boundValue) > 0 ? 'ACTIVE / HIGH' : 'INACTIVE / LOW'}
-              </span>
-              <span className="text-[10px] text-zinc-500 block font-mono">
-                Value: {boundValue}
-              </span>
+        {definition.displayType === 'indicator-led' && (() => {
+          const on = primary?.base !== null && primary?.base !== undefined && primary.base > stateThreshold && !primary.stale;
+          return (
+            <div className="flex items-center gap-3 py-2">
+              <div
+                className={`h-5 w-5 rounded-full border shadow-lg ${
+                  on ? `${schemeColors.ledActive} animate-pulse` : 'bg-zinc-800 border-zinc-700'
+                }`}
+              />
+              <div>
+                <span className="text-sm font-bold text-zinc-200">
+                  {primary?.stale ? 'NO DATA' : on ? 'ACTIVE / HIGH' : 'INACTIVE / LOW'}
+                </span>
+                <span className="text-[10px] text-zinc-500 block font-mono">
+                  Value: {boundText} {unit} · on above {stateThreshold}
+                </span>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ACTION BUTTON */}
         {definition.displayType === 'action-button' && (
@@ -1224,11 +1217,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                 {definition.action?.label || 'Execute Action'}
               </Button>
             )}
-            {lastActionTime && (
-              <p className="text-[10px] text-emerald-400 text-center font-mono">
-                Command dispatched at {new Date(lastActionTime).toLocaleTimeString()}
-              </p>
-            )}
+            <AckChip ack={ack} />
           </div>
         )}
 
@@ -1237,18 +1226,27 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
           <div className="space-y-2 py-1">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-xs font-bold text-zinc-200 block">Switch State</span>
+                <span className="text-xs font-bold text-zinc-200 block">
+                  {feedbackOn !== null ? 'Vehicle State' : 'Switch State'}
+                </span>
                 <span className="text-[10px] text-zinc-500 font-mono">
-                  {toggleState ? 'ENGAGED (1)' : 'DISENGAGED (0)'}
+                  {switchOn ? 'ENGAGED' : 'DISENGAGED'}
+                  {feedbackOn !== null
+                    ? ` · ${definition.feedback?.fieldName} ${feedbackReading?.text}`
+                    : feedbackBindings.length > 0
+                      ? ' · no feedback yet (last sent)'
+                      : ' · last sent'}
                 </span>
               </div>
               <button
                 onClick={handleToggleClick}
                 className={`p-1 rounded-lg border transition-all ${
-                  toggleState ? schemeColors.toggleActive : 'border-zinc-800 bg-zinc-900 text-zinc-500'
+                  switchOn ? schemeColors.toggleActive : 'border-zinc-800 bg-zinc-900 text-zinc-500'
                 }`}
+                aria-pressed={switchOn}
+                aria-label={`${definition.name}: ${switchOn ? 'on' : 'off'}`}
               >
-                {toggleState ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
+                {switchOn ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
               </button>
             </div>
             {isConfirmingToggle && (
@@ -1282,13 +1280,14 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                 </div>
               </div>
             )}
+            <AckChip ack={ack} />
           </div>
         )}
 
         {/* TEXT DISPLAY */}
         {definition.displayType === 'text-display' && (
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-lg p-2.5 font-mono text-xs text-zinc-300">
-            {definition.description || 'Raw output'}: <b className={schemeColors.icon}>{boundValue}</b>
+          <div className={`bg-zinc-900/60 border border-zinc-800 rounded-lg p-2.5 font-mono text-xs text-zinc-300 transition-opacity ${isStaleAll ? 'opacity-40' : ''}`}>
+            {definition.description || 'Raw output'}: <b className={schemeColors.icon}>{boundText}</b> {unit}
           </div>
         )}
       </CardContent>
