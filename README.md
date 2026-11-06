@@ -97,26 +97,58 @@ For advanced testing workflows (e.g. regenerating golden vectors or running mock
 
 ## Custom Widget Specification
 
-Custom widgets are declarative JSON definitions safe from arbitrary code execution:
+Custom widgets are declarative JSON definitions safe from arbitrary code execution. Build them in **Edit Mode → Add Widget → Build Custom Widget** (with a live preview), or import a `.widget.json` file.
 
 ```json
 {
   "id": "custom-bus-voltage",
   "name": "Bus Voltage Monitor",
   "category": "telemetry",
-  "displayType": "gauge-linear",
+  "displayType": "gauge-radial",
   "binding": {
     "messageName": "SYS_STATUS",
     "fieldName": "voltage_battery",
     "unit": "V",
-    "min": 10.0,
+    "min": 13.0,
     "max": 16.8,
-    "decimals": 2
-  }
+    "decimals": 2,
+    "warnThreshold": 14.8,
+    "critThreshold": 14.2,
+    "thresholdInvert": true
+  },
+  "gauge": { "sweep": 240, "style": "both", "majorTicks": 5, "minorTicks": 4, "showZones": true }
 }
 ```
 
-Action buttons enforce confirmation on execution:
+**Display types:** `stat-card`, `value-list`, `gauge-radial`, `gauge-linear`, `sparkline` (time-series chart), `compass-rose`, `multi-bar`, `indicator-led`, `text-display`, `param-control`, `action-button`, `toggle-switch`, `slider-control`.
+
+**Bindings.** `binding` is the primary value. Any decoded field of any message the vehicle sends can be bound; the creator lists the fields actually received (marked ●). Values are computed as `raw × multiplier + offset`.
+
+| Key | Meaning |
+|---|---|
+| `unitKind` | `speed` (from m/s), `altitude` or `distance` (from m): shown in the units chosen in Link & Display Settings. Min, max and thresholds stay in the base units. |
+| `warnThreshold` / `critThreshold` / `thresholdInvert` | Alert colouring, and the green / amber / red zones on gauges. |
+| `label`, `color` | Row / series label and hex colour (value lists and charts). |
+
+**Several values.** `bindings` lists further values after `binding`:
+- **Charts** plot every value as its own series.
+- **Value lists** show one row per value.
+- **Radial and linear gauges and the compass rose** draw the first extra value as a magenta marker, for example a target against the actual value.
+
+**Options**
+
+| Key | Applies to | Options |
+|---|---|---|
+| `gauge` | radial gauge | `sweep` (180, 240 or 270), `style` (`arc`, `needle` or `both`), `majorTicks`, `minorTicks`, `showZones` |
+| `gauge` | linear gauge | `majorTicks`, `showZones` |
+| `chart` | time-series chart | `windowSec` (default window; 10 s, 30 s, 1 min or 5 min can be picked on the chart), `yScale` (`auto`, `zero` or `fixed`), `showGrid`, `fill` |
+| `staleAfterSec` | all telemetry widgets | Seconds without the message before values dim and show **Stale** (default 3). |
+| `stateThreshold` | LED, toggle feedback | On when the value is above this (default 0). |
+| `feedback` | toggle switch | A binding to the field that reports the real state, e.g. `SERVO_OUTPUT_RAW.servo9_raw` with `stateThreshold: 1500`. The switch then shows what the vehicle reports, not what was last sent. |
+
+Charts sample at 10 Hz and keep 10 minutes of history, shared between widgets bound to the same field. Pause a chart, then hover over it to read past values.
+
+Action buttons, toggles and sliders show the vehicle's acknowledgement: accepted, denied, or no response. Imported widgets always require confirmation before sending:
 
 ```json
 {
