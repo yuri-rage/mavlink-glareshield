@@ -1,10 +1,20 @@
 import { create } from 'zustand';
-import { mavlinkConnection, ConnectionStatus, ConnectionStats } from '../mavlink/connection';
+import {
+  mavlinkConnection,
+  ConnectionStatus,
+  ConnectionStats,
+  DEFAULT_SERIAL_BAUD,
+  type LinkConfig,
+} from '../mavlink/connection';
 import { messageRateManager, BandwidthProfile } from '../mavlink/rateManager';
 
 const STORAGE_KEY = 'mavlink_glareshield_ws_url';
 const STORAGE_KEY_PROFILE = 'mavlink_glareshield_bandwidth_profile';
 const STORAGE_KEY_GCS_SYSID = 'mavlink_glareshield_gcs_sysid';
+const STORAGE_KEY_LINK_KIND = 'mavlink_glareshield_link_kind';
+const STORAGE_KEY_SERIAL_BAUD = 'mavlink_glareshield_serial_baud';
+
+export type LinkKind = LinkConfig['kind'];
 export function getDefaultWsUrl(): string {
   if (typeof window !== 'undefined' && window.location) {
     const host = window.location.hostname || 'localhost';
@@ -60,6 +70,37 @@ function getStoredGcsSystemId(): number {
   return 255;
 }
 
+function getStoredLinkKind(): LinkKind {
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY_LINK_KIND) === 'serial') {
+      return 'serial';
+    }
+  } catch {}
+  return 'websocket';
+}
+
+function getStoredSerialBaud(): number {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const parsed = parseInt(localStorage.getItem(STORAGE_KEY_SERIAL_BAUD) || '', 10);
+      if (parsed > 0) return parsed;
+    }
+  } catch {}
+  return DEFAULT_SERIAL_BAUD;
+}
+
+function storeValue(key: string, value: string) {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn(`Failed to save ${key}:`, e);
+  }
+}
+
+export function buildLinkConfig(linkKind: LinkKind, url: string, serialBaud: number): LinkConfig {
+  return linkKind === 'serial' ? { kind: 'serial', baudRate: serialBaud } : { kind: 'websocket', url };
+}
+
 export function normalizeWsUrl(input: string): string {
   let url = input.trim();
   if (!url) return getDefaultWsUrl();
@@ -71,6 +112,9 @@ export function normalizeWsUrl(input: string): string {
 
 interface ConnectionState {
   url: string;
+  /** WebSocket (bridge / Mission Planner) or a USB serial device opened by the browser. */
+  linkKind: LinkKind;
+  serialBaud: number;
   status: ConnectionStatus;
   errorMessage?: string;
   bandwidthProfile: BandwidthProfile;
@@ -78,6 +122,8 @@ interface ConnectionState {
   stats: ConnectionStats;
 
   setUrl: (url: string) => void;
+  setLinkKind: (kind: LinkKind) => void;
+  setSerialBaud: (baud: number) => void;
   setBandwidthProfile: (profile: BandwidthProfile) => void;
   setGcsSystemId: (sysId: number) => void;
   connect: () => void;
@@ -88,12 +134,17 @@ interface ConnectionState {
 const initialUrl = getStoredUrl();
 const initialProfile = getStoredBandwidthProfile();
 const initialGcsSysId = getStoredGcsSystemId();
+const initialLinkKind = getStoredLinkKind();
+const initialSerialBaud = getStoredSerialBaud();
 mavlinkConnection.setUrl(initialUrl);
+mavlinkConnection.setLink(buildLinkConfig(initialLinkKind, initialUrl, initialSerialBaud));
 messageRateManager.setProfile(initialProfile);
 mavlinkConnection.getEncoder().setSourceId(initialGcsSysId);
 
 export const useConnectionStore = create<ConnectionState>((set, get) => ({
   url: initialUrl,
+  linkKind: initialLinkKind,
+  serialBaud: initialSerialBaud,
   status: 'disconnected',
   errorMessage: undefined,
   bandwidthProfile: initialProfile,
@@ -129,7 +180,22 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       console.warn('Failed to save WebSocket URL:', e);
     }
     set({ url });
-    mavlinkConnection.setUrl(url);
+    if (get().linkKind === 'websocket') mavlinkConnection.setUrl(url);
+  },
+
+  setLinkKind: (linkKind: LinkKind) => {
+    storeValue(STORAGE_KEY_LINK_KIND, linkKind);
+    set({ linkKind });
+    const { url, serialBaud } = get();
+    mavlinkConnection.setLink(buildLinkConfig(linkKind, url, serialBaud));
+  },
+
+  setSerialBaud: (baud: number) => {
+    const serialBaud = Math.max(1, Math.round(baud)) || DEFAULT_SERIAL_BAUD;
+    storeValue(STORAGE_KEY_SERIAL_BAUD, String(serialBaud));
+    set({ serialBaud });
+    const { linkKind, url } = get();
+    mavlinkConnection.setLink(buildLinkConfig(linkKind, url, serialBaud));
   },
 
   setBandwidthProfile: (profile: BandwidthProfile) => {
@@ -145,8 +211,8 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   },
 
   connect: () => {
-    const { url } = get();
-    mavlinkConnection.setUrl(url);
+    const { url, linkKind, serialBaud } = get();
+    mavlinkConnection.setLink(buildLinkConfig(linkKind, url, serialBaud));
     mavlinkConnection.connect();
   },
 
