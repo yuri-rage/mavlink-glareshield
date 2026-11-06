@@ -1,0 +1,12 @@
+{
+  // Cloudflare Workers static-assets deployment of the Vite build (dist/).
+  // Workers Builds runs `npx wrangler deploy` for master and `npx wrangler versions upload` for other
+  // branches; without this file the second has no assets directory and fails. public/_headers is
+  // copied into dist/ and applied by Workers static assets as before.
+  "name": "glareshield",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
