@@ -607,5 +607,42 @@ for (const [type, landCmd, opts, label] of [
   check('trace is capped and keeps the newest points', capped.length === TRACE_MAX_POINTS && Math.abs(capped[capped.length - 1][1] - (lon0 + (TRACE_MAX_POINTS + 9) / mPerDegLon)) < 1e-12);
 }
 
+// ------------------------------------------------------------------------------------------------
+// Waypoint voice callouts: commanded jumps are not arrivals
+// ------------------------------------------------------------------------------------------------
+{
+  const { decideWaypointCallout } = await import('../src/lib/audioAlerts.ts');
+  const T = 5_000_000;
+  const base = {
+    connected: true, enabled: true, armed: true, currentSeq: 5, prevSeq: 5, reachedSeq: 4, reachedAt: T - 60_000,
+    lastAnnouncedReachedAt: T - 60_000, reachedSupported: true, manualJump: null, lastSpoken: null, now: T,
+  };
+  check('callout: MISSION_ITEM_REACHED announces the reached waypoint', decideWaypointCallout({ ...base, reachedSeq: 5, reachedAt: T }) === 5);
+  check('callout: pressing Next (5 → 6) is not announced as reaching WP 5', decideWaypointCallout({ ...base, currentSeq: 6, manualJump: { seq: 6, time: T - 200 } }) === null);
+  check('callout: Go to a later waypoint is not announced either', decideWaypointCallout({ ...base, currentSeq: 8, manualJump: { seq: 8, time: T - 200 } }) === null);
+  check('callout: with REACHED supported, the current-waypoint step alone never announces', decideWaypointCallout({ ...base, currentSeq: 6 }) === null);
+  check('callout: reaching the same waypoint again after a restart is announced (timestamp, not seq, is the event)',
+    decideWaypointCallout({ ...base, reachedSeq: 1, reachedAt: T, lastAnnouncedReachedAt: T - 90_000, lastSpoken: { seq: 1, time: T - 90_000 } }) === 1);
+  const legacy = { ...base, reachedSupported: false, reachedAt: 0, lastAnnouncedReachedAt: 0 };
+  check('callout: without REACHED support, an autopilot step 5 → 6 announces WP 5', decideWaypointCallout({ ...legacy, currentSeq: 6 }) === 5);
+  check('callout: without REACHED support, a commanded Next is still not an arrival', decideWaypointCallout({ ...legacy, currentSeq: 6, manualJump: { seq: 6, time: T - 500 } }) === null);
+  check('callout: an old jump does not suppress a later real step', decideWaypointCallout({ ...legacy, currentSeq: 7, prevSeq: 6, manualJump: { seq: 6, time: T - 60_000 } }) === 6);
+  check('callout: an arrival reported by both paths is spoken once', decideWaypointCallout({ ...base, reachedSeq: 5, reachedAt: T, lastSpoken: { seq: 5, time: T - 400 } }) === null);
+  {
+    const reachedPayload = new Uint8Array(2);
+    new DataView(reachedPayload.buffer).setUint16(0, 3, true);
+    useTelemetryStore.getState().processPacket({ version: 2, sequence: 1, systemId: 1, componentId: 1, messageId: MAVLINK_MSG_ID.MISSION_ITEM_REACHED, payload: reachedPayload, crc: 0, raw: new Uint8Array() });
+    const st = useTelemetryStore.getState();
+    check('store: MISSION_ITEM_REACHED records seq, time and that the autopilot reports arrivals', st.lastReachedWaypointSeq === 3 && st.lastReachedAt > 0 && st.missionItemReachedSeen);
+    const origSendJ = (mavlinkConnection as any).send;
+    (mavlinkConnection as any).send = () => true;
+    await setMissionCurrentWaypoint(4);
+    (mavlinkConnection as any).send = origSendJ;
+    const jump = useTelemetryStore.getState().manualWaypointJump;
+    check('store: Next / Go / Restart record the commanded jump', jump?.seq === 4 && Date.now() - (jump?.time ?? 0) < 2000);
+  }
+  check('callout: nothing while disarmed via the fallback, or when muted', decideWaypointCallout({ ...legacy, currentSeq: 6, armed: false }) === null && decideWaypointCallout({ ...base, reachedSeq: 5, reachedAt: T, enabled: false }) === null);
+}
+
 console.log(failures.length ? `\n${failures.length} regression check(s) FAILED` : '\nAll regression checks PASSED');
 process.exit(failures.length ? 1 : 0);

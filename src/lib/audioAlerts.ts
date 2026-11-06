@@ -580,6 +580,47 @@ export const useAudioAlertsStore = create<AudioAlertsState>((set, get) => ({
  * for mode changes, arm/disarm, link loss/restore, low battery, and critical/PreArm
  * alerts, and maintains a Screen Wake Lock while connected.
  */
+/** How long after a Next / Go / Restart from this GCS a waypoint change is treated as that jump, not an arrival. */
+export const MANUAL_JUMP_WINDOW_MS = 10000;
+
+export interface WaypointCalloutInput {
+  connected: boolean;
+  enabled: boolean;
+  armed: boolean;
+  currentSeq: number;
+  prevSeq: number;
+  reachedSeq: number;
+  reachedAt: number;
+  lastAnnouncedReachedAt: number;
+  /** The autopilot sends MISSION_ITEM_REACHED, so the current-waypoint fallback is not needed. */
+  reachedSupported: boolean;
+  manualJump: { seq: number; time: number } | null;
+  /** The last waypoint announced and when, so an arrival reported both ways is spoken once. */
+  lastSpoken: { seq: number; time: number } | null;
+  now: number;
+}
+
+/**
+ * Which waypoint to announce, if any.
+ *
+ * Arrivals come from MISSION_ITEM_REACHED, which the autopilot sends when it actually reaches a waypoint. Only for
+ * autopilots that never send it does a forward step of the current waypoint count as reaching the previous one,
+ * and never when the step is a jump the operator just commanded (Next / Go): those used to be announced as
+ * arrivals at waypoints the vehicle had not reached.
+ */
+export function decideWaypointCallout(i: WaypointCalloutInput): number | null {
+  if (!i.connected || !i.enabled) return null;
+  if (i.reachedAt > i.lastAnnouncedReachedAt && i.reachedSeq > 0) {
+    const justSpoken = i.lastSpoken && i.lastSpoken.seq === i.reachedSeq && i.now - i.lastSpoken.time < 3000;
+    return justSpoken ? null : i.reachedSeq;
+  }
+  if (i.reachedSupported) return null;
+  if (!(i.currentSeq > i.prevSeq && i.prevSeq > 0 && i.armed)) return null;
+  const jump = i.manualJump;
+  if (jump && jump.seq === i.currentSeq && i.now - jump.time < MANUAL_JUMP_WINDOW_MS) return null;
+  return i.prevSeq;
+}
+
 export function useAudioAlertListener() {
   const statusMessages = useTelemetryStore((state) => state.statusMessages);
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
@@ -595,8 +636,13 @@ export function useAudioAlertListener() {
   const prevArmedRef = useRef<boolean>(heartbeat.isArmed);
   const prevLinkLostRef = useRef<boolean>(false);
   const batteryWarnedRef = useRef<'none' | 'low' | 'critical'>('none');
-  const lastAnnouncedWpRef = useRef<number>(-1);
+  const lastReachedAt = useTelemetryStore((state) => state.lastReachedAt);
+  const missionItemReachedSeen = useTelemetryStore((state) => state.missionItemReachedSeen);
+  const manualWaypointJump = useTelemetryStore((state) => state.manualWaypointJump);
+  // Start from the current values so nothing already in the store is announced on mount.
+  const lastAnnouncedReachedAtRef = useRef<number>(lastReachedAt);
   const prevWpSeqRef = useRef<number>(currentWaypointSeq);
+  const lastSpokenWpRef = useRef<{ seq: number; time: number } | null>(null);
 
   // Initialize Piper Neural TTS Worker in the background when voice callouts are enabled
   useEffect(() => {
@@ -680,36 +726,31 @@ export function useAudioAlertListener() {
 
   // Spoken mission progress ("waypoint n") upon arriving at each waypoint
   useEffect(() => {
-    if (heartbeat.lastHeartbeatTime === 0 || heartbeat.modeName === 'DISCONNECTED') {
-      lastAnnouncedWpRef.current = -1;
-      prevWpSeqRef.current = currentWaypointSeq;
-      return;
-    }
-
-    if (!soundEnabled || !voiceEnabled || !waypointAnnounceEnabled) {
-      prevWpSeqRef.current = currentWaypointSeq;
-      return;
-    }
-
-    // 1. Direct MAVLink MISSION_ITEM_REACHED event
-    if (lastReachedWaypointSeq > 0 && lastReachedWaypointSeq !== lastAnnouncedWpRef.current) {
-      lastAnnouncedWpRef.current = lastReachedWaypointSeq;
-      speakCallout(`Waypoint ${lastReachedWaypointSeq}`);
-      prevWpSeqRef.current = currentWaypointSeq;
-      return;
-    }
-
-    // 2. Autopilot advanced current waypoint during mission (fallback when MISSION_ITEM_REACHED is not emitted)
-    if (currentWaypointSeq > prevWpSeqRef.current && prevWpSeqRef.current > 0 && heartbeat.isArmed) {
-      const completedWp = prevWpSeqRef.current;
-      if (completedWp !== lastAnnouncedWpRef.current) {
-        lastAnnouncedWpRef.current = completedWp;
-        speakCallout(`Waypoint ${completedWp}`);
-      }
-    }
+    const decision = decideWaypointCallout({
+      connected: heartbeat.lastHeartbeatTime !== 0 && heartbeat.modeName !== 'DISCONNECTED',
+      enabled: soundEnabled && voiceEnabled && waypointAnnounceEnabled,
+      armed: heartbeat.isArmed,
+      currentSeq: currentWaypointSeq,
+      prevSeq: prevWpSeqRef.current,
+      reachedSeq: lastReachedWaypointSeq,
+      reachedAt: lastReachedAt,
+      lastAnnouncedReachedAt: lastAnnouncedReachedAtRef.current,
+      reachedSupported: missionItemReachedSeen,
+      manualJump: manualWaypointJump,
+      lastSpoken: lastSpokenWpRef.current,
+      now: Date.now(),
+    });
     prevWpSeqRef.current = currentWaypointSeq;
+    lastAnnouncedReachedAtRef.current = lastReachedAt;
+    if (decision !== null) {
+      lastSpokenWpRef.current = { seq: decision, time: Date.now() };
+      speakCallout(`Waypoint ${decision}`);
+    }
   }, [
     lastReachedWaypointSeq,
+    lastReachedAt,
+    missionItemReachedSeen,
+    manualWaypointJump,
     currentWaypointSeq,
     heartbeat.isArmed,
     heartbeat.lastHeartbeatTime,
