@@ -68,6 +68,61 @@ function getSharedAudioContext(allowResume = false): AudioContext | null {
   return sharedAudioCtx;
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// Output keep-alive
+//
+// Many outputs power down after a moment of digital silence: Bluetooth headsets and speakers, USB DACs, HDMI
+// sinks, and OS audio servers that suspend idle streams. Waking takes ~100-500 ms and fades in, which ate the
+// first syllable of a callout. A 50 ms silent pre-roll cannot help, because silence is exactly what lets them
+// sleep. Instead, keep a faint noise floor (about -78 dBFS, far below hearing) flowing from the first sound
+// until KEEP_ALIVE_HOLD_MS after the last, and when the output was cold, start speech after a short warm-up.
+// (The cockpit EQ/compressor chain itself was measured offline and does not soften onsets.)
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Lead-in before a sound when the output has been idle, so the device is awake when the speech starts. */
+export const OUTPUT_WARMUP_S = 0.35;
+/** How long the noise floor keeps the output awake after the last sound. */
+export const KEEP_ALIVE_HOLD_MS = 30000;
+const KEEP_ALIVE_LEVEL = 1.2e-4; // ≈ -78 dBFS, about 4 LSB of 16-bit audio
+
+let keepAliveSource: AudioBufferSourceNode | null = null;
+let keepAliveStopTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Make sure the output is awake for a sound about to play. Returns the seconds to wait before starting it: the
+ * warm-up when the output was idle, otherwise 0.
+ */
+function warmOutput(ctx: AudioContext): number {
+  let lead = 0;
+  if (!keepAliveSource) {
+    try {
+      const length = ctx.sampleRate; // 1 s of noise, looped
+      const noise = ctx.createBuffer(1, length, ctx.sampleRate);
+      const data = noise.getChannelData(0);
+      for (let i = 0; i < length; i++) data[i] = (Math.random() * 2 - 1) * KEEP_ALIVE_LEVEL;
+      const src = ctx.createBufferSource();
+      src.buffer = noise;
+      src.loop = true;
+      src.connect(ctx.destination);
+      src.start();
+      keepAliveSource = src;
+      lead = OUTPUT_WARMUP_S;
+    } catch {
+      keepAliveSource = null;
+    }
+  }
+  if (keepAliveStopTimer) clearTimeout(keepAliveStopTimer);
+  keepAliveStopTimer = setTimeout(() => {
+    keepAliveStopTimer = null;
+    try {
+      keepAliveSource?.stop();
+      keepAliveSource?.disconnect();
+    } catch {}
+    keepAliveSource = null;
+  }, KEEP_ALIVE_HOLD_MS);
+  return lead;
+}
+
 function cacheAudioBuffer(key: string, buffer: AudioBuffer) {
   if (audioBufferCache.has(key)) {
     audioBufferCache.delete(key);
@@ -157,9 +212,8 @@ async function startBufferPlayback(ctx: AudioContext, buffer: AudioBuffer) {
       }
     };
 
-    // Pre-roll schedule offset (50ms) to ensure the audio DAC and OS sound daemon
-    // complete any hardware anti-pop un-mute ramp during silence, preserving the crisp leading attack.
-    const startTime = Math.max(ctx.currentTime, 0) + 0.05;
+    // Wake the output first (see warmOutput); a small offset remains so start() is never in the past.
+    const startTime = Math.max(ctx.currentTime, 0) + Math.max(0.03, warmOutput(ctx));
     source.start(startTime);
   } catch {
     activeVoiceSource = null;
@@ -167,7 +221,8 @@ async function startBufferPlayback(ctx: AudioContext, buffer: AudioBuffer) {
   }
 }
 
-function enqueueCockpitBuffer(buffer: AudioBuffer, priority: boolean) {
+/** Exported for tests; callers use speakCallout(). */
+export function enqueueCockpitBuffer(buffer: AudioBuffer, priority: boolean) {
   const ctx = getSharedAudioContext(true);
   if (!ctx) return;
 
@@ -223,6 +278,13 @@ function selectPreferredBrowserFemaleVoice(): SpeechSynthesisVoice | null {
 function fallbackBrowserSpeak(cleanText: string, priority: boolean) {
   try {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    // The browser's own voice plays on the same device: wake it first, as for Piper playback.
+    const ctx = getSharedAudioContext(true);
+    const lead = ctx ? warmOutput(ctx) : 0;
+    if (lead > 0) {
+      setTimeout(() => fallbackBrowserSpeak(cleanText, priority), lead * 1000);
+      return;
+    }
     if (priority) {
       window.speechSynthesis.cancel();
     }
@@ -429,7 +491,8 @@ export function playAlertChime(severity: number) {
       ctx.resume().catch(() => {});
     }
 
-    const now = ctx.currentTime + 0.02; // Small 20ms offset so chime attack isn't truncated by DAC un-mute ramp
+    // Wake the output first so the chime's attack is not lost to a sleeping device.
+    const now = ctx.currentTime + Math.max(0.02, warmOutput(ctx));
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
