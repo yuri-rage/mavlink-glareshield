@@ -14,9 +14,11 @@ export type WidgetDisplayType =
   | 'sparkline'
   | 'value-list'
   // Several of the types above in one card: see `panels`.
-  | 'composite';
+  | 'composite'
+  // Composite panels only: one of the dashboard's built-in widgets, named by `widgetId`.
+  | 'builtin';
 
-/** Display types a single panel can use (everything except composite). */
+/** Display types a composite panel can use (everything except composite). */
 export type PanelDisplayType = Exclude<WidgetDisplayType, 'composite'>;
 
 export type MultiBarGroupType =
@@ -127,6 +129,8 @@ export interface CustomWidgetDefinition {
   colorScheme?: 'default' | 'green' | 'amber' | 'blue' | 'red';
   minWidth?: number;
   minHeight?: number;
+  /** `builtin` panels (as expanded by cardPanels): which built-in widget. */
+  widgetId?: string;
   /** Composite widgets: the panels in the card, laid out left to right on a 12-column grid. */
   panels?: WidgetPanelDefinition[];
 }
@@ -137,6 +141,8 @@ export interface CustomWidgetDefinition {
  */
 export interface WidgetPanelDefinition {
   displayType: PanelDisplayType;
+  /** `builtin` panels: which built-in widget, e.g. `built-in-gps-card`. */
+  widgetId?: string;
   /** Small heading above the panel. Controls also use it to name the command they send. */
   title?: string;
   /** Width in twelfths of the card (default 12, a full row). Narrow cards stack every panel full width. */

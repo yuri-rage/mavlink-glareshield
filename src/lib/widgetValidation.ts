@@ -2,6 +2,7 @@
 // Imported JSON is untrusted: unknown types fall back to safe defaults, malformed values are dropped, and every
 // command or parameter write is forced to ask for confirmation.
 
+import { builtinPanelId } from './builtinWidgets';
 import type {
   CustomWidgetDefinition,
   MultiBarGroupType,
@@ -129,6 +130,17 @@ function sanitizeAction(raw: unknown): WidgetAction | undefined {
 function sanitizePanel(raw: unknown): WidgetPanelDefinition | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const r = raw as Record<string, unknown>;
+  if (r.displayType === 'builtin') {
+    // Only built-in widgets the app knows; anything else is dropped rather than guessed at.
+    const widgetId = builtinPanelId(r.widgetId);
+    if (!widgetId) return undefined;
+    const out: WidgetPanelDefinition = { displayType: 'builtin', widgetId };
+    const title = text(r.title, 40);
+    if (title) out.title = title;
+    const span = finite(r.span);
+    if (span !== undefined) out.span = Math.max(1, Math.min(12, Math.round(span)));
+    return out;
+  }
   // A panel is cleaned exactly as a widget would be; composites can't nest.
   const type = r.displayType === 'composite' ? 'stat-card' : (r.displayType as WidgetDisplayType);
   const clean = sanitizeWidgetDefinition({ ...(r as object), id: 'panel', name: 'panel', category: 'custom', displayType: type } as CustomWidgetDefinition);
