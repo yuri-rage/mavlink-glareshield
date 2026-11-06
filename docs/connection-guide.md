@@ -211,7 +211,7 @@ Chromium-based browsers (Google Chrome, Microsoft Edge, Brave, Opera) require pe
 
 ### Step 2: Local Network Access (Internet Origin → Local IP)
 
-When a public web origin (`glareshield.yurirage.com` or `glareshield.pages.dev`) connects to a local RFC 1918 IP address (`10.x.x.x`, `192.168.x.x`, `172.16-31.x.x`), Chrome's **Local Network Access (LNA)** policy applies.
+When a public web origin (such as `glareshield.yurirage.com`) connects to a local RFC 1918 IP address (`10.x.x.x`, `192.168.x.x`, `172.16-31.x.x`), Chrome's **Local Network Access (LNA)** policy applies.
 
 Modern Chromium browsers will display a prompt: *"Allow Glareshield to connect to devices on your local network?"*. Click **Allow**.
 
@@ -312,7 +312,6 @@ By default, the bridge permits connections from:
 - `http://localhost:*` and `http://127.0.0.1:*`
 - Private network IPs: `192.168.*`, `10.*`, `172.16-31.*`
 - Production domain: `https://glareshield.yurirage.com`
-- Cloudflare Pages project: `https://glareshield.pages.dev` and preview/branch URLs (`https://*.glareshield.pages.dev`)
 - `tauri://*` (desktop companion)
 - Direct CLI tools and scripts without an Origin header (`None`)
 
