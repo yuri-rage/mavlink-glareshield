@@ -13,6 +13,7 @@ import {
 } from '../../types/widget';
 import { Download, Plus, Save } from 'lucide-react';
 import { BindingEditor, NumberField, SELECT_CLASS } from './BindingEditor';
+import { cleanBinding } from '../../lib/widgetValidation';
 import { getObservedCatalog } from '../../lib/messageCache';
 import { CustomWidgetRenderer } from '../widgets/CustomWidgetRenderer';
 import { WINDOW_CHOICES } from '../widgets/custom/TimeSeriesChart';
@@ -181,17 +182,6 @@ const DEFAULT_BINDING: WidgetDataBinding = {
   max: 100,
 };
 
-/** Drop undefined / empty keys so saved JSON stays tidy. */
-function cleanBinding(b: WidgetDataBinding, keepRange = true): WidgetDataBinding {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(b)) {
-    if (v === undefined || v === '') continue;
-    if (!keepRange && (k === 'min' || k === 'max')) continue;
-    out[k] = v;
-  }
-  return out as unknown as WidgetDataBinding;
-}
-
 /** Message-specific defaults when the user picks a message for a binding. */
 function messageDefaults(msg: string): Partial<WidgetDataBinding> {
   if (msg === 'RC_CHANNELS (scaled)' || msg === 'SERVO_OUTPUT_RAW (scaled)') return { min: -1, max: 1, unit: '', decimals: 2 };
@@ -342,7 +332,8 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
 
     if (isTelemetryWidget) {
       def.binding = cleanBinding({ ...binding, multiplier: binding.multiplier ?? 1 });
-      if (extrasUsed.length) def.bindings = extrasUsed.map((b) => cleanBinding(b, false));
+      // Keep each extra value's own min / max: the multi-gauge layout scales every gauge separately.
+      if (extrasUsed.length) def.bindings = extrasUsed.map((b) => cleanBinding(b));
       if (staleAfterSec !== undefined) def.staleAfterSec = staleAfterSec;
     }
     if (displayType === 'slider-control') {
@@ -353,7 +344,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     if (displayType === 'sparkline') def.chart = { ...chart };
     if (displayType === 'indicator-led' && stateThreshold !== undefined) def.stateThreshold = stateThreshold;
     if (displayType === 'toggle-switch' && feedbackEnabled) {
-      def.feedback = cleanBinding(feedback, false);
+      def.feedback = cleanBinding(feedback);
       if (stateThreshold !== undefined) def.stateThreshold = stateThreshold;
       if (staleAfterSec !== undefined) def.staleAfterSec = staleAfterSec;
     }
