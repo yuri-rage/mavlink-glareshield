@@ -328,6 +328,31 @@ const COMMAND_ACK_RESULTS: Record<number, string> = {
   9: 'COMMAND_UNSUPPORTED_MAV_FRAME',
 };
 
+/** Spacing between recorded trace points: fine enough to show path-tracking deviations of a few tens of cm. */
+export const TRACE_MIN_SPACING_M = 0.25;
+/** Points kept in the trace (about 1.4 h at 5 Hz while moving). */
+export const TRACE_MAX_POINTS = 25000;
+
+/** Approximate ground distance in metres between two nearby lat/lon points (equirectangular). */
+function nearDistanceM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const rad = Math.PI / 180;
+  const x = (lon2 - lon1) * rad * Math.cos(((lat1 + lat2) / 2) * rad);
+  const y = (lat2 - lat1) * rad;
+  return Math.hypot(x, y) * 6371000;
+}
+
+/** The trace with a new point appended when it is at least TRACE_MIN_SPACING_M from the last one. */
+export function appendTracePoint(trace: [number, number][], lat: number, lon: number): [number, number][] {
+  if (lat === 0 && lon === 0) return trace;
+  if (trace.length > 0) {
+    const last = trace[trace.length - 1];
+    if (nearDistanceM(last[0], last[1], lat, lon) < TRACE_MIN_SPACING_M) return trace;
+  }
+  return trace.length >= TRACE_MAX_POINTS
+    ? [...trace.slice(trace.length - TRACE_MAX_POINTS + 1), [lat, lon]]
+    : [...trace, [lat, lon]];
+}
+
 const HANDLED_MESSAGE_IDS = new Set<number>([
   MAVLINK_MSG_ID.HEARTBEAT,
   MAVLINK_MSG_ID.ATTITUDE,
@@ -759,22 +784,9 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   setBaseStationPosition: (pos: BaseStationPosition | null) => set({ baseStationPosition: pos }),
 
   addTracePoint: (lat: number, lon: number) => {
-    if (lat === 0 && lon === 0) return;
     set((state) => {
-      const trace = state.flightTrace;
-      if (trace.length > 0) {
-        const last = trace[trace.length - 1];
-        const dLat = Math.abs(last[0] - lat);
-        const dLon = Math.abs(last[1] - lon);
-        if (dLat < 0.00001 && dLon < 0.00001) {
-          return state;
-        }
-      }
-      const updated =
-        trace.length >= 5000
-          ? [...trace.slice(trace.length - 4999), [lat, lon] as [number, number]]
-          : [...trace, [lat, lon] as [number, number]];
-      return { flightTrace: updated };
+      const updated = appendTracePoint(state.flightTrace, lat, lon);
+      return updated === state.flightTrace ? state : { flightTrace: updated };
     });
   },
 
@@ -921,26 +933,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         }
 
         case MAVLINK_MSG_ID.GLOBAL_POSITION_INT: {
-          let updatedTrace = state.flightTrace;
-          if (data.lat !== 0 || data.lon !== 0) {
-            const trace = state.flightTrace;
-            let shouldAdd = true;
-            if (trace.length > 0) {
-              const last = trace[trace.length - 1];
-              const dLat = Math.abs(last[0] - data.lat);
-              const dLon = Math.abs(last[1] - data.lon);
-              // ~1.5 meters movement threshold
-              if (dLat < 0.000015 && dLon < 0.000015) {
-                shouldAdd = false;
-              }
-            }
-            if (shouldAdd) {
-              updatedTrace =
-                trace.length >= 5000
-                  ? [...trace.slice(trace.length - 4999), [data.lat, data.lon] as [number, number]]
-                  : [...trace, [data.lat, data.lon] as [number, number]];
-            }
-          }
+          const updatedTrace = appendTracePoint(state.flightTrace, data.lat, data.lon);
 
           let updatedHome = state.homePosition;
           if (
