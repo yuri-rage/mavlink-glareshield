@@ -7,7 +7,8 @@ import {
 } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { useAudioAlertsStore } from '../../lib/audioAlerts';
-import { mavlinkConnection, isLoopbackWs, getWssHost } from '../../mavlink/connection';
+import { mavlinkConnection, isLoopbackWs, getWssHost, SERIAL_BAUD_RATES } from '../../mavlink/connection';
+import { getSerialApi, requestSerialDevice } from '../../mavlink/transport';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Modal } from '../ui/modal';
@@ -54,6 +55,10 @@ function formatDurationClock(totalMs: number): string {
 export const Navbar: React.FC = () => {
   const {
     url,
+    linkKind,
+    serialBaud,
+    setLinkKind,
+    setSerialBaud,
     status,
     errorMessage,
     bandwidthProfile,
@@ -105,6 +110,10 @@ export const Navbar: React.FC = () => {
 
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [inputUrl, setInputUrl] = useState(url);
+  const [inputLinkKind, setInputLinkKind] = useState(linkKind);
+  const [inputSerialBaud, setInputSerialBaud] = useState(serialBaud);
+  const [serialPickerNotice, setSerialPickerNotice] = useState<string | null>(null);
+  const serialApi = getSerialApi();
   const [inputGcsSysId, setInputGcsSysId] = useState(gcsSystemId);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [isPreArmMenuOpen, setIsPreArmMenuOpen] = useState(false);
@@ -204,6 +213,9 @@ export const Navbar: React.FC = () => {
 
   const openConnectModal = () => {
     setInputUrl(url);
+    setInputLinkKind(linkKind);
+    setInputSerialBaud(serialBaud);
+    setSerialPickerNotice(null);
     setInputGcsSysId(gcsSystemId);
     mavlinkConnection.pauseReconnect();
     setIsConnectModalOpen(true);
@@ -214,9 +226,20 @@ export const Navbar: React.FC = () => {
     mavlinkConnection.resumeReconnect();
   };
 
-  const handleConnectSubmit = (e: React.FormEvent) => {
+  const handleConnectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (status === 'connected') return;
+    if (inputLinkKind === 'serial') {
+      // The device picker needs the user gesture, so it must be the first thing awaited here.
+      const picked = await requestSerialDevice();
+      if (!picked) {
+        setSerialPickerNotice('No device selected. Choose the telemetry radio or flight controller in the browser prompt.');
+        return;
+      }
+      setSerialPickerNotice(null);
+      setSerialBaud(inputSerialBaud);
+    }
+    setLinkKind(inputLinkKind);
     setUrl(inputUrl);
     setGcsSystemId(inputGcsSysId);
     setIsConnectModalOpen(false);
@@ -294,7 +317,7 @@ export const Navbar: React.FC = () => {
             variant="success"
             className="h-7 px-2 sm:px-2.5 text-xs font-sans font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center hover:bg-emerald-950/80 transition-colors shadow-sm"
             onClick={openConnectModal}
-            title={`Connected: ${url} (click for Link & Page Configuration)`}
+            title={`Connected: ${linkKind === 'serial' ? `serial @ ${serialBaud} baud` : url} (click for Link & Page Configuration)`}
           >
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
             <span className="hidden sm:inline">Connected</span>
@@ -939,85 +962,168 @@ export const Navbar: React.FC = () => {
         isOpen={isConnectModalOpen}
         onClose={handleCloseConnectModal}
         title="Link & Display Settings"
-        description="Configure your MAVLink WebSocket endpoint, display units, altitude reference, audio callouts, and telemetry bandwidth."
+        description="Configure your MAVLink link (WebSocket or USB serial), display units, altitude reference, audio callouts, and telemetry bandwidth."
       >
         <form onSubmit={handleConnectSubmit} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-xs font-medium text-zinc-300">WebSocket URL or Host:Port</label>
-            <Input
-              type="text"
-              value={inputUrl}
-              onChange={(e) => setInputUrl(e.target.value)}
-              placeholder="ws://localhost:56781"
-              className="font-mono text-xs"
-            />
-            <p className="text-[11px] text-zinc-500">
-              Default companion bridge endpoint is <code className="text-sky-400">ws://localhost:56781</code>. Saved automatically for page reloads.
-            </p>
+            <label className="text-xs font-medium text-zinc-300">Link Type</label>
+            <div className="grid grid-cols-2 gap-1 p-0.5 rounded-lg bg-zinc-900 border border-zinc-800" role="radiogroup">
+              {(
+                [
+                  ['websocket', 'WebSocket'],
+                  ['serial', serialApi === 'web-usb-serial' ? 'USB (WebUSB)' : 'USB Serial'],
+                ] as const
+              ).map(([kind, label]) => (
+                <button
+                  key={kind}
+                  type="button"
+                  role="radio"
+                  aria-checked={inputLinkKind === kind}
+                  disabled={status === 'connected'}
+                  onClick={() => {
+                    setInputLinkKind(kind);
+                    setSerialPickerNotice(null);
+                  }}
+                  className={
+                    'text-xs py-1.5 rounded-md transition-colors disabled:opacity-60 ' +
+                    (inputLinkKind === kind ? 'bg-sky-500/20 text-sky-300 font-medium' : 'text-zinc-400 hover:text-zinc-200')
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-            {typeof window !== 'undefined' && window.location.protocol === 'https:' && inputUrl.trim().startsWith('ws://') && !isLoopbackWs(inputUrl.trim()) && (
-              <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-950/25 text-amber-200 text-xs space-y-1 mt-2">
-                <div className="font-semibold flex items-center gap-1.5 text-amber-300">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                  HTTPS Mixed Content Restriction
+          {inputLinkKind === 'serial' && (
+            <div className="space-y-2">
+              {serialApi === null ? (
+                <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-950/25 text-amber-200 text-[11px] leading-relaxed">
+                  This browser cannot open USB serial devices. Use Chrome or Edge on a desktop, or Chrome on Android, or
+                  connect through the companion bridge over WebSocket.
                 </div>
-                <p className="text-[11px] text-zinc-300 leading-relaxed">
-                  You are loading Glareshield over HTTPS. Browsers strictly block unencrypted <code className="text-amber-300">ws://</code> connections as Mixed Active Content.
-                </p>
-                <div className="text-[11px] text-zinc-400 space-y-0.5 pt-0.5">
-                  <div>• <strong>Secure:</strong> Use <code className="text-emerald-400">wss://</code> (e.g. bridge with <code className="text-zinc-300">--ssl-cert</code> or reverse proxy).</div>
-                  <div>• <strong>Firefox:</strong> In <code className="text-zinc-300">about:config</code>, set <code className="text-zinc-300">network.websocket.allowInsecureFromHTTPS</code> to <code className="text-zinc-300">true</code>.</div>
-                </div>
-              </div>
-            )}
-
-            {(() => {
-              const wssHost = getWssHost(inputUrl);
-              if (!wssHost) return null;
-              return (
-                <div className="p-2.5 rounded-lg border border-sky-500/30 bg-sky-950/25 text-sky-200 text-xs space-y-1.5 mt-2">
-                  <div className="font-semibold flex items-center justify-between text-sky-300">
-                    <div className="flex items-center gap-1.5">
-                      <Shield className="h-3.5 w-3.5 shrink-0 text-sky-400" />
-                      Self-Signed Certificate Trust
+              ) : (
+                <>
+                  {serialApi === 'web-serial' && (
+                    <>
+                      <label className="text-xs font-medium text-zinc-300">Baud Rate</label>
+                      <select
+                        value={inputSerialBaud}
+                        onChange={(e) => setInputSerialBaud(Number(e.target.value))}
+                        disabled={status === 'connected'}
+                        className="w-full h-8 rounded-md border border-zinc-800 bg-zinc-950 px-2 font-mono text-xs text-zinc-200"
+                      >
+                        {SERIAL_BAUD_RATES.map((baud) => (
+                          <option key={baud} value={baud}>
+                            {baud}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+                  <p className="text-[11px] text-zinc-500 leading-relaxed">
+                    {serialApi === 'web-serial' ? (
+                      <>
+                        Telemetry radios (SiK) usually run at <code className="text-sky-400">57600</code>; a flight
+                        controller's own USB port ignores the baud rate. <strong>Connect Now</strong> opens the browser's
+                        port picker; reconnects reuse the chosen port.
+                      </>
+                    ) : (
+                      <>
+                        Android has no Web Serial, so the board is opened over WebUSB. This reaches a flight controller's
+                        own USB port (a USB virtual COM port); FTDI and CP210x telemetry radios are not supported this way.
+                      </>
+                    )}
+                  </p>
+                  {serialPickerNotice && (
+                    <div className="p-2 rounded-lg border border-amber-500/30 bg-amber-950/25 text-amber-200 text-[11px]">
+                      {serialPickerNotice}
                     </div>
-                    <a
-                      href={`https://${wssHost}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-400 hover:text-sky-300 underline"
-                    >
-                      Open in Tab
-                      <ExternalLink className="h-3 w-3 shrink-0" />
-                    </a>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {inputLinkKind === 'websocket' && (
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-zinc-300">WebSocket URL or Host:Port</label>
+              <Input
+                type="text"
+                value={inputUrl}
+                onChange={(e) => setInputUrl(e.target.value)}
+                placeholder="ws://localhost:56781"
+                className="font-mono text-xs"
+              />
+              <p className="text-[11px] text-zinc-500">
+                Default companion bridge endpoint is <code className="text-sky-400">ws://localhost:56781</code>. Saved automatically for page reloads.
+              </p>
+
+              {typeof window !== 'undefined' && window.location.protocol === 'https:' && inputUrl.trim().startsWith('ws://') && !isLoopbackWs(inputUrl.trim()) && (
+                <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-950/25 text-amber-200 text-xs space-y-1 mt-2">
+                  <div className="font-semibold flex items-center gap-1.5 text-amber-300">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    HTTPS Mixed Content Restriction
                   </div>
                   <p className="text-[11px] text-zinc-300 leading-relaxed">
-                    If using a self-signed certificate, browsers require a one-time trust step. Open{' '}
-                    <a
-                      href={`https://${wssHost}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sky-400 hover:underline font-mono inline-flex items-center gap-0.5"
-                    >
-                      https://{wssHost}
-                      <ExternalLink className="h-2.5 w-2.5 inline" />
-                    </a>{' '}
-                    in a new tab, proceed past the certificate warning, then connect.
+                    You are loading Glareshield over HTTPS. Browsers strictly block unencrypted <code className="text-amber-300">ws://</code> connections as Mixed Active Content.
                   </p>
+                  <div className="text-[11px] text-zinc-400 space-y-0.5 pt-0.5">
+                    <div>• <strong>Secure:</strong> Use <code className="text-emerald-400">wss://</code> (e.g. bridge with <code className="text-zinc-300">--ssl-cert</code> or reverse proxy).</div>
+                    <div>• <strong>Firefox:</strong> In <code className="text-zinc-300">about:config</code>, set <code className="text-zinc-300">network.websocket.allowInsecureFromHTTPS</code> to <code className="text-zinc-300">true</code>.</div>
+                  </div>
                 </div>
-              );
-            })()}
+              )}
 
-            {errorMessage && (
-              <div className="p-2.5 rounded-lg border border-red-500/30 bg-red-950/25 text-red-300 text-xs flex items-start gap-2 mt-2">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-400 mt-0.5" />
-                <div className="text-[11px] leading-relaxed">
-                  <span className="font-semibold text-red-300">Link Error: </span>
-                  {errorMessage}
-                </div>
+              {(() => {
+                const wssHost = getWssHost(inputUrl);
+                if (!wssHost) return null;
+                return (
+                  <div className="p-2.5 rounded-lg border border-sky-500/30 bg-sky-950/25 text-sky-200 text-xs space-y-1.5 mt-2">
+                    <div className="font-semibold flex items-center justify-between text-sky-300">
+                      <div className="flex items-center gap-1.5">
+                        <Shield className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+                        Self-Signed Certificate Trust
+                      </div>
+                      <a
+                        href={`https://${wssHost}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-400 hover:text-sky-300 underline"
+                      >
+                        Open in Tab
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                      </a>
+                    </div>
+                    <p className="text-[11px] text-zinc-300 leading-relaxed">
+                      If using a self-signed certificate, browsers require a one-time trust step. Open{' '}
+                      <a
+                        href={`https://${wssHost}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sky-400 hover:underline font-mono inline-flex items-center gap-0.5"
+                      >
+                        https://{wssHost}
+                        <ExternalLink className="h-2.5 w-2.5 inline" />
+                      </a>{' '}
+                      in a new tab, proceed past the certificate warning, then connect.
+                    </p>
+                  </div>
+                );
+              })()}
+
+            </div>
+          )}
+
+          {errorMessage && (
+            <div className="p-2.5 rounded-lg border border-red-500/30 bg-red-950/25 text-red-300 text-xs flex items-start gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-400 mt-0.5" />
+              <div className="text-[11px] leading-relaxed">
+                <span className="font-semibold text-red-300">Link Error: </span>
+                {errorMessage}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <label className="text-xs font-medium text-zinc-300">GCS System ID</label>
@@ -1268,6 +1374,7 @@ export const Navbar: React.FC = () => {
                 type="submit"
                 variant="default"
                 size="sm"
+                disabled={inputLinkKind === 'serial' && serialApi === null}
                 className="bg-sky-500 hover:bg-sky-600 text-white"
               >
                 Connect Now
