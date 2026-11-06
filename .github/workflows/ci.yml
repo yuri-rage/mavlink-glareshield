@@ -1,0 +1,42 @@
+name: Test & Build
+
+# Deployment is handled by Cloudflare Workers Builds (the "glareshield" Worker's Git integration,
+# configured by wrangler.jsonc). This workflow only gates changes on the test suite and build.
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test_and_build:
+    name: Test & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit & regression tests
+        run: |
+          npm test
+          npm run test:regressions
+
+      - name: Build production bundle
+        run: npm run build
