@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useTelemetryStore, setMissionCurrentWaypoint, sendTrackedCommand } from '../../store/telemetryStore';
+import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
+import { formatEta, useWaypointNavigation } from '../../lib/useWaypointNavigation';
 import { useUnitsStore } from '../../store/unitsStore';
 import { useAudioAlertsStore } from '../../lib/audioAlerts';
 import { missionManager } from '../../mavlink/missionManager';
@@ -22,10 +23,21 @@ import {
 } from 'lucide-react';
 
 export const WaypointControlWidget: React.FC = () => {
-  const heartbeat = useTelemetryStore((s) => s.heartbeat);
-  const connected = heartbeat.lastHeartbeatTime > 0 && heartbeat.modeName !== 'DISCONNECTED';
-  const missionWaypoints = useTelemetryStore((s) => s.missionWaypoints);
-  const currentWaypointSeq = useTelemetryStore((s) => s.currentWaypointSeq);
+  const {
+    heartbeat,
+    connected,
+    currentWaypointSeq,
+    userWps,
+    userWpCount,
+    activeWp,
+    minSeq,
+    nextSeq,
+    prevSeq,
+    hasNext,
+    hasPrev,
+    isPending,
+    navigateTo,
+  } = useWaypointNavigation();
   const navController = useTelemetryStore((s) => s.navController);
   const vfr = useTelemetryStore((s) => s.vfr);
 
@@ -37,50 +49,13 @@ export const WaypointControlWidget: React.FC = () => {
     voiceEnabled,
   } = useAudioAlertsStore();
 
-  const [isPending, setIsPending] = useState(false);
   const [selectedWpInput, setSelectedWpInput] = useState<number>(() => currentWaypointSeq || 1);
-
-  // User waypoints exclude WP0 (Home position)
-  const userWps = missionWaypoints.filter((w) => w.seq > 0);
-  const userWpCount = userWps.length;
-  const activeWp = missionWaypoints.find((w) => w.seq === currentWaypointSeq);
-
-  const maxSeq = userWpCount > 0 ? Math.max(...userWps.map((w) => w.seq)) : 0;
-  const minSeq = userWpCount > 0 ? Math.min(...userWps.map((w) => w.seq)) : 1;
-
-  const nextSeq = Math.min(maxSeq, (currentWaypointSeq || 0) + 1);
-  const prevSeq = Math.max(minSeq, (currentWaypointSeq || 1) - 1);
-
-  const hasNext = connected && userWpCount > 0 && currentWaypointSeq < maxSeq;
-  const hasPrev = connected && userWpCount > 0 && currentWaypointSeq > minSeq;
   const isAutoMode = heartbeat.modeName === 'AUTO';
-
-  // Format ETA to active waypoint
-  const etaFormatted = (() => {
-    if (navController.wpDist <= 0 || vfr.groundspeed <= 0.5) return '--';
-    const totalSecs = Math.round(navController.wpDist / vfr.groundspeed);
-    if (totalSecs >= 3600) {
-      const hrs = Math.floor(totalSecs / 3600);
-      const mins = Math.floor((totalSecs % 3600) / 60);
-      return `${hrs}h ${mins}m`;
-    }
-    if (totalSecs >= 60) {
-      const mins = Math.floor(totalSecs / 60);
-      const secs = totalSecs % 60;
-      return `${mins}m ${secs.toString().padStart(2, '0')}s`;
-    }
-    return `${totalSecs}s`;
-  })();
+  const etaFormatted = formatEta(navController.wpDist, vfr.groundspeed);
 
   const handleNavigateTo = async (targetSeq: number) => {
-    if (!connected || targetSeq <= 0 || isPending) return;
-    setIsPending(true);
     setSelectedWpInput(targetSeq);
-    try {
-      await setMissionCurrentWaypoint(targetSeq);
-    } finally {
-      setTimeout(() => setIsPending(false), 500);
-    }
+    await navigateTo(targetSeq);
   };
 
   const handleSwitchToAuto = async () => {

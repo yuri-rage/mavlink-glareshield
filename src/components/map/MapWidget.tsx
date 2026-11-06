@@ -79,6 +79,7 @@ interface GpsFix {
 }
 
 import { computeMapBadgeVisibility } from './mapBadgeVisibility';
+import { MapMissionFooter } from './MapMissionFooter';
 
 interface MapWidgetProps {
   colSpan?: number;
@@ -1444,45 +1445,15 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           )}
         </div>
 
-        {/* Mission Progress & Fly-To Status Overlay in bottom-left (single line) */}
-        {connected && (missionWaypoints.length > 0 || navController.wpDist > 0 || flyToMode) && (
-          <div className="absolute bottom-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] font-mono text-zinc-200 flex items-center gap-2.5 pointer-events-none shadow-md whitespace-nowrap overflow-hidden">
-            {flyToMode && (
-              <span className="text-sky-300 font-bold animate-pulse">
-                Click any point on the map to command Guided Fly-To…
-              </span>
-            )}
-            {(missionWaypoints.length > 0 || navController.wpDist > 0) && (
-              <>
-                <span className="text-amber-300 font-bold">
-                  WP {currentWaypointSeq}/{Math.max(0, missionWaypoints.length - 1)}
-                </span>
-                {navController.wpDist > 0 && (
-                  <span>
-                    Dist: <b className="text-sky-400">{formatDistance(navController.wpDist).full}</b>
-                  </span>
-                )}
-                {Math.abs(navController.xtrackError) >= 0.5 && (
-                  <span>
-                    XTrack: <b className="text-zinc-300">{formatCrosstrack(navController.xtrackError).full}</b>
-                  </span>
-                )}
-                {navController.wpDist > 0 && vfr.groundspeed > 0.5 && (
-                  <span>
-                    ETA:{' '}
-                    <b className="text-emerald-400">
-                      {(() => {
-                        const s = Math.round(navController.wpDist / vfr.groundspeed);
-                        return s >= 60 ? `${Math.floor(s / 60)}m${(s % 60).toString().padStart(2, '0')}s` : `${s}s`;
-                      })()}
-                    </b>
-                  </span>
-                )}
-              </>
-            )}
+        {/* Fly-To prompt (mission progress moved to the footer below the map) */}
+        {connected && flyToMode && (
+          <div className="absolute bottom-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] font-mono pointer-events-none shadow-md whitespace-nowrap">
+            <span className="text-sky-300 font-bold animate-pulse">Click any point on the map to command Guided Fly-To…</span>
           </div>
         )}
       </CardContent>
+
+      <MapMissionFooter />
 
       {/* Guided Fly-To-Here Confirmation Modal */}
       {pendingFlyTo && (
