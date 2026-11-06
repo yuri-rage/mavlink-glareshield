@@ -563,9 +563,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     }).addTo(map);
     vehicleMarkerRef.current = marker;
 
-    // Trail polyline - Mission Planner vibrant magenta trace line
+    // Trail polyline: dark magenta, so it reads against satellite imagery and stays distinct from the
+    // bright magenta / yellow mission lines.
     const trailPoly = L.polyline(flightTrace, {
-      color: '#d946ef',
+      color: '#800073',
       weight: 3.5,
       opacity: 0.95,
       pane: 'trailPane',

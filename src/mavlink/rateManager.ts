@@ -38,7 +38,8 @@ export class MessageRateManager {
   // Default base frequencies (Hz) for known message types
   private defaultBaseHz: Record<number, number> = {
     [MAVLINK_MSG_ID.ATTITUDE]: 10,
-    [MAVLINK_MSG_ID.GLOBAL_POSITION_INT]: 3,
+    // 5 Hz (x0.5 / x2 for the low / high profiles) so the map trace shows small path-tracking deviations.
+    [MAVLINK_MSG_ID.GLOBAL_POSITION_INT]: 5,
     [MAVLINK_MSG_ID.GPS_RAW_INT]: 2,
     [MAVLINK_MSG_ID.GPS2_RAW]: 2,
     [MAVLINK_MSG_ID.VFR_HUD]: 4,

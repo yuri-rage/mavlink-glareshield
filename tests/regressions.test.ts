@@ -578,5 +578,34 @@ for (const [type, landCmd, opts, label] of [
   (mavlinkConnection as any).send = origSend;
 }
 
+// ------------------------------------------------------------------------------------------------
+// Map trace resolution: small path-tracking deviations must be recorded
+// ------------------------------------------------------------------------------------------------
+{
+  const { appendTracePoint, TRACE_MIN_SPACING_M, TRACE_MAX_POINTS } = await import('../src/store/telemetryStore.ts');
+  const lat0 = 34.17697;
+  const lon0 = -118.484826;
+  const mPerDegLat = 111195;
+  const mPerDegLon = 111195 * Math.cos((lat0 * Math.PI) / 180);
+  // Drive east in 0.3 m steps with a 0.4 m sideways (north) wiggle every few steps.
+  let trace: [number, number][] = [];
+  const truth: number[] = [];
+  for (let i = 0; i < 40; i++) {
+    const north = i % 8 < 4 ? 0 : 0.4;
+    truth.push(north);
+    trace = appendTracePoint(trace, lat0 + north / mPerDegLat, lon0 + (i * 0.3) / mPerDegLon);
+  }
+  const recordedNorth = trace.map(([lat]) => (lat - lat0) * mPerDegLat);
+  check('trace keeps points 0.3 m apart (the old ~1.5 m per-axis threshold dropped most of them)', trace.length === 40, `${trace.length}`);
+  check('trace records a 0.4 m sideways deviation', Math.max(...recordedNorth) > 0.35);
+  let dense: [number, number][] = [];
+  for (let i = 0; i < 20; i++) dense = appendTracePoint(dense, lat0, lon0 + (i * 0.05) / mPerDegLon);
+  check(`trace skips jitter closer than ${TRACE_MIN_SPACING_M} m`, dense.length < 6, `${dense.length}`);
+  check('trace ignores 0,0 positions', appendTracePoint([], 0, 0).length === 0);
+  let capped: [number, number][] = [];
+  for (let i = 0; i < TRACE_MAX_POINTS + 10; i++) capped = appendTracePoint(capped, lat0, lon0 + i / mPerDegLon);
+  check('trace is capped and keeps the newest points', capped.length === TRACE_MAX_POINTS && Math.abs(capped[capped.length - 1][1] - (lon0 + (TRACE_MAX_POINTS + 9) / mPerDegLon)) < 1e-12);
+}
+
 console.log(failures.length ? `\n${failures.length} regression check(s) FAILED` : '\nAll regression checks PASSED');
 process.exit(failures.length ? 1 : 0);
