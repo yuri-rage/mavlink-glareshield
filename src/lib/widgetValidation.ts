@@ -41,6 +41,16 @@ export const VALID_MULTI_BAR_GROUPS = new Set<MultiBarGroupType>([
 ]);
 
 const MAX_EXTRA_BINDINGS = 16;
+
+/** Drop undefined / empty keys so saved JSON stays tidy. Every set value, including min and max, is kept. */
+export function cleanBinding(b: WidgetDataBinding): WidgetDataBinding {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(b)) {
+    if (v === undefined || v === '') continue;
+    out[k] = v;
+  }
+  return out as unknown as WidgetDataBinding;
+}
 const finite = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
 const text = (v: unknown, max = 64): string | undefined => (typeof v === 'string' ? v.slice(0, max) : undefined);
 

@@ -14,7 +14,7 @@ const cache = await import('../src/lib/messageCache.ts');
 const { valueSampler, SampleRing } = await import('../src/lib/valueSampler.ts');
 const { computeYRange } = await import('../src/components/widgets/custom/TimeSeriesChart.tsx');
 const { describeAck, extractBoundValueFromState } = await import('../src/components/widgets/CustomWidgetRenderer.tsx');
-const { sanitizeWidgetDefinition } = await import('../src/lib/widgetValidation.ts');
+const { sanitizeWidgetDefinition, cleanBinding } = await import('../src/lib/widgetValidation.ts');
 const { MAVLINK_MSG_ID } = await import('../src/mavlink/messages.ts');
 
 const failures: string[] = [];
@@ -213,6 +213,11 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   check('sanitize: imported actions always require confirmation', w.action?.confirmation === true);
   const mb = sanitizeWidgetDefinition({ id: 'm', name: 'M', category: 'telemetry', displayType: 'multi-bar', multiBarConfig: { group: 'servo-8-scaled' } });
   check('sanitize: scaled multi-bar groups survive import (previously reset to rc-8)', mb.multiBarConfig?.group === 'servo-8-scaled');
+  const saved = cleanBinding({ messageName: 'RPM', fieldName: 'rpm1', min: 0, max: 4000, unit: undefined, label: '' });
+  check('cleanBinding keeps an extra gauge\'s own min / max (they were dropped, so gauge 2 used gauge 1\'s scale)', saved.min === 0 && saved.max === 4000 && !('unit' in saved) && !('label' in saved));
+  const multi = sanitizeWidgetDefinition({ id: 'g2', name: 'G', category: 'telemetry', displayType: 'gauge-radial', gauge: { layout: 'multiple' },
+    binding: { messageName: 'A', fieldName: 'a', min: -100, max: 100 }, bindings: [{ messageName: 'B', fieldName: 'b', min: 0, max: 4000 }] });
+  check('sanitize: per-gauge ranges survive import', multi.bindings?.[0].min === 0 && multi.bindings?.[0].max === 4000 && multi.binding?.min === -100);
   const mg = sanitizeWidgetDefinition({ id: 'g', name: 'G', category: 'telemetry', displayType: 'gauge-radial', gauge: { layout: 'multiple' } });
   const bad = sanitizeWidgetDefinition({ id: 'g', name: 'G', category: 'telemetry', displayType: 'gauge-radial', gauge: { layout: 'grid' as any } });
   check('sanitize: gauge layout "multiple" is kept, unknown layouts dropped', mg.gauge?.layout === 'multiple' && bad.gauge?.layout === undefined);
