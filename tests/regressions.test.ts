@@ -644,5 +644,11 @@ for (const [type, landCmd, opts, label] of [
   check('callout: nothing while disarmed via the fallback, or when muted', decideWaypointCallout({ ...legacy, currentSeq: 6, armed: false }) === null && decideWaypointCallout({ ...base, reachedSeq: 5, reachedAt: T, enabled: false }) === null);
 }
 
+{
+  const { showsWaypointAltitude } = await import('../src/lib/useWaypointNavigation.ts');
+  check('waypoint selector: altitude hidden for rover (10) and boat (11), shown for copter (2) and plane (1)',
+    !showsWaypointAltitude(10) && !showsWaypointAltitude(11) && showsWaypointAltitude(2) && showsWaypointAltitude(1));
+}
+
 console.log(failures.length ? `\n${failures.length} regression check(s) FAILED` : '\nAll regression checks PASSED');
 process.exit(failures.length ? 1 : 0);
