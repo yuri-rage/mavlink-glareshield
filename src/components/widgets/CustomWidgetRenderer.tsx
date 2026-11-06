@@ -28,10 +28,6 @@ import {
 import { SCHEME_CLASSES, useBindingReadings, type PanelProps } from './custom/panelKit';
 import { WidgetPanel, panelFills, panelIcon } from './custom/WidgetPanel';
 
-// Kept here for existing imports.
-export { extractBoundValueFromState, scalePwmToUnitRange } from '../../lib/widgetValues';
-export { describeAck } from './custom/panelModel';
-
 valueSampler.setStateGetter(() => useTelemetryStore.getState());
 
 /** Below this content width a composite card stacks its panels in one column. */
@@ -174,7 +170,8 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                   }`}
                   aria-label={title || undefined}
                 >
-                  {title && (
+                  {/* A built-in widget brings its own title row. */}
+                  {title && p.def.displayType !== 'builtin' && (
                     <h4 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1 mb-1.5 truncate">
                       <Icon className={`h-3 w-3 shrink-0 ${p.scheme.icon}`} />
                       <span className="truncate">{title}</span>

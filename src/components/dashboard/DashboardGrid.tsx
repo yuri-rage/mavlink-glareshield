@@ -1,17 +1,7 @@
 import React, { useState } from 'react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CustomWidgetDefinition, PlacedWidget } from '../../types/widget';
-import { GlareshieldWidget, AllFlightModesWidget, SetSpeedWidget } from '../glareshield/GlareshieldWidget';
-import { HudWidget } from '../hud/HudWidget';
-import { MapWidget } from '../map/MapWidget';
-import { BatteryWidget } from '../widgets/BatteryWidget';
-import { GpsWidget } from '../widgets/GpsWidget';
-import { VfrHudWidget } from '../widgets/VfrHudWidget';
-import { StatusTextConsoleWidget } from '../widgets/StatusTextConsoleWidget';
-import { ParametersWidget } from '../widgets/ParametersWidget';
-import { TelemetryChartsWidget } from '../widgets/TelemetryChartsWidget';
-import { NtripWidget } from '../widgets/NtripWidget';
-import { WaypointControlWidget } from '../widgets/WaypointControlWidget';
+import { renderBuiltinWidget } from '../widgets/builtinRegistry';
 import { CustomWidgetRenderer } from '../widgets/CustomWidgetRenderer';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { Button } from '../ui/button';
@@ -113,49 +103,16 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
   const renderWidgetContent = (placed: PlacedWidget) => {
     const { widgetId } = placed;
 
-    // Check built-in widgets
-    switch (widgetId) {
-      case 'built-in-glareshield':
-      case 'built-in-arm-modes':
-        return <GlareshieldWidget />;
-      case 'built-in-all-modes':
-        return <AllFlightModesWidget />;
-      case 'built-in-set-speed':
-        return <SetSpeedWidget />;
-      case 'built-in-hud':
-      case 'built-in-pfd':
-        return <HudWidget />;
-      case 'built-in-map':
-        return <MapWidget colSpan={placed.colSpan ?? 6} />;
-      case 'built-in-battery-card':
-        return <BatteryWidget />;
-      case 'built-in-gps-card':
-        return <GpsWidget />;
-      case 'built-in-vfr-hud':
-        return <VfrHudWidget />;
-      case 'built-in-statustext':
-        return <StatusTextConsoleWidget />;
-      case 'built-in-parameters':
-        return <ParametersWidget />;
-      case 'built-in-charts':
-        return <TelemetryChartsWidget />;
-      case 'built-in-ntrip':
-        return <NtripWidget />;
-      case 'built-in-waypoints':
-        return <WaypointControlWidget />;
-      default: {
-        // Look up custom widget definition
-        const customDef = profile.customWidgets.find((w) => w.id === widgetId);
-        if (customDef) {
-          return <CustomWidgetRenderer definition={customDef} />;
-        }
-        return (
-          <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl text-center text-zinc-500 font-mono text-xs">
-            Unknown widget ID: {widgetId}
-          </div>
-        );
-      }
-    }
+    const builtin = renderBuiltinWidget(widgetId, placed.colSpan ?? 6);
+    if (builtin) return builtin;
+
+    const customDef = profile.customWidgets.find((w) => w.id === widgetId);
+    if (customDef) return <CustomWidgetRenderer definition={customDef} />;
+    return (
+      <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl text-center text-zinc-500 font-mono text-xs">
+        Unknown widget ID: {widgetId}
+      </div>
+    );
   };
 
   // Map 12-column span to responsive Tailwind grid classes

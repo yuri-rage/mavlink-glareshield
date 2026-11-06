@@ -1,3 +1,4 @@
+import { BUILTIN_PANELS, builtinPanelId } from '../../lib/builtinWidgets';
 import { VALID_DISPLAY_TYPES, sanitizeWidgetDefinition } from '../../lib/widgetValidation';
 import React, { useState } from 'react';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -151,6 +152,8 @@ const BUILT_IN_CATALOG = [
 /** What an import preview lists: the widget itself, or each panel of a composite widget. */
 interface ImportPart {
   heading?: string;
+  /** A built-in widget panel: its name and the vehicle controls it contains, if any. */
+  builtin?: { name: string; controls?: string };
   binding?: CustomWidgetDefinition['binding'];
   extraCount: number;
   action?: CustomWidgetDefinition['action'];
@@ -166,12 +169,30 @@ function importParts(w: CustomWidgetDefinition): ImportPart[] {
     paramControl: p.paramControl,
   });
   if (w.displayType !== 'composite') return [part(w)];
-  return (w.panels ?? []).map((p, i) => part(p, `Panel ${i + 1}${p.title ? `: ${p.title}` : ''} (${p.displayType})`));
+  return (w.panels ?? []).map((p, i) => {
+    const heading = `Panel ${i + 1}${p.title ? `: ${p.title}` : ''} (${p.displayType})`;
+    if (p.displayType !== 'builtin') return part(p, heading);
+    const info = BUILTIN_PANELS[builtinPanelId(p.widgetId) ?? ''];
+    return { heading, extraCount: 0, builtin: { name: info?.name ?? String(p.widgetId), controls: info?.controls } };
+  });
 }
 
 const ImportPartDetails: React.FC<{ part: ImportPart }> = ({ part }) => (
   <div className={part.heading ? 'mt-2 pl-2 border-l-2 border-zinc-700 space-y-1' : 'space-y-1'}>
     {part.heading && <div className="text-zinc-200 font-bold">{part.heading}</div>}
+    {part.builtin && <div>Built-in widget: <b className="text-zinc-100">{part.builtin.name}</b></div>}
+    {part.builtin?.controls && (
+      <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded mt-2 space-y-1 text-amber-200">
+        <div className="font-bold flex items-center gap-1.5 text-amber-300">
+          <AlertTriangle className="h-4 w-4" />
+          Built-in Vehicle Controls:
+        </div>
+        <div>This panel can send {part.builtin.controls}.</div>
+        <div className="text-[11px] text-amber-400 mt-1">
+          * These are the built-in widget's own controls, with its own confirmations, as when you place it yourself.
+        </div>
+      </div>
+    )}
     {part.binding && (
       <div className="p-2 bg-zinc-950 rounded border border-zinc-800 mt-2 space-y-0.5">
         <div className="text-zinc-300 font-bold">Telemetry Binding:</div>
@@ -306,7 +327,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
               {importParts(pendingImportWidget).map((part, i) => (
                 <ImportPartDetails key={i} part={part} />
               ))}
-              {!importParts(pendingImportWidget).some((p) => p.action || p.paramControl) && (
+              {!importParts(pendingImportWidget).some((p) => p.action || p.paramControl || p.builtin?.controls) && (
                 <div className="text-zinc-500 italic mt-1">No autopilot actions or parameter controls (read-only instrument).</div>
               )}
             </div>

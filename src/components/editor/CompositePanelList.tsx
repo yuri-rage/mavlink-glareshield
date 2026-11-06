@@ -6,6 +6,13 @@ import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { panelIcon } from '../widgets/custom/WidgetPanel';
 import { MAX_COMPOSITE_BINDINGS, MAX_PANELS } from '../../lib/widgetValidation';
+import { BUILTIN_PANELS, builtinPanelId } from '../../lib/builtinWidgets';
+
+/** What a panel is, for the list: a built-in widget's name, otherwise the display type. */
+function panelKind(p: WidgetPanelDefinition): string {
+  if (p.displayType === 'builtin') return BUILTIN_PANELS[builtinPanelId(p.widgetId) ?? '']?.name ?? 'Built-in widget';
+  return shortTypeName(p.displayType);
+}
 
 /** Display types in the order the creator offers them, with their names. */
 export const PANEL_TYPE_OPTIONS: { value: PanelDisplayType; label: string }[] = [
@@ -22,6 +29,7 @@ export const PANEL_TYPE_OPTIONS: { value: PanelDisplayType; label: string }[] = 
   { value: 'toggle-switch', label: 'Toggle Switch (Relay / Servo)' },
   { value: 'slider-control', label: 'Slider Control (PWM / Speed)' },
   { value: 'text-display', label: 'Text Output Display' },
+  { value: 'builtin', label: 'Built-in Widget (GPS, Battery, HUD, Map…)' },
 ];
 
 export const shortTypeName = (t: PanelDisplayType) => PANEL_TYPE_OPTIONS.find((o) => o.value === t)?.label.replace(/\s*\(.*$/, '') ?? t;
@@ -94,9 +102,9 @@ export const CompositePanelList: React.FC<CompositePanelListProps> = ({ panels, 
                 <span className="text-[10px] font-mono text-zinc-500 w-4 shrink-0">{i + 1}</span>
                 <Icon className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-sky-400' : 'text-zinc-500'}`} />
                 <span className={`truncate ${active ? 'text-zinc-100 font-semibold' : 'text-zinc-300'}`}>
-                  {p.title?.trim() || shortTypeName(p.displayType)}
+                  {p.title?.trim() || panelKind(p)}
                 </span>
-                {p.title?.trim() && <span className="text-[10px] text-zinc-500 truncate hidden sm:inline">{shortTypeName(p.displayType)}</span>}
+                {p.title?.trim() && <span className="text-[10px] text-zinc-500 truncate hidden sm:inline">{panelKind(p)}</span>}
               </button>
               <select
                 value={p.span ?? 12}

@@ -13,7 +13,8 @@ const values = await import('../src/lib/widgetValues.ts');
 const cache = await import('../src/lib/messageCache.ts');
 const { valueSampler, SampleRing } = await import('../src/lib/valueSampler.ts');
 const { computeYRange } = await import('../src/components/widgets/custom/TimeSeriesChart.tsx');
-const { describeAck, extractBoundValueFromState } = await import('../src/components/widgets/CustomWidgetRenderer.tsx');
+const { describeAck } = await import('../src/components/widgets/custom/panelModel.ts');
+const { extractBoundValueFromState } = await import('../src/lib/widgetValues.ts');
 const { sanitizeWidgetDefinition, cleanBinding } = await import('../src/lib/widgetValidation.ts');
 const { MAVLINK_MSG_ID } = await import('../src/mavlink/messages.ts');
 
@@ -313,6 +314,30 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   check('sanitize: a command without a numeric ID is dropped', act.action === undefined);
   const act2 = sanitizeWidgetDefinition({ id: 'a', name: 'A', category: 'control', displayType: 'action-button', action: { label: 'X', commandId: 20, params: [1, 'x', null, 4] as any, confirmation: false } });
   check('sanitize: command params become seven finite numbers', act2.action?.params.join() === '1,0,0,4,0,0,0');
+}
+
+// ------------------------------------------------------------------------------------------------
+// Built-in widgets as composite panels
+// ------------------------------------------------------------------------------------------------
+{
+  const pm = await import('../src/components/widgets/custom/panelModel.ts');
+  const { BUILTIN_PANELS, builtinPanelId } = await import('../src/lib/builtinWidgets.ts');
+  const card: any = { id: 'b', name: 'B', category: 'telemetry', displayType: 'composite', panels: [
+    { displayType: 'builtin', widgetId: 'built-in-gps-card', span: 6, title: 'Position', binding: { messageName: 'X', fieldName: 'y' }, evil: 1 },
+    { displayType: 'builtin', widgetId: 'built-in-pfd' },
+    { displayType: 'builtin', widgetId: 'built-in-nope' },
+    { displayType: 'builtin', widgetId: 'custom-123' },
+    { displayType: 'builtin' },
+  ] };
+  const clean = sanitizeWidgetDefinition(card);
+  check('builtin: known built-ins kept, unknown or missing IDs dropped', clean.panels?.length === 2);
+  check('builtin: keeps only its ID, title and span', JSON.stringify(clean.panels?.[0]) === JSON.stringify({ displayType: 'builtin', widgetId: 'built-in-gps-card', title: 'Position', span: 6 }));
+  check('builtin: older IDs map to the current one', clean.panels?.[1].widgetId === 'built-in-hud');
+  check('builtin: not allowed as a whole widget', sanitizeWidgetDefinition({ id: 't', name: 'T', category: 'telemetry', displayType: 'builtin' as any, widgetId: 'built-in-gps-card' }).displayType === 'stat-card');
+  check('builtin: a custom widget cannot be embedded as one', builtinPanelId('custom-1') === undefined && builtinPanelId(42) === undefined);
+  check('builtin: reads no bound values and requests no streams itself', pm.panelBindings(pm.cardPanels(clean)[0]).length === 0 && pm.requiredMessageIds(clean).length === 0);
+  check('builtin: cardPanels passes the widget ID through', pm.cardPanels(clean)[0].widgetId === 'built-in-gps-card');
+  check('builtin: widgets with vehicle controls say so', ['built-in-glareshield', 'built-in-all-modes', 'built-in-set-speed', 'built-in-waypoints', 'built-in-map', 'built-in-parameters', 'built-in-ntrip'].every((id) => Boolean(BUILTIN_PANELS[id].controls)));
 }
 
 console.log(failures.length ? `\n${failures.length} widget check(s) FAILED` : '\nAll widget checks PASSED');

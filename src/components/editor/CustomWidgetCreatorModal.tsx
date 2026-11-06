@@ -15,6 +15,7 @@ import {
 } from '../../types/widget';
 import { Download, Plus, Save } from 'lucide-react';
 import { CompositePanelList, PANEL_TYPE_OPTIONS, SPAN_OPTIONS, panelValueCount } from './CompositePanelList';
+import { BUILTIN_PANELS } from '../../lib/builtinWidgets';
 import { MAX_COMPOSITE_BINDINGS, MAX_PANELS } from '../../lib/widgetValidation';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { BindingEditor, NumberField, SELECT_CLASS } from './BindingEditor';
@@ -235,6 +236,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   const [panelSpan, setPanelSpan] = useState(12);
   const [panelDescription, setPanelDescription] = useState('');
   const [panelColor, setPanelColor] = useState<WidgetPanelDefinition['colorScheme']>(undefined);
+  const [builtinId, setBuiltinId] = useState('built-in-gps-card');
   const toSingleConfirm = useConfirmStep();
 
   // Telemetry bindings and display options
@@ -328,6 +330,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     setPanelSpan(p.span ?? 12);
     setPanelDescription(p.description ?? '');
     setPanelColor(p.colorScheme);
+    setBuiltinId(p.widgetId ?? 'built-in-gps-card');
   };
 
   useEffect(() => {
@@ -437,6 +440,13 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
 
   /** The selected panel as the form currently has it. */
   const currentPanel = (): WidgetPanelDefinition => {
+    if (displayType === 'builtin') {
+      // A built-in widget has no settings of its own: just which one, its title and width.
+      const panel: WidgetPanelDefinition = { displayType, widgetId: builtinId };
+      if (panelTitle.trim()) panel.title = panelTitle.trim();
+      if (panelSpan !== 12) panel.span = panelSpan;
+      return panel;
+    }
     const { id: _id, name: _name, category: _category, description: _description, colorScheme: _color, ...settings } = buildSingle();
     const panel: WidgetPanelDefinition = { ...(settings as Omit<WidgetPanelDefinition, 'displayType'>), displayType };
     if (panelTitle.trim()) panel.title = panelTitle.trim();
@@ -620,12 +630,18 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                 }}
                 className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
               >
-                {!isComposite && PANEL_TYPE_OPTIONS.map((o) => (
+                {!isComposite && PANEL_TYPE_OPTIONS.filter((o) => o.value !== 'builtin').map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
                 ))}
-                {isComposite && <option value="single">Single widget (keep the selected panel)</option>}
+                {isComposite && (
+                  <option value="single" disabled={displayType === 'builtin'}>
+                    {displayType === 'builtin'
+                      ? 'Single widget (select a panel that is not built-in)'
+                      : 'Single widget (keep the selected panel)'}
+                  </option>
+                )}
                 <option value="composite">Composite (several panels in one card)</option>
               </select>
               {toSingleConfirm.armed && (
@@ -725,6 +741,19 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                     ))}
                   </select>
                 </div>
+                {displayType === 'builtin' ? (
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-zinc-400">Built-in Widget</label>
+                    <select value={builtinId} onChange={(e) => setBuiltinId(e.target.value)} className={SELECT_CLASS} aria-label="Built-in widget">
+                      {Object.entries(BUILTIN_PANELS).map(([id, info]) => (
+                        <option key={id} value={id}>
+                          {info.name}
+                          {info.large ? ' (large: best full width)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
                 <div className="space-y-1">
                   <label className="text-[11px] font-medium text-zinc-400">Accent Color</label>
                   <select
@@ -740,6 +769,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                     <option value="red">Crimson Red</option>
                   </select>
                 </div>
+                )}
                 {(displayType === 'stat-card' || displayType === 'text-display' || displayType === 'compass-rose') && (
                   <div className="space-y-1 sm:col-span-2">
                     <label className="text-[11px] font-medium text-zinc-400">
@@ -755,7 +785,13 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                   </div>
                 )}
               </div>
-              <p className="text-[10px] text-zinc-500">The settings below are for this panel.</p>
+              <p className="text-[10px] text-zinc-500">
+                {displayType === 'builtin'
+                  ? `The ${BUILTIN_PANELS[builtinId]?.name ?? 'built-in'} widget shows its own title and works as it does on the dashboard.${
+                      BUILTIN_PANELS[builtinId]?.controls ? ` It can send ${BUILTIN_PANELS[builtinId]?.controls}.` : ''
+                    }`
+                  : 'The settings below are for this panel.'}
+              </p>
             </Section>
           </>
         )}

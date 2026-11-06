@@ -497,6 +497,7 @@ A composite widget puts several panels in one card: a gauge, a toggle and a char
 |---|---|
 | `title` | Small heading above the panel. Control panels also use it to name what they send. |
 | `span` | Width in twelfths of the card: `12` (the default) is a full row, `6` is half and `4` is a third. Panels fill rows left to right. |
+| `widgetId` | `builtin` panels only: which [built-in widget](#built-in-widgets-as-panels) to show. |
 
 The card's `name`, `category`, `colorScheme` and `staleAfterSec` apply to every panel that doesn't set its own.
 
@@ -518,6 +519,42 @@ The card's `name`, `category`, `colorScheme` and `staleAfterSec` apply to every 
 }
 ```
 
+### Built-in widgets as panels
+
+A panel can also hold one of the dashboard's built-in widgets: set `displayType` to `builtin` and name it in `widgetId`. It works exactly as on the dashboard, with its own title row and badges (the panel's `title` names it in the creator's list only). Its own frame is dropped, because the panel draws one.
+
+```json
+{
+  "id": "custom-nav-station",
+  "name": "Nav Station",
+  "category": "telemetry",
+  "displayType": "composite",
+  "panels": [
+    { "displayType": "builtin", "widgetId": "built-in-gps-card", "span": 6 },
+    { "displayType": "builtin", "widgetId": "built-in-battery-card", "span": 6 },
+    { "displayType": "builtin", "widgetId": "built-in-map" }
+  ]
+}
+```
+
+| `widgetId` | Widget | Notes |
+|---|---|---|
+| `built-in-gps-card` | GNSS / GPS | |
+| `built-in-battery-card` | Battery & Power | |
+| `built-in-vfr-hud` | VFR Flight Metrics | |
+| `built-in-hud` | Heads-Up Display | At least 300 px tall. A second HUD opens a second camera stream. |
+| `built-in-charts` | Telemetry Charts | At least 300 px tall |
+| `built-in-statustext` | STATUSTEXT Console | At least 280 px tall |
+| `built-in-glareshield` | Flight Controls | Controls: arm / disarm, flight modes |
+| `built-in-all-modes` | All Flight Modes | Controls: flight modes |
+| `built-in-set-speed` | Set Speed Controller | Controls: speed |
+| `built-in-waypoints` | Waypoint Navigation | Controls: waypoint changes, mission restart |
+| `built-in-map` | Navigation Map | Large. Controls: waypoint changes, mission restart. Uses its full-width layout when the panel is at least 900 px wide. |
+| `built-in-parameters` | Parameter Manager | Large, at least 480 px tall. Controls: parameter writes |
+| `built-in-ntrip` | RTK / NTRIP Injector | Large. Controls: RTCM injection |
+
+Built-in controls keep their own confirmations, exactly as when you place the widget yourself; the import preview lists which panels have them. A `builtin` panel with an unknown `widgetId` is dropped on import, and a custom widget can't be embedded this way.
+
 How a composite card behaves:
 
 - **Alerts.** Each panel's border turns amber or red with its own thresholds. The card's border and badge show the worst panel.
@@ -528,14 +565,14 @@ How a composite card behaves:
 
 ### Building a composite in the creator
 
-1. In the creator, set **Display UI Type** to **Composite (several panels in one card)**. Whatever you had set up becomes panel 1.
+1. In the creator, set **Display UI Type** to **Composite (several panels in one card)**. Whatever you had set up becomes panel 1. For a built-in widget, set the panel type to **Built-in Widget** and pick one.
 2. **Add panel** adds another, up to 8. Click a panel in the list to edit it: the settings below the list then apply to that panel (its type, title, width, accent colour and everything else).
 3. Set each panel's width in the list, and reorder panels with the arrows. The preview shows the card as laid out.
 4. **Save & Place** adds the card full width. **Export Widget JSON** saves the whole composite as one file.
 
 The card's name, description and accent colour are at the top, as for any widget. A panel left on **Same as the card** uses the card's colour. The list counts the values the card reads; past 32, the card can't be saved until some are removed.
 
-To turn a composite back into a single widget, choose **Single widget** in **Display UI Type**. The selected panel is kept, and the creator asks before dropping any others.
+To turn a composite back into a single widget, choose **Single widget** in **Display UI Type**. The selected panel is kept, and the creator asks before dropping any others. This isn't offered while a built-in panel is selected: place a built-in widget from **Add Widget** instead.
 
 ---
 
@@ -559,6 +596,7 @@ These rules apply to everything imported, and to everything saved from the creat
 | `panels` | At most 8, each cleaned by these same rules. A panel can't be `composite`. A composite reads at most 32 values in all; extra values are trimmed from the last panels first. |
 | `action` | Needs a numeric `commandId`, otherwise it is dropped. `params` always becomes seven numbers; missing or invalid ones are 0. |
 | `span` | 1–12 |
+| `widgetId` | Must name a built-in widget, otherwise the panel is dropped. |
 | `multiBarConfig.group` | Must be a known group, otherwise it becomes `rc-8`. |
 | `bindings` | At most 16. The display type then uses as many as it supports (see [Display types](#display-types)). |
 | `decimals` | 0–6 |
