@@ -295,6 +295,12 @@ interface TelemetryState {
   missionWaypoints: MissionWaypoint[];
   currentWaypointSeq: number;
   lastReachedWaypointSeq: number;
+  /** When the last MISSION_ITEM_REACHED arrived (ms epoch), so reaching the same waypoint again is still an event. */
+  lastReachedAt: number;
+  /** True once the autopilot has sent any MISSION_ITEM_REACHED (it reports arrivals itself). */
+  missionItemReachedSeen: boolean;
+  /** The last waypoint change requested from this GCS (Next / Go / Restart), so it is not mistaken for an arrival. */
+  manualWaypointJump: { seq: number; time: number } | null;
   fencePoints: FencePoint[];
   rallyPoints: RallyPoint[];
   flightTrace: [number, number][];
@@ -384,6 +390,8 @@ const HANDLED_MESSAGE_IDS = new Set<number>([
   MAVLINK_MSG_ID.MISSION_ITEM,
   MAVLINK_MSG_ID.MISSION_ITEM_INT,
   MAVLINK_MSG_ID.MISSION_CURRENT,
+  // Without this the REACHED case below never ran: arrivals were only inferred from MISSION_CURRENT.
+  MAVLINK_MSG_ID.MISSION_ITEM_REACHED,
   MAVLINK_MSG_ID.COMMAND_ACK,
   MAVLINK_MSG_ID.RADIO_STATUS,
   MAVLINK_MSG_ID.HOME_POSITION,
@@ -770,6 +778,9 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   missionWaypoints: initialNav.missionWaypoints ?? [],
   currentWaypointSeq: 0,
   lastReachedWaypointSeq: 0,
+  lastReachedAt: 0,
+  missionItemReachedSeen: false,
+  manualWaypointJump: null,
   fencePoints: initialNav.fencePoints ?? [],
   rallyPoints: initialNav.rallyPoints ?? [],
   flightTrace: [],
@@ -1445,6 +1456,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         case MAVLINK_MSG_ID.MISSION_ITEM_REACHED: {
           return {
             lastReachedWaypointSeq: data.seq,
+            lastReachedAt: now,
+            missionItemReachedSeen: true,
           };
         }
 
@@ -1841,6 +1854,7 @@ export async function setMissionCurrentWaypoint(seq: number): Promise<boolean> {
 
   // Optimistically set current waypoint in store for responsive UI feedback
   useTelemetryStore.setState((s) => ({
+    manualWaypointJump: { seq, time: Date.now() },
     currentWaypointSeq: seq,
     missionWaypoints: s.missionWaypoints.map((w) => ({
       ...w,
