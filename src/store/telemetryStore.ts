@@ -359,6 +359,12 @@ export function appendTracePoint(trace: [number, number][], lat: number, lon: nu
     : [...trace, [lat, lon]];
 }
 
+/** Heartbeat gap after which the vehicle counts as re-acquired (rates and home are requested again). */
+export const VEHICLE_REACQUIRE_GAP_MS = 5000;
+export function isVehicleReacquired(lastHeartbeatTime: number, now: number): boolean {
+  return lastHeartbeatTime > 0 && now - lastHeartbeatTime > VEHICLE_REACQUIRE_GAP_MS;
+}
+
 const HANDLED_MESSAGE_IDS = new Set<number>([
   MAVLINK_MSG_ID.HEARTBEAT,
   MAVLINK_MSG_ID.ATTITUDE,
@@ -831,6 +837,14 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         const isArmed = (data.base_mode & 0x80) !== 0;
         const modeName = resolveModeName(data.type, data.custom_mode);
         messageRateManager.setTarget(packet.systemId, packet.componentId);
+
+        // The vehicle is back after a silence (reboot, radio dropout) while our link stayed up. A rebooted
+        // autopilot has forgotten the stream rates we asked for, so ask again, and re-request home.
+        if (isVehicleReacquired(state.heartbeat.lastHeartbeatTime, now) && state.heartbeat.systemId === packet.systemId) {
+          messageRateManager.resetCache();
+          const encoder = mavlinkConnection.getEncoder();
+          mavlinkConnection.send(encoder.createRequestMessage(packet.systemId, packet.componentId, MAVLINK_MSG_ID.HOME_POSITION));
+        }
 
         // Poll for firmware version / version banner if not yet resolved
         if (!state.firmwareVersion) { if (versionPollAttempts < 5) {

@@ -678,5 +678,46 @@ for (const [type, landCmd, opts, label] of [
   check('mission complete: the final mission item is the highest seq', lastMissionSeq([{ seq: 0 }, { seq: 1 }, { seq: 9 }, { seq: 4 }]) === 9 && lastMissionSeq([]) === 0);
 }
 
+// ------------------------------------------------------------------------------------------------
+// Reconnection: MJPEG frame extraction, backoff, vehicle re-acquisition
+// ------------------------------------------------------------------------------------------------
+{
+  const { MjpegFrameExtractor, reconnectDelayMs } = await import('../src/lib/mjpeg.ts');
+  const jpeg = (fill: number, len = 20) => new Uint8Array([0xff, 0xd8, ...Array(len).fill(fill), 0xff, 0xd9]);
+  const header = new TextEncoder().encode('--frame\r\nContent-Type: image/jpeg\r\n\r\n');
+  const join = (...parts: Uint8Array[]) => { const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; } return out; };
+  const stream = join(header, jpeg(1), new TextEncoder().encode('\r\n'), header, jpeg(2), header, jpeg(3));
+  const ex = new MjpegFrameExtractor();
+  const frames: Uint8Array[] = [];
+  for (let i = 0; i < stream.length; i += 7) frames.push(...ex.push(stream.slice(i, i + 7)));
+  check('mjpeg: frames split across arbitrary chunks come out whole and in order', frames.length === 3 && frames.every((f, i) => f[2] === i + 1 && f.length === 24));
+  const nested = join(header, new Uint8Array([0xff, 0xd8, 5, 0xff, 0xd8, 6, 0xff, 0xd9, 7, 0xff, 0xd9]));
+  const nf = new MjpegFrameExtractor().push(nested);
+  check('mjpeg: an embedded thumbnail stays inside its frame', nf.length === 1 && nf[0].length === 11);
+  const small = new MjpegFrameExtractor(64);
+  small.push(new Uint8Array([0xff, 0xd8, ...Array(100).fill(9)]));
+  check('mjpeg: a runaway frame is dropped and the extractor resyncs', small.push(jpeg(4)).length === 1);
+  check('reconnect backoff: 1, 2, 4, 8, then 10 s', [0, 1, 2, 3, 4, 9].map(reconnectDelayMs).join() === '1000,2000,4000,8000,10000,10000');
+
+  const { isVehicleReacquired, VEHICLE_REACQUIRE_GAP_MS } = await import('../src/store/telemetryStore.ts');
+  const tNow = 1_000_000;
+  check('vehicle re-acquired after a heartbeat gap, not on steady heartbeats or the first one',
+    isVehicleReacquired(tNow - VEHICLE_REACQUIRE_GAP_MS - 1, tNow) && !isVehicleReacquired(tNow - 1000, tNow) && !isVehicleReacquired(0, tNow));
+  const { messageRateManager } = await import('../src/mavlink/rateManager.ts');
+  let resets = 0;
+  const origReset = messageRateManager.resetCache.bind(messageRateManager);
+  (messageRateManager as any).resetCache = () => { resets++; };
+  const hbPayload = new Uint8Array(9); hbPayload[4] = 10; hbPayload[5] = 3; // rover, ArduPilot
+  const hbPkt = { version: 2 as const, sequence: 0, systemId: 1, componentId: 1, messageId: MAVLINK_MSG_ID.HEARTBEAT, payload: hbPayload, crc: 0, raw: new Uint8Array() };
+  useTelemetryStore.getState().processPacket(hbPkt);
+  const before = resets;
+  useTelemetryStore.getState().processPacket(hbPkt);
+  const steady = resets - before;
+  useTelemetryStore.setState((s) => ({ heartbeat: { ...s.heartbeat, lastHeartbeatTime: Date.now() - VEHICLE_REACQUIRE_GAP_MS - 2000 } }));
+  useTelemetryStore.getState().processPacket(hbPkt);
+  (messageRateManager as any).resetCache = origReset;
+  check('store: a heartbeat after a gap re-requests stream rates (rebooted autopilots forget them)', steady === 0 && resets - before === 1);
+}
+
 console.log(failures.length ? `\n${failures.length} regression check(s) FAILED` : '\nAll regression checks PASSED');
 process.exit(failures.length ? 1 : 0);
