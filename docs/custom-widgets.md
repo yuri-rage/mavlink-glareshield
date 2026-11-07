@@ -158,6 +158,8 @@ The messages the dashboard itself uses, such as `ATTITUDE`, `VFR_HUD`, `GLOBAL_P
 
 Trim maps to 0. When the parameters haven't been downloaded yet, the scaling assumes 1000 / 1500 / 2000. To show a percentage, multiply by 100.
 
+**PID tuning, one controller at a time.** `PID_TUNING` carries a different controller in each message, so it is bound per axis instead: `PID_TUNING_ROLL`, `PID_TUNING_PITCH`, `PID_TUNING_YAW`, `PID_TUNING_ACCZ`, `PID_TUNING_STEER`, `PID_TUNING_LANDING`, `PID_TUNING_WHEEL_LEFT`, `PID_TUNING_WHEEL_RIGHT` and so on, after MAVLink's `PID_TUNING_AXIS` names. Each one has the fields `desired`, `achieved`, `FF`, `P`, `I`, `D`, `SRate` and `PDmod`, in the units the firmware reports. The vehicle sends an axis only while `GCS_PID_MASK` selects it, and which bit selects which axis depends on the vehicle type. On Rover, for example, the throttle controller arrives as `PID_TUNING_ACCZ`. The built-in **PID Tuning** widget shows the controllers your vehicle has and switches them on and off for you.
+
 ### Units
 
 With `unitKind` set, the value is converted into the units chosen in **Link & Display Settings**:
@@ -609,6 +611,7 @@ A panel can also hold one of the dashboard's built-in widgets: set `displayType`
 | `built-in-vfr-hud` | VFR Flight Metrics | |
 | `built-in-hud` | Heads-Up Display | At least 300 px tall. A second HUD opens a second camera stream. |
 | `built-in-charts` | Telemetry Charts | At least 300 px tall |
+| `built-in-pid-tuning` | PID Tuning | At least 380 px tall. Controls: GCS_PID_MASK (which controllers report) |
 | `built-in-statustext` | STATUSTEXT Console | At least 280 px tall |
 | `built-in-statustext-mini` | Mini STATUSTEXT | Compact; newest at the top or the bottom (header toggle). Grows with the panels beside it. |
 | `built-in-glareshield` | Flight Controls | Controls: arm / disarm, flight modes |

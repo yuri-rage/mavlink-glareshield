@@ -225,6 +225,15 @@ dcase("RPM",
       vehicle.rpm_encode(5400.0, 5420.0),
       {"rpm1": 5400.0, "rpm2": 5420.0})
 
+# --- PID_TUNING ------------------------------------------------------------
+pid = vehicle.pid_tuning_encode(1, 0.5, 0.375, 0.125, 0.25, -0.0625, 0.03125, 2.5, 0.75)
+dcase("PID_TUNING roll with extensions", pid,
+      {"axis": 1, "desired": 0.5, "achieved": 0.375, "FF": 0.125, "P": 0.25, "I": -0.0625, "D": 0.03125,
+       "SRate": 2.5, "PDmod": 0.75})
+dcase("PID_TUNING steering, extensions zero (trimmed on the wire)",
+      vehicle.pid_tuning_encode(5, -1.5, -1.25, 0, 0.5, 0, 0, 0, 0),
+      {"axis": 5, "desired": -1.5, "achieved": -1.25, "P": 0.5, "SRate": 0, "PDmod": 0})
+
 dcase("VIBRATION",
       vehicle.vibration_encode(987654321, 4.5, 5.25, 8.75, 0, 1, 2),
       {"time_usec": 987654321, "vibration_x": 4.5, "vibration_y": 5.25, "vibration_z": 8.75,

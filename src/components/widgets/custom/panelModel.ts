@@ -356,7 +356,9 @@ export function requiredMessageIds(def: CustomWidgetDefinition): number[] {
   const fb = feedbackBinding(def);
   const ids = new Set<number>();
   for (const b of [...panelBindings(def), ...(fb ? [fb] : [])]) {
-    const id = (MAVLINK_MSG_ID as Record<string, number>)[baseMessageName(b.messageName)];
+    const name = baseMessageName(b.messageName);
+    // PID_TUNING_ROLL, PID_TUNING_STEER, …: one axis of PID_TUNING.
+    const id = name.startsWith('PID_TUNING_') ? MAVLINK_MSG_ID.PID_TUNING : (MAVLINK_MSG_ID as Record<string, number>)[name];
     if (id !== undefined) ids.add(id);
   }
   return [...ids];

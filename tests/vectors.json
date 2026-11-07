@@ -578,6 +578,35 @@
    }
   },
   {
+   "name": "PID_TUNING roll with extensions",
+   "msgid": 194,
+   "hex": "fd210000000101c200000000003f0000c03e0000003e0000803e000080bd0000003d01000020400000403fc6cc",
+   "expect": {
+    "axis": 1,
+    "desired": 0.5,
+    "achieved": 0.375,
+    "FF": 0.125,
+    "P": 0.25,
+    "I": -0.0625,
+    "D": 0.03125,
+    "SRate": 2.5,
+    "PDmod": 0.75
+   }
+  },
+  {
+   "name": "PID_TUNING steering, extensions zero (trimmed on the wire)",
+   "msgid": 194,
+   "hex": "fd190000000101c200000000c0bf0000a0bf000000000000003f0000000000000000056105",
+   "expect": {
+    "axis": 5,
+    "desired": -1.5,
+    "achieved": -1.25,
+    "P": 0.5,
+    "SRate": 0,
+    "PDmod": 0
+   }
+  },
+  {
    "name": "VIBRATION",
    "msgid": 241,
    "hex": "fd1d0000000101f10000b168de3a00000000000090400000a84000000c41000000000100000002a56e",

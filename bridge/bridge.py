@@ -49,6 +49,7 @@ NON_VEHICLE_MAV_TYPES = {6, 18, 26, 27, 30, 31, 33, 34}
 # Forget a UDP vehicle endpoint after this long without any packet from it
 UDP_VEHICLE_TIMEOUT_S = 10.0
 MSG_SYS_STATUS = 1
+MSG_PARAM_REQUEST_READ = 20
 MSG_PARAM_REQUEST_LIST = 21
 MSG_PARAM_VALUE = 22
 MSG_PARAM_SET = 23
@@ -80,6 +81,7 @@ MSG_BATTERY_STATUS = 147
 MSG_WIND = 168
 MSG_RANGEFINDER = 173
 MSG_EKF_STATUS_REPORT = 193
+MSG_PID_TUNING = 194
 MSG_RPM = 226
 MSG_GPS_RTCM_DATA = 233
 MSG_VIBRATION = 241
@@ -122,6 +124,7 @@ CRC_EXTRA = {
     MSG_WIND: 1,
     MSG_RANGEFINDER: 83,
     MSG_EKF_STATUS_REPORT: 71,
+    MSG_PID_TUNING: 98,
     MSG_RPM: 207,
     MSG_GPS_RTCM_DATA: 35,
     MSG_VIBRATION: 90,
@@ -240,6 +243,10 @@ class BridgeServer:
         self.relay_present = 0b1111
         self.relay_on = 0
         self.flight_mode = 0  # STABILIZE
+        # GCS_PID_MASK: bits 0-3 select roll, pitch, yaw and accel Z PID_TUNING (Copter's layout).
+        self.gcs_pid_mask = 0
+        # Simulated controller response per PID_TUNING axis: [achieved, velocity, integrator].
+        self.pid_state = {axis: [0.0, 0.0, 0.0] for axis in (1, 2, 3, 4)}
         self.sim_lat = 37.7749
         self.sim_lon = -122.4194
         self.sim_alt = 45.0
@@ -712,6 +719,8 @@ class BridgeServer:
                 param_id = payload[6:22].decode("ascii", errors="ignore").strip("\x00")
                 param_type = payload[22] if len(payload) > 22 else 9
                 print(f"[MOCK] PARAM_SET {param_id} = {param_val}")
+                if param_id == "GCS_PID_MASK":
+                    self.gcs_pid_mask = max(0, int(param_val))
                 id_bytes = param_id.encode("ascii")[:16].ljust(16, b"\x00")
                 val_bytes = (
                     struct.pack("<fHH", param_val, 9, 0)
@@ -719,6 +728,19 @@ class BridgeServer:
                     + struct.pack("<B", param_type or 9)
                 )
                 await self.broadcast(self.encoder.pack(MSG_PARAM_VALUE, val_bytes))
+
+            elif msgid == MSG_PARAM_REQUEST_READ:
+                if len(payload) < 20:
+                    payload = payload.ljust(20, b"\x00")
+                param_id = payload[4:20].decode("ascii", errors="ignore").strip("\x00")
+                if param_id == "GCS_PID_MASK":
+                    id_bytes = param_id.encode("ascii").ljust(16, b"\x00")
+                    val_bytes = (
+                        struct.pack("<fHH", float(self.gcs_pid_mask), 1, 0)
+                        + id_bytes
+                        + struct.pack("<B", 4)
+                    )
+                    await self.broadcast(self.encoder.pack(MSG_PARAM_VALUE, val_bytes))
 
             elif msgid == MSG_PARAM_REQUEST_LIST:
                 print(
@@ -732,6 +754,7 @@ class BridgeServer:
                     ("FLTMODE1", 0.0, 9),
                     ("FLTMODE2", 5.0, 9),
                     ("FLTMODE3", 6.0, 9),
+                    ("GCS_PID_MASK", float(self.gcs_pid_mask), 4),
                 ]
                 for idx, (p_id, p_val, p_type) in enumerate(sample_params):
                     id_bytes = p_id.encode("ascii")[:16].ljust(16, b"\x00")
@@ -1149,6 +1172,23 @@ class BridgeServer:
                         self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
                     )
 
+    def mock_pid_tuning(self, axis: int, elapsed: float) -> bytes:
+        """One PID_TUNING payload: step inputs tracked by a slightly underdamped response."""
+        period = 4.0 + axis  # each axis steps on its own schedule
+        amp = 0.8 if axis < 4 else 1.5
+        desired = amp if (elapsed % period) < period / 2 else -amp * 0.6
+        st = self.pid_state[axis]
+        dt = 0.1
+        err = desired - st[0]
+        st[2] = max(-0.3, min(0.3, st[2] + 0.4 * err * dt))
+        accel = 22.0 * err - 5.5 * st[1] + 3.0 * st[2]
+        st[1] += accel * dt
+        st[0] += st[1] * dt
+        p_term = 0.135 * err
+        d_term = -0.0036 * st[1]
+        ff = 0.05 * desired
+        return struct.pack("<6fBff", desired, st[0], ff, p_term, st[2], d_term, axis, abs(st[1]) * 0.1, 1.0)
+
     async def mock_telemetry_loop(self):
         """Generates realistic ArduPilot telemetry stream"""
         print("[MOCK] Starting mock telemetry generator...")
@@ -1244,6 +1284,15 @@ class BridgeServer:
                     "<I6f", int(elapsed * 1000), roll, pitch, yaw, 0.01, 0.01, 0.05
                 )
                 await self.broadcast(self.encoder.pack(MSG_ATTITUDE, att))
+
+            # 10Hz: PID_TUNING for each axis GCS_PID_MASK selects (bit n -> axis n+1, as on Copter)
+            if step % 2 == 0 and self.gcs_pid_mask:
+                for axis in (1, 2, 3, 4):
+                    if not self.gcs_pid_mask & (1 << (axis - 1)):
+                        continue
+                    await self.broadcast(
+                        self.encoder.pack(MSG_PID_TUNING, self.mock_pid_tuning(axis, elapsed))
+                    )
 
             # 5Hz: VFR_HUD (airspeed, groundspeed, alt, climb, heading, throttle)
             if step % 4 == 0:

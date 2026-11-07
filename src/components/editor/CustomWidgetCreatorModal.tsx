@@ -127,6 +127,11 @@ const COMMON_FIELDS: Record<string, string[]> = {
     'nav_pitch',
   ],
   WIND: ['direction', 'speed', 'speed_z'],
+  // PID_TUNING per controller axis (sent while GCS_PID_MASK selects it); other axes appear once received.
+  PID_TUNING_ROLL: ['desired', 'achieved', 'FF', 'P', 'I', 'D', 'SRate', 'PDmod'],
+  PID_TUNING_PITCH: ['desired', 'achieved', 'FF', 'P', 'I', 'D', 'SRate', 'PDmod'],
+  PID_TUNING_YAW: ['desired', 'achieved', 'FF', 'P', 'I', 'D', 'SRate', 'PDmod'],
+  PID_TUNING_STEER: ['desired', 'achieved', 'FF', 'P', 'I', 'D', 'SRate', 'PDmod'],
   VIBRATION: ['vibration_x', 'vibration_y', 'vibration_z', 'clipping_0', 'clipping_1', 'clipping_2'],
   RELAY_STATUS: ['on', 'present'],
   EKF_STATUS_REPORT: [

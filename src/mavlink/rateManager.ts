@@ -72,6 +72,9 @@ export class MessageRateManager {
     [MAVLINK_MSG_ID.VIBRATION]: 2,
     [MAVLINK_MSG_ID.RELAY_STATUS]: 1,
     [MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4]: 4,
+    // Tuning: fast enough to see a step response (x0.5 / x2 for the low / high profiles). Only sent while
+    // GCS_PID_MASK selects an axis, and then once per selected axis.
+    [MAVLINK_MSG_ID.PID_TUNING]: 10,
   };
 
   public setProfile(profile: BandwidthProfile) {

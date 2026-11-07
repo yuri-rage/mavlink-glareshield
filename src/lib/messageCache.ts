@@ -8,6 +8,8 @@
 import { mavlinkConnection } from '../mavlink/connection';
 import { decodePayload, type MavlinkPacket } from '../mavlink/parser';
 import { MAVLINK_MSG_ID } from '../mavlink/messages';
+import { pidAxisMessageName } from '../mavlink/pidTuning';
+import { pidTuningRecorder } from './pidTuningRecorder';
 
 const MAV_TYPE_GCS = 6;
 const MAV_AUTOPILOT_INVALID = 8;
@@ -105,7 +107,18 @@ export function recordPacket(packet: MavlinkPacket, now = Date.now()): void {
     return;
   }
   if ('rawPayload' in decoded) return; // no decoder for this message
-  latest.set(name, { fields: numericFields(decoded), time: now, systemId: packet.systemId });
+  const fields = numericFields(decoded);
+  if (packet.messageId === MAVLINK_MSG_ID.PID_TUNING) {
+    // One controller axis per message: kept per axis (PID_TUNING_ROLL, PID_TUNING_STEER, …) so a binding never
+    // mixes axes, and recorded in full for the PID tuning chart.
+    lastSeen.delete(name);
+    const axisName = pidAxisMessageName(fields.axis);
+    lastSeen.set(axisName, now);
+    latest.set(axisName, { fields, time: now, systemId: packet.systemId });
+    pidTuningRecorder.record(fields, now);
+    return;
+  }
+  latest.set(name, { fields, time: now, systemId: packet.systemId });
 }
 
 /** Strip the "(scaled)" display suffix used by the RC / servo pseudo-messages. */

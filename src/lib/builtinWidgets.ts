@@ -21,6 +21,7 @@ export const BUILTIN_PANELS: Record<string, BuiltinPanelInfo> = {
   'built-in-waypoints': { name: 'Waypoint Navigation', controls: 'waypoint changes and mission restart' },
   'built-in-hud': { name: 'Heads-Up Display (HUD)', minHeightPx: 300 },
   'built-in-charts': { name: 'Telemetry Charts', minHeightPx: 300 },
+  'built-in-pid-tuning': { name: 'PID Tuning', minHeightPx: 380, controls: 'GCS_PID_MASK writes' },
   'built-in-statustext': { name: 'STATUSTEXT Console', minHeightPx: 280 },
   'built-in-statustext-mini': { name: 'Mini STATUSTEXT' },
   'built-in-map': { name: 'Navigation Map', controls: 'mission waypoint changes and restart', large: true },
