@@ -102,6 +102,7 @@ export class WebUsbSerialTransport implements Transport {
   private intentionalDisconnect = false;
   private connectPromise?: Promise<void>;
   private readLoopPromise?: Promise<void>;
+  private writeQueue: Promise<void> = Promise.resolve();
   /** The comm interface, when claiming it was possible and necessary. */
   private claimedControlInterface?: number;
 
@@ -330,14 +331,26 @@ export class WebUsbSerialTransport implements Transport {
     if (!this.device || !this.port || this.status.kind !== 'connected') {
       throw new Error('WebUsbSerialTransport is not connected.');
     }
-    const result = await this.device.transferOut(this.port.outEndpoint, frame);
-    if (result.status === 'stall') {
-      throw new Error('USB write stalled.');
-    }
+    // WebUSB bulk OUT endpoints do not support simultaneous overlapping
+    // transferOut calls; serialize outbound writes through a promise chain.
+    const transfer = async () => {
+      if (!this.device || !this.port || this.status.kind !== 'connected') {
+        throw new Error('WebUsbSerialTransport is not connected.');
+      }
+      const result = await this.device.transferOut(this.port.outEndpoint, frame);
+      if (result.status === 'stall') {
+        throw new Error('USB write stalled.');
+      }
+    };
+
+    const nextWrite = this.writeQueue.then(transfer, transfer);
+    this.writeQueue = nextWrite.catch(() => {});
+    return nextWrite;
   }
 
   async disconnect(): Promise<void> {
     this.intentionalDisconnect = true;
+    this.writeQueue = Promise.resolve();
     const device = this.device;
     const port = this.port;
 
