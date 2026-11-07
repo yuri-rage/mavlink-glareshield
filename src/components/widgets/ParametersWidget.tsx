@@ -9,13 +9,15 @@ import {
   areParamsDifferent,
 } from '../../mavlink/paramMetadata';
 import { useParamMetaStore } from '../../store/paramMetaStore';
+import { bitmaskSummary, valueLabel } from '../../mavlink/paramBits';
+import { BitmaskEditor, DetailsButton, EnumSelect, ParamDetails } from './params/ParamEditors';
 import { getVehicleCategory } from '../../mavlink/messages';
 import { decodePayload } from '../../mavlink/parser';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
-import { Sliders, RefreshCw, Check, Search, Zap, X, Download, Upload, AlertTriangle, Info, Loader2 } from 'lucide-react';
+import { Sliders, RefreshCw, Check, Search, Zap, X, Download, Upload, AlertTriangle, Info, Loader2, Lock, ChevronDown } from 'lucide-react';
 
 const ROW_HEIGHT = 38;
 const DEFAULT_VIEWPORT_HEIGHT = 440;
@@ -51,6 +53,11 @@ export const ParametersWidget: React.FC = () => {
   const [editingParam, setEditingParam] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [savedSuccess, setSavedSuccess] = useState<string | null>(null);
+  /** Typing a number for a named-value parameter ("Other value…"), instead of the dropdown. */
+  const [editCustom, setEditCustom] = useState(false);
+  /** The value cell being edited, which the bitmask checklist opens beside. */
+  const [editAnchor, setEditAnchor] = useState<HTMLElement | null>(null);
+  const [details, setDetails] = useState<{ key: string; anchor: HTMLElement } | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(DEFAULT_VIEWPORT_HEIGHT);
 
@@ -131,13 +138,21 @@ export const ParametersWidget: React.FC = () => {
     paramManager.fetchParameters();
   };
 
-  const handleStartEdit = (paramId: string, currentVal: number) => {
+  const handleStartEdit = (paramId: string, currentVal: number, anchor?: HTMLElement) => {
+    if (getParamMetadata(paramId)?.readOnly) return;
     setEditingParam(paramId);
     setEditValue(currentVal.toString());
+    setEditCustom(false);
+    setEditAnchor(anchor ?? null);
   };
 
   const handleSaveParam = (paramId: string) => {
     const num = parseFloat(editValue);
+    // The vehicle would refuse it anyway; don't send a write for a read-only parameter.
+    if (getParamMetadata(paramId)?.readOnly) {
+      setEditingParam(null);
+      return;
+    }
     if (!isNaN(num)) {
       const hb = useTelemetryStore.getState().heartbeat;
       const p = parameters[paramId];
@@ -493,30 +508,39 @@ export const ParametersWidget: React.FC = () => {
                   const isSaved = savedSuccess === key;
                   const defVal = item.defaultValue !== undefined ? item.defaultValue : item.value;
                   const isAtDefault = item.defaultValue === undefined || Math.abs(item.defaultValue - item.value) < 1e-6;
-                  const enumLabel = meta?.values?.[item.value];
+                  const enumLabel = valueLabel(meta?.values, item.value);
+                  const bitsLabel = meta?.bitmask ? bitmaskSummary(item.value, meta.bitmask) : undefined;
+                  const readOnly = Boolean(meta?.readOnly);
+                  // Which editor: a checklist for bitmasks, a dropdown for named values, otherwise a number.
+                  const editor: 'bitmask' | 'enum' | 'number' = editCustom
+                    ? 'number'
+                    : meta?.bitmask
+                      ? 'bitmask'
+                      : meta?.values && Object.keys(meta.values).length > 0
+                        ? 'enum'
+                        : 'number';
                   const parsedEditNum = parseFloat(editValue);
                   const outOfRange =
                     isEditing &&
                     !isNaN(parsedEditNum) &&
                     ((meta?.min !== undefined && parsedEditNum < meta.min) ||
                       (meta?.max !== undefined && parsedEditNum > meta.max));
+                  const subtitle = meta?.displayName || meta?.description;
 
                   return (
                     <tr key={key} className="h-[38px] hover:bg-zinc-900/40">
                       <td
                         className="py-1 px-3 max-w-[230px]"
-                        title={
-                          meta
-                            ? `${key}: ${meta.description}${
-                                meta.min !== undefined || meta.max !== undefined
-                                  ? ` [Range: ${meta.min ?? '-∞'} .. ${meta.max ?? '∞'}]`
-                                  : ''
-                              }`
-                            : key
-                        }
+                        title={meta ? `${key}${meta.displayName ? ` · ${meta.displayName}` : ''}${meta.description ? `\n${meta.description}` : ''}` : key}
                       >
                         <div className="flex items-center gap-1.5 truncate">
                           <span className="font-semibold text-zinc-200 truncate">{key}</span>
+                          {meta && (
+                            <DetailsButton
+                              name={key}
+                              onClick={(button) => setDetails((d) => (d?.key === key ? null : { key, anchor: button }))}
+                            />
+                          )}
                           {meta?.rebootRequired && (
                             <span
                               className="text-[9px] px-1 py-0 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 font-sans shrink-0"
@@ -526,19 +550,39 @@ export const ParametersWidget: React.FC = () => {
                             </span>
                           )}
                         </div>
-                        {meta?.description && (
-                          <div className="text-[10px] text-zinc-500 font-sans truncate leading-tight">
-                            {meta.description}
-                          </div>
-                        )}
+                        {subtitle && <div className="text-[10px] text-zinc-500 font-sans truncate leading-tight">{subtitle}</div>}
                       </td>
                       <td className="py-1 px-3 font-mono">
-                        {isEditing ? (
+                        {isEditing && editor === 'enum' ? (
+                          <div className="flex items-center gap-1">
+                            <EnumSelect
+                              name={key}
+                              values={meta!.values!}
+                              editValue={editValue}
+                              onChange={setEditValue}
+                              onSave={() => handleSaveParam(key)}
+                              onCancel={() => setEditingParam(null)}
+                              onCustom={() => setEditCustom(true)}
+                            />
+                            <button
+                              onClick={() => handleSaveParam(key)}
+                              className="h-5 px-1.5 text-[10px] bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded border border-emerald-500/40 font-sans font-semibold"
+                              title="Save parameter"
+                            >
+                              Save
+                            </button>
+                            <button onClick={() => setEditingParam(null)} className="h-5 px-1 text-[10px] text-zinc-400 hover:text-zinc-200" title="Cancel">
+                              ✕
+                            </button>
+                          </div>
+                        ) : isEditing && editor === 'number' ? (
                           <div className="flex flex-col gap-0.5">
                             <div className="flex items-center gap-1">
                               <Input
                                 type="number"
-                                step="any"
+                                step={meta?.increment ?? 'any'}
+                                min={meta?.min}
+                                max={meta?.max}
                                 value={editValue}
                                 onChange={(e) => setEditValue(e.target.value)}
                                 onKeyDown={(e) => {
@@ -551,15 +595,11 @@ export const ParametersWidget: React.FC = () => {
                                   }
                                 }}
                                 className={`h-6 w-24 text-xs font-mono px-1 py-0 bg-black/90 text-sky-300 ${
-                                  outOfRange
-                                    ? 'border-amber-500 focus:ring-amber-500'
-                                    : 'border-sky-500 focus:ring-1 focus:ring-sky-500'
+                                  outOfRange ? 'border-amber-500 focus:ring-amber-500' : 'border-sky-500 focus:ring-1 focus:ring-sky-500'
                                 }`}
                                 autoFocus
                               />
-                              {meta?.units && (
-                                <span className="text-[10px] text-zinc-400 font-sans">{meta.units}</span>
-                              )}
+                              {meta?.units && <span className="text-[10px] text-zinc-400 font-sans">{meta.units}</span>}
                               <button
                                 onClick={() => handleSaveParam(key)}
                                 className="h-5 px-1.5 text-[10px] bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded border border-emerald-500/40 font-sans font-semibold"
@@ -567,37 +607,45 @@ export const ParametersWidget: React.FC = () => {
                               >
                                 Save
                               </button>
-                              <button
-                                onClick={() => setEditingParam(null)}
-                                className="h-5 px-1 text-[10px] text-zinc-400 hover:text-zinc-200"
-                                title="Cancel"
-                              >
+                              <button onClick={() => setEditingParam(null)} className="h-5 px-1 text-[10px] text-zinc-400 hover:text-zinc-200" title="Cancel">
                                 ✕
                               </button>
                             </div>
-                            {(meta?.min !== undefined || meta?.max !== undefined) && (
-                              <span
-                                className={`text-[9px] font-sans ${
-                                  outOfRange ? 'text-amber-400 font-semibold' : 'text-zinc-500'
-                                }`}
-                              >
-                                Range: {meta.min ?? '—'} to {meta.max ?? '—'} {meta.units ?? ''}
+                            {(meta?.min !== undefined || meta?.max !== undefined || valueLabel(meta?.values, parsedEditNum)) && (
+                              <span className={`text-[9px] font-sans ${outOfRange ? 'text-amber-400 font-semibold' : 'text-zinc-500'}`}>
+                                {meta?.min !== undefined || meta?.max !== undefined
+                                  ? `Range: ${meta?.min ?? '—'} to ${meta?.max ?? '—'} ${meta?.units ?? ''}`
+                                  : ''}
+                                {valueLabel(meta?.values, parsedEditNum) ? ` · ${valueLabel(meta?.values, parsedEditNum)}` : ''}
                               </span>
                             )}
                           </div>
-                        ) : (
-                          <span
-                            onClick={() => handleStartEdit(key, item.value)}
-                            className="inline-flex items-center gap-1.5 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 hover:underline px-1 py-0.5 -mx-1 rounded cursor-pointer transition-colors"
-                            title={`Click to edit ${key} (raw: ${item.value})`}
-                          >
+                        ) : readOnly ? (
+                          <span className="inline-flex items-center gap-1.5 text-zinc-300 px-1 py-0.5 -mx-1" title={`${key} is read-only`}>
                             <span>{formatParamValue(item.value)}</span>
-                            {meta?.units && (
-                              <span className="text-[10px] text-zinc-400 font-sans no-underline">{meta.units}</span>
+                            {meta?.units && <span className="text-[10px] text-zinc-500 font-sans">{meta.units}</span>}
+                            {enumLabel && <span className="text-[10px] text-zinc-500 font-sans truncate max-w-[130px]">({enumLabel})</span>}
+                            <Lock className="h-2.5 w-2.5 text-zinc-600" aria-label="read-only" />
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => handleStartEdit(key, item.value, e.currentTarget)}
+                            className={`inline-flex items-center gap-1.5 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 px-1 py-0.5 -mx-1 rounded cursor-pointer transition-colors max-w-full text-left ${
+                              isEditing ? 'bg-sky-500/10 ring-1 ring-sky-500/60' : ''
+                            }`}
+                            title={`Click to edit ${key} (raw: ${item.value})`}
+                            aria-haspopup={meta?.bitmask ? 'dialog' : undefined}
+                          >
+                            <span>{formatParamValue(isEditing && editor === 'bitmask' ? parsedEditNum : item.value)}</span>
+                            {meta?.units && <span className="text-[10px] text-zinc-400 font-sans">{meta.units}</span>}
+                            {enumLabel && !bitsLabel && (
+                              <span className="text-[10px] text-zinc-400 font-sans truncate max-w-[130px]">({enumLabel})</span>
                             )}
-                            {enumLabel && (
-                              <span className="text-[10px] text-zinc-400 font-sans no-underline truncate max-w-[130px]">
-                                ({enumLabel})
+                            {bitsLabel && (
+                              <span className="text-[10px] text-zinc-400 font-sans truncate max-w-[160px] inline-flex items-center gap-0.5">
+                                {isEditing && editor === 'bitmask' ? bitmaskSummary(parsedEditNum, meta!.bitmask!) : bitsLabel}
+                                <ChevronDown className="h-2.5 w-2.5 shrink-0" />
                               </span>
                             )}
                             {isSaved && (
@@ -605,7 +653,22 @@ export const ParametersWidget: React.FC = () => {
                                 <Check className="h-2.5 w-2.5" /> Saved
                               </span>
                             )}
-                          </span>
+                          </button>
+                        )}
+                        {isEditing && editor === 'bitmask' && meta?.bitmask && (
+                          <BitmaskEditor
+                            name={key}
+                            bitmask={meta.bitmask}
+                            value={parsedEditNum}
+                            original={item.value}
+                            anchor={editAnchor}
+                            onChange={(v) => setEditValue(String(v))}
+                            onSave={() => handleSaveParam(key)}
+                            onCancel={() => setEditingParam(null)}
+                          />
+                        )}
+                        {details?.key === key && meta && (
+                          <ParamDetails name={key} meta={meta} anchor={details.anchor} onClose={() => setDetails(null)} source={paramMetaSummary} />
                         )}
                       </td>
                       {hasAnyDefaults && (

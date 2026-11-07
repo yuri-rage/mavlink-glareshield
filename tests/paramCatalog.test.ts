@@ -166,5 +166,22 @@ const cat = parsePdefJson(fixture);
   check('loader: nothing cached and offline → built-in descriptions, said plainly', st().status === 'unavailable' && /built-in/.test(st().summary));
 }
 
+// ------------------------------------------------------------------------------------------------
+// Bitmasks and named values (the editors)
+// ------------------------------------------------------------------------------------------------
+{
+  const { hasBit, withBit, setBits, bitmaskSummary, bitmaskBits, sortedValueOptions, valueLabel } = await import('../src/mavlink/paramBits.ts');
+  check('bits: read and set', hasBit(6, 1) && hasBit(6, 2) && !hasBit(6, 0) && withBit(6, 0, true) === 7 && withBit(6, 2, false) === 2 && withBit(6, 1, true) === 6);
+  check('bits: bit 31 works (no signed 32-bit overflow)', withBit(0, 31, true) === 2147483648 && hasBit(2147483648, 31) && setBits(2147483649).join() === '0,31');
+  check('bits: float values from the vehicle are rounded', hasBit(4.0000001, 2) && setBits(3.0).join() === '0,1');
+  const names = cat.ARMING_CHECK.bitmask!;
+  check('bits: summary names set bits, then counts the rest', bitmaskSummary(6, names) === 'Barometer, Compass' && bitmaskSummary(14, names) === 'Barometer, Compass +1' && bitmaskSummary(0, names) === 'None');
+  check('bits: unnamed set bits are still reported', bitmaskSummary(2 ** 30, { 0: 'A' }) === 'bit 30');
+  check('bits: definition bits in order', bitmaskBits(names).slice(0, 4).join() === '0,1,2,3');
+  const opts = sortedValueOptions(cat.SERIAL1_PROTOCOL.values!);
+  check('values: numeric order, negatives first', opts[0][0] === -1 && opts.every((o, i) => i === 0 || o[0] > opts[i - 1][0]));
+  check('values: a float from the vehicle finds its label', valueLabel(cat.BATT_MONITOR.values, 4.0000001) === cat.BATT_MONITOR.values![4] && valueLabel(cat.BATT_MONITOR.values, 4.5) === undefined);
+}
+
 console.log(failures.length ? `\n${failures.length} FAILED` : '\nAll parameter catalogue checks passed');
 process.exit(failures.length ? 1 : 0);
