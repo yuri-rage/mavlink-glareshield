@@ -1229,7 +1229,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                   onChange={(e) => setRequireConfirm(e.target.checked)}
                   className="rounded border-zinc-700 bg-zinc-900 accent-amber-500"
                 />
-                Require Confirmation
+                {displayType === 'toggle-switch' ? 'Slide to Switch (confirms)' : 'Require Confirmation'}
               </label>
             </div>
 
