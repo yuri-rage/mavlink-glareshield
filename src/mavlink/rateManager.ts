@@ -33,6 +33,8 @@ export class MessageRateManager {
   private profile: BandwidthProfile = 'standard';
   private targetSystem = 1;
   private targetComponent = 1;
+  /** No stream requests go out until a vehicle has sent a heartbeat on this link: nothing would answer them. */
+  private vehicleHeard = false;
   private updateDebounceTimer: any = null;
 
   // Default base frequencies (Hz) for known message types
@@ -73,12 +75,21 @@ export class MessageRateManager {
     return this.profile;
   }
 
+  /** A vehicle heartbeat arrived: aim requests at it, and send them now if this is the first one on the link. */
   public setTarget(systemId: number, componentId: number) {
-    if (this.targetSystem !== systemId || this.targetComponent !== componentId) {
+    const first = !this.vehicleHeard;
+    this.vehicleHeard = true;
+    if (first || this.targetSystem !== systemId || this.targetComponent !== componentId) {
       this.targetSystem = systemId;
       this.targetComponent = componentId;
       this.resetCache();
     }
+  }
+
+  /** A new link (or a dropped one): wait for a vehicle again before requesting streams. */
+  public resetForLink() {
+    this.vehicleHeard = false;
+    this.currentRequestedIntervals.clear();
   }
 
   public resetCache() {
@@ -131,7 +142,7 @@ export class MessageRateManager {
   }
 
   public recalculateAndApply() {
-    if (mavlinkConnection.getStatus() !== 'connected') return;
+    if (mavlinkConnection.getStatus() !== 'connected' || !this.vehicleHeard) return;
 
     const limits = BANDWIDTH_PROFILES[this.profile];
     const encoder = mavlinkConnection.getEncoder();

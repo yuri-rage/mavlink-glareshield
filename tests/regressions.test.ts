@@ -25,6 +25,7 @@ const { missionManager } = await import('../src/mavlink/missionManager.ts');
 const { parseParamFile, serializeParamFile, getParamMetadata, areParamsDifferent } = await import('../src/mavlink/paramMetadata.ts');
 const { normalizeCalloutText, useAudioAlertsStore } = await import('../src/lib/audioAlerts.ts');
 const { computeMapBadgeVisibility } = await import('../src/components/map/mapBadgeVisibility.ts');
+const { messageRateManager } = await import('../src/mavlink/rateManager.ts');
 
 const failures: string[] = [];
 function check(name: string, ok: boolean, detail = '') {
@@ -737,6 +738,72 @@ for (const [type, landCmd, opts, label] of [
   missionCurrent(3);
   const after = useTelemetryStore.getState();
   check('store: a new MISSION_CURRENT still moves the current flag', after.missionWaypoints !== before && after.missionWaypoints.find((w) => w.current)?.seq === 3 && after.currentWaypointSeq === 3);
+}
+
+// ------------------------------------------------------------------------------------------------
+// Bridge up, no vehicle: no background requests, and no console line for each one that goes unanswered
+// ------------------------------------------------------------------------------------------------
+{
+  const origSend = (mavlinkConnection as any).send;
+  const origStatus = mavlinkConnection.getStatus;
+  const origSetTimeout = globalThis.setTimeout;
+  const sent: { id: number; cmd: number }[] = [];
+  (mavlinkConnection as any).send = (d: Uint8Array) => {
+    for (const p of parser.parse(d)) {
+      const pl = new Uint8Array(33); pl.set(p.payload.subarray(0, 33));
+      sent.push({ id: p.messageId, cmd: p.messageId === 76 ? new DataView(pl.buffer).getUint16(28, true) : 0 });
+    }
+    for (const cb of (mavlinkConnection as any).sendListeners ?? []) cb(d);
+    return true;
+  };
+  (mavlinkConnection as any).getStatus = () => 'connected';
+  const SET_MESSAGE_INTERVAL = 511;
+
+  // Stream rates wait for a vehicle heartbeat, then go out.
+  messageRateManager.resetForLink();
+  messageRateManager.registerRequirement('quiet-test', MAVLINK_MSG_ID.ATTITUDE);
+  messageRateManager.recalculateAndApply();
+  check('no vehicle: no SET_MESSAGE_INTERVAL into an empty link', !sent.some((m) => m.cmd === SET_MESSAGE_INTERVAL));
+  messageRateManager.setTarget(1, 1);
+  messageRateManager.recalculateAndApply();
+  check('first vehicle heartbeat: stream rates are requested', sent.some((m) => m.cmd === SET_MESSAGE_INTERVAL));
+  messageRateManager.unregisterRequirement('quiet-test');
+
+  // Capture the 5 s ACK timeouts so they can be fired at once.
+  const timers: (() => void)[] = [];
+  (globalThis as any).setTimeout = (fn: () => void, ms?: number) => {
+    if (ms === 5000) { timers.push(fn); return 0 as any; }
+    return origSetTimeout(fn, ms);
+  };
+  const enc = new MavlinkEncoder(255, 190);
+  const timeoutLines = () => useTelemetryStore.getState().statusMessages.filter((m: any) => m.text.includes('NO ACK (TIMEOUT)')).length;
+  const fireAll = () => { while (timers.length) timers.shift()!(); };
+  const hb = useTelemetryStore.getState().heartbeat;
+
+  useTelemetryStore.setState({ heartbeat: { ...hb, lastHeartbeatTime: 0 }, statusMessages: [] });
+  mavlinkConnection.send(enc.createRequestMessage(1, 1, MAVLINK_MSG_ID.AUTOPILOT_VERSION));
+  mavlinkConnection.send(enc.createSetMessageInterval(1, 1, MAVLINK_MSG_ID.ATTITUDE, 100000));
+  fireAll();
+  check('no vehicle yet: background request timeouts are not logged', timeoutLines() === 0, `${timeoutLines()} lines`);
+
+  const userAck = sendTrackedCommand(enc.createCommandLong(1, 1, 22, [0, 0, 0, 0, 0, 0, 10]), { label: 'Takeoff (10m)' });
+  fireAll();
+  check('no vehicle: a command the person sent still reports its timeout', timeoutLines() === 1 && (await userAck).resultText === 'TIMEOUT');
+
+  useTelemetryStore.setState({ heartbeat: { ...hb, lastHeartbeatTime: Date.now() - 1000 }, statusMessages: [] });
+  mavlinkConnection.send(enc.createRequestMessage(1, 1, MAVLINK_MSG_ID.AUTOPILOT_VERSION));
+  fireAll();
+  check('vehicle present: an unanswered background request is still logged', timeoutLines() === 1);
+
+  useTelemetryStore.setState({ heartbeat: { ...hb, lastHeartbeatTime: Date.now() - 30000 }, statusMessages: [] });
+  mavlinkConnection.send(enc.createRequestMessage(1, 1, MAVLINK_MSG_ID.AUTOPILOT_VERSION));
+  fireAll();
+  check('vehicle gone silent: background request timeouts stop being logged', timeoutLines() === 0);
+
+  (globalThis as any).setTimeout = origSetTimeout;
+  (mavlinkConnection as any).send = origSend;
+  (mavlinkConnection as any).getStatus = origStatus;
+  useTelemetryStore.setState({ heartbeat: hb });
 }
 
 console.log(failures.length ? `\n${failures.length} regression check(s) FAILED` : '\nAll regression checks PASSED');
