@@ -19,6 +19,9 @@ import { baseMessageName } from '../../../lib/messageCache';
 import { MAX_PANELS } from '../../../lib/widgetValidation';
 import { MAVLINK_MSG_ID } from '../../../mavlink/messages';
 import type { ColorScheme } from './palette';
+import type { ParamMeta } from '../../../mavlink/paramMetadata';
+import { sortedValueOptions } from '../../../mavlink/paramBits';
+import type { WidgetParamControl } from '../../../types/widget';
 
 export const TELEMETRY_TYPES: ReadonlySet<WidgetDisplayType> = new Set<WidgetDisplayType>([
   'stat-card',
@@ -400,4 +403,21 @@ export function sliderParams(commandId: number, params: readonly number[], value
   if (commandId === 183 || commandId === 181 || commandId === 178) out[1] = value;
   else out[0] = value;
   return out;
+}
+
+/**
+ * A param-control's settings with the gaps filled from the parameter's metadata. Settings written in the widget
+ * always win; named values become the dropdown only when the widget lists no options of its own.
+ */
+export function effectiveParamControl(control: WidgetParamControl | undefined, meta: ParamMeta | null): WidgetParamControl {
+  const c: WidgetParamControl = { ...(control ?? { paramId: '' }) };
+  if (!meta) return c;
+  if (c.min === undefined && meta.min !== undefined) c.min = meta.min;
+  if (c.max === undefined && meta.max !== undefined) c.max = meta.max;
+  if (c.step === undefined && meta.increment !== undefined) c.step = meta.increment;
+  if (c.unit === undefined && meta.units) c.unit = meta.units;
+  if ((!c.options || c.options.length === 0) && meta.values && !meta.bitmask) {
+    c.options = sortedValueOptions(meta.values).map(([value, label]) => ({ label, value }));
+  }
+  return c;
 }

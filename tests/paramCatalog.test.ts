@@ -183,5 +183,44 @@ const cat = parsePdefJson(fixture);
   check('values: a float from the vehicle finds its label', valueLabel(cat.BATT_MONITOR.values, 4.0000001) === cat.BATT_MONITOR.values![4] && valueLabel(cat.BATT_MONITOR.values, 4.5) === undefined);
 }
 
+// ------------------------------------------------------------------------------------------------
+// Wildcard search and Parameter set patterns
+// ------------------------------------------------------------------------------------------------
+{
+  const { parseParamQuery, matchesParamQuery, expandParamPatterns } = await import('../src/mavlink/paramMatch.ts');
+  const names = ['BATT_MONITOR', 'BATT_CAPACITY', 'BATT2_MONITOR', 'SERIAL1_PROTOCOL', 'SERVO9_FUNCTION', 'CRUISE_SPEED', 'ARMING_CHECK', 'FS_THR_ENABLE', 'FS_GCS_ENABLE'];
+  const find = (q: string) => names.filter((n) => matchesParamQuery(n, cat[n], parseParamQuery(q))).join(',');
+  check('search: empty matches everything', find('') === names.join(','));
+  check('search: a plain word is a substring of name, short name or description', find('batt') === 'BATT_MONITOR,BATT_CAPACITY,BATT2_MONITOR' && find('cruise') === 'CRUISE_SPEED' && find('voltage') === 'BATT_MONITOR,BATT2_MONITOR');
+  check('search: a wildcard matches the whole name', find('BATT_*') === 'BATT_MONITOR,BATT_CAPACITY' && find('*_ENABLE') === 'FS_THR_ENABLE,FS_GCS_ENABLE' && find('SERVO?_FUNCTION') === 'SERVO9_FUNCTION');
+  check('search: wildcards add up', find('BATT_* FS_*') === 'BATT_MONITOR,BATT_CAPACITY,FS_THR_ENABLE,FS_GCS_ENABLE');
+  check('search: words narrow (all must match)', find('BATT* monitoring') === 'BATT_MONITOR,BATT2_MONITOR' && find('batt capacity') === 'BATT_CAPACITY');
+  check('search: a leading - leaves matches out', find('BATT* -BATT2_*') === 'BATT_MONITOR,BATT_CAPACITY' && find('-batt') === 'SERIAL1_PROTOCOL,SERVO9_FUNCTION,CRUISE_SPEED,ARMING_CHECK,FS_THR_ENABLE,FS_GCS_ENABLE');
+  check('search: quotes keep words together, case ignored', find('"target speed"') === 'CRUISE_SPEED' && find('"speed target"') === '' && find('batt_*') === 'BATT_MONITOR,BATT_CAPACITY', `${find('"target speed"')} / ${find('batt_*')}`);
+  check('search: commas separate terms; regex characters are literal', find('BATT_*,FS_*').split(',').length === 4 && find('BATT.*') === '');
+
+  const set = expandParamPatterns(['CRUISE_SPEED', 'BATT*', '-BATT2_*', 'NOT_A_PARAM', 'BATT_MONITOR'], names);
+  check('set: exact names keep their place, patterns add alphabetically, - excludes, no repeats',
+    set.map((e) => e.name).join(',') === 'CRUISE_SPEED,BATT_CAPACITY,BATT_MONITOR,NOT_A_PARAM', set.map((e) => e.name).join(','));
+  check('set: names the vehicle lacks are listed as missing', set.find((e) => e.name === 'NOT_A_PARAM')?.present === false && set.find((e) => e.name === 'CRUISE_SPEED')?.present === true);
+  check('set: lower-case entries work', expandParamPatterns(['fs_*'], names).map((e) => e.name).join(',') === 'FS_GCS_ENABLE,FS_THR_ENABLE');
+}
+
+// ------------------------------------------------------------------------------------------------
+// param-control fills what the widget doesn't set from the metadata
+// ------------------------------------------------------------------------------------------------
+{
+  const { effectiveParamControl } = await import('../src/components/widgets/custom/panelModel.ts');
+  const filled = effectiveParamControl({ paramId: 'CRUISE_SPEED' }, cat.CRUISE_SPEED);
+  check('param-control: range, step and unit come from the metadata', filled.min === 0 && filled.max === 100 && filled.step === 0.1 && filled.unit === 'm/s');
+  const own = effectiveParamControl({ paramId: 'CRUISE_SPEED', min: 1, unit: 'kn' }, cat.CRUISE_SPEED);
+  check('param-control: what the widget sets wins', own.min === 1 && own.unit === 'kn' && own.max === 100);
+  const opts = effectiveParamControl({ paramId: 'BATT_MONITOR' }, cat.BATT_MONITOR).options!;
+  check('param-control: named values become the dropdown', opts[0].value === 0 && opts[0].label === 'Disabled' && opts.length === Object.keys(cat.BATT_MONITOR.values!).length);
+  check('param-control: the widget\'s own options win', effectiveParamControl({ paramId: 'BATT_MONITOR', options: [{ label: 'Off', value: 0 }] }, cat.BATT_MONITOR).options!.length === 1);
+  check('param-control: a bitmask is not turned into a dropdown', effectiveParamControl({ paramId: 'ARMING_CHECK' }, cat.ARMING_CHECK).options === undefined);
+  check('param-control: no metadata, unchanged', JSON.stringify(effectiveParamControl({ paramId: 'X', step: 2 }, null)) === JSON.stringify({ paramId: 'X', step: 2 }));
+}
+
 console.log(failures.length ? `\n${failures.length} FAILED` : '\nAll parameter catalogue checks passed');
 process.exit(failures.length ? 1 : 0);

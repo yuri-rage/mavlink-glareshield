@@ -7,11 +7,21 @@ import { mavlinkConnection } from '../../../mavlink/connection';
 import { getMavCmdName } from '../../../mavlink/messages';
 import { Button } from '../../ui/button';
 import { AlertTriangle, Check, Play, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
-import { feedbackBinding, feedbackThreshold, followsRelayStatus, relayInstance, sliderParams, toggleParams } from './panelModel';
+import {
+  effectiveParamControl,
+  feedbackBinding,
+  feedbackThreshold,
+  followsRelayStatus,
+  relayInstance,
+  sliderParams,
+  toggleParams,
+} from './panelModel';
 import { getCachedField } from '../../../lib/messageCache';
 import { extractBit } from '../../../lib/widgetValues';
 import { AckChip, useCommandSender, useVehicleTarget, type PanelProps } from './panelKit';
 import { SlideToConfirm } from './SlideToConfirm';
+import { getParamMetadata } from '../../../mavlink/paramMetadata';
+import { useParamMetaStore } from '../../../store/paramMetaStore';
 
 export const ActionButtonPanel: React.FC<PanelProps> = ({ def, scheme }) => {
   const { sysId, compId } = useVehicleTarget();
@@ -217,9 +227,13 @@ type ParamStatus = { type: 'info' | 'success' | 'error'; text: string } | null;
 
 export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
   const { sysId, compId } = useVehicleTarget();
-  const control = def.paramControl;
-  const paramId = control?.paramId?.trim().toUpperCase() || 'WPNAV_SPEED';
+  const paramId = def.paramControl?.paramId?.trim().toUpperCase() || 'WPNAV_SPEED';
   const paramEntry = useTelemetryStore((s) => s.parameters[paramId]);
+  // Anything the widget doesn't set comes from the vehicle's parameter metadata (range, step, units, named
+  // values), so a panel only needs the parameter's name. Re-read when the metadata arrives.
+  useParamMetaStore((s) => s.catalog);
+  const meta = getParamMetadata(paramId);
+  const control = effectiveParamControl(def.paramControl, meta);
 
   const [input, setInput] = useState<string>('');
   const [isConfirming, setIsConfirming] = useState(false);
@@ -314,7 +328,8 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
       <div className="flex items-center justify-between text-xs font-mono">
         <div>
           <span className="text-zinc-400 block text-[10px]">PARAMETER ID</span>
-          <span className="font-bold text-sky-400">{paramId}</span>
+          <span className="font-bold text-sky-400" title={meta?.description}>{paramId}</span>
+          {meta?.displayName && <span className="block text-[10px] text-zinc-500 font-sans">{meta.displayName}</span>}
         </div>
         <div className="text-right flex items-center gap-1.5">
           <div>
@@ -342,6 +357,7 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
             onChange={(e) => onInputChange(e.target.value)}
             className="h-8 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-xs font-mono text-zinc-100"
           >
+            {input !== '' && !control.options.some((opt) => String(opt.value) === input) && <option value={input}>{input} (not in list)</option>}
             {control.options.map((opt) => (
               <option key={opt.value} value={String(opt.value)}>
                 {opt.label} ({opt.value})
