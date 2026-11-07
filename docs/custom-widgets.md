@@ -560,6 +560,7 @@ A panel can also hold one of the dashboard's built-in widgets: set `displayType`
 | `built-in-hud` | Heads-Up Display | At least 300 px tall. A second HUD opens a second camera stream. |
 | `built-in-charts` | Telemetry Charts | At least 300 px tall |
 | `built-in-statustext` | STATUSTEXT Console | At least 280 px tall |
+| `built-in-statustext-mini` | Mini STATUSTEXT | Compact, newest first. Grows with the panels beside it. |
 | `built-in-glareshield` | Flight Controls | Controls: arm / disarm, flight modes |
 | `built-in-all-modes` | All Flight Modes | Controls: flight modes |
 | `built-in-set-speed` | Set Speed Controller | Controls: speed |

@@ -124,6 +124,14 @@ const BUILT_IN_CATALOG = [
     defaultSpan: 6,
   },
   {
+    id: 'built-in-statustext-mini',
+    name: 'Mini STATUSTEXT',
+    category: 'telemetry',
+    description: 'Compact message log, newest first. Control-widget height by default; grows with taller neighbours. Also fits in composite cards.',
+    icon: Terminal,
+    defaultSpan: 4,
+  },
+  {
     id: 'built-in-parameters',
     name: 'ArduPilot Parameter Manager',
     category: 'control',

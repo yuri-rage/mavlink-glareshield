@@ -337,6 +337,7 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   check('builtin: a custom widget cannot be embedded as one', builtinPanelId('custom-1') === undefined && builtinPanelId(42) === undefined);
   check('builtin: reads no bound values and requests no streams itself', pm.panelBindings(pm.cardPanels(clean)[0]).length === 0 && pm.requiredMessageIds(clean).length === 0);
   check('builtin: cardPanels passes the widget ID through', pm.cardPanels(clean)[0].widgetId === 'built-in-gps-card');
+  check('builtin: the mini STATUSTEXT widget can be a panel', builtinPanelId('built-in-statustext-mini') === 'built-in-statustext-mini' && !BUILTIN_PANELS['built-in-statustext-mini'].minHeightPx);
   check('builtin: widgets with vehicle controls say so', ['built-in-glareshield', 'built-in-all-modes', 'built-in-set-speed', 'built-in-waypoints', 'built-in-map', 'built-in-parameters', 'built-in-ntrip'].every((id) => Boolean(BUILTIN_PANELS[id].controls)));
 }
 

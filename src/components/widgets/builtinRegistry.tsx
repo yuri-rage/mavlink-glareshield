@@ -8,6 +8,7 @@ import { BatteryWidget } from './BatteryWidget';
 import { GpsWidget } from './GpsWidget';
 import { VfrHudWidget } from './VfrHudWidget';
 import { StatusTextConsoleWidget } from './StatusTextConsoleWidget';
+import { MiniStatusTextWidget } from './MiniStatusTextWidget';
 import { ParametersWidget } from './ParametersWidget';
 import { TelemetryChartsWidget } from './TelemetryChartsWidget';
 import { NtripWidget } from './NtripWidget';
@@ -39,6 +40,8 @@ export function renderBuiltinWidget(widgetId: string, colSpan: number): React.Re
       return <VfrHudWidget />;
     case 'built-in-statustext':
       return <StatusTextConsoleWidget />;
+    case 'built-in-statustext-mini':
+      return <MiniStatusTextWidget />;
     case 'built-in-parameters':
       return <ParametersWidget />;
     case 'built-in-charts':
