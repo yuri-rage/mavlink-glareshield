@@ -890,5 +890,36 @@ for (const [type, landCmd, opts, label] of [
   check('restore defaults: every app key is removed', removed === 5 && [...data.keys()].join() === 'some_other_app', [...data.keys()].join());
 }
 
+// ------------------------------------------------------------------------------------------------
+// No stream-rate requests for messages the autopilot only sends as events ("No ap_message for mavlink id (253)")
+// ------------------------------------------------------------------------------------------------
+{
+  const origSend = (mavlinkConnection as any).send;
+  const origStatus = mavlinkConnection.getStatus;
+  const requested: number[] = [];
+  (mavlinkConnection as any).send = (d: Uint8Array) => {
+    for (const p of parser.parse(d)) {
+      if (p.messageId !== 76) continue;
+      const pl = new Uint8Array(33); pl.set(p.payload.subarray(0, 33));
+      const dv = new DataView(pl.buffer);
+      if (dv.getUint16(28, true) === 511) requested.push(Math.round(dv.getFloat32(0, true)));
+    }
+    return true;
+  };
+  (mavlinkConnection as any).getStatus = () => 'connected';
+  messageRateManager.resetForLink();
+  messageRateManager.registerRequirement('event-test', MAVLINK_MSG_ID.STATUSTEXT);
+  messageRateManager.registerRequirement('event-test', MAVLINK_MSG_ID.COMMAND_ACK);
+  messageRateManager.registerRequirement('event-test', MAVLINK_MSG_ID.ATTITUDE);
+  messageRateManager.setTarget(1, 1);
+  messageRateManager.recalculateAndApply();
+  check('rates: event-only messages (STATUSTEXT, COMMAND_ACK) are never requested at an interval',
+    requested.includes(MAVLINK_MSG_ID.ATTITUDE) && !requested.includes(MAVLINK_MSG_ID.STATUSTEXT) && !requested.includes(MAVLINK_MSG_ID.COMMAND_ACK),
+    `requested ${requested.join(',')}`);
+  messageRateManager.unregisterRequirement('event-test');
+  (mavlinkConnection as any).send = origSend;
+  (mavlinkConnection as any).getStatus = origStatus;
+}
+
 console.log(failures.length ? `\n${failures.length} regression check(s) FAILED` : '\nAll regression checks PASSED');
 process.exit(failures.length ? 1 : 0);

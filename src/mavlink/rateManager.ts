@@ -3,6 +3,17 @@ import { MAVLINK_MSG_ID } from './messages';
 
 export type BandwidthProfile = 'low' | 'standard' | 'high';
 
+/**
+ * Messages the autopilot sends as events or replies, never at an interval. Asking for a rate gets a refusal
+ * (ArduPilot: "No ap_message for mavlink id (253)"), so a widget that reads one registers without a request.
+ */
+const EVENT_ONLY_MESSAGES = new Set<number>([
+  MAVLINK_MSG_ID.STATUSTEXT,
+  MAVLINK_MSG_ID.COMMAND_ACK,
+  MAVLINK_MSG_ID.MISSION_ACK,
+  MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL,
+]);
+
 export interface RateLimits {
   multiplier: number;
   maxHz: number;
@@ -152,6 +163,7 @@ export class MessageRateManager {
 
     // Request or update required messages
     for (const msgId of activeMsgIds) {
+      if (EVENT_ONLY_MESSAGES.has(msgId)) continue;
       const baseHz = this.defaultBaseHz[msgId] ?? 2;
       const targetHz = Math.min(baseHz * limits.multiplier, limits.maxHz);
       const intervalUs = Math.max(Math.round(1000000 / targetHz), limits.minIntervalUs);
