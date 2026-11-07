@@ -12,6 +12,7 @@ import { getSerialApi, requestSerialDevice } from '../../mavlink/transport';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Modal } from '../ui/modal';
+import { RestoreDefaults } from './RestoreDefaults';
 import { Input } from '../ui/input';
 import {
   WifiOff,
@@ -22,7 +23,6 @@ import {
   Check,
   AlertTriangle,
   Loader2,
-  RotateCcw,
   Settings,
   BatteryCharging,
   Satellite,
@@ -249,19 +249,6 @@ export const Navbar: React.FC = () => {
     e.preventDefault();
     e.stopPropagation();
     disconnect();
-  };
-
-  const handleClearStorage = (e?: React.MouseEvent) => {
-    if (typeof window === 'undefined') return;
-    if (e?.shiftKey || window.confirm('Clear all local storage and reload the page for a clean load?')) {
-      try {
-        localStorage.clear();
-        sessionStorage.clear();
-      } catch (err) {
-        console.error('Failed to clear storage:', err);
-      }
-      window.location.reload();
-    }
   };
 
   const vehicleCategory = getVehicleCategory(heartbeat.type);
@@ -669,20 +656,6 @@ export const Navbar: React.FC = () => {
 
           {/* Right: Telemetry Rate, Theme, Settings Gear & Connection Status */}
           <div className="flex items-center gap-1.5 sm:gap-2 justify-end ml-auto shrink-0">
-            {import.meta.env.DEV && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleClearStorage}
-                className="h-7 px-2 text-xs font-sans text-amber-400/90 border-amber-500/40 hover:bg-amber-950/40 hover:text-amber-300 hover:border-amber-500/70 gap-1.5 rounded-lg flex items-center shadow-sm transition-colors"
-                title="Dev Diagnostic: Clear local storage and reload page for a clean load (Shift+click to skip confirmation)"
-              >
-                <RotateCcw className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-                <span className="hidden lg:inline font-mono text-[11px] font-medium">Clear Storage</span>
-              </Button>
-            )}
-
             {/* Link Rate Stats (Adjacent to Connection Button) */}
             {status === 'connected' && (
               <div
@@ -1330,32 +1303,9 @@ export const Navbar: React.FC = () => {
             </div>
           </div>
 
-          {import.meta.env.DEV && (
-            <div className="pt-2 border-t border-zinc-800">
-              <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-950/20 flex items-center justify-between gap-2">
-                <div>
-                  <div className="font-semibold text-xs text-amber-300 flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-                    Dev Diagnostics
-                  </div>
-                  <div className="text-[11px] text-zinc-400 mt-0.5">
-                    Clear local storage to test initial clean load of the page.
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearStorage}
-                  className="h-7 px-2.5 text-xs font-semibold text-amber-400 border-amber-500/40 hover:bg-amber-950/50 hover:text-amber-300 gap-1.5 shrink-0"
-                  title="Clear local storage and reload (Shift+click to skip confirmation)"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  Clear & Reload
-                </Button>
-              </div>
-            </div>
-          )}
+          <div className="pt-3 border-t border-zinc-800">
+            <RestoreDefaults />
+          </div>
 
           <div className="flex items-center justify-between pt-2">
             {status === 'connected' ? (

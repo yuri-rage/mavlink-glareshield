@@ -1,3 +1,5 @@
+// Must stay first: a pending "Restore defaults" clears saved settings before the stores load them.
+import './lib/restoreDefaultsBoot';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
