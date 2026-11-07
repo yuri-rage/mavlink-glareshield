@@ -37,6 +37,7 @@ export const shortTypeName = (t: PanelDisplayType) => PANEL_TYPE_OPTIONS.find((o
 /** Panel widths offered, in twelfths of the card. */
 export const SPAN_OPTIONS = [
   { value: 12, label: 'Full row' },
+  { value: 9, label: '¾ row' },
   { value: 8, label: '⅔ row' },
   { value: 6, label: '½ row' },
   { value: 4, label: '⅓ row' },

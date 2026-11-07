@@ -498,7 +498,7 @@ A composite widget puts several panels in one card: a gauge, a toggle and a char
 | Panel field | Meaning |
 |---|---|
 | `title` | Small heading above the panel. Control panels also use it to name what they send. |
-| `span` | Width in twelfths of the card: `12` (the default) is a full row, `6` is half and `4` is a third. Panels fill rows left to right. |
+| `span` | Width in twelfths of the card: `12` (the default) is a full row, `9` is three quarters, `6` is half and `4` is a third. Panels fill rows left to right. |
 | `widgetId` | `builtin` panels only: which [built-in widget](#built-in-widgets-as-panels) to show. |
 
 The card's `name`, `category`, `colorScheme` and `staleAfterSec` apply to every panel that doesn't set its own.
