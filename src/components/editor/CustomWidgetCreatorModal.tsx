@@ -30,7 +30,7 @@ interface CustomWidgetCreatorModalProps {
   initialWidget?: CustomWidgetDefinition | null;
 }
 
-export const COMMON_FIELDS: Record<string, string[]> = {
+const COMMON_FIELDS: Record<string, string[]> = {
   SYS_STATUS: ['voltage_battery', 'current_battery', 'battery_remaining', 'load', 'drop_rate_comm', 'errors_comm'],
   ATTITUDE: ['rollDeg', 'pitchDeg', 'yawDeg', 'roll', 'pitch', 'yaw', 'rollSpeed', 'pitchSpeed', 'yawSpeed'],
   VFR_HUD: ['groundspeed', 'airspeed', 'climb', 'throttle', 'alt', 'heading'],

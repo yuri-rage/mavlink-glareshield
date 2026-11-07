@@ -11,7 +11,7 @@ export interface MavlinkPacket {
   raw: Uint8Array;
 }
 
-export function crcAccumulate(byte: number, crc: number): number {
+function crcAccumulate(byte: number, crc: number): number {
   let tmp = (byte ^ (crc & 0xff)) & 0xff;
   tmp = (tmp ^ (tmp << 4)) & 0xff;
   return ((crc >> 8) ^ (tmp << 8) ^ (tmp << 3) ^ (tmp >> 4)) & 0xffff;

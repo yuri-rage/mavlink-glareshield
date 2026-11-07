@@ -113,7 +113,7 @@ export function baseMessageName(messageName: string): string {
   return messageName.replace(/\s*\(scaled\)\s*$/i, '').trim().toUpperCase();
 }
 
-export function getCachedMessage(messageName: string): CachedMessage | undefined {
+function getCachedMessage(messageName: string): CachedMessage | undefined {
   return latest.get(baseMessageName(messageName));
 }
 

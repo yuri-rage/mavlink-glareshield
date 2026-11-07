@@ -227,7 +227,7 @@ export function extractBoundValueFromState(
 export type UnitSystem = 'ms' | 'kmh' | 'mph' | 'kts';
 
 /** Display conversion for a unit kind under the user's unit system. */
-export function unitConversion(kind: WidgetUnitKind | undefined, system: UnitSystem): { factor: number; unit: string } | null {
+function unitConversion(kind: WidgetUnitKind | undefined, system: UnitSystem): { factor: number; unit: string } | null {
   if (!kind || kind === 'none') return null;
   const imperial = system === 'mph' || system === 'kts';
   if (kind === 'speed') {
@@ -271,7 +271,7 @@ export function toDisplayUnits(base: number, binding: WidgetDataBinding, system:
   return conv ? base * conv.factor : base;
 }
 
-export function formatNumber(value: number, decimals: number | undefined): string {
+function formatNumber(value: number, decimals: number | undefined): string {
   if (!Number.isFinite(value)) return '--';
   return value.toFixed(Math.max(0, Math.min(6, decimals ?? 1)));
 }

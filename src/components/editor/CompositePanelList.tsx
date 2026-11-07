@@ -32,7 +32,7 @@ export const PANEL_TYPE_OPTIONS: { value: PanelDisplayType; label: string }[] = 
   { value: 'builtin', label: 'Built-in Widget (GPS, Battery, HUD, Map…)' },
 ];
 
-export const shortTypeName = (t: PanelDisplayType) => PANEL_TYPE_OPTIONS.find((o) => o.value === t)?.label.replace(/\s*\(.*$/, '') ?? t;
+const shortTypeName = (t: PanelDisplayType) => PANEL_TYPE_OPTIONS.find((o) => o.value === t)?.label.replace(/\s*\(.*$/, '') ?? t;
 
 /** Panel widths offered, in twelfths of the card. */
 export const SPAN_OPTIONS = [

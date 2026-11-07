@@ -117,7 +117,7 @@ export function generateNmeaGga(lat: number, lon: number, alt = 0): string {
  * Converts ECEF (Earth-Centered Earth-Fixed) X, Y, Z coordinates in meters to WGS-84
  * latitude, longitude (in degrees), and ellipsoidal height (in meters) via Bowring's method.
  */
-export function ecefToWgs84(x: number, y: number, z: number): { lat: number; lon: number; alt: number } {
+function ecefToWgs84(x: number, y: number, z: number): { lat: number; lon: number; alt: number } {
   const a = 6378137.0; // WGS-84 semi-major axis (meters)
   const f = 1.0 / 298.257223563;
   const b = a * (1.0 - f); // semi-minor axis
@@ -157,7 +157,7 @@ export function ecefToWgs84(x: number, y: number, z: number): { lat: number; lon
 /**
  * Reads an arbitrary signed bit-field from a byte buffer.
  */
-export function getSignedBitsFromBuffer(data: Uint8Array, bitOffset: number, bitLength: number): bigint {
+function getSignedBitsFromBuffer(data: Uint8Array, bitOffset: number, bitLength: number): bigint {
   let val = 0n;
   for (let i = 0; i < bitLength; i++) {
     const totalBit = bitOffset + i;
