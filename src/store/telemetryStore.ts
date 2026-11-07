@@ -211,14 +211,6 @@ export interface RallyPoint {
   alt: number;
 }
 
-export interface TelemetryHistoryPoint {
-  time: number;
-  altitude: number;
-  groundspeed: number;
-  batteryCurrent: number;
-  climb: number;
-}
-
 export interface CommandAckInfo {
   command: number;
   result: number;
@@ -304,7 +296,6 @@ interface TelemetryState {
   fencePoints: FencePoint[];
   rallyPoints: RallyPoint[];
   flightTrace: [number, number][];
-  history: TelemetryHistoryPoint[];
   lastCommandAck?: CommandAckInfo;
   commandFeedback?: CommandFeedbackInfo;
   baseStationPosition: BaseStationPosition | null;
@@ -790,7 +781,6 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   fencePoints: initialNav.fencePoints ?? [],
   rallyPoints: initialNav.rallyPoints ?? [],
   flightTrace: [],
-  history: [],
   baseStationPosition: null,
   hasConnectedInSession: false,
   armedStartedAt: null,
@@ -1235,20 +1225,6 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         }
 
         case MAVLINK_MSG_ID.VFR_HUD: {
-          // Append history sample at ~1Hz
-          const lastPoint = state.history[state.history.length - 1];
-          let updatedHistory = state.history;
-          if (!lastPoint || now - lastPoint.time >= 1000) {
-            const newPoint: TelemetryHistoryPoint = {
-              time: now,
-              altitude: Number(data.alt.toFixed(1)),
-              groundspeed: Number(data.groundspeed.toFixed(1)),
-              batteryCurrent: Number(state.battery.current.toFixed(1)),
-              climb: Number(data.climb.toFixed(1)),
-            };
-            // Keep last 60 samples
-            updatedHistory = [...state.history.slice(-59), newPoint];
-          }
 
           return {
             vfr: {
@@ -1259,7 +1235,6 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
               alt: data.alt,
               climb: data.climb,
             },
-            history: updatedHistory,
           };
         }
 
@@ -1447,12 +1422,14 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
             feedback.targetKey === `action:wp:${data.seq}` &&
             (feedback.status === 'pending' || feedback.status === 'denied' || feedback.status === 'failed');
 
+          // Vehicles repeat MISSION_CURRENT several times a second. Rebuild the mission only when the active item
+          // actually changes: a new array re-renders the map and rewrites the whole mission to localStorage.
+          const currentChanged = state.missionWaypoints.some((w) => w.current !== (w.seq === data.seq));
           return {
             currentWaypointSeq: data.seq,
-            missionWaypoints: state.missionWaypoints.map((w) => ({
-              ...w,
-              current: w.seq === data.seq,
-            })),
+            ...(currentChanged
+              ? { missionWaypoints: state.missionWaypoints.map((w) => ({ ...w, current: w.seq === data.seq })) }
+              : {}),
             ...(isMatchingNavFeedback
               ? {
                   commandFeedback: {

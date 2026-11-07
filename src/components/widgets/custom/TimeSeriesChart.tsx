@@ -23,6 +23,16 @@ export interface TimeSeriesChartProps {
   fixedMin: number;
   fixedMax: number;
   dimmed?: boolean;
+  /** Controlled window (seconds). When set, the chart's own window buttons are not used. */
+  windowSec?: number;
+  /** Controlled pause instant (null = live). When set (even to null), the chart's own pause is not used. */
+  pausedAt?: number | null;
+  /** Show the window / pause buttons (default true). Hide them when a parent controls several charts at once. */
+  controls?: boolean;
+  /** Minimum plot height in px (default 120). */
+  plotMinHeight?: number;
+  /** Label each legend value even for a single series (default: only with several). */
+  legendLabels?: boolean;
 }
 
 export const WINDOW_CHOICES = [10, 30, 60, 300] as const;
@@ -69,12 +79,62 @@ export function computeYRange(
   return [lo, hi];
 }
 
-export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({ series, config, fixedMin, fixedMax, dimmed }) => {
+/** Window choice and pause, shared by a chart and by parents that drive several charts at once. */
+export const ChartControls: React.FC<{
+  windowSec: number;
+  onWindow: (sec: number) => void;
+  paused: boolean;
+  onTogglePause: () => void;
+}> = ({ windowSec, onWindow, paused, onTogglePause }) => (
+  <div className="flex items-center gap-1 shrink-0">
+    <div className="flex rounded-md border border-zinc-800 overflow-hidden">
+      {WINDOW_CHOICES.map((sec) => (
+        <button
+          key={sec}
+          type="button"
+          onClick={() => onWindow(sec)}
+          className={`px-1.5 py-0.5 text-[10px] font-mono ${
+            windowSec === sec ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+          }`}
+          aria-pressed={windowSec === sec}
+        >
+          {windowLabel(sec)}
+        </button>
+      ))}
+    </div>
+    <button
+      type="button"
+      onClick={onTogglePause}
+      className={`p-1 rounded-md border ${
+        paused ? 'border-amber-500/60 text-amber-400' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200'
+      }`}
+      title={paused ? 'Resume' : 'Pause (hover the chart to read values)'}
+      aria-label={paused ? 'Resume chart' : 'Pause chart'}
+    >
+      {paused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+    </button>
+  </div>
+);
+
+export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
+  series,
+  config,
+  fixedMin,
+  fixedMax,
+  dimmed,
+  windowSec: controlledWindow,
+  pausedAt: controlledPause,
+  controls = true,
+  plotMinHeight = 120,
+  legendLabels,
+}) => {
   const colors = useChromeColors();
   const [wrapRef, size] = useElementSize<HTMLDivElement>();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [windowSec, setWindowSec] = useState<number>(config?.windowSec ?? 30);
-  const [pausedAt, setPausedAt] = useState<number | null>(null);
+  const [ownWindow, setWindowSec] = useState<number>(config?.windowSec ?? 30);
+  const [ownPause, setPausedAt] = useState<number | null>(null);
+  const windowSec = controlledWindow ?? ownWindow;
+  const pausedAt = controlledPause !== undefined ? controlledPause : ownPause;
   const hoverRef = useRef<number | null>(null); // canvas x in CSS px
   const [latest, setLatest] = useState<string[]>([]);
   const redrawRef = useRef<() => void>(() => {});
@@ -346,42 +406,22 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({ series, config
           {series.map((s, i) => (
             <span key={s.key + i} className="flex items-baseline gap-1 min-w-0">
               <span className="h-2 w-2 rounded-full shrink-0 self-center" style={{ background: s.color }} />
-              {series.length > 1 && <span className="text-[10px] text-zinc-400 truncate">{s.label}</span>}
+              {(series.length > 1 || legendLabels) && <span className="text-[10px] text-zinc-400 truncate">{s.label}</span>}
               <span className={`${series.length > 1 ? 'text-sm' : 'text-2xl'} font-bold text-zinc-100`}>{latest[i] ?? '--'}</span>
               <span className="text-[10px] text-zinc-400">{s.unit}</span>
             </span>
           ))}
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <div className="flex rounded-md border border-zinc-800 overflow-hidden">
-            {WINDOW_CHOICES.map((sec) => (
-              <button
-                key={sec}
-                type="button"
-                onClick={() => setWindowSec(sec)}
-                className={`px-1.5 py-0.5 text-[10px] font-mono ${
-                  windowSec === sec ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-                aria-pressed={windowSec === sec}
-              >
-                {windowLabel(sec)}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={() => setPausedAt((p) => (p === null ? Date.now() : null))}
-            className={`p-1 rounded-md border ${
-              pausedAt !== null ? 'border-amber-500/60 text-amber-400' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200'
-            }`}
-            title={pausedAt !== null ? 'Resume' : 'Pause (hover the chart to read values)'}
-            aria-label={pausedAt !== null ? 'Resume chart' : 'Pause chart'}
-          >
-            {pausedAt !== null ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
-          </button>
-        </div>
+        {controls && (
+          <ChartControls
+            windowSec={windowSec}
+            onWindow={setWindowSec}
+            paused={pausedAt !== null}
+            onTogglePause={() => setPausedAt((p) => (p === null ? Date.now() : null))}
+          />
+        )}
       </div>
-      <div ref={wrapRef} className="relative flex-1 min-h-[120px]">
+      <div ref={wrapRef} className="relative flex-1" style={{ minHeight: plotMinHeight }}>
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full"

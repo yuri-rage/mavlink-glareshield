@@ -1,16 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { Navbar } from './components/navbar/Navbar';
 import { EditToolbar } from './components/editor/EditToolbar';
 import { DashboardGrid } from './components/dashboard/DashboardGrid';
-import { AddWidgetModal } from './components/editor/AddWidgetModal';
-import { CustomWidgetCreatorModal } from './components/editor/CustomWidgetCreatorModal';
-import { ProfileManagerModal } from './components/editor/ProfileManagerModal';
 import { useConnectionStore } from './store/connectionStore';
 import { CustomWidgetDefinition } from './types/widget';
 import { useAudioAlertListener } from './lib/audioAlerts';
 
+// Editor modals load when first opened.
+const AddWidgetModal = lazy(() => import('./components/editor/AddWidgetModal').then((m) => ({ default: m.AddWidgetModal })));
+const CustomWidgetCreatorModal = lazy(() =>
+  import('./components/editor/CustomWidgetCreatorModal').then((m) => ({ default: m.CustomWidgetCreatorModal }))
+);
+const ProfileManagerModal = lazy(() => import('./components/editor/ProfileManagerModal').then((m) => ({ default: m.ProfileManagerModal })));
+
 export const App: React.FC = () => {
-  const { connect } = useConnectionStore();
+  // Only the action: subscribing to the whole store would re-render the entire dashboard on every 1 s stats tick.
+  const connect = useConnectionStore((s) => s.connect);
 
   // Global audio alerts listener active across all tabs
   useAudioAlertListener();
@@ -46,34 +51,37 @@ export const App: React.FC = () => {
         />
       </main>
 
-      {/* Modals */}
-      <AddWidgetModal
-        isOpen={isAddWidgetOpen}
-        onClose={() => setIsAddWidgetOpen(false)}
-        onOpenWidgetCreator={() => {
-          setEditingCustomWidget(null);
-          setIsWidgetCreatorOpen(true);
-        }}
-        onEditCustomWidget={(cw) => {
-          setIsAddWidgetOpen(false);
-          setEditingCustomWidget(cw);
-          setIsWidgetCreatorOpen(true);
-        }}
-      />
+      {/* Modals: mounted only while open, so their code loads on first use */}
+      <Suspense fallback={null}>
+        {isAddWidgetOpen && (
+          <AddWidgetModal
+            isOpen
+            onClose={() => setIsAddWidgetOpen(false)}
+            onOpenWidgetCreator={() => {
+              setEditingCustomWidget(null);
+              setIsWidgetCreatorOpen(true);
+            }}
+            onEditCustomWidget={(cw) => {
+              setIsAddWidgetOpen(false);
+              setEditingCustomWidget(cw);
+              setIsWidgetCreatorOpen(true);
+            }}
+          />
+        )}
 
-      <CustomWidgetCreatorModal
-        isOpen={isWidgetCreatorOpen}
-        onClose={() => {
-          setIsWidgetCreatorOpen(false);
-          setEditingCustomWidget(null);
-        }}
-        initialWidget={editingCustomWidget}
-      />
+        {isWidgetCreatorOpen && (
+          <CustomWidgetCreatorModal
+            isOpen
+            onClose={() => {
+              setIsWidgetCreatorOpen(false);
+              setEditingCustomWidget(null);
+            }}
+            initialWidget={editingCustomWidget}
+          />
+        )}
 
-      <ProfileManagerModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-      />
+        {isProfileModalOpen && <ProfileManagerModal isOpen onClose={() => setIsProfileModalOpen(false)} />}
+      </Suspense>
     </div>
   );
 };
