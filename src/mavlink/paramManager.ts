@@ -26,6 +26,8 @@ export class ParamManager {
   private legacyTargetComp = 1;
   private legacyRetries = 0;
   private isCancelled = false;
+  /** Names any widget has asked for one at a time, so they aren't mistaken for a downloaded list. */
+  private singleReads = new Set<string>();
 
   constructor() {
     mavlinkConnection.onPacket((packet: MavlinkPacket) => {
@@ -126,6 +128,24 @@ export class ParamManager {
         this.requestMissingLegacyParams();
       }, 2500);
     }
+  }
+
+  /** Ask the vehicle for one parameter by name (PARAM_REQUEST_READ). Widgets use this, not the encoder directly. */
+  public requestParam(sysId: number, compId: number, name: string) {
+    const id = name.trim().toUpperCase();
+    if (!id) return;
+    this.singleReads.add(id);
+    mavlinkConnection.send(mavlinkConnection.getEncoder().createParamRequestRead(sysId, compId, -1, id));
+  }
+
+  /**
+   * Whether the parameters in the store (`names`) are more than the ones read one at a time: a full download,
+   * or a parameter file loaded into the store. Wildcard patterns need that; single reads only fill exact names.
+   */
+  public hasParamList(names: Iterable<string>): boolean {
+    if (this.status.paramCount > 0) return true;
+    for (const n of names) if (!this.singleReads.has(n.toUpperCase())) return true;
+    return false;
   }
 
   public cancelFetch() {

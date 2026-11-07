@@ -62,13 +62,12 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
       setPendingReads((prev) => (prev.size === 0 ? prev : new Set()));
       return;
     }
-    const enc = mavlinkConnection.getEncoder();
     const sentNow: string[] = [];
     for (const r of rows) {
       if (!r.present && !requested.current.has(r.name)) {
         requested.current.add(r.name);
         sentNow.push(r.name);
-        mavlinkConnection.send(enc.createParamRequestRead(sysId, compId, -1, r.name));
+        paramManager.requestParam(sysId, compId, r.name);
       }
     }
     if (sentNow.length === 0) return;
@@ -136,7 +135,7 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
     const entry = parameters[name];
     // The write needs the parameter's type from the vehicle; ask for it rather than guess.
     if (!entry || entry.type === undefined) {
-      mavlinkConnection.send(mavlinkConnection.getEncoder().createParamRequestRead(sysId, compId, -1, name));
+      paramManager.requestParam(sysId, compId, name);
       setStatus((s) => ({ ...s, [name]: { kind: 'failed', text: 'type unknown; requested from the vehicle, try again' } }));
       stopEdit();
       return;
@@ -170,8 +169,9 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
     return <p className="text-xs text-zinc-500 italic py-2">No parameters chosen. Edit the widget to list some (names or patterns like BATT_*).</p>;
   }
 
-  // Individual PARAM_REQUEST_READ replies fill only the exact names asked for; patterns still need the full list.
-  const notDownloaded = fetchStatus.paramCount === 0 && downloaded.every((n) => requested.current.has(n));
+  // Individual PARAM_REQUEST_READ replies (from this or any other widget) fill only the exact names asked for;
+  // patterns still need the full list.
+  const notDownloaded = !paramManager.hasParamList(downloaded);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 gap-1.5">

@@ -255,5 +255,18 @@ const cat = parsePdefJson(fixture);
   check('import: a param-set panel in a composite keeps its list and confirms', comp.panels?.[0].displayType === 'param-set' && comp.panels?.[0].paramSet?.params[0] === 'BATT_*' && comp.panels?.[0].paramSet?.confirmation === true);
 }
 
+// ------------------------------------------------------------------------------------------------
+// Single reads vs a downloaded list (Parameter set patterns need the list)
+// ------------------------------------------------------------------------------------------------
+{
+  const { paramManager } = await import('../src/mavlink/paramManager.ts');
+  check('param list: nothing loaded is not a list', paramManager.hasParamList([]) === false);
+  // Another widget (param-control, PID Tuning's GCS_PID_MASK) reads one parameter by name.
+  paramManager.requestParam(1, 1, 'gcs_pid_mask');
+  paramManager.requestParam(1, 1, 'WPNAV_SPEED');
+  check('param list: parameters read one at a time by any widget are not a list', paramManager.hasParamList(['GCS_PID_MASK', 'WPNAV_SPEED']) === false);
+  check('param list: anything else in the store (a download or a loaded file) is', paramManager.hasParamList(['GCS_PID_MASK', 'BATT_MONITOR']) === true);
+}
+
 console.log(failures.length ? `\n${failures.length} FAILED` : '\nAll parameter catalogue checks passed');
 process.exit(failures.length ? 1 : 0);
