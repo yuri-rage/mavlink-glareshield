@@ -581,6 +581,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     // Interaction listeners: unlock follow mode when user drags the map
     map.on('dragstart', () => {
       isInteractingRef.current = true;
+      isFlyingToRef.current = false;
       setFollowVehicle(false);
       followVehicleRef.current = false;
     });
@@ -589,6 +590,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     });
     map.on('zoomstart', () => {
       isInteractingRef.current = true;
+      isFlyingToRef.current = false;
     });
     map.on('zoomend', () => {
       isInteractingRef.current = false;
@@ -778,7 +780,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         if (pixelDist > 180 && !isFlyingToRef.current) {
           isFlyingToRef.current = true;
           map.panTo(latLng, { animate: true, duration: 0.4 });
+          const safetyTimer = setTimeout(() => {
+            isFlyingToRef.current = false;
+          }, 500);
           map.once('moveend', () => {
+            clearTimeout(safetyTimer);
             isFlyingToRef.current = false;
           });
         } else if (!isFlyingToRef.current) {
@@ -961,16 +967,12 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     if (distanceM < 2) setActiveFlyToTarget(null);
   }, [activeFlyToTarget, position.lat, position.lon]);
 
-  // Render active Fly-To target marker and dashed vector line
+  // Render active Fly-To target marker (only re-creates when target changes)
   useEffect(() => {
     if (!mapInstanceRef.current) return;
     if (flyToMarkerRef.current) {
       flyToMarkerRef.current.remove();
       flyToMarkerRef.current = null;
-    }
-    if (flyToLineRef.current) {
-      flyToLineRef.current.remove();
-      flyToLineRef.current = null;
     }
 
     if (!activeFlyToTarget) return;
@@ -995,21 +997,41 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       .addTo(mapInstanceRef.current);
     flyToMarkerRef.current = m;
 
-    if (position.lat !== 0 || position.lon !== 0) {
-      const line = L.polyline(
-        [
-          [position.lat, position.lon],
-          [activeFlyToTarget.lat, activeFlyToTarget.lon],
-        ],
-        {
-          color: '#38bdf8',
-          weight: 2.5,
-          dashArray: '6, 6',
-          opacity: 0.9,
-          pane: 'missionLinesPane',
-        }
-      ).addTo(mapInstanceRef.current);
-      flyToLineRef.current = line;
+    return () => {
+      if (flyToMarkerRef.current) {
+        flyToMarkerRef.current.remove();
+        flyToMarkerRef.current = null;
+      }
+    };
+  }, [activeFlyToTarget]);
+
+  // Update dashed vector line connecting vehicle to target (efficient setLatLngs without recreation)
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+
+    if (!activeFlyToTarget || (position.lat === 0 && position.lon === 0)) {
+      if (flyToLineRef.current) {
+        flyToLineRef.current.remove();
+        flyToLineRef.current = null;
+      }
+      return;
+    }
+
+    const latLngs: [number, number][] = [
+      [position.lat, position.lon],
+      [activeFlyToTarget.lat, activeFlyToTarget.lon],
+    ];
+
+    if (flyToLineRef.current) {
+      flyToLineRef.current.setLatLngs(latLngs);
+    } else {
+      flyToLineRef.current = L.polyline(latLngs, {
+        color: '#38bdf8',
+        weight: 2.5,
+        dashArray: '6, 6',
+        opacity: 0.9,
+        pane: 'missionLinesPane',
+      }).addTo(mapInstanceRef.current);
     }
   }, [activeFlyToTarget, position.lat, position.lon]);
 
@@ -1373,7 +1395,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                     animate: true,
                     duration: 0.4,
                   });
+                  const safetyTimer = setTimeout(() => {
+                    isFlyingToRef.current = false;
+                  }, 500);
                   mapInstanceRef.current.once('moveend', () => {
+                    clearTimeout(safetyTimer);
                     isFlyingToRef.current = false;
                   });
                 }
