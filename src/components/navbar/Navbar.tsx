@@ -320,7 +320,7 @@ export const Navbar: React.FC = () => {
             title={`Connected: ${linkKind === 'serial' ? `serial @ ${serialBaud} baud` : url} (click for Link & Page Configuration)`}
           >
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            <span className="hidden sm:inline">Connected</span>
+            <span className="hidden md:inline">Connected</span>
           </Badge>
         );
       case 'connecting':
@@ -332,7 +332,7 @@ export const Navbar: React.FC = () => {
             title="Connecting to MAVLink endpoint (click for Link & Page Configuration)..."
           >
             <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping shrink-0" />
-            <span className="hidden sm:inline">Connecting...</span>
+            <span className="hidden md:inline">Connecting...</span>
           </Badge>
         );
       case 'error':
@@ -344,7 +344,7 @@ export const Navbar: React.FC = () => {
             title="Connection error (click for Link & Page Configuration)"
           >
             <WifiOff className="h-3.5 w-3.5 shrink-0" />
-            <span className="hidden sm:inline">Link Error</span>
+            <span className="hidden md:inline">Link Error</span>
           </Badge>
         );
       default:
@@ -400,7 +400,8 @@ export const Navbar: React.FC = () => {
     <>
       <header className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md">
         {/* Top Row: Brand, Arm/Mode Flyouts, Link Rate, Settings Gear & Connection Pill */}
-        <div className="px-2.5 sm:px-6 py-2 flex items-center justify-between gap-y-2 gap-x-2 sm:gap-x-3 max-w-full">
+        {/* Wraps rather than overlapping if a long mode name or label ever outgrows the row. */}
+        <div className="px-2.5 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-y-2 gap-x-2 sm:gap-x-3 max-w-full">
           {/* Left: Brand & Flight Status */}
           <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
@@ -412,7 +413,7 @@ export const Navbar: React.FC = () => {
                 />
               </div>
               <div>
-                <span className="font-bold text-sm sm:text-base tracking-tight text-zinc-100 hidden sm:inline">
+                <span className="font-bold text-sm sm:text-base tracking-tight text-zinc-100 hidden md:inline">
                   GLARESHIELD
                 </span>
                 <div className="flex items-center gap-1 sm:gap-1.5 leading-none mt-0.5">
@@ -421,12 +422,12 @@ export const Navbar: React.FC = () => {
                       <>
                         {getVehicleIcon()}
                         <div className="flex items-baseline gap-1 sm:gap-1.5 min-w-0">
-                          <span className="text-xs text-sky-300 font-sans font-medium tracking-tight max-w-[78px] sm:max-w-none truncate">
+                          <span className="text-xs text-sky-300 font-sans font-medium tracking-tight hidden min-[480px]:inline truncate">
                             {vehicleCategoryLabel}
                           </span>
                           {firmwareVersion && (
                             <span
-                              className="text-[10px] sm:text-[11px] text-zinc-400 font-mono font-normal tracking-tight hidden sm:inline"
+                              className="text-[10px] sm:text-[11px] text-zinc-400 font-mono font-normal tracking-tight hidden md:inline"
                               title={firmwareRaw || `Firmware: ${firmwareVersion}`}
                             >
                               {firmwareVersion}
@@ -447,7 +448,7 @@ export const Navbar: React.FC = () => {
             </div>
 
             {status === 'connected' && heartbeat.lastHeartbeatTime > 0 && (
-              <div className="h-5 w-px bg-zinc-800 hidden sm:block" />
+              <div className="h-5 w-px bg-zinc-800 hidden md:block" />
             )}
 
             {/* Arm Status Pill (Left of Mode) with Dropdown Flyout */}
@@ -465,6 +466,7 @@ export const Navbar: React.FC = () => {
                     setIsPreArmMenuOpen(false);
                   }}
                   title="Click to Arm / Disarm vehicle"
+                  aria-label={heartbeat.isArmed ? 'Armed: arm / disarm menu' : 'Disarmed: arm / disarm menu'}
                 >
                   {heartbeat.isArmed ? (
                     <>
@@ -474,8 +476,8 @@ export const Navbar: React.FC = () => {
                   ) : (
                     <>
                       <Shield className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                      {/* Phones: the shield alone (armed always shows its word). */}
                       <span className="hidden sm:inline">DISARMED</span>
-                      <span className="sm:hidden">DISARM</span>
                     </>
                   )}
                   <ChevronDown className="h-3.5 w-3.5 opacity-60 ml-0.5 shrink-0" />
@@ -626,7 +628,7 @@ export const Navbar: React.FC = () => {
                   }}
                   title="Click to switch flight mode"
                 >
-                  <span className="whitespace-nowrap">{heartbeat.modeName}</span>
+                  <span className="whitespace-nowrap truncate max-w-[7.5rem] sm:max-w-[10rem]">{heartbeat.modeName}</span>
                   <ChevronDown className="h-3.5 w-3.5 opacity-60 ml-0.5 shrink-0" />
                 </Badge>
 
@@ -686,7 +688,7 @@ export const Navbar: React.FC = () => {
             {/* Link Rate Stats (Adjacent to Connection Button) */}
             {status === 'connected' && (
               <div
-                className="h-7 hidden md:flex items-center gap-1.5 text-xs font-mono font-medium text-zinc-400 border border-zinc-800 rounded-lg px-2.5 bg-zinc-900/60"
+                className="h-7 hidden lg:flex items-center gap-1.5 text-xs font-mono font-medium text-zinc-400 border border-zinc-800 rounded-lg px-2.5 bg-zinc-900/60"
                 title={`Telemetry Link: ${stats.packetsPerSecond} packets/sec, ${(stats.bytesReceived / 1024).toFixed(1)} KB received total`}
               >
                 <Activity className="h-3.5 w-3.5 text-sky-400 shrink-0" />
