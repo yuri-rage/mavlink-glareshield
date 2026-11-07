@@ -3,6 +3,7 @@ import { useTelemetryStore } from '../../store/telemetryStore';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { paramManager, ParamManagerStatus } from '../../mavlink/paramManager';
 import {
+  formatParamValue,
   getParamMetadata,
   parseParamFile,
   serializeParamFile,
@@ -24,14 +25,7 @@ const ROW_HEIGHT = 38;
 const DEFAULT_VIEWPORT_HEIGHT = 440;
 const BUFFER = 10;
 
-export function formatParamValue(val: number): string {
-  if (val === undefined || val === null || isNaN(val)) return '-';
-  if (Number.isInteger(val)) return val.toString();
-  if (Math.abs(val) < 0.0001 && val !== 0) {
-    return Number(val.toPrecision(9)).toString();
-  }
-  return parseFloat(val.toFixed(4)).toString();
-}
+export { formatParamValue };
 
 interface ParamDiffEntry {
   name: string;

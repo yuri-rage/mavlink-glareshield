@@ -433,11 +433,13 @@ export function parseParamFile(content: string): Record<string, number> {
 
 /**
  * Format parameter value for display and serialization.
- * Uses toPrecision(9) which is exact for IEEE-754 32-bit floats without dropping small exponents.
+ * Uses 7 significant digits, which represents the full precision limit of IEEE-754 32-bit floats
+ * (~7.22 decimal digits) without exposing single-precision binary conversion noise (e.g. 0.200000003).
  */
 export function formatParamValue(val: number): string {
+  if (val === undefined || val === null || isNaN(val)) return '-';
   if (Number.isInteger(val)) return String(val);
-  const str = Number(val).toPrecision(9);
+  const str = Number(val).toPrecision(7);
   return String(parseFloat(str));
 }
 

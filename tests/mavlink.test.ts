@@ -897,6 +897,16 @@ if (formatParamValue(150.25) !== '150.25') {
   console.error('formatParamValue(150.25) expected "150.25", got:', formatParamValue(150.25));
   process.exit(1);
 }
+// Verify 32-bit float rounding precision: 0.2 shouldn't display binary conversion noise 0.200000003
+if (formatParamValue(0.20000000298023224) !== '0.2') {
+  console.error('formatParamValue(0.20000000298023224) expected "0.2", got:', formatParamValue(0.20000000298023224));
+  process.exit(1);
+}
+// Verify small calibration values retain their full significant figures without truncation
+if (formatParamValue(0.000123456) !== '0.000123456') {
+  console.error('formatParamValue(0.000123456) expected "0.000123456", got:', formatParamValue(0.000123456));
+  process.exit(1);
+}
 console.log('formatParamValue truncation & formatting verified successfully!');
 
 // 15. Test 4-Way Unit System (m/s / kmh / mph / kts) and Altitude Mode (AGL / MSL)
