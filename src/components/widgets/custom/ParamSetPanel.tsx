@@ -13,10 +13,12 @@ import { bitmaskSummary, valueLabel } from '../../../mavlink/paramBits';
 import { expandParamPatterns, isParamPattern } from '../../../mavlink/paramMatch';
 import { useParamMetaStore } from '../../../store/paramMetaStore';
 import { BitmaskEditor, DetailsButton, EnumSelect, ParamDetails } from '../params/ParamEditors';
-import { useVehicleTarget, type PanelProps } from './panelKit';
+import { usePanelWidth, useVehicleTarget, type PanelProps } from './panelKit';
 
 /** Rows shown at most; a wider pattern asks to be narrowed rather than listing hundreds of parameters. */
 export const MAX_PARAM_SET_ROWS = 150;
+/** Below this width, the Default column collapses underneath the Value cell. */
+const NARROW_DEFAULT_COL_PX = 330;
 /** How long to wait for the vehicle to echo a written value. */
 const ECHO_TIMEOUT_MS = 4000;
 /** How long to wait for a single PARAM_REQUEST_READ reply before showing "not on this vehicle". */
@@ -165,6 +167,8 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
     else send(name, value);
   };
 
+  const { ref: containerRef, width } = usePanelWidth<HTMLDivElement>();
+
   if (entries.length === 0) {
     return <p className="text-xs text-zinc-500 italic py-2">No parameters chosen. Edit the widget to list some (names or patterns like BATT_*).</p>;
   }
@@ -172,9 +176,12 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
   // Individual PARAM_REQUEST_READ replies (from this or any other widget) fill only the exact names asked for;
   // patterns still need the full list.
   const notDownloaded = !paramManager.hasParamList(downloaded);
+  const hasAnyDefaults = shown.some(({ name }) => parameters[name]?.defaultValue !== undefined);
+  const narrow = width !== null && width < NARROW_DEFAULT_COL_PX;
+  const showDefaultCol = hasAnyDefaults && !narrow;
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 gap-1.5">
+    <div ref={containerRef} className="flex-1 flex flex-col min-h-0 gap-1.5">
       {notDownloaded && hasPatterns && (
         <div className="flex items-center justify-between gap-2 rounded-md border border-zinc-800 bg-zinc-900/60 px-2 py-1.5 text-[11px] text-zinc-400">
           <span>Patterns need the vehicle's parameter list.</span>
@@ -192,6 +199,13 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
       {/* Sized by its rows, scrolling past about thirteen of them. */}
       <div className="flex-1 min-h-0">
         <div className="max-h-[420px] overflow-y-auto overflow-x-hidden pr-0.5">
+          {shown.length > 0 && (
+            <div className="sticky top-0 z-10 flex items-center gap-2 bg-zinc-950/95 pb-1 border-b border-zinc-800/80 text-[10px] font-mono uppercase tracking-wider text-zinc-500 backdrop-blur-sm">
+              <span className="min-w-[38%] flex-1 basis-0">Parameter</span>
+              <span className="flex-1 text-right">Value</span>
+              {showDefaultCol && <span className="w-16 shrink-0 text-right">Default</span>}
+            </div>
+          )}
           <ul className="divide-y divide-zinc-900">
             {shown.map(({ name, present }) => {
               const item = parameters[name];
@@ -201,9 +215,15 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
               const editNum = parseFloat(editValue);
               const st = status[name];
               const conf = confirming?.name === name ? confirming : null;
+              const isModified = item?.defaultValue !== undefined && Math.abs(item.value - item.defaultValue) > 1e-6;
+              const defaultLabel = item?.defaultValue !== undefined ? valueLabel(meta?.values, item.defaultValue) : undefined;
+              const defaultTitle =
+                item?.defaultValue !== undefined
+                  ? `Default: ${formatParamValue(item.defaultValue)}${defaultLabel ? ` (${defaultLabel})` : ''}${isEditing ? ' — click to use default' : ''}`
+                  : undefined;
               return (
                 <li key={name} className="py-1 flex items-center gap-2 min-w-0">
-                  <div className="min-w-[40%] flex-1 basis-0" title={meta?.description ? `${name}\n${meta.description}` : name}>
+                  <div className="min-w-[38%] flex-1 basis-0" title={meta?.description ? `${name}\n${meta.description}` : name}>
                     <div className="flex items-center gap-1 min-w-0">
                       <span className="font-mono text-[11px] font-semibold text-zinc-200 truncate">{name}</span>
                       {meta && <DetailsButton name={name} onClick={(b) => setDetails((d) => (d?.name === name ? null : { name, anchor: b }))} />}
@@ -214,7 +234,7 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
                     )}
                   </div>
 
-                  <div className="min-w-0 max-w-[60%] flex flex-col items-end gap-0.5 font-mono text-[11px]">
+                  <div className="min-w-0 flex-1 flex flex-col items-end gap-0.5 font-mono text-[11px]">
                     {!item ? (
                       <span className="text-zinc-600 italic font-sans text-[10px]">
                         {!linked ? 'not loaded' : fetchStatus.isFetching || pendingReads.has(name) ? 'loading…' : present ? '…' : 'not on this vehicle'}
@@ -296,17 +316,34 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
                         {st.kind === 'pending' ? 'writing…' : st.kind === 'saved' ? 'saved' : `not saved: ${st.text}`}
                       </span>
                     )}
-                    {item && item.defaultValue !== undefined && !conf && !isEditing && (
+                    {!showDefaultCol && item && item.defaultValue !== undefined && !conf && (
                       <span
                         className={`text-[9.5px] font-mono leading-none ${
-                          Math.abs(item.value - item.defaultValue) > 1e-6 ? 'text-amber-300' : 'text-zinc-600'
-                        }`}
-                        title={`Default: ${item.defaultValue}`}
+                          isModified ? 'text-amber-300' : 'text-zinc-500'
+                        } ${isEditing ? 'cursor-pointer hover:underline' : ''}`}
+                        onClick={isEditing ? () => setEditValue(String(item.defaultValue)) : undefined}
+                        title={defaultTitle}
                       >
                         def: {formatParamValue(item.defaultValue)}
                       </span>
                     )}
                   </div>
+
+                  {showDefaultCol && (
+                    <div
+                      className={`w-16 shrink-0 text-right font-mono text-[11px] truncate ${
+                        item?.defaultValue === undefined
+                          ? 'text-zinc-600'
+                          : isModified
+                            ? 'text-amber-300 font-medium'
+                            : 'text-zinc-500'
+                      } ${isEditing && item?.defaultValue !== undefined ? 'cursor-pointer hover:underline' : ''}`}
+                      onClick={isEditing && item?.defaultValue !== undefined ? () => setEditValue(String(item.defaultValue)) : undefined}
+                      title={defaultTitle}
+                    >
+                      {item?.defaultValue !== undefined ? formatParamValue(item.defaultValue) : '—'}
+                    </div>
+                  )}
 
                   {isEditing && editor === 'bitmask' && meta?.bitmask && item && !conf && (
                     <BitmaskEditor

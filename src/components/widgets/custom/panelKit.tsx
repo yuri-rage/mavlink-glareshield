@@ -1,6 +1,6 @@
 // Hooks and small pieces shared by the custom widget panels.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTelemetryStore, sendTrackedCommand } from '../../../store/telemetryStore';
 import { readBinding, type AlertState, type BindingReading, type UnitSystem } from '../../../lib/widgetValues';
 import type { CustomWidgetDefinition, WidgetDataBinding } from '../../../types/widget';
@@ -37,6 +37,22 @@ export function useVehicleTarget() {
   const sysId = useTelemetryStore((s) => s.heartbeat.systemId || 1);
   const compId = useTelemetryStore((s) => s.heartbeat.componentId || 1);
   return { sysId, compId };
+}
+
+/** Content width of an element, tracked as it resizes (`null` before first measurement or in non-DOM tests). */
+export function usePanelWidth<T extends HTMLElement>(enabled = true) {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!enabled || !el) return;
+    if (el.clientWidth > 0) setWidth(el.clientWidth);
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [enabled]);
+  return { ref, width };
 }
 
 /** Sends a command and tracks the vehicle's COMMAND_ACK (or timeout) for display under the control. */

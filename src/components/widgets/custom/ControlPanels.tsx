@@ -19,10 +19,11 @@ import {
 } from './panelModel';
 import { getCachedField } from '../../../lib/messageCache';
 import { extractBit } from '../../../lib/widgetValues';
-import { AckChip, useCommandSender, useVehicleTarget, type PanelProps } from './panelKit';
+import { AckChip, useCommandSender, usePanelWidth, useVehicleTarget, type PanelProps } from './panelKit';
 import { SlideToConfirm } from './SlideToConfirm';
-import { getParamMetadata } from '../../../mavlink/paramMetadata';
+import { formatParamValue, getParamMetadata } from '../../../mavlink/paramMetadata';
 import { useParamMetaStore } from '../../../store/paramMetaStore';
+import { DetailsButton, ParamDetails } from '../params/ParamEditors';
 
 export const ActionButtonPanel: React.FC<PanelProps> = ({ def, scheme }) => {
   const { sysId, compId } = useVehicleTarget();
@@ -236,6 +237,7 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
   // values), so a panel only needs the parameter's name. Load the metadata if it hasn't been yet, and re-read
   // when it arrives.
   const ensureMeta = useParamMetaStore((s) => s.ensure);
+  const metaSummary = useParamMetaStore((s) => s.summary);
   useParamMetaStore((s) => s.catalog);
   useEffect(() => {
     ensureMeta(getVehicleCategory(heartbeatType), firmwareVersion);
@@ -247,6 +249,7 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
   const [isConfirming, setIsConfirming] = useState(false);
   const [isConfirmingOutOfBounds, setIsConfirmingOutOfBounds] = useState(false);
   const [status, setStatus] = useState<ParamStatus>(null);
+  const [detailsAnchor, setDetailsAnchor] = useState<HTMLElement | null>(null);
   const pendingWriteRef = useRef<{ value: number; time: number } | null>(null);
 
   const requestParam = () => paramManager.requestParam(sysId, compId, paramId);
@@ -328,32 +331,53 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
     if (isConfirmingOutOfBounds) setIsConfirmingOutOfBounds(false);
   };
 
+  const { ref: containerRef, width } = usePanelWidth<HTMLDivElement>();
+  const narrow = width !== null && width < 280;
+  const defaultFormatted = paramEntry?.defaultValue !== undefined ? formatParamValue(paramEntry.defaultValue) : undefined;
+  const isModifiedFromDefault =
+    paramEntry?.defaultValue !== undefined && Math.abs(paramEntry.value - paramEntry.defaultValue) > 1e-6;
+  const canResetToDefault =
+    defaultFormatted !== undefined && (isModifiedFromDefault || (input !== '' && input !== defaultFormatted));
+
   return (
-    <div className="space-y-2.5 py-1">
-      <div className="flex items-center justify-between text-xs font-mono">
-        <div>
+    <div ref={containerRef} className="space-y-2.5 py-1">
+      <div className="flex items-start justify-between gap-2 text-xs font-mono">
+        <div className="min-w-0 flex-1">
           <span className="text-zinc-400 block text-[10px]">PARAMETER ID</span>
-          <span className="font-bold text-sky-400" title={meta?.description}>{paramId}</span>
-          {meta?.displayName && <span className="block text-[10px] text-zinc-500 font-sans">{meta.displayName}</span>}
+          <div className="flex items-center gap-1 min-w-0">
+            <span className="font-bold text-sky-400 truncate" title={meta?.description}>{paramId}</span>
+            {meta && <DetailsButton name={paramId} onClick={(b) => setDetailsAnchor((cur) => (cur ? null : b))} />}
+          </div>
+          {meta?.displayName && <span className="block text-[10px] text-zinc-500 font-sans truncate">{meta.displayName}</span>}
         </div>
-        <div className="text-right flex items-center gap-1.5">
+        <div className="text-right flex items-center gap-3 shrink-0">
           <div>
             <span className="text-zinc-400 block text-[10px]">LIVE VALUE</span>
             <div className="flex items-baseline justify-end gap-1 font-bold text-zinc-100">
-              <span>{paramEntry !== undefined ? Number(paramEntry.value.toFixed(4)) : 'Not loaded'}</span>
+              <span>{paramEntry !== undefined ? formatParamValue(paramEntry.value) : 'Not loaded'}</span>
               {control?.unit && <span className="text-[10px] text-zinc-400 font-normal">{control.unit}</span>}
-              {paramEntry?.defaultValue !== undefined && (
-                <span
-                  className={`text-[9.5px] font-mono font-normal ml-1 ${
-                    Math.abs(paramEntry.value - paramEntry.defaultValue) > 1e-6 ? 'text-amber-300' : 'text-zinc-500'
-                  }`}
-                  title={`Default: ${paramEntry.defaultValue}`}
-                >
-                  (def: {Number(paramEntry.defaultValue.toFixed(4))})
-                </span>
-              )}
             </div>
+            {narrow && defaultFormatted !== undefined && (
+              <span
+                className={`block text-[10px] font-mono ${isModifiedFromDefault ? 'text-amber-300' : 'text-zinc-500'}`}
+                title={`Default: ${defaultFormatted}${control?.unit ? ` ${control.unit}` : ''}`}
+              >
+                Default: {defaultFormatted}{control?.unit ? ` ${control.unit}` : ''}
+              </span>
+            )}
           </div>
+          {!narrow && defaultFormatted !== undefined && (
+            <div>
+              <span className="text-zinc-400 block text-[10px]">DEFAULT</span>
+              <div
+                className={`flex items-baseline justify-end gap-1 font-bold ${isModifiedFromDefault ? 'text-amber-300' : 'text-zinc-400'}`}
+                title={`Default: ${defaultFormatted}${control?.unit ? ` ${control.unit}` : ''}`}
+              >
+                <span>{defaultFormatted}</span>
+                {control?.unit && <span className="text-[10px] text-zinc-500 font-normal">{control.unit}</span>}
+              </div>
+            </div>
+          )}
           <button
             type="button"
             onClick={requestParam}
@@ -364,6 +388,16 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
           </button>
         </div>
       </div>
+      {detailsAnchor && meta && (
+        <ParamDetails
+          name={paramId}
+          meta={meta}
+          anchor={detailsAnchor}
+          onClose={() => setDetailsAnchor(null)}
+          source={metaSummary}
+          defaultValue={paramEntry?.defaultValue}
+        />
+      )}
 
       {control?.options && control.options.length > 0 ? (
         <div className="flex items-center gap-2">
@@ -383,6 +417,16 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
             <Check className="h-3.5 w-3.5" />
             Set
           </Button>
+          {canResetToDefault && (
+            <button
+              type="button"
+              onClick={() => onInputChange(defaultFormatted!)}
+              className="h-8 px-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-amber-300 text-[10px] font-mono shrink-0"
+              title={`Reset input to default: ${defaultFormatted}`}
+            >
+              Def
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex items-center gap-2">
@@ -400,18 +444,16 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
             <Check className="h-3.5 w-3.5" />
             Apply
           </Button>
-          {paramEntry?.defaultValue !== undefined &&
-            Math.abs(paramEntry.value - paramEntry.defaultValue) > 1e-6 &&
-            input !== String(Number(paramEntry.defaultValue.toFixed(4))) && (
-              <button
-                type="button"
-                onClick={() => onInputChange(String(Number(paramEntry.defaultValue!.toFixed(4))))}
-                className="h-8 px-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-amber-300 text-[10px] font-mono shrink-0"
-                title={`Reset input to default: ${paramEntry.defaultValue}`}
-              >
-                Def
-              </button>
-            )}
+          {canResetToDefault && (
+            <button
+              type="button"
+              onClick={() => onInputChange(defaultFormatted!)}
+              className="h-8 px-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-amber-300 text-[10px] font-mono shrink-0"
+              title={`Reset input to default: ${defaultFormatted}`}
+            >
+              Def
+            </button>
+          )}
         </div>
       )}
 
