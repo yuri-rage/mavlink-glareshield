@@ -926,21 +926,40 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     };
   }, [pendingFlyTo]);
 
-  // A sent target stays on the map until the vehicle gets there or leaves GUIDED.
+  // A sent target is shown only while the vehicle is going there: it is dropped on arrival, when the vehicle
+  // leaves GUIDED or disarms, and if GUIDED never takes hold after the send.
+  const flyToStartRef = useRef<{ wasGuided: boolean; wasArmed: boolean } | null>(null);
   useEffect(() => {
-    if (!activeFlyToTarget) return;
-    if (heartbeat.modeName !== 'GUIDED' && heartbeat.modeName !== 'DISCONNECTED') {
-      // Allow a moment for the mode change that the fly-to itself may have asked for.
-      const t = setTimeout(() => {
-        if (useTelemetryStore.getState().heartbeat.modeName !== 'GUIDED') setActiveFlyToTarget(null);
-      }, 3000);
-      return () => clearTimeout(t);
+    if (!activeFlyToTarget) {
+      flyToStartRef.current = null;
+      return;
     }
-    if (position.lat !== 0 || position.lon !== 0) {
-      const { distanceM } = computeDistanceAndBearing(position.lat, position.lon, activeFlyToTarget.lat, activeFlyToTarget.lon);
-      if (distanceM < 2) setActiveFlyToTarget(null);
-    }
-  }, [activeFlyToTarget, heartbeat.modeName, position.lat, position.lon]);
+    const hb = useTelemetryStore.getState().heartbeat;
+    flyToStartRef.current = { wasGuided: hb.modeName === 'GUIDED', wasArmed: hb.isArmed };
+    // The send may itself have asked for GUIDED; give the mode change a moment, then give up on it.
+    const t = setTimeout(() => {
+      const mode = useTelemetryStore.getState().heartbeat.modeName;
+      if (mode !== 'GUIDED' && mode !== 'DISCONNECTED') setActiveFlyToTarget(null);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [activeFlyToTarget]);
+
+  useEffect(() => {
+    const start = flyToStartRef.current;
+    // A dropped link says nothing about what the vehicle is doing; keep the target until it is heard again.
+    if (!activeFlyToTarget || !start || heartbeat.modeName === 'DISCONNECTED') return;
+    if (heartbeat.modeName === 'GUIDED') start.wasGuided = true;
+    if (heartbeat.isArmed) start.wasArmed = true;
+    const leftGuided = start.wasGuided && heartbeat.modeName !== 'GUIDED';
+    const disarmed = start.wasArmed && !heartbeat.isArmed;
+    if (leftGuided || disarmed) setActiveFlyToTarget(null);
+  }, [activeFlyToTarget, heartbeat.modeName, heartbeat.isArmed]);
+
+  useEffect(() => {
+    if (!activeFlyToTarget || (position.lat === 0 && position.lon === 0)) return;
+    const { distanceM } = computeDistanceAndBearing(position.lat, position.lon, activeFlyToTarget.lat, activeFlyToTarget.lon);
+    if (distanceM < 2) setActiveFlyToTarget(null);
+  }, [activeFlyToTarget, position.lat, position.lon]);
 
   // Render active Fly-To target marker and dashed vector line
   useEffect(() => {
