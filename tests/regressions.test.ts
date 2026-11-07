@@ -719,5 +719,25 @@ for (const [type, landCmd, opts, label] of [
   check('store: a heartbeat after a gap re-requests stream rates (rebooted autopilots forget them)', steady === 0 && resets - before === 1);
 }
 
+// MISSION_CURRENT repeats several times a second: an unchanged item must not rebuild the mission (it re-renders the
+// map and rewrites the whole mission to localStorage).
+{
+  const wps = Array.from({ length: 5 }, (_, i) => ({ seq: i, lat: 1, lon: 1, alt: 10, command: 16, current: i === 2, frame: 3 }));
+  useTelemetryStore.setState({ missionWaypoints: wps as any, currentWaypointSeq: 2 });
+  const missionCurrent = (seq: number) => {
+    const payload = new Uint8Array(18);
+    payload[0] = seq & 0xff;
+    payload[1] = seq >> 8;
+    useTelemetryStore.getState().processPacket({ messageId: MAVLINK_MSG_ID.MISSION_CURRENT, systemId: 1, componentId: 1, sequence: 0, payload } as any);
+  };
+  const before = useTelemetryStore.getState().missionWaypoints;
+  missionCurrent(2);
+  missionCurrent(2);
+  check('store: a repeated MISSION_CURRENT keeps the same mission array', useTelemetryStore.getState().missionWaypoints === before);
+  missionCurrent(3);
+  const after = useTelemetryStore.getState();
+  check('store: a new MISSION_CURRENT still moves the current flag', after.missionWaypoints !== before && after.missionWaypoints.find((w) => w.current)?.seq === 3 && after.currentWaypointSeq === 3);
+}
+
 console.log(failures.length ? `\n${failures.length} regression check(s) FAILED` : '\nAll regression checks PASSED');
 process.exit(failures.length ? 1 : 0);
