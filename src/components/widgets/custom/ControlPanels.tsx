@@ -9,6 +9,7 @@ import { Button } from '../../ui/button';
 import { AlertTriangle, Check, Play, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
 import { sliderParams, toggleParams } from './panelModel';
 import { AckChip, useCommandSender, useVehicleTarget, type PanelProps } from './panelKit';
+import { SlideToConfirm } from './SlideToConfirm';
 
 export const ActionButtonPanel: React.FC<PanelProps> = ({ def, scheme }) => {
   const { sysId, compId } = useVehicleTarget();
@@ -56,14 +57,16 @@ export const TogglePanel: React.FC<PanelProps> = ({ def, feedback, scheme }) => 
   const { sysId, compId } = useVehicleTarget();
   const { ack, send } = useCommandSender();
   const [lastSent, setLastSent] = useState(false);
-  const [isConfirming, setIsConfirming] = useState(false);
-  const [pending, setPending] = useState(false);
+  const linked = useTelemetryStore((s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED');
 
   const threshold = def.stateThreshold ?? 0;
   /** Vehicle-reported switch state when a feedback field is configured, otherwise what was last sent. */
   const feedbackOn = feedback && feedback.base !== null && !feedback.stale ? feedback.base > threshold : null;
   const switchOn = feedbackOn ?? lastSent;
   const hasFeedback = Boolean(def.feedback?.messageName);
+  // With confirmation on, the switch is a slide-to-confirm control (like the arming slider): the slide itself is
+  // the deliberate action, so there is no separate confirm step.
+  const slide = Boolean(def.action?.confirmation);
 
   const execute = (next: boolean) => {
     setLastSent(next);
@@ -73,23 +76,15 @@ export const TogglePanel: React.FC<PanelProps> = ({ def, feedback, scheme }) => 
     send(cmd, `${def.action.label || def.name}: ${next ? 'ON' : 'OFF'}`);
   };
 
-  const onClick = () => {
-    const next = !switchOn;
-    if (def.action?.confirmation) {
-      setPending(next);
-      setIsConfirming(true);
-      return;
-    }
-    execute(next);
-  };
+  const commandName = def.action ? getMavCmdName(def.action.commandId) : '';
 
   return (
     <div className="space-y-2 py-1">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
           <span className="text-xs font-bold text-zinc-200 block">{feedbackOn !== null ? 'Vehicle State' : 'Switch State'}</span>
           <span className="text-[10px] text-zinc-500 font-mono">
-            {switchOn ? 'ENGAGED' : 'DISENGAGED'}
+            <span className={switchOn ? 'text-amber-300 font-bold' : ''}>{switchOn ? 'ENGAGED' : 'DISENGAGED'}</span>
             {feedbackOn !== null
               ? ` · ${def.feedback?.fieldName} ${feedback?.text}`
               : hasFeedback
@@ -97,40 +92,28 @@ export const TogglePanel: React.FC<PanelProps> = ({ def, feedback, scheme }) => 
                 : ' · last sent'}
           </span>
         </div>
-        <button
-          onClick={onClick}
-          className={`p-1 rounded-lg border transition-all ${switchOn ? scheme.toggleActive : 'border-zinc-800 bg-zinc-900 text-zinc-500'}`}
-          aria-pressed={switchOn}
-          aria-label={`${def.name}: ${switchOn ? 'on' : 'off'}`}
-        >
-          {switchOn ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
-        </button>
+        {!slide && (
+          <button
+            onClick={() => execute(!switchOn)}
+            className={`p-1 rounded-lg border transition-all shrink-0 ${switchOn ? scheme.toggleActive : 'border-zinc-800 bg-zinc-900 text-zinc-500'}`}
+            aria-pressed={switchOn}
+            aria-label={`${def.name}: ${switchOn ? 'on' : 'off'}`}
+          >
+            {switchOn ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
+          </button>
+        )}
+        {slide && commandName && <span className="text-[10px] text-zinc-500 font-mono truncate shrink-0">{commandName}</span>}
       </div>
-      {isConfirming && (
-        <div className="p-2 bg-amber-950/40 border border-amber-600/40 rounded space-y-1.5 text-xs">
-          <div className="font-bold text-amber-300 flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">
-              Confirm toggle to {pending ? 'ENGAGED' : 'DISENGAGED'}
-              {def.action ? ` — ${getMavCmdName(def.action.commandId)}` : ''}?
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs h-7"
-              onClick={() => {
-                execute(pending);
-                setIsConfirming(false);
-              }}
-            >
-              Confirm Toggle
-            </Button>
-            <Button size="sm" variant="outline" className="text-xs text-zinc-400 h-7" onClick={() => setIsConfirming(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
+      {slide && (
+        <SlideToConfirm
+          label={!linked ? 'NO LINK — Locked' : switchOn ? 'Slide to DISENGAGE' : 'Slide to ENGAGE'}
+          onConfirm={() => execute(!switchOn)}
+          disabled={!linked}
+          toneClass={
+            switchOn ? 'accent-amber-500 bg-amber-950/40 border-amber-800/60' : 'accent-emerald-500 bg-emerald-950/40 border-emerald-800/60'
+          }
+          ariaLabel={`${def.name}: ${switchOn ? 'on, slide right to turn off' : 'off, slide right to turn on'}`}
+        />
       )}
       <AckChip ack={ack} />
     </div>

@@ -394,7 +394,7 @@ The `action` object, used by `action-button`, `toggle-switch` and `slider-contro
 | `label` | Button text and the name used in status messages. |
 | `commandId` | The `MAV_CMD` number, for example `20` for `MAV_CMD_NAV_RETURN_TO_LAUNCH`. |
 | `params` | Seven numbers, `param1` … `param7`. |
-| `confirmation` | Ask for a second click before sending. Always `true` after an import. |
+| `confirmation` | Ask for a second click before sending (toggles: slide to switch instead). Always `true` after an import. |
 
 ### `action-button`
 
@@ -419,6 +419,8 @@ An on/off switch. What it sends depends on the command:
 | `181` `DO_SET_RELAY` | `param1` = relay number, as written. `param2` = 1 for on, 0 for off. |
 | `183` `DO_SET_SERVO` | `param1` = servo number, as written. `param2` = the ON PWM when on, and the OFF PWM (your `params[2]`) when off. Defaults are 1900 and 1100. |
 | anything else | `param1` = 1 for on, 0 for off. The other params are sent as written. |
+
+With `confirmation` on (always the case after an import), the switch is a **slide-to-confirm** control, like the arming slider: drag the handle from the left end all the way to the right and let go. Anything shorter springs back and sends nothing, so there's no separate confirm step. The slider is locked while there's no vehicle link. With `confirmation` off, it's a plain tap switch.
 
 On its own, the switch can only show what it last sent. Add `feedback` to make it show what the vehicle reports instead. For example, read back the servo output, which is on above `stateThreshold`:
 
