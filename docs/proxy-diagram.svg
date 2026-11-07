@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="820" viewBox="0 0 1000 820" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Glareshield behind a local reverse proxy</title>
+  <desc>The browser loads Glareshield once from glareshield.yurirage.com. Pi-hole resolves mav.home.example.com and dotb.home.example.com to Nginx Proxy Manager, which holds a Let's Encrypt wildcard certificate, decrypts wss and https, and forwards them to bridge.py and Dock of the Base in their own LXC containers on a Proxmox host. Both exchange MAVLink with the ArduPilot vehicle, which is on the LAN through HaLow, over UDP port 14550.</desc>
+  <defs>
+    <marker id="tls" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#34d399"/></marker>
+    <marker id="plain" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#fb923c"/></marker>
+    <marker id="udp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c084fc"/></marker>
+    <marker id="dns" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9ca3af"/></marker>
+    <style>
+      .zone { fill: #111827; stroke: #374151; stroke-width: 1.5; }
+      .group { fill: #0f172a; stroke: #475569; stroke-width: 1.5; stroke-dasharray: 6 5; }
+      .zlabel { fill: #9ca3af; font-size: 12px; font-weight: 700; letter-spacing: 1.5px; }
+      .box { fill: #164e63; stroke: #22d3ee; stroke-opacity: .45; stroke-width: 1.5; }
+      .dnsbox { fill: #1f2937; stroke: #9ca3af; stroke-opacity: .5; stroke-width: 1.5; }
+      .vehicle { fill: #581c87; stroke: #e879f9; stroke-opacity: .5; stroke-width: 1.5; }
+      .title { fill: #f9fafb; font-size: 17px; font-weight: 700; }
+      .sub { fill: #a5f3fc; font-size: 12.5px; }
+      .gsub { fill: #d1d5db; font-size: 12.5px; }
+      .vsub { fill: #f5d0fe; font-size: 12.5px; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .lbl { font-size: 12.5px; font-weight: 600; }
+      .tlsl { fill: #6ee7b7; } .plainl { fill: #fdba74; } .udpl { fill: #e9d5ff; } .dnsl { fill: #d1d5db; }
+      .note { fill: #d1d5db; font-size: 12.5px; }
+      .dim { fill: #9ca3af; font-size: 11.5px; }
+      .num { fill: #0b1220; font-size: 12px; font-weight: 800; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1000" height="820" rx="14" fill="#0b1220"/>
+
+  <!-- Zones -->
+  <rect class="zone" x="20" y="20" width="960" height="112" rx="10"/>
+  <text class="zlabel" x="36" y="42">INTERNET</text>
+  <text class="note" x="36" y="74">MAVLink never crosses the internet:</text>
+  <text class="note" x="36" y="92">after step 1 the browser talks to</text>
+  <text class="note" x="36" y="110">the local network directly.</text>
+
+  <rect class="zone" x="20" y="146" width="960" height="106" rx="10"/>
+  <text class="zlabel" x="36" y="168">YOUR DEVICE</text>
+  <text class="note" x="36" y="188">phone, tablet or laptop on the LAN</text>
+
+  <rect class="zone" x="20" y="266" width="960" height="534" rx="10"/>
+  <text class="zlabel" x="36" y="288">LOCAL NETWORK</text>
+
+  <rect class="group" x="40" y="400" width="920" height="248" rx="10"/>
+  <text class="zlabel" x="56" y="422">PROXMOX HOST</text>
+  <text class="dim" x="944" y="422" text-anchor="end">one LXC container each, each with its own LAN IP</text>
+
+  <!-- Internet -->
+  <rect class="box" x="330" y="44" width="340" height="66" rx="10"/>
+  <text class="title" x="500" y="71" text-anchor="middle">glareshield.yurirage.com</text>
+  <text class="sub" x="500" y="93" text-anchor="middle">serves the app's files, nothing else</text>
+
+  <!-- Device -->
+  <rect class="box" x="330" y="170" width="340" height="62" rx="10"/>
+  <text class="title" x="500" y="196" text-anchor="middle">Web browser</text>
+  <text class="sub" x="500" y="217" text-anchor="middle">runs Glareshield and opens every connection</text>
+
+  <!-- Pi-hole -->
+  <rect class="dnsbox" x="56" y="304" width="236" height="70" rx="10"/>
+  <text class="title" x="174" y="331" text-anchor="middle">Pi-hole</text>
+  <text class="gsub mono" x="174" y="353" text-anchor="middle" font-size="11.5">*.home.example.com</text>
+  <text class="gsub mono" x="174" y="368" text-anchor="middle" font-size="11.5">→ 192.168.1.10</text>
+
+  <!-- NPM -->
+  <rect class="box" x="330" y="440" width="340" height="88" rx="10"/>
+  <text class="title" x="500" y="466" text-anchor="middle">Nginx Proxy Manager</text>
+  <text class="sub" x="500" y="487" text-anchor="middle">wildcard Let's Encrypt cert; TLS ends here</text>
+  <text class="sub mono" x="500" y="508" text-anchor="middle" font-size="11.5">192.168.1.10</text>
+
+  <!-- bridge -->
+  <rect class="box" x="64" y="562" width="252" height="70" rx="10"/>
+  <text class="title" x="190" y="590" text-anchor="middle">bridge.py</text>
+  <text class="sub mono" x="190" y="612" text-anchor="middle" font-size="11.5">192.168.1.11 · ws :56781</text>
+
+  <!-- DotB -->
+  <rect class="box" x="684" y="562" width="252" height="70" rx="10"/>
+  <text class="title" x="810" y="590" text-anchor="middle">Dock of the Base</text>
+  <text class="sub mono" x="810" y="612" text-anchor="middle" font-size="11.5">192.168.1.12 · web :8765</text>
+
+  <!-- Vehicle -->
+  <rect class="vehicle" x="330" y="712" width="340" height="66" rx="10"/>
+  <text class="title" x="500" y="739" text-anchor="middle">ArduPilot vehicle</text>
+  <text class="vsub" x="500" y="761" text-anchor="middle">on the LAN through HaLow</text>
+
+  <!-- 1: page load -->
+  <line x1="500" y1="168" x2="500" y2="113" stroke="#34d399" stroke-width="2.5" marker-end="url(#tls)"/>
+  <circle cx="500" cy="140" r="9" fill="#34d399"/><text class="num" x="500" y="144" text-anchor="middle">1</text>
+  <text class="lbl tlsl" x="518" y="144">HTTPS · load the app (once)</text>
+
+  <!-- DNS lookup -->
+  <path d="M328,201 H174 V301" fill="none" stroke="#9ca3af" stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round" marker-end="url(#dns)"/>
+  <text class="lbl dnsl" x="186" y="232">name lookup</text>
+
+  <!-- 2: wss to proxy -->
+  <line x1="420" y1="234" x2="420" y2="437" stroke="#34d399" stroke-width="2.5" marker-end="url(#tls)"/>
+  <circle cx="420" cy="330" r="9" fill="#34d399"/><text class="num" x="420" y="334" text-anchor="middle">2</text>
+  <text class="lbl tlsl mono" x="406" y="391" text-anchor="end">wss://mav.home.example.com</text>
+
+  <!-- 3: https to proxy -->
+  <line x1="580" y1="234" x2="580" y2="437" stroke="#34d399" stroke-width="2.5" marker-end="url(#tls)"/>
+  <circle cx="580" cy="330" r="9" fill="#34d399"/><text class="num" x="580" y="334" text-anchor="middle">3</text>
+  <text class="lbl tlsl mono" x="594" y="391">https://dotb.home.example.com</text>
+
+  <!-- proxy to bridge -->
+  <path d="M352,530 V546 H190 V559" fill="none" stroke="#fb923c" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#plain)"/>
+  <text class="lbl plainl mono" x="340" y="540" text-anchor="end">ws://192.168.1.11:56781</text>
+
+  <!-- proxy to dotb -->
+  <path d="M648,530 V546 H810 V559" fill="none" stroke="#fb923c" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#plain)"/>
+  <text class="lbl plainl mono" x="660" y="540">http://192.168.1.12:8765</text>
+
+  <!-- bridge to vehicle -->
+  <path d="M190,635 V745 H327" fill="none" stroke="#c084fc" stroke-width="2.5" marker-start="url(#udp)" marker-end="url(#udp)"/>
+  <text class="lbl udpl" x="202" y="676">UDP 14550</text>
+  <text class="note" x="202" y="693">telemetry and commands</text>
+
+  <!-- dotb to vehicle -->
+  <path d="M810,635 V745 H673" fill="none" stroke="#c084fc" stroke-width="2.5" marker-start="url(#udp)" marker-end="url(#udp)"/>
+  <text class="lbl udpl" x="798" y="676" text-anchor="end">UDP 14550</text>
+  <text class="note" x="798" y="693" text-anchor="end">RTCM3 corrections (GPS_RTCM_DATA)</text>
+
+  <!-- Legend -->
+  <g transform="translate(728,32)">
+    <line x1="0" y1="8" x2="34" y2="8" stroke="#34d399" stroke-width="2.5"/><text class="note" x="44" y="12">encrypted (TLS)</text>
+    <line x1="0" y1="30" x2="34" y2="30" stroke="#fb923c" stroke-width="2.5" stroke-dasharray="7 5"/><text class="note" x="44" y="34">plain, stays on the LAN</text>
+    <line x1="0" y1="52" x2="34" y2="52" stroke="#c084fc" stroke-width="2.5"/><text class="note" x="44" y="56">MAVLink over UDP</text>
+    <text class="dim" x="0" y="80">Arrows point away from the side</text>
+    <text class="dim" x="0" y="95">that opens the connection.</text>
+  </g>
+</svg>
