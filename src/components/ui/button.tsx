@@ -8,8 +8,11 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'default', size = 'default', ...props }, ref) => {
+    // A button that sets its own text size keeps it: the responsive default (`sm:text-sm`) would otherwise survive
+    // the class merge and override it from the sm breakpoint up.
+    const ownTextSize = /(^|\s)text-(xs|sm|base|lg|\[)/.test(className ?? '');
     const baseStyles =
-      'inline-flex items-center justify-center whitespace-nowrap rounded-lg text-xs sm:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-400 disabled:pointer-events-none disabled:opacity-50 select-none';
+      'inline-flex items-center justify-center whitespace-nowrap rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-400 disabled:pointer-events-none disabled:opacity-50 select-none';
 
     const variants = {
       default: 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200 shadow-sm active:scale-[0.98]',
@@ -32,7 +35,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
-        className={cn(baseStyles, variants[variant], sizes[size], className)}
+        className={cn(baseStyles, !ownTextSize && (size === 'default' || size === 'icon') && 'text-xs sm:text-sm', variants[variant], sizes[size], className)}
         {...props}
       />
     );

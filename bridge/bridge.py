@@ -1281,6 +1281,9 @@ class BridgeServer:
                 )
                 await self.broadcast(self.encoder.pack(MSG_GLOBAL_POSITION_INT, pos))
 
+                # Ground speed in cm/s, matching VFR_HUD (moving only while armed).
+                gps_vel = 520 if self.armed else 0
+
                 # GPS_RAW_INT (time_usec, lat, lon, alt, eph, epv, vel, cog, fix_type, satellites_visible, alt_ellipsoid, h_acc, v_acc, vel_acc, hdg_acc, yaw)
                 gps = struct.pack(
                     "<QiiiHHHHBBiIIIIH",
@@ -1290,7 +1293,7 @@ class BridgeServer:
                     alt_i,
                     85,
                     120,
-                    520,
+                    gps_vel,
                     hdg_u,
                     3,
                     14,
@@ -1313,7 +1316,7 @@ class BridgeServer:
                     0,
                     65,
                     95,
-                    515,
+                    max(0, gps_vel - 5),
                     hdg_u,
                     6,
                     18,
