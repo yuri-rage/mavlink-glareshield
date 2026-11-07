@@ -53,6 +53,7 @@ export interface CachedMessage {
 const latest = new Map<string, CachedMessage>();
 const lastSeen = new Map<string, number>();
 let vehicleSystemId: number | undefined;
+let vehicleType: number | undefined;
 
 /** Flatten a decoded payload to numeric fields; arrays become `name[0]`, `name[1]`, ... */
 function numericFields(decoded: Record<string, unknown>): Record<string, number> {
@@ -78,7 +79,11 @@ export function recordPacket(packet: MavlinkPacket, now = Date.now()): void {
     const autopilot = packet.payload[5];
     const type = packet.payload[4];
     if (autopilot !== MAV_AUTOPILOT_INVALID && type !== MAV_TYPE_GCS && packet.componentId === 1) {
+      if (vehicleType !== undefined && vehicleType !== type) {
+        pidTuningRecorder.clear();
+      }
       vehicleSystemId = packet.systemId;
+      vehicleType = type;
     }
   }
   if (SKIPPED.has(packet.messageId)) return;
@@ -113,8 +118,9 @@ export function recordPacket(packet: MavlinkPacket, now = Date.now()): void {
     // mixes axes, and recorded in full for the PID tuning chart.
     lastSeen.delete(name);
     const axisName = pidAxisMessageName(fields.axis);
+    const { axis: _axis, ...axisFields } = fields;
     lastSeen.set(axisName, now);
-    latest.set(axisName, { fields, time: now, systemId: packet.systemId });
+    latest.set(axisName, { fields: axisFields, time: now, systemId: packet.systemId });
     pidTuningRecorder.record(fields, now);
     return;
   }
@@ -152,6 +158,7 @@ export function resetMessageCache(): void {
   latest.clear();
   lastSeen.clear();
   vehicleSystemId = undefined;
+  vehicleType = undefined;
 }
 
 mavlinkConnection.onPacket((packet) => recordPacket(packet));

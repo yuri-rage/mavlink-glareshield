@@ -102,6 +102,7 @@ recordPacket(pidPacket(2, -5, -4), 1010);
 check('each axis is cached under its own name', getCachedField('PID_TUNING_ROLL', 'desired') === 10 && getCachedField('PID_TUNING_PITCH', 'desired') === -5);
 check('names are case-insensitive for bindings', getCachedField('pid_tuning_roll', 'achieved') === 9);
 check('the mixed PID_TUNING entry is not offered', !('PID_TUNING' in getObservedCatalog()) && 'PID_TUNING_ROLL' in getObservedCatalog());
+check('the constant axis field is excluded from observed fields', !getObservedCatalog().PID_TUNING_ROLL.includes('axis'));
 check('extension fields decode', Math.abs((getCachedField('PID_TUNING_ROLL', 'SRate') ?? 0) - 4) < 1e-6);
 check('axis names follow the MAVLink enum', pidAxisMessageName(5) === 'PID_TUNING_STEER' && pidAxisMessageName(42) === 'PID_TUNING_AXIS42');
 const def = {
@@ -133,6 +134,15 @@ off();
 check('new-axis listeners hear only new axes', heard === 1);
 recordPacket(pidPacket(0, 1, 1), 5100);
 check('axis 0 (invalid) is ignored', !pidTuningRecorder.seenAxes().includes(0));
+function hbPacket(type: number) {
+  const payload = new Uint8Array([0, 0, 0, 0, type, 3, 0, 0, 3]);
+  return { version: 2 as const, sequence: 0, systemId: 1, componentId: 1, messageId: MAVLINK_MSG_ID.HEARTBEAT, payload, crc: 0, raw: new Uint8Array() };
+}
+recordPacket(hbPacket(10), 5200); // Rover
+recordPacket(pidPacket(5, 1, 1), 5210);
+recordPacket(hbPacket(2), 5300); // Copter (different vehicle type clears the old vehicle's recorder history)
+check('switching vehicle type clears previous vehicle PID history', pidTuningRecorder.seenAxes().length === 0);
+recordPacket(pidPacket(1, 2, 2), 5310);
 pidTuningRecorder.clear();
 check('clear empties the history', pidTuningRecorder.seenAxes().length === 0 && rollDesired.length === 0);
 

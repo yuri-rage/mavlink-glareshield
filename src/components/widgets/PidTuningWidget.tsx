@@ -137,10 +137,14 @@ export const PidTuningWidget: React.FC = () => {
     return () => messageRateManager.unregisterRequirement('pid-tuning');
   }, []);
 
-  // Read GCS_PID_MASK if the parameter list hasn't brought it.
+  // Read GCS_PID_MASK if the parameter list hasn't brought it; retry while waiting in case a packet is dropped.
   useEffect(() => {
     if (!linked || maskEntry || axes.length === 0) return;
     paramManager.requestParam(sysId, compId, MASK_PARAM);
+    const timer = setInterval(() => {
+      paramManager.requestParam(sysId, compId, MASK_PARAM);
+    }, 2500);
+    return () => clearInterval(timer);
   }, [linked, maskEntry, axes.length, sysId, compId]);
 
   // GCS_PID_MASK writes, confirmed when the vehicle echoes the value.
