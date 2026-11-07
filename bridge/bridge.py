@@ -733,12 +733,25 @@ class BridgeServer:
                 if len(payload) < 20:
                     payload = payload.ljust(20, b"\x00")
                 param_id = payload[4:20].decode("ascii", errors="ignore").strip("\x00")
-                if param_id == "GCS_PID_MASK":
+                mock_params = {
+                    "BATT_CAPACITY": (5000.0, 9),
+                    "WPNAV_SPEED": (500.0, 9),
+                    "RTL_ALT": (2000.0, 9),
+                    "PILOT_SPEED_UP": (250.0, 9),
+                    "FLTMODE1": (0.0, 9),
+                    "FLTMODE2": (5.0, 9),
+                    "FLTMODE3": (6.0, 9),
+                    "SYSID_THISMAV": (1.0, 9),
+                    "MOT_SPIN_ARM": (0.15, 9),
+                    "GCS_PID_MASK": (float(self.gcs_pid_mask), 4),
+                }
+                if param_id in mock_params:
+                    val, p_type = mock_params[param_id]
                     id_bytes = param_id.encode("ascii").ljust(16, b"\x00")
                     val_bytes = (
-                        struct.pack("<fHH", float(self.gcs_pid_mask), 1, 0)
+                        struct.pack("<fHH", val, len(mock_params), 0)
                         + id_bytes
-                        + struct.pack("<B", 4)
+                        + struct.pack("<B", p_type)
                     )
                     await self.broadcast(self.encoder.pack(MSG_PARAM_VALUE, val_bytes))
 
@@ -887,21 +900,24 @@ class BridgeServer:
                             self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
                         )
                     elif "@PARAM" in filename or "param.pck" in filename:
+                        with_defaults = "withdefaults=1" in filename
                         params = [
-                            ("BATT_CAPACITY", 5000.0, 4),
-                            ("WPNAV_SPEED", 500.0, 4),
-                            ("RTL_ALT", 2000.0, 4),
-                            ("PILOT_SPEED_UP", 250.0, 4),
-                            ("FLTMODE1", 0.0, 4),
-                            ("FLTMODE2", 5.0, 4),
-                            ("FLTMODE3", 6.0, 4),
-                            ("SYSID_THISMAV", 1.0, 4),
-                            ("MOT_SPIN_ARM", 0.15, 4),
+                            ("BATT_CAPACITY", 5000.0, 3300.0, 4),
+                            ("WPNAV_SPEED", 500.0, 500.0, 4),
+                            ("RTL_ALT", 2000.0, 1500.0, 4),
+                            ("PILOT_SPEED_UP", 250.0, 250.0, 4),
+                            ("FLTMODE1", 0.0, 0.0, 4),
+                            ("FLTMODE2", 5.0, 0.0, 4),
+                            ("FLTMODE3", 6.0, 0.0, 4),
+                            ("SYSID_THISMAV", 1.0, 1.0, 4),
+                            ("MOT_SPIN_ARM", 0.15, 0.10, 4),
+                            ("GCS_PID_MASK", float(self.gcs_pid_mask), 0.0, 4),
                         ]
                         buf = bytearray()
-                        buf += struct.pack("<HHH", 0x671B, len(params), len(params))
+                        magic = 0x671C if with_defaults else 0x671B
+                        buf += struct.pack("<HHH", magic, len(params), len(params))
                         last_name = ""
-                        for name, val, ptype in params:
+                        for name, val, def_val, ptype in params:
                             common_len = 0
                             while (
                                 common_len < len(last_name)
@@ -913,9 +929,13 @@ class BridgeServer:
                             suffix = name[common_len:]
                             name_len = len(suffix) - 1
                             plen = (name_len << 4) | (common_len & 0x0F)
-                            buf += struct.pack("<BB", ptype, plen)
+                            has_explicit_def = with_defaults and abs(val - def_val) > 1e-6
+                            ptype_byte = (ptype & 0x0F) | (0x10 if has_explicit_def else 0)
+                            buf += struct.pack("<BB", ptype_byte, plen)
                             buf += suffix.encode("utf-8")
                             buf += struct.pack("<f", val)
+                            if has_explicit_def:
+                                buf += struct.pack("<f", def_val)
                             last_name = name
                         self.ftp_files = getattr(self, "ftp_files", {})
                         self.ftp_files[1] = bytes(buf)

@@ -28,6 +28,11 @@ export class ParamManager {
   private isCancelled = false;
   /** Names any widget has asked for one at a time, so they aren't mistaken for a downloaded list. */
   private singleReads = new Set<string>();
+  /** Firmware default values learned from @PARAM/param.pck?withdefaults=1. */
+  private defaults = new Map<string, number>();
+  private defaultsLoaded = false;
+  private defaultsLoading = false;
+  private defaultsTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     mavlinkConnection.onPacket((packet: MavlinkPacket) => {
@@ -100,7 +105,19 @@ export class ParamManager {
     if (!this.status.isFetching || this.status.method !== 'legacy') {
       // Any PARAM_VALUE arriving outside a list download (a single read, write echo, or onboard tune change)
       // is a single parameter update, not a full parameter list.
-      if (data?.param_id) this.singleReads.add(String(data.param_id).trim().toUpperCase());
+      if (data?.param_id) {
+        const id = String(data.param_id).trim().toUpperCase();
+        this.singleReads.add(id);
+        const defVal = this.defaults.get(id);
+        if (defVal !== undefined) {
+          const cur = useTelemetryStore.getState().parameters[id];
+          if (cur && cur.defaultValue === undefined) {
+            useTelemetryStore.setState((s) => ({
+              parameters: { ...s.parameters, [id]: { ...s.parameters[id], defaultValue: defVal } },
+            }));
+          }
+        }
+      }
       return;
     }
 
@@ -142,6 +159,55 @@ export class ParamManager {
     if (!id) return;
     this.singleReads.add(id);
     mavlinkConnection.send(mavlinkConnection.getEncoder().createParamRequestRead(sysId, compId, -1, id));
+    this.scheduleDefaultsFetch(sysId, compId);
+  }
+
+  /**
+   * Quietly reads @PARAM/param.pck?withdefaults=1 once via MAVFTP when single parameters are requested so
+   * ParamPanel and ParamSetPanel have defaultValue even before the full Parameters widget is opened.
+   */
+  private scheduleDefaultsFetch(sysId: number, compId: number) {
+    if (this.defaultsLoaded || this.defaultsLoading || this.status.isFetching) return;
+    if (mavlinkConnection.getStatus() !== 'connected') return;
+    if (this.defaultsTimer) clearTimeout(this.defaultsTimer);
+    this.defaultsTimer = setTimeout(() => {
+      this.defaultsTimer = null;
+      void this.loadDefaultsOnly(sysId, compId);
+    }, 300);
+  }
+
+  private async loadDefaultsOnly(sysId: number, compId: number) {
+    if (this.defaultsLoaded || this.defaultsLoading || this.status.isFetching) return;
+    if (mavlinkConnection.getStatus() !== 'connected') return;
+    this.defaultsLoading = true;
+    try {
+      const pckData = await mavFtpClient.readFile(sysId, compId, '@PARAM/param.pck?withdefaults=1', 239, 1500);
+      if (this.status.isFetching || !pckData || pckData.length < 6) return;
+      const unpacked = this.unpackParamPck(pckData);
+      if (!unpacked) return;
+      for (const [k, v] of Object.entries(unpacked)) {
+        if (v.defaultValue !== undefined) this.defaults.set(k, v.defaultValue);
+      }
+      if (this.defaults.size > 0) {
+        this.defaultsLoaded = true;
+        useTelemetryStore.setState((state) => {
+          let changed = false;
+          const next = { ...state.parameters };
+          for (const [k, cur] of Object.entries(next)) {
+            const defVal = this.defaults.get(k);
+            if (defVal !== undefined && cur.defaultValue === undefined) {
+              next[k] = { ...cur, defaultValue: defVal };
+              changed = true;
+            }
+          }
+          return changed ? { parameters: next } : state;
+        });
+      }
+    } catch {
+      // MAVFTP unavailable: single reads still work via PARAM_VALUE without defaults.
+    } finally {
+      this.defaultsLoading = false;
+    }
   }
 
   /**
@@ -181,6 +247,10 @@ export class ParamManager {
     }
 
     if (this.status.isFetching) return;
+    if (this.defaultsTimer) {
+      clearTimeout(this.defaultsTimer);
+      this.defaultsTimer = null;
+    }
 
     this.isCancelled = false;
     const hb = useTelemetryStore.getState().heartbeat;
@@ -234,6 +304,11 @@ export class ParamManager {
           const duration = Date.now() - startTime;
           const hasDefaults = Object.values(unpacked).some((p) => p.defaultValue !== undefined);
           console.log(`[ParamManager] Successfully unpacked ${count} parameters via MAVFTP (hasDefaults=${hasDefaults}) in ${duration}ms!`);
+
+          for (const [k, v] of Object.entries(unpacked)) {
+            if (v.defaultValue !== undefined) this.defaults.set(k, v.defaultValue);
+          }
+          if (hasDefaults) this.defaultsLoaded = true;
 
           useTelemetryStore.setState((state) => ({
             parameters: { ...state.parameters, ...unpacked },
@@ -371,9 +446,11 @@ export class ParamManager {
       }
       offset += valSize;
 
-      let defaultVal: number | undefined = undefined;
+      // In 0x671c (withdefaults=1), ArduPilot only sets flags bit 0 (hasDefault) when the current value differs
+      // from the default; when the bit is 0, the parameter is at its default value (defaultVal === val).
+      let defaultVal: number | undefined = magic === 0x671c ? val : undefined;
 
-      // If flags bit 0 is set, default value is included right after
+      // If flags bit 0 is set, an explicit default value follows right after
       if (hasDefault) {
         if (ptype === 1) {
           if (offset + 1 <= data.length) {

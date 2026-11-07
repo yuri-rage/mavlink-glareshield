@@ -192,7 +192,13 @@ pckDv.setFloat32(pckOfs, 14.5, true);
 pckOfs += 4;
 
 const unpackedParams = paramManager.unpackParamPck(pckBuffer.subarray(0, pckOfs));
-if (unpackedParams && unpackedParams['BATT_CAPACITY']?.value === 5000 && unpackedParams['BATT_ARM_VOLT']?.value === 14.5) {
+if (
+  unpackedParams &&
+  unpackedParams['BATT_CAPACITY']?.value === 5000 &&
+  unpackedParams['BATT_CAPACITY']?.defaultValue === undefined &&
+  unpackedParams['BATT_ARM_VOLT']?.value === 14.5 &&
+  unpackedParams['BATT_ARM_VOLT']?.defaultValue === undefined
+) {
   console.log('param.pck unpacked successfully:', Object.keys(unpackedParams));
 } else {
   console.error('param.pck unpacking failed:', unpackedParams);
@@ -200,16 +206,17 @@ if (unpackedParams && unpackedParams['BATT_CAPACITY']?.value === 5000 && unpacke
 }
 
 // 7b. Test param.pck Unpacking WITH DEFAULTS (magic 0x671c)
-// Header 6 bytes: magic (0x671c), num_params (1), total_params (1)
-// Item: WP_RADIUS = 0, default = 50 (int16, ptype = 2, flags bit 0 set -> 0x12)
-const defBuffer = new Uint8Array(6 + 2 + 9 + 2 + 2);
+// Header 6 bytes: magic (0x671c), num_params (2), total_params (2)
+// Item 1: WP_RADIUS = 0, default = 50 (int16, ptype = 2, flags bit 0 set -> 0x12)
+// Item 2: WP_SPEED = 100, unmodified so default = 100 (int16, ptype = 2, flags bit 0 NOT set -> 0x02)
+const defBuffer = new Uint8Array(64);
 const defDv = new DataView(defBuffer.buffer);
 defDv.setUint16(0, 0x671c, true); // magic 0x671c = param.pck with defaults
-defDv.setUint16(2, 1, true);
-defDv.setUint16(4, 1, true);
+defDv.setUint16(2, 2, true);
+defDv.setUint16(4, 2, true);
 let defOfs = 6;
 const paramDefName = 'WP_RADIUS';
-defBuffer[defOfs] = 0x12; // ptype = 2 (int16), flags = 1 (hasDefault)
+defBuffer[defOfs] = 0x12; // ptype = 2 (int16), flags = 1 (hasDefault: explicit default follows)
 defBuffer[defOfs + 1] = ((paramDefName.length - 1) << 4) | 0;
 defOfs += 2;
 new TextEncoder().encodeInto(paramDefName, defBuffer.subarray(defOfs, defOfs + paramDefName.length));
@@ -219,13 +226,24 @@ defOfs += 2;
 defDv.setInt16(defOfs, 50, true); // default value = 50
 defOfs += 2;
 
+const paramUnmodSuffix = 'SPEED'; // shares 'WP_' (3 chars) with WP_RADIUS
+defBuffer[defOfs] = 0x02; // ptype = 2 (int16), flags = 0 (unmodified: default === current)
+defBuffer[defOfs + 1] = ((paramUnmodSuffix.length - 1) << 4) | 3;
+defOfs += 2;
+new TextEncoder().encodeInto(paramUnmodSuffix, defBuffer.subarray(defOfs, defOfs + paramUnmodSuffix.length));
+defOfs += paramUnmodSuffix.length;
+defDv.setInt16(defOfs, 100, true); // current value = 100 (and implicit default = 100)
+defOfs += 2;
+
 const unpackedWithDefaults = paramManager.unpackParamPck(defBuffer.subarray(0, defOfs));
 if (
   unpackedWithDefaults &&
   unpackedWithDefaults['WP_RADIUS']?.value === 0 &&
-  unpackedWithDefaults['WP_RADIUS']?.defaultValue === 50
+  unpackedWithDefaults['WP_RADIUS']?.defaultValue === 50 &&
+  unpackedWithDefaults['WP_SPEED']?.value === 100 &&
+  unpackedWithDefaults['WP_SPEED']?.defaultValue === 100
 ) {
-  console.log('param.pck with defaults (0x671c) unpacked successfully: WP_RADIUS = 0 (default: 50)');
+  console.log('param.pck with defaults (0x671c) unpacked successfully: WP_RADIUS = 0 (default: 50), WP_SPEED = 100 (default: 100)');
 } else {
   console.error('param.pck with defaults unpacking failed:', unpackedWithDefaults);
   process.exit(1);
