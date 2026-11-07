@@ -124,16 +124,16 @@ export const ParametersWidget: React.FC = () => {
 
   const paramKeys = useMemo(() => Object.keys(parameters), [parameters]);
 
-  // Automatically fetch parameters when widget opens and link is active with 0 params loaded
+  // Automatically fetch parameters when widget opens and link is active without a full parameter list
   useEffect(() => {
-    if (connected && paramKeys.length === 0 && !paramStatus.isFetching && !autoFetchedRef.current) {
+    if (connected && !paramManager.hasParamList(paramKeys) && !paramStatus.isFetching && !autoFetchedRef.current) {
       autoFetchedRef.current = true;
       paramManager.fetchParameters();
     }
     if (!connected) {
       autoFetchedRef.current = false;
     }
-  }, [connected, paramKeys.length, paramStatus.isFetching]);
+  }, [connected, paramKeys, paramStatus.isFetching]);
 
   const encoder = mavlinkConnection.getEncoder();
 

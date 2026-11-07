@@ -94,40 +94,46 @@ export class ParamManager {
   }
 
   private handlePacket(packet: MavlinkPacket) {
-    if (!this.status.isFetching || this.status.method !== 'legacy') return;
+    if (packet.messageId !== MAVLINK_MSG_ID.PARAM_VALUE) return;
+    const data = decodePayload(packet.messageId, packet.payload);
 
-    if (packet.messageId === MAVLINK_MSG_ID.PARAM_VALUE) {
-      const data = decodePayload(packet.messageId, packet.payload);
-      this.legacyIndices.add(data.param_index);
-      this.legacyExpected = data.param_count || this.legacyExpected;
-
-      const pct = this.legacyExpected > 0 ? Math.round((this.legacyIndices.size / this.legacyExpected) * 100) : 0;
-      this.setStatus({
-        paramCount: this.legacyIndices.size,
-        message: `Streaming params: ${this.legacyIndices.size} / ${this.legacyExpected} (${pct}%)`,
-      });
-
-      if (this.legacyTimer) clearTimeout(this.legacyTimer);
-
-      if (this.legacyExpected > 0 && this.legacyIndices.size >= this.legacyExpected) {
-        this.setStatus({
-          isFetching: false,
-          method: 'idle',
-          message: `Loaded all ${this.legacyExpected} params via stream`,
-        });
-        return;
-      }
-
-      // If last index packet arrived or activity paused, check for gaps
-      if (this.legacyExpected > 0 && data.param_index + 1 >= this.legacyExpected) {
-        this.requestMissingLegacyParams();
-        return;
-      }
-
-      this.legacyTimer = setTimeout(() => {
-        this.requestMissingLegacyParams();
-      }, 2500);
+    if (!this.status.isFetching || this.status.method !== 'legacy') {
+      // Any PARAM_VALUE arriving outside a list download (a single read, write echo, or onboard tune change)
+      // is a single parameter update, not a full parameter list.
+      if (data?.param_id) this.singleReads.add(String(data.param_id).trim().toUpperCase());
+      return;
     }
+
+    this.legacyIndices.add(data.param_index);
+    this.legacyExpected = data.param_count || this.legacyExpected;
+
+    const pct = this.legacyExpected > 0 ? Math.round((this.legacyIndices.size / this.legacyExpected) * 100) : 0;
+    this.setStatus({
+      paramCount: this.legacyIndices.size,
+      message: `Streaming params: ${this.legacyIndices.size} / ${this.legacyExpected} (${pct}%)`,
+    });
+
+    if (this.legacyTimer) clearTimeout(this.legacyTimer);
+
+    if (this.legacyExpected > 0 && this.legacyIndices.size >= this.legacyExpected) {
+      this.singleReads.clear();
+      this.setStatus({
+        isFetching: false,
+        method: 'idle',
+        message: `Loaded all ${this.legacyExpected} params via stream`,
+      });
+      return;
+    }
+
+    // If last index packet arrived or activity paused, check for gaps
+    if (this.legacyExpected > 0 && data.param_index + 1 >= this.legacyExpected) {
+      this.requestMissingLegacyParams();
+      return;
+    }
+
+    this.legacyTimer = setTimeout(() => {
+      this.requestMissingLegacyParams();
+    }, 2500);
   }
 
   /** Ask the vehicle for one parameter by name (PARAM_REQUEST_READ). Widgets use this, not the encoder directly. */
@@ -143,9 +149,12 @@ export class ParamManager {
    * or a parameter file loaded into the store. Wildcard patterns need that; single reads only fill exact names.
    */
   public hasParamList(names: Iterable<string>): boolean {
-    if (this.status.paramCount > 0) return true;
-    for (const n of names) if (!this.singleReads.has(n.toUpperCase())) return true;
-    return false;
+    let any = false;
+    for (const n of names) {
+      any = true;
+      if (!this.singleReads.has(n.toUpperCase())) return true;
+    }
+    return any && this.status.paramCount > 0;
   }
 
   public cancelFetch() {
@@ -229,6 +238,7 @@ export class ParamManager {
           useTelemetryStore.setState((state) => ({
             parameters: { ...state.parameters, ...unpacked },
           }));
+          this.singleReads.clear();
 
           this.setStatus({
             isFetching: false,
