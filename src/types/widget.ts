@@ -9,6 +9,8 @@ export type WidgetDisplayType =
   | 'text-display'
   | 'multi-bar'
   | 'param-control'
+  // A list of parameters to view and edit, picked by name or wildcard: see `paramSet`.
+  | 'param-set'
   | 'compass-rose'
   // Rendered as the time-series chart; the id is kept so saved profiles keep working.
   | 'sparkline'
@@ -97,6 +99,17 @@ export interface WidgetParamControl {
   confirmation?: boolean;
 }
 
+/** A Parameter set: the parameters to list, as exact names or wildcard patterns, with optional exclusions. */
+export interface WidgetParamSet {
+  /**
+   * In order: `BATT_CAPACITY` (an exact name, listed even if the vehicle lacks it), `BATT_*` or `FS_?_*`
+   * (every downloaded parameter matching, alphabetically), `-BATT2_*` (leave matches out).
+   */
+  params: string[];
+  /** Ask before every write. Always true after an import. */
+  confirmation?: boolean;
+}
+
 export interface WidgetMultiBarConfig {
   group: MultiBarGroupType;
 }
@@ -110,6 +123,7 @@ export interface CustomWidgetDefinition {
   binding?: WidgetDataBinding;
   action?: WidgetAction;
   paramControl?: WidgetParamControl;
+  paramSet?: WidgetParamSet;
   multiBarConfig?: WidgetMultiBarConfig;
   /**
    * Further values after `binding`. Charts plot them all, the value list shows them all, and the radial gauge,
@@ -154,6 +168,7 @@ export interface WidgetPanelDefinition {
   bindings?: WidgetDataBinding[];
   action?: WidgetAction;
   paramControl?: WidgetParamControl;
+  paramSet?: WidgetParamSet;
   multiBarConfig?: WidgetMultiBarConfig;
   gauge?: WidgetGaugeConfig;
   chart?: WidgetChartConfig;

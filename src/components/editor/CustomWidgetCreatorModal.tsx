@@ -16,7 +16,9 @@ import {
 import { Download, Plus, Save } from 'lucide-react';
 import { CompositePanelList, PANEL_TYPE_OPTIONS, SPAN_OPTIONS, panelValueCount } from './CompositePanelList';
 import { BUILTIN_PANELS } from '../../lib/builtinWidgets';
-import { MAX_COMPOSITE_BINDINGS, MAX_PANELS } from '../../lib/widgetValidation';
+import { MAX_COMPOSITE_BINDINGS, MAX_PANELS, sanitizeParamSetEntries } from '../../lib/widgetValidation';
+import { expandParamPatterns } from '../../mavlink/paramMatch';
+import { useTelemetryStore } from '../../store/telemetryStore';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { BindingEditor, NumberField, SELECT_CLASS } from './BindingEditor';
 import { cleanBinding } from '../../lib/widgetValidation';
@@ -266,6 +268,16 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   const [paramOptionsText, setParamOptionsText] = useState('');
   const [paramConfirm, setParamConfirm] = useState(true);
 
+  // Parameter set config: one entry per line (or comma separated)
+  const [paramSetText, setParamSetText] = useState('');
+  const [paramSetConfirm, setParamSetConfirm] = useState(false);
+  const downloadedParamNames = useTelemetryStore((s) => s.parameters);
+  const paramSetEntries = useMemo(() => sanitizeParamSetEntries(paramSetText.split(/[\s,]+/)), [paramSetText]);
+  const paramSetPreview = useMemo(
+    () => expandParamPatterns(paramSetEntries, Object.keys(downloadedParamNames)),
+    [paramSetEntries, downloadedParamNames]
+  );
+
   // Action Binding
   const [actionLabel, setActionLabel] = useState('Trigger Command');
   const [commandId, setCommandId] = useState('20'); // MAV_CMD_NAV_RETURN_TO_LAUNCH
@@ -305,6 +317,9 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     setStaleAfterSec(w?.staleAfterSec);
 
     setMultiBarGroup(w?.multiBarConfig?.group ?? 'rc-8');
+
+    setParamSetText((w?.paramSet?.params ?? []).join('\n'));
+    setParamSetConfirm(Boolean(w?.paramSet?.confirmation));
 
     const pc = w?.paramControl;
     setParamId(pc?.paramId || 'WPNAV_SPEED');
@@ -374,7 +389,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
       id,
       name: name.trim() || 'Custom Instrument',
       description: description.trim(),
-      category: isActionWidget || displayType === 'param-control' ? 'control' : category,
+      category: isActionWidget || displayType === 'param-control' || displayType === 'param-set' ? 'control' : category,
       displayType,
       colorScheme,
     };
@@ -402,6 +417,10 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
       def.multiBarConfig = {
         group: multiBarGroup,
       };
+    }
+
+    if (displayType === 'param-set') {
+      def.paramSet = { params: paramSetEntries, confirmation: paramSetConfirm };
     }
 
     if (displayType === 'param-control') {
@@ -461,7 +480,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   const buildDefinition = (): CustomWidgetDefinition => {
     if (!isComposite) return buildSingle();
     const list = panelsWithCurrent();
-    const hasControl = list.some((p) => ['action-button', 'toggle-switch', 'slider-control', 'param-control'].includes(p.displayType));
+    const hasControl = list.some((p) => ['action-button', 'toggle-switch', 'slider-control', 'param-control', 'param-set'].includes(p.displayType));
     return {
       id: initialWidget?.id || `custom-${Date.now()}`,
       name: name.trim() || 'Custom Instrument',
@@ -821,6 +840,56 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                 <option value="ekf-variances">EKF_STATUS_REPORT: EKF Variances (Vel / PosH / PosV / Mag)</option>
                 <option value="battery-cells">BATTERY_STATUS: Individual LiPo Cell Voltages (V)</option>
               </select>
+            </div>
+          </div>
+        )}
+
+        {/* Parameter Set Configuration */}
+        {displayType === 'param-set' && (
+          <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400">Parameters to list</h4>
+              <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={paramSetConfirm}
+                  onChange={(e) => setParamSetConfirm(e.target.checked)}
+                  className="rounded border-zinc-700 bg-zinc-900 accent-amber-500"
+                />
+                Confirm every write
+              </label>
+            </div>
+            <textarea
+              value={paramSetText}
+              onChange={(e) => setParamSetText(e.target.value.toUpperCase())}
+              rows={5}
+              spellCheck={false}
+              placeholder={'BATT_CAPACITY\nBATT_*\n-BATT2_*\nFS_*'}
+              aria-label="Parameters to list"
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
+            />
+            <p className="text-[10px] text-zinc-500 leading-snug">
+              One per line (or separated by commas or spaces). An exact name keeps its place; <code className="text-sky-300">*</code> and{' '}
+              <code className="text-sky-300">?</code> add every matching parameter alphabetically; a leading{' '}
+              <code className="text-sky-300">-</code> leaves matches out. Up to 64 entries. Out-of-range values always ask before writing.
+            </p>
+            <div className="text-[10px] font-mono text-zinc-400">
+              {Object.keys(downloadedParamNames).length === 0 ? (
+                <span className="text-zinc-500">Download the vehicle's parameters to preview what the patterns match.</span>
+              ) : (
+                <>
+                  <span className="text-zinc-300">{paramSetPreview.filter((r) => r.present).length} parameters</span>
+                  {paramSetPreview.some((r) => !r.present) && (
+                    <span className="text-amber-400"> · not on this vehicle: {paramSetPreview.filter((r) => !r.present).map((r) => r.name).join(', ')}</span>
+                  )}
+                  {paramSetPreview.length > 0 && (
+                    <div className="truncate text-zinc-500" title={paramSetPreview.map((r) => r.name).join(', ')}>
+                      {paramSetPreview.slice(0, 12).map((r) => r.name).join(', ')}
+                      {paramSetPreview.length > 12 ? ` +${paramSetPreview.length - 12}` : ''}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}

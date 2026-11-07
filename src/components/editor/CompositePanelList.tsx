@@ -24,6 +24,7 @@ export const PANEL_TYPE_OPTIONS: { value: PanelDisplayType; label: string }[] = 
   { value: 'compass-rose', label: 'Compass / Vector Rose (Heading / Wind / Bearing)' },
   { value: 'multi-bar', label: 'Multi-Channel Bar / PWM Visualizer (RC / Servo / ESC / Vibe)' },
   { value: 'param-control', label: 'Parameter Control (ArduPilot PARAM_SET)' },
+  { value: 'param-set', label: 'Parameter Set (pick parameters by name or BATT_*)' },
   { value: 'indicator-led', label: 'LED Status Indicator (On/Off)' },
   { value: 'action-button', label: 'Action Button (MAVLink Command)' },
   { value: 'toggle-switch', label: 'Toggle Switch (Relay / Servo)' },
