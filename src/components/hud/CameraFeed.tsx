@@ -129,7 +129,7 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, fit, opacity,
             lastObjectUrl = objectUrl;
             // Straight to the element: a React render per frame is unnecessary work at 10-30 fps.
             if (imgRef.current) imgRef.current.src = objectUrl;
-            if (previous) setTimeout(() => URL.revokeObjectURL(previous), 1000);
+            if (previous) setTimeout(() => URL.revokeObjectURL(previous), 100);
             lastFrameAt = Date.now();
             if (!gotFrame) {
               gotFrame = true;

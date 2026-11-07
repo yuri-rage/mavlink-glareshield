@@ -149,6 +149,40 @@ export const HudWidget: React.FC = () => {
   const [cameraStatus, setCameraStatus] = useState<CameraStatus>({ state: 'connecting', method: 'img' });
   const [cameraReconnectKey, setCameraReconnectKey] = useState(0);
   const [flashTick, setFlashTick] = useState(0);
+  const [dimensions, setDimensions] = useState<{ width: number; height: number; dpr: number }>({
+    width: 0,
+    height: 0,
+    dpr: typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
+  });
+
+  // Track canvas container size via ResizeObserver to keep canvas razor-sharp on resize
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const updateSize = () => {
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      const dpr = window.devicePixelRatio || 1;
+      setDimensions((prev) => {
+        if (prev.width === width && prev.height === height && prev.dpr === dpr) return prev;
+        return { width, height, dpr };
+      });
+    };
+
+    updateSize();
+
+    const ro = new ResizeObserver(() => {
+      updateSize();
+    });
+    ro.observe(canvas);
+
+    window.addEventListener('resize', updateSize);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
+  }, []);
 
   const isFailsafe = isFailsafeActive(heartbeat, statusMessages);
 
@@ -222,13 +256,13 @@ export const HudWidget: React.FC = () => {
     if (!ctx) return;
 
     // Handle high DPI
-    const dpr = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
+    const dpr = dimensions.dpr || window.devicePixelRatio || 1;
+    const width = dimensions.width || canvas.clientWidth;
+    const height = dimensions.height || canvas.clientHeight;
     if (width === 0 || height === 0) return;
 
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
     ctx.scale(dpr, dpr);
 
     const cx = width / 2;
@@ -297,7 +331,7 @@ export const HudWidget: React.FC = () => {
 
     // Geometric layouts for HUD overlay instruments
     const PITCH_SCALE = 4.2; // Pixels per degree
-    const disarmY = cy - 18 * PITCH_SCALE; // 20 deg above wings level horizon (84px above cy)
+    const disarmY = cy - 18 * PITCH_SCALE; // Steady disarm banner positioned ~18 deg above wings level horizon
     const failsafeY = disarmY + 25; // Directly below DISARMED
     const isFlashVisible = flashTick % 2 === 0;
 
@@ -1015,7 +1049,7 @@ export const HudWidget: React.FC = () => {
     videoConfig.url,
     videoConfig.darken,
     videoConfig.symbologyBrightness,
-    statusMessages,
+    dimensions,
     isFailsafe,
     flashTick,
   ]);
