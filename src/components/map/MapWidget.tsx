@@ -5,7 +5,7 @@ import { useUnitsStore } from '../../store/unitsStore';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { missionManager, MissionManagerStatus, groupFencePolygons } from '../../mavlink/missionManager';
 import { mavlinkConnection } from '../../mavlink/connection';
-import { MAVLINK_MSG_ID, getVehicleCategory, getGuidedModeNum } from '../../mavlink/messages';
+import { MAVLINK_MSG_ID, getVehicleCategory, getGuidedModeNum, cmdHasLocation } from '../../mavlink/messages';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -13,7 +13,7 @@ import { Modal } from '../ui/modal';
 import { Input } from '../ui/input';
 import { parseDroppedMissionFile, ParsedMissionFile } from '../../mavlink/missionFileParser';
 import { MissionItemIntData } from '../../mavlink/encoder';
-import { RefreshCw, Crosshair, Maximize2, Shield, Flag, X, Eraser, Upload, AlertTriangle, Navigation, Home, Map as MapIcon } from 'lucide-react';
+import { RefreshCw, Crosshair, Maximize2, Shield, Flag, Eraser, Upload, AlertTriangle, Navigation, Home, Map as MapIcon } from 'lucide-react';
 import L from 'leaflet';
 
 function renderVehicleSvg(type: number): string {
@@ -74,6 +74,7 @@ interface GpsFix {
 
 import { computeMapBadgeVisibility } from './mapBadgeVisibility';
 import { MapMissionFooter } from './MapMissionFooter';
+import { MissionMenu } from './MissionMenu';
 
 interface MapWidgetProps {
   colSpan?: number;
@@ -225,8 +226,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     const files = e.dataTransfer.files;
     if (!files || files.length === 0) return;
+    await loadMissionFile(files[0]);
+  };
 
-    const file = files[0];
+  /** Parses a dropped or picked flight plan file and shows its preview, ready to upload. */
+  const loadMissionFile = async (file: File) => {
     try {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = new Uint8Array(arrayBuffer);
@@ -901,7 +905,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     missionMarkersRef.current = [];
 
     // Filter valid waypoints
-    const validWps = missionWaypoints.filter((w) => (w.lat !== 0 || w.lon !== 0) && Math.abs(w.lat) <= 90 && Math.abs(w.lon) <= 180);
+    const validWps = missionWaypoints.filter((w) => cmdHasLocation(w.command) && (w.lat !== 0 || w.lon !== 0) && Math.abs(w.lat) <= 90 && Math.abs(w.lon) <= 180);
     const lineCoords: [number, number][] = validWps.map((w) => [w.lat, w.lon]);
     missionPolylineRef.current.setLatLngs(lineCoords);
 
@@ -1325,29 +1329,14 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               <Maximize2 className="h-3.5 w-3.5 text-sky-400" />
             </Button>
 
-            <Button
-              variant={missionStatus.isFetching ? 'destructive' : 'outline'}
-              size="sm"
-              onClick={missionStatus.isFetching ? () => missionManager.cancelFetch() : handleFetchMission}
-              className={`h-7 px-2 text-xs font-bold gap-1 transition-colors ${
-                missionStatus.isFetching
-                  ? 'bg-red-500/10 border-red-500/50 text-red-400 hover:bg-red-500/20 hover:text-red-300'
-                  : 'text-zinc-300 hover:text-white'
-              }`}
-              title={missionStatus.isFetching ? 'Cancel waypoint and fence fetch' : 'Fetch waypoints, fence & rally from vehicle'}
-            >
-              {missionStatus.isFetching ? (
-                <>
-                  <X className="h-3.5 w-3.5 text-red-400" />
-                  <span className="hidden xl:inline text-[11px]">Cancel</span>
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-3.5 w-3.5 text-amber-400" />
-                  <span className="hidden xl:inline text-[11px]">Fetch WPs</span>
-                </>
-              )}
-            </Button>
+            <MissionMenu
+              connected={connected}
+              isFetching={missionStatus.isFetching}
+              isUploading={Boolean(missionStatus.isUploading)}
+              onFetch={handleFetchMission}
+              onCancelFetch={() => missionManager.cancelFetch()}
+              onOpenFile={loadMissionFile}
+            />
           </div>
         </div>
       </CardHeader>

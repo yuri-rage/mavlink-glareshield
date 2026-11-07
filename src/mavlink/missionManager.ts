@@ -1,5 +1,5 @@
 import { mavlinkConnection } from './connection';
-import { MAVLINK_MSG_ID } from './messages';
+import { MAVLINK_MSG_ID, cmdHasLocation } from './messages';
 import { decodePayload, MavlinkPacket } from './parser';
 import { mavFtpClient } from './ftp';
 import { MissionItemIntData } from './encoder';
@@ -879,11 +879,14 @@ export class MissionManager {
       const p2 = view.getFloat32(offset + 4, true);
       const p3 = view.getFloat32(offset + 8, true);
       const p4 = view.getFloat32(offset + 12, true);
-      const x = view.getInt32(offset + 16, true) / 1e7;
-      const y = view.getInt32(offset + 20, true) / 1e7;
+      const command = view.getUint16(offset + 30, true);
+      // x and y are degrees * 1e7 only for commands with a location; otherwise they are plain param5/param6,
+      // as MISSION_ITEM_INT decoding treats them.
+      const scale = cmdHasLocation(command) ? 1e7 : 1;
+      const x = view.getInt32(offset + 16, true) / scale;
+      const y = view.getInt32(offset + 20, true) / scale;
       const z = view.getFloat32(offset + 24, true);
       const seq = view.getUint16(offset + 28, true);
-      const command = view.getUint16(offset + 30, true);
       const frame = view.getUint8(offset + 34);
       const current = view.getUint8(offset + 35) === 1;
 

@@ -7,7 +7,7 @@
     "dev": "vite --host",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "npx tsx tests/mavlink.test.ts && npx tsx tests/golden.test.ts && npx tsx tests/transport.test.ts && npx tsx tests/widgets.test.ts",
+    "test": "npx tsx tests/mavlink.test.ts && npx tsx tests/golden.test.ts && npx tsx tests/transport.test.ts && npx tsx tests/widgets.test.ts && npx tsx tests/missionFiles.test.ts",
     "test:widgets": "npx tsx tests/widgets.test.ts",
     "test:transport": "npx tsx tests/transport.test.ts",
     "test:golden": "npx tsx tests/golden.test.ts",

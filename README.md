@@ -18,7 +18,7 @@ Designed to remove the "glare" from more fully featured GCS applications and foc
 
 ## Features
 
-- **Heads-Up Display (HUD) & Tactical Map**: Canvas artificial horizon, speed/altitude tapes, Leaflet moving map with waypoints, polygon geofences, rally points, and drag-and-drop mission upload.
+- **Heads-Up Display (HUD) & Tactical Map**: Canvas artificial horizon, speed/altitude tapes, Leaflet moving map with waypoints, polygon geofences, rally points, mission upload from a file (or drag-and-drop), and saving the mission, fence and rally points to QGC `.plan` or `.waypoints` files.
 - **Flight Controls & Autopilot Commands**: Slide-to-confirm Arm/Disarm, flight mode switching, speed adjustment, and quick actions (RTL, Pause/Loiter, Land, Takeoff).
 - **Fast MAVLink & MAVFTP Engine**: Native in-browser MAVLink framing and high-speed MAVFTP parameter and mission sync with automatic legacy streaming fallback.
 - **RTK / NTRIP Correction Injection**: Real-time RTCM3 correction streaming to your vehicle from NTRIP casters or local USB base stations.

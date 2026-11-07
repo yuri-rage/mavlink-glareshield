@@ -460,7 +460,7 @@ const fence0Dv = new DataView(fence0Payload.buffer);
 fence0Dv.setInt32(16, Math.round(38.2222 * 1e7), true); // Fence lat
 fence0Dv.setInt32(20, Math.round(-121.2222 * 1e7), true); // Fence lon
 fence0Dv.setUint16(28, 0, true); // seq = 0
-fence0Dv.setUint16(30, 5005, true); // CIRCLE_INCLUSION
+fence0Dv.setUint16(30, 5003, true); // MAV_CMD_NAV_FENCE_CIRCLE_INCLUSION
 fence0Payload[37] = 1; // mission_type = 1 (FENCE)
 useTelemetryStore.getState().processPacket({
   version: 2,
