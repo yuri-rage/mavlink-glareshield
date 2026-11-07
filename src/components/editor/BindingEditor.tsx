@@ -219,6 +219,15 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
         <NumberField label="Multiplier" value={value.multiplier} placeholder="1" onChange={(v) => set({ multiplier: v })} />
         <NumberField label="Offset" value={value.offset} placeholder="0" onChange={(v) => set({ offset: v })} />
         <NumberField
+          label="Bit (bitmask fields)"
+          value={value.bit}
+          placeholder="whole value"
+          min={0}
+          max={31}
+          step="1"
+          onChange={(v) => set({ bit: v === undefined ? undefined : Math.max(0, Math.min(31, Math.round(v))) })}
+        />
+        <NumberField
           label="Decimals"
           value={value.decimals}
           placeholder="1"

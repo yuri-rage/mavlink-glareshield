@@ -134,6 +134,7 @@ A binding says where a value comes from and how to present it.
 | `messageName` | MAVLink message name, for example `VFR_HUD`. Use `RC_CHANNELS (scaled)` or `SERVO_OUTPUT_RAW (scaled)` for normalised RC and servo values (see below). |
 | `fieldName` | Field within the message. |
 | `multiplier`, `offset` | The displayed value is `raw × multiplier + offset`. Defaults are 1 and 0. |
+| `bit` | Read one bit of a bitmask field (0 = least significant, up to 31): the raw value becomes 0 or 1. For example, `RELAY_STATUS.on` with `bit: 2` is relay 3. |
 | `unit` | Unit text shown after the value. |
 | `unitKind` | `none` (default), `speed`, `altitude` or `distance`. See [Units](#units). |
 | `decimals` | Decimal places, 0–6. |
@@ -422,7 +423,19 @@ An on/off switch. What it sends depends on the command:
 
 With `confirmation` on (always the case after an import), the switch is a **slide-to-confirm** control, like the arming slider: drag the handle from the left end all the way to the right and let go. Anything shorter springs back and sends nothing, so there's no separate confirm step. The slider is locked while there's no vehicle link. With `confirmation` off, it's a plain tap switch.
 
-On its own, the switch can only show what it last sent. Add `feedback` to make it show what the vehicle reports instead. For example, read back the servo output, which is on above `stateThreshold`:
+**Relay toggles follow the vehicle on their own.** A toggle that sends `181` `DO_SET_RELAY` with no `feedback` reads the vehicle's `RELAY_STATUS` message, which reports every relay as one bit of its `on` field (bit *n* is relay instance *n*, as in `param1`). The app asks the vehicle to stream it at 1 Hz. The card then shows the relay's real state, for example **RELAY3 ON**, even when something else switched it. If the vehicle reports that relay as not configured (its bit of `RELAY_STATUS.present` is 0), the card says so. Firmware that doesn't send `RELAY_STATUS` falls back to the last value sent.
+
+```json
+{
+  "id": "custom-pump-relay",
+  "name": "Pump",
+  "category": "control",
+  "displayType": "toggle-switch",
+  "action": { "label": "Pump", "commandId": 181, "params": [2, 0, 0, 0, 0, 0, 0], "confirmation": true }
+}
+```
+
+Without feedback, a toggle shows what it last sent; a command the vehicle rejects or doesn't answer leaves the switch where it was. For other commands (or to override the automatic relay state), add `feedback` to make the switch show what the vehicle reports instead. For example, read back the servo output, which is on above `stateThreshold`:
 
 ```json
 {
@@ -602,6 +615,7 @@ These rules apply to everything imported, and to everything saved from the creat
 | `multiBarConfig.group` | Must be a known group, otherwise it becomes `rc-8`. |
 | `bindings` | At most 16. The display type then uses as many as it supports (see [Display types](#display-types)). |
 | `decimals` | 0–6 |
+| `bit` | 0–31, whole numbers |
 | `color` | Hex only, such as `#rgb` or `#rrggbb`. Anything else is dropped. |
 | `gauge.majorTicks` / `minorTicks` | 2–12 / 0–9 |
 | `gauge.sweep` | 180, 240 or 270 |

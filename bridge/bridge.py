@@ -83,6 +83,7 @@ MSG_EKF_STATUS_REPORT = 193
 MSG_RPM = 226
 MSG_GPS_RTCM_DATA = 233
 MSG_VIBRATION = 241
+MSG_RELAY_STATUS = 376
 MSG_HOME_POSITION = 242
 MSG_STATUSTEXT = 253
 MSG_ESC_TELEMETRY_1_TO_4 = 11030
@@ -124,6 +125,7 @@ CRC_EXTRA = {
     MSG_RPM: 207,
     MSG_GPS_RTCM_DATA: 35,
     MSG_VIBRATION: 90,
+    MSG_RELAY_STATUS: 199,
     MSG_HOME_POSITION: 104,
     MSG_STATUSTEXT: 83,
     MSG_ESC_TELEMETRY_1_TO_4: 144,
@@ -234,6 +236,9 @@ class BridgeServer:
 
         # Vehicle simulated state
         self.armed = False
+        # Mock relays: RELAY1-RELAY4 configured (bits 0-3 of RELAY_STATUS.present), all off.
+        self.relay_present = 0b1111
+        self.relay_on = 0
         self.flight_mode = 0  # STABILIZE
         self.sim_lat = 37.7749
         self.sim_lon = -122.4194
@@ -454,6 +459,13 @@ class BridgeServer:
         elif self.mode == "serial" and self.serial_conn:
             self.serial_conn.write(data)
 
+    def relay_status_packet(self) -> bytes:
+        """RELAY_STATUS: time_boot_ms, on and present bitmasks (bit n = relay instance n)."""
+        payload = struct.pack(
+            "<IHH", int(time.time() * 1000) & 0xFFFFFFFF, self.relay_on, self.relay_present
+        )
+        return self.encoder.pack(MSG_RELAY_STATUS, payload)
+
     async def handle_mock_command(self, data: bytes):
         # Inspect MAVLink message ID (extract exact payload length so signed or coalesced frames work cleanly)
         if len(data) >= 12 and data[0] == 0xFD:
@@ -621,6 +633,23 @@ class BridgeServer:
                     await self.broadcast(
                         self.encoder.pack(MSG_HOME_POSITION, home_payload)
                     )
+
+                elif cmd == 181:  # MAV_CMD_DO_SET_RELAY: param1 relay instance, param2 0 off / 1 on
+                    instance = int(p1)
+                    known = 0 <= instance < 16 and bool(self.relay_present & (1 << instance))
+                    if known:
+                        if p2 >= 1:
+                            self.relay_on |= 1 << instance
+                        else:
+                            self.relay_on &= ~(1 << instance)
+                        print(f"[MOCK] RELAY{instance + 1} {'ON' if p2 >= 1 else 'OFF'}")
+                    ack_payload = struct.pack(
+                        "<HBBIBB", 181, 0 if known else 2, 0, 0, 1, 1
+                    )  # 0 = ACCEPTED, 2 = DENIED (relay not configured)
+                    await self.broadcast(
+                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
+                    )
+                    await self.broadcast(self.relay_status_packet())
 
                 elif cmd == 42428:  # MAV_CMD_DO_SEND_BANNER
                     ack_payload = struct.pack(
@@ -1345,6 +1374,7 @@ class BridgeServer:
                     0,
                 )
                 await self.broadcast(self.encoder.pack(MSG_VIBRATION, vibe_pkt))
+                await self.broadcast(self.relay_status_packet())
 
                 ekf_pkt = struct.pack(
                     "<fffffHf", 0.08, 0.12, 0.09, 0.05, 0.04, 0x01FF, 0.02

@@ -57,6 +57,7 @@ export class MessageRateManager {
     [MAVLINK_MSG_ID.EKF_STATUS_REPORT]: 2,
     [MAVLINK_MSG_ID.RPM]: 4,
     [MAVLINK_MSG_ID.VIBRATION]: 2,
+    [MAVLINK_MSG_ID.RELAY_STATUS]: 1,
     [MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4]: 4,
   };
 

@@ -340,5 +340,41 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   check('builtin: widgets with vehicle controls say so', ['built-in-glareshield', 'built-in-all-modes', 'built-in-set-speed', 'built-in-waypoints', 'built-in-map', 'built-in-parameters', 'built-in-ntrip'].every((id) => Boolean(BUILTIN_PANELS[id].controls)));
 }
 
+// ------------------------------------------------------------------------------------------------
+// Relay state: RELAY_STATUS decoding, bit bindings, relay toggles following the vehicle
+// ------------------------------------------------------------------------------------------------
+{
+  const pm = await import('../src/components/widgets/custom/panelModel.ts');
+  const { MavlinkParser, decodePayload } = await import('../src/mavlink/parser.ts');
+  const { extractBit, resolveRawValue } = await import('../src/lib/widgetValues.ts');
+  const { recordPacket, getCachedField } = await import('../src/lib/messageCache.ts');
+
+  // pymavlink: RELAY_STATUS(time_boot_ms=123456, on=0b0101, present=0b1111), sys 1 comp 1.
+  const hex = 'fd07000000010178010040e2010005000fa422'; // payload trimmed of its trailing zero, as MAVLink 2 sends it
+  const packets = new MavlinkParser().parse(Uint8Array.from(Buffer.from(hex, 'hex')));
+  check('RELAY_STATUS: a pymavlink packet passes the CRC check', packets.length === 1 && packets[0].messageId === MAVLINK_MSG_ID.RELAY_STATUS);
+  const d: any = packets[0] ? decodePayload(packets[0].messageId, packets[0].payload) : {};
+  check('RELAY_STATUS: decodes time, on and present', d.time_boot_ms === 123456 && d.on === 5 && d.present === 15, JSON.stringify(d));
+  if (packets[0]) recordPacket(packets[0]);
+  check('RELAY_STATUS: reaches the message cache for bindings', getCachedField('RELAY_STATUS', 'on') === 5);
+
+  check('extractBit: picks single bits', extractBit(5, 0) === 1 && extractBit(5, 1) === 0 && extractBit(5, 2) === 1 && extractBit(0x80000000, 31) === 1);
+  check('bit binding: reads one bit of a field', resolveRawValue({ messageName: 'RELAY_STATUS', fieldName: 'on', bit: 2 }, {}) === 1 && resolveRawValue({ messageName: 'RELAY_STATUS', fieldName: 'on', bit: 1 }, {}) === 0);
+  check('bit binding: without a bit, the whole field', resolveRawValue({ messageName: 'RELAY_STATUS', fieldName: 'on' }, {}) === 5);
+  const b = sanitizeWidgetDefinition({ id: 'x', name: 'X', category: 'telemetry', displayType: 'stat-card', binding: { messageName: 'A', fieldName: 'b', bit: 40.6 } });
+  check('sanitize: bit is a whole number from 0 to 31', b.binding?.bit === 31);
+
+  const relayToggle: any = { id: 'r', name: 'Lights', category: 'control', displayType: 'toggle-switch', stateThreshold: 1500,
+    action: { label: 'Lights', commandId: 181, params: [2, 0, 0, 0, 0, 0, 0], confirmation: true } };
+  const fb = pm.feedbackBinding(relayToggle);
+  check('relay toggle: follows RELAY_STATUS.on, bit = relay instance', fb?.messageName === 'RELAY_STATUS' && fb?.fieldName === 'on' && fb?.bit === 2 && fb?.label === 'RELAY3');
+  check('relay toggle: on above 0, whatever stateThreshold says', pm.followsRelayStatus(relayToggle) && pm.feedbackThreshold(relayToggle) === 0);
+  check('relay toggle: asks the vehicle to stream RELAY_STATUS', pm.requiredMessageIds(relayToggle).includes(MAVLINK_MSG_ID.RELAY_STATUS));
+  const explicit = { ...relayToggle, feedback: { messageName: 'SERVO_OUTPUT_RAW', fieldName: 'servo9_raw' } };
+  check('relay toggle: an explicit feedback field overrides it', pm.feedbackBinding(explicit)?.messageName === 'SERVO_OUTPUT_RAW' && !pm.followsRelayStatus(explicit) && pm.feedbackThreshold(explicit) === 1500);
+  check('servo toggle: no automatic feedback', pm.feedbackBinding({ ...relayToggle, action: { ...relayToggle.action, commandId: 183 } }) === undefined);
+  check('relay toggle: out-of-range relay numbers get no automatic feedback', pm.relayInstance({ ...relayToggle, action: { ...relayToggle.action, params: [16, 0, 0, 0, 0, 0, 0] } }) === undefined && pm.relayInstance({ ...relayToggle, action: { ...relayToggle.action, params: [1.5, 0, 0, 0, 0, 0, 0] } }) === undefined);
+}
+
 console.log(failures.length ? `\n${failures.length} widget check(s) FAILED` : '\nAll widget checks PASSED');
 process.exit(failures.length ? 1 : 0);

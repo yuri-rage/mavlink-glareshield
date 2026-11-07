@@ -7,7 +7,9 @@ import { mavlinkConnection } from '../../../mavlink/connection';
 import { getMavCmdName } from '../../../mavlink/messages';
 import { Button } from '../../ui/button';
 import { AlertTriangle, Check, Play, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
-import { sliderParams, toggleParams } from './panelModel';
+import { feedbackBinding, feedbackThreshold, followsRelayStatus, relayInstance, sliderParams, toggleParams } from './panelModel';
+import { getCachedField } from '../../../lib/messageCache';
+import { extractBit } from '../../../lib/widgetValues';
 import { AckChip, useCommandSender, useVehicleTarget, type PanelProps } from './panelKit';
 import { SlideToConfirm } from './SlideToConfirm';
 
@@ -59,21 +61,33 @@ export const TogglePanel: React.FC<PanelProps> = ({ def, feedback, scheme }) => 
   const [lastSent, setLastSent] = useState(false);
   const linked = useTelemetryStore((s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED');
 
-  const threshold = def.stateThreshold ?? 0;
-  /** Vehicle-reported switch state when a feedback field is configured, otherwise what was last sent. */
-  const feedbackOn = feedback && feedback.base !== null && !feedback.stale ? feedback.base > threshold : null;
+  const fbBinding = feedbackBinding(def);
+  const threshold = feedbackThreshold(def);
+  // A relay toggle follows RELAY_STATUS, unless the vehicle reports that relay as not configured.
+  const relay = followsRelayStatus(def) ? relayInstance(def) : undefined;
+  const presentMask = relay !== undefined && feedback && !feedback.stale ? getCachedField('RELAY_STATUS', 'present') : undefined;
+  const relayMissing = relay !== undefined && presentMask !== undefined && extractBit(presentMask, relay) === 0;
+  /** Vehicle-reported switch state when there is a feedback field, otherwise what was last sent. */
+  const feedbackOn =
+    feedback && feedback.base !== null && !feedback.stale && !relayMissing ? feedback.base > threshold : null;
   const switchOn = feedbackOn ?? lastSent;
-  const hasFeedback = Boolean(def.feedback?.messageName);
+  const hasFeedback = Boolean(fbBinding);
+  const feedbackText =
+    relay !== undefined ? `${fbBinding?.label} ${feedbackOn ? 'ON' : 'OFF'}` : `${fbBinding?.fieldName} ${feedback?.text}`;
   // With confirmation on, the switch is a slide-to-confirm control (like the arming slider): the slide itself is
   // the deliberate action, so there is no separate confirm step.
   const slide = Boolean(def.action?.confirmation);
 
   const execute = (next: boolean) => {
+    const previous = switchOn;
     setLastSent(next);
     if (!def.action) return;
     const params = toggleParams(def.action.commandId, def.action.params, next);
     const cmd = mavlinkConnection.getEncoder().createCommandLong(sysId, compId, def.action.commandId, params);
-    send(cmd, `${def.action.label || def.name}: ${next ? 'ON' : 'OFF'}`);
+    // Rejected or unanswered: the switch didn't move, so don't show it as if it had.
+    send(cmd, `${def.action.label || def.name}: ${next ? 'ON' : 'OFF'}`, (status) => {
+      if (status === 'rejected') setLastSent(previous);
+    });
   };
 
   const commandName = def.action ? getMavCmdName(def.action.commandId) : '';
@@ -86,10 +100,12 @@ export const TogglePanel: React.FC<PanelProps> = ({ def, feedback, scheme }) => 
           <span className="text-[10px] text-zinc-500 font-mono">
             <span className={switchOn ? 'text-amber-300 font-bold' : ''}>{switchOn ? 'ENGAGED' : 'DISENGAGED'}</span>
             {feedbackOn !== null
-              ? ` · ${def.feedback?.fieldName} ${feedback?.text}`
-              : hasFeedback
-                ? ' · no feedback yet (last sent)'
-                : ' · last sent'}
+              ? ` · ${feedbackText}`
+              : relayMissing
+                ? ` · ${fbBinding?.label} not configured on the vehicle (last sent)`
+                : hasFeedback
+                  ? ' · no feedback yet (last sent)'
+                  : ' · last sent'}
           </span>
         </div>
         {!slide && (

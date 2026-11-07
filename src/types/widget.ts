@@ -48,6 +48,8 @@ export interface WidgetDataBinding {
   critThreshold?: number;
   thresholdInvert?: boolean; // true if lower values trigger warning/critical (e.g., voltage, battery_remaining)
   offset?: number; // added after the multiplier: displayed = raw * multiplier + offset
+  /** Read one bit of an integer field (0 = least significant): the raw value becomes 0 or 1. For bitmask fields. */
+  bit?: number;
   /** When set, the value (in m/s or m after multiplier/offset) is shown in the user's chosen units. */
   unitKind?: WidgetUnitKind;
   label?: string; // series / row label for multi-value widgets
