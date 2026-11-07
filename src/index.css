@@ -63,34 +63,26 @@ html.daylight-theme body {
   color: #0f172a !important;
 }
 
-html.daylight-theme .bg-zinc-950,
-html.daylight-theme .bg-zinc-950\/95,
-html.daylight-theme .bg-zinc-950\/90,
-html.daylight-theme .bg-zinc-950\/85,
-html.daylight-theme .bg-zinc-950\/80,
-html.daylight-theme .bg-zinc-950\/70,
-html.daylight-theme .bg-zinc-950\/60 {
+/* Zinc surfaces, any opacity: matched by class-token prefix so new opacity variants are covered automatically
+   ([class^=] / [class*=" "] match a class that starts with the name, not hover:/focus: variants). */
+html.daylight-theme :is([class^='bg-zinc-950'], [class*=' bg-zinc-950']) {
   background-color: #ffffff !important;
   color: #0f172a !important;
 }
 
-html.daylight-theme .bg-zinc-900,
-html.daylight-theme .bg-zinc-900\/95,
-html.daylight-theme .bg-zinc-900\/90,
-html.daylight-theme .bg-zinc-900\/80,
-html.daylight-theme .bg-zinc-900\/70,
-html.daylight-theme .bg-zinc-900\/60,
-html.daylight-theme .bg-zinc-900\/40 {
+html.daylight-theme :is([class^='bg-zinc-900'], [class*=' bg-zinc-900']) {
   background-color: #f1f5f9 !important;
   color: #0f172a !important;
 }
 
-html.daylight-theme .bg-zinc-800,
-html.daylight-theme .bg-zinc-800\/80,
-html.daylight-theme .bg-zinc-800\/60,
-html.daylight-theme .bg-zinc-800\/40 {
+html.daylight-theme :is([class^='bg-zinc-800'], [class*=' bg-zinc-800']) {
   background-color: #e2e8f0 !important;
   color: #0f172a !important;
+}
+
+/* Black log panels (messages, parameters) become light; the HUD's own black video area stays dark. */
+html.daylight-theme :is([class*=' bg-black\/5'], [class*=' bg-black\/6']) {
+  background-color: #f8fafc !important;
 }
 
 /* Daylight High-Contrast Badge & Pill Overrides */
@@ -163,11 +155,7 @@ html.daylight-theme .text-zinc-700 {
   color: #94a3b8 !important;
 }
 
-html.daylight-theme .border-zinc-800,
-html.daylight-theme .border-zinc-800\/80,
-html.daylight-theme .border-zinc-800\/60,
-html.daylight-theme .border-zinc-700,
-html.daylight-theme .border-zinc-700\/80 {
+html.daylight-theme :is([class^='border-zinc-'], [class*=' border-zinc-']) {
   border-color: #cbd5e1 !important;
 }
 
@@ -203,26 +191,45 @@ html.daylight-theme .border-amber-500\/60 {
   border-color: #fbbf24 !important;
 }
 
+html.daylight-theme .text-sky-100,
+html.daylight-theme .text-sky-200,
 html.daylight-theme .text-sky-300,
-html.daylight-theme .text-sky-400 {
+html.daylight-theme .text-sky-400,
+html.daylight-theme .text-blue-400 {
   color: #0284c7 !important;
 }
 
+html.daylight-theme .text-emerald-100,
+html.daylight-theme .text-emerald-200,
 html.daylight-theme .text-emerald-300,
 html.daylight-theme .text-emerald-400 {
   color: #047857 !important;
 }
 
+html.daylight-theme .text-amber-200,
 html.daylight-theme .text-amber-300,
 html.daylight-theme .text-amber-400 {
   color: #b45309 !important;
 }
 
+html.daylight-theme .text-rose-100,
+html.daylight-theme .text-rose-200,
 html.daylight-theme .text-rose-300,
 html.daylight-theme .text-rose-400,
+html.daylight-theme .text-red-100,
+html.daylight-theme .text-red-200,
 html.daylight-theme .text-red-300,
 html.daylight-theme .text-red-400 {
   color: #be123c !important;
+}
+
+html.daylight-theme .text-cyan-300,
+html.daylight-theme .text-cyan-400 {
+  color: #0e7490 !important;
+}
+
+html.daylight-theme .text-purple-400 {
+  color: #7e22ce !important;
 }
 
 /* Hide scrollbars cleanly where horizontal scroll hints are used */
