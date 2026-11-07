@@ -54,7 +54,7 @@ Nothing is placed until you confirm.
 
 Every imported definition is cleaned before use:
 
-- **Confirmation is always on.** `action.confirmation` and `paramControl.confirmation` are forced to `true`, whatever the file says. An imported widget can't send a command or write a parameter without you confirming it. You can turn confirmation off afterwards in the creator if you trust the widget.
+- **Confirmation is always on.** `action.confirmation`, `paramControl.confirmation` and `paramSet.confirmation` are forced to `true`, whatever the file says. An imported widget can't send a command or write a parameter without you confirming it. You can turn confirmation off afterwards in the creator if you trust the widget.
 - **IDs never collide.** If the imported `id` already exists, the widget gets a fresh ID and an **(imported)** suffix on its name, so your existing widget is never overwritten.
 - **Invalid values are clamped or dropped.** The full list is under [Limits and validation rules](#limits-and-validation-rules).
 - **Unknown display types fall back.** An unknown `displayType` becomes `stat-card`. An unknown multi-bar group becomes `rc-8`.
@@ -98,6 +98,7 @@ The smallest useful widget:
 | `multiBarConfig` | `{ "group": … }` | `multi-bar` | Which preset group of bars to draw. |
 | `action` | object | command types | The command for buttons, toggles and sliders. |
 | `paramControl` | object | `param-control` | The parameter to read and write. |
+| `paramSet` | object | `param-set` | The parameters to list and edit, by name or wildcard. |
 | `feedback` | binding | | `toggle-switch` only: the field that reports the real on/off state. |
 | `stateThreshold` | number | | `indicator-led` and toggle `feedback`: "on" means the value is above this. Default `0`. |
 | `staleAfterSec` | number | | Seconds without the message before the widget shows **Stale**. Default `3`. |
@@ -386,7 +387,7 @@ A status light. It is **on** when the value is above `stateThreshold` and the da
 
 ## Control widgets
 
-Control widgets send a MAVLink `COMMAND_LONG`, or a `PARAM_SET`, to the vehicle. They report the vehicle's answer on the card: **accepted**, **denied**, or **no response**.
+Control widgets send a MAVLink `COMMAND_LONG`, or a `PARAM_SET` (`param-control`, `param-set`), to the vehicle. They report the vehicle's answer on the card: **accepted**, **denied**, or **no response**.
 
 The `action` object, used by `action-button`, `toggle-switch` and `slider-control`:
 
@@ -516,6 +517,41 @@ What you do set always wins, for example to offer only some of the values:
 }
 ```
 
+### `param-set`
+
+A list of parameters to view and edit in one card, chosen by name or by wildcard: for example everything about the battery, or the failsafe settings you change in the field.
+
+Each row works like a row in the Parameters widget:
+- the name, short name and description come from the metadata for the connected vehicle and firmware version, with an (i) details card;
+- named values get a dropdown, bitmasks a checklist, and numbers a box with the parameter's range and step;
+- read-only parameters show a lock.
+
+Every write waits for the vehicle to echo the new value back. The row shows **writing…**, then **saved**, or **not saved** when no echo arrives within 4 seconds. A value outside the parameter's range always asks before writing, even with `confirmation` off.
+
+| `paramSet` field | Meaning |
+|---|---|
+| `params` | The entries, in order. An exact name such as `BATT_CAPACITY` keeps its place, and is listed even when the vehicle doesn't have it (as **not on this vehicle**), so a typo shows. A pattern with `*` or `?`, such as `BATT_*`, `FS_?_*` or `*_ENABLE`, adds every matching downloaded parameter, alphabetically. An entry starting with `-`, such as `-BATT2_*`, leaves matches out. Each name appears once. |
+| `confirmation` | Ask before every write. Always `true` after an import. |
+
+Patterns need the vehicle's parameter list. Until it's downloaded, the card offers a **Download** button. Exact names are requested one by one on their own. A card lists at most 150 rows; narrow the patterns if more match.
+
+```json
+{
+  "id": "custom-battery-params",
+  "name": "Battery Setup",
+  "category": "control",
+  "displayType": "param-set",
+  "paramSet": {
+    "params": ["BATT_MONITOR", "BATT_CAPACITY", "BATT_*", "-BATT_*_PIN"],
+    "confirmation": false
+  }
+}
+```
+
+In the creator, choose **Parameter Set** and type the entries one per line. Once the vehicle's parameters are downloaded, the creator previews what they match and which exact names the vehicle lacks.
+
+The same patterns work in the Parameters widget's search box, where plain words also search descriptions (see its **(i)** help).
+
 ---
 
 ## Composite widgets
@@ -636,7 +672,8 @@ These rules apply to everything imported, and to everything saved from the creat
 | `gauge.sweep` | 180, 240 or 270 |
 | `chart.windowSec` | 5–600 |
 | `staleAfterSec` | 0.5–600 |
-| `action.confirmation`, `paramControl.confirmation` | Forced to `true` on import. |
+| `paramSet.params` | At most 64 entries. Each is upper-cased and must be letters, digits, `_`, `*` or `?` (up to 32 characters), optionally with a leading `-`; anything else is dropped, as are repeats. |
+| `action.confirmation`, `paramControl.confirmation`, `paramSet.confirmation` | Forced to `true` on import. |
 | Duplicate `id` | Reassigned, with **(imported)** added to the name. |
 
 Fields the app doesn't recognise are kept in the file but have no effect.

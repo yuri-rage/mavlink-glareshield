@@ -164,15 +164,17 @@ interface ImportPart {
   extraCount: number;
   action?: CustomWidgetDefinition['action'];
   paramControl?: CustomWidgetDefinition['paramControl'];
+  paramSet?: CustomWidgetDefinition['paramSet'];
 }
 
 function importParts(w: CustomWidgetDefinition): ImportPart[] {
-  const part = (p: Pick<CustomWidgetDefinition, 'binding' | 'bindings' | 'action' | 'paramControl'>, heading?: string): ImportPart => ({
+  const part = (p: Pick<CustomWidgetDefinition, 'binding' | 'bindings' | 'action' | 'paramControl' | 'paramSet'>, heading?: string): ImportPart => ({
     heading,
     binding: p.binding,
     extraCount: p.bindings?.length ?? 0,
     action: p.action,
     paramControl: p.paramControl,
+    paramSet: p.paramSet,
   });
   if (w.displayType !== 'composite') return [part(w)];
   return (w.panels ?? []).map((p, i) => {
@@ -237,6 +239,20 @@ const ImportPartDetails: React.FC<{ part: ImportPart }> = ({ part }) => (
         )}
         <div className="text-[11px] text-amber-400 mt-1">
           * Confirmation is enforced on imported parameter controls to prevent unintended vehicle configuration changes.
+        </div>
+      </div>
+    )}
+    {part.paramSet && (
+      <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded mt-2 space-y-1 text-amber-200">
+        <div className="font-bold flex items-center gap-1.5 text-amber-300">
+          <AlertTriangle className="h-4 w-4" />
+          Autopilot Parameter Set:
+        </div>
+        <div>
+          Can edit: <b className="text-zinc-100 font-mono break-words">{part.paramSet.params.join(', ') || '(none)'}</b>
+        </div>
+        <div className="text-[11px] text-amber-400 mt-1">
+          * Patterns such as BATT_* cover every matching parameter on the vehicle. Confirmation is enforced on every write from an imported set.
         </div>
       </div>
     )}
@@ -336,7 +352,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
               {importParts(pendingImportWidget).map((part, i) => (
                 <ImportPartDetails key={i} part={part} />
               ))}
-              {!importParts(pendingImportWidget).some((p) => p.action || p.paramControl || p.builtin?.controls) && (
+              {!importParts(pendingImportWidget).some((p) => p.action || p.paramControl || p.paramSet || p.builtin?.controls) && (
                 <div className="text-zinc-500 italic mt-1">No autopilot actions or parameter controls (read-only instrument).</div>
               )}
             </div>

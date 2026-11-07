@@ -26,6 +26,7 @@ export const VALID_DISPLAY_TYPES = new Set<WidgetDisplayType>([
   'text-display',
   'multi-bar',
   'param-control',
+  'param-set',
   'compass-rose',
   'sparkline',
   'value-list',
@@ -46,6 +47,23 @@ export const VALID_MULTI_BAR_GROUPS = new Set<MultiBarGroupType>([
 ]);
 
 const MAX_EXTRA_BINDINGS = 16;
+/** Entries a Parameter set may list (each can be a wildcard). */
+export const MAX_PARAM_SET_ENTRIES = 64;
+/** A parameter name (16 characters in MAVLink) or a wildcard pattern, optionally with a leading - to exclude. */
+const PARAM_SET_ENTRY = /^-?[A-Z0-9_*?]{1,32}$/;
+
+/** Cleans a Parameter set's entries: upper-cased, trimmed, only name / wildcard characters, at most 64. */
+export function sanitizeParamSetEntries(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const e of raw) {
+    if (typeof e !== 'string') continue;
+    const v = e.trim().toUpperCase();
+    if (PARAM_SET_ENTRY.test(v) && !out.includes(v)) out.push(v);
+    if (out.length >= MAX_PARAM_SET_ENTRIES) break;
+  }
+  return out;
+}
 /** Panels a composite widget may hold. */
 export const MAX_PANELS = 8;
 /** Bound values across all panels of a composite widget (each is read 8 times a second). */
@@ -154,7 +172,7 @@ function sanitizePanel(raw: unknown): WidgetPanelDefinition | undefined {
   const description = text(r.description, 200);
   if (description) out.description = description;
   if (typeof r.colorScheme === 'string' && COLOR_SCHEMES.has(r.colorScheme)) out.colorScheme = r.colorScheme as WidgetPanelDefinition['colorScheme'];
-  for (const key of ['binding', 'bindings', 'action', 'paramControl', 'multiBarConfig', 'gauge', 'chart', 'feedback', 'stateThreshold', 'staleAfterSec'] as const) {
+  for (const key of ['binding', 'bindings', 'action', 'paramControl', 'paramSet', 'multiBarConfig', 'gauge', 'chart', 'feedback', 'stateThreshold', 'staleAfterSec'] as const) {
     if (clean[key] !== undefined) (out as unknown as Record<string, unknown>)[key] = clean[key];
   }
   return out;
@@ -207,5 +225,11 @@ export function sanitizeWidgetDefinition(raw: CustomWidgetDefinition): CustomWid
   if (raw.action !== undefined) w.action = sanitizeAction(raw.action);
   if (w.action) w.action = { ...w.action, confirmation: true };
   if (w.paramControl) w.paramControl = { ...w.paramControl, confirmation: true };
+  if (raw.paramSet !== undefined) {
+    w.paramSet =
+      raw.paramSet && typeof raw.paramSet === 'object'
+        ? { params: sanitizeParamSetEntries((raw.paramSet as { params?: unknown }).params), confirmation: true }
+        : undefined;
+  }
   return w;
 }

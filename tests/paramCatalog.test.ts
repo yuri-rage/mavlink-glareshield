@@ -222,5 +222,29 @@ const cat = parsePdefJson(fixture);
   check('param-control: no metadata, unchanged', JSON.stringify(effectiveParamControl({ paramId: 'X', step: 2 }, null)) === JSON.stringify({ paramId: 'X', step: 2 }));
 }
 
+// ------------------------------------------------------------------------------------------------
+// Parameter set widgets from outside are cleaned and always confirm writes
+// ------------------------------------------------------------------------------------------------
+{
+  const { sanitizeWidgetDefinition, MAX_PARAM_SET_ENTRIES } = await import('../src/lib/widgetValidation.ts');
+  const w = sanitizeWidgetDefinition({
+    id: 'x', name: 'Set', category: 'control', displayType: 'param-set',
+    paramSet: { params: ['batt_*', ' FS_THR_ENABLE ', 'BATT_*', '-batt2_*', '<img src=x>', 'A'.repeat(40), 42 as unknown as string, 'DROP TABLE', 'SERVO?_FUNCTION'], confirmation: false },
+  } as any);
+  check('import: param-set is a known type', w.displayType === 'param-set');
+  check('import: entries cleaned (upper-cased, trimmed, only name/wildcard characters, no repeats)',
+    JSON.stringify(w.paramSet?.params) === JSON.stringify(['BATT_*', 'FS_THR_ENABLE', '-BATT2_*', 'SERVO?_FUNCTION']), JSON.stringify(w.paramSet?.params));
+  check('import: writes always confirmed', w.paramSet?.confirmation === true);
+  const many = sanitizeWidgetDefinition({ id: 'y', name: 'S', category: 'control', displayType: 'param-set', paramSet: { params: Array.from({ length: 200 }, (_, i) => `P${i}`) } } as any);
+  check('import: at most 64 entries', many.paramSet?.params.length === MAX_PARAM_SET_ENTRIES);
+  const junk = sanitizeWidgetDefinition({ id: 'z', name: 'S', category: 'control', displayType: 'param-set', paramSet: 'BATT_*' } as any);
+  check('import: a malformed paramSet is dropped', junk.paramSet === undefined);
+  const comp = sanitizeWidgetDefinition({
+    id: 'c', name: 'C', category: 'control', displayType: 'composite',
+    panels: [{ displayType: 'param-set', title: 'Battery', paramSet: { params: ['BATT_*'] } }],
+  } as any);
+  check('import: a param-set panel in a composite keeps its list and confirms', comp.panels?.[0].displayType === 'param-set' && comp.panels?.[0].paramSet?.params[0] === 'BATT_*' && comp.panels?.[0].paramSet?.confirmation === true);
+}
+
 console.log(failures.length ? `\n${failures.length} FAILED` : '\nAll parameter catalogue checks passed');
 process.exit(failures.length ? 1 : 0);
