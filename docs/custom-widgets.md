@@ -476,11 +476,25 @@ Reads a vehicle parameter and writes a new value to it. The widget shows the par
 | `paramControl` field | Meaning |
 |---|---|
 | `paramId` | Parameter name, for example `WPNAV_SPEED`. |
-| `min`, `max` | The expected range. A value outside it asks for a separate, explicit confirmation, even when `confirmation` is off. |
-| `step` | Step for the input. |
-| `unit` | Unit text. |
-| `options` | A list of `{ "label", "value" }` pairs. When present, the widget shows a dropdown instead of a number box. |
+| `min`, `max` | The expected range. A value outside it asks for a separate, explicit confirmation, even when `confirmation` is off. Optional: defaults to the parameter's range from ArduPilot's metadata. |
+| `step` | Step for the input. Optional: defaults to the parameter's increment. |
+| `unit` | Unit text. Optional: defaults to the parameter's units. |
+| `options` | A list of `{ "label", "value" }` pairs. When present, the widget shows a dropdown instead of a number box. Optional: a parameter with named values (for example `FENCE_ACTION`) gets them as the dropdown. |
 | `confirmation` | Ask before every write. Always `true` after an import. |
+
+Anything you leave out comes from the parameter metadata for the connected vehicle and firmware version (see the Parameters widget's header chip), so a panel can be as short as:
+
+```json
+{
+  "id": "custom-fence-action",
+  "name": "Fence Action",
+  "category": "control",
+  "displayType": "param-control",
+  "paramControl": { "paramId": "FENCE_ACTION", "confirmation": true }
+}
+```
+
+What you do set always wins, for example to offer only some of the values:
 
 ```json
 {

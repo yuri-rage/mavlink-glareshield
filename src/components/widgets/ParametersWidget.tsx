@@ -10,7 +10,8 @@ import {
 } from '../../mavlink/paramMetadata';
 import { useParamMetaStore } from '../../store/paramMetaStore';
 import { bitmaskSummary, valueLabel } from '../../mavlink/paramBits';
-import { BitmaskEditor, DetailsButton, EnumSelect, ParamDetails } from './params/ParamEditors';
+import { BitmaskEditor, DetailsButton, EnumSelect, ParamDetails, Popover } from './params/ParamEditors';
+import { matchesParamQuery, parseParamQuery } from '../../mavlink/paramMatch';
 import { getVehicleCategory } from '../../mavlink/messages';
 import { decodePayload } from '../../mavlink/parser';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
@@ -58,6 +59,8 @@ export const ParametersWidget: React.FC = () => {
   /** The value cell being edited, which the bitmask checklist opens beside. */
   const [editAnchor, setEditAnchor] = useState<HTMLElement | null>(null);
   const [details, setDetails] = useState<{ key: string; anchor: HTMLElement } | null>(null);
+  const [searchHelpOpen, setSearchHelpOpen] = useState(false);
+  const searchHelpRef = useRef<HTMLButtonElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(DEFAULT_VIEWPORT_HEIGHT);
 
@@ -281,8 +284,8 @@ export const ParametersWidget: React.FC = () => {
     }, 2000);
   };
 
+  const searchQuery = useMemo(() => parseParamQuery(search), [search]);
   const filteredKeys = useMemo(() => {
-    const q = search.trim().toLowerCase();
     const matched = paramKeys.filter((k) => {
       if (onlyModified) {
         const p = parameters[k];
@@ -290,14 +293,11 @@ export const ParametersWidget: React.FC = () => {
           return false;
         }
       }
-      if (!q) return true;
-      if (k.toLowerCase().includes(q)) return true;
-      const meta = getParamMetadata(k);
-      if (meta && (meta.description.toLowerCase().includes(q) || meta.displayName?.toLowerCase().includes(q))) return true;
-      return false;
+      return matchesParamQuery(k, getParamMetadata(k), searchQuery);
     });
     return matched.sort((a, b) => a.localeCompare(b));
-  }, [paramKeys, parameters, search, onlyModified, paramMetaCatalog]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the catalogue changes what getParamMetadata returns
+  }, [paramKeys, parameters, searchQuery, onlyModified, paramMetaCatalog]);
 
   const hasAnyDefaults = paramStatus.hasDefaults || Object.values(parameters).some((p) => p.defaultValue !== undefined);
 
@@ -435,11 +435,50 @@ export const ParametersWidget: React.FC = () => {
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-500" />
             <Input
               type="text"
-              placeholder="Search name or description (e.g. BATT, failsafe, RTL, speed)..."
+              placeholder="Search: BATT_*  FS_*  failsafe  -BATT2_*"
               value={search}
               onChange={handleSearchChange}
-              className="h-8 pl-8 text-xs font-mono"
+              className="h-8 pl-8 pr-20 text-xs font-mono"
+              aria-describedby="param-search-help"
             />
+            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {!searchQuery.empty && (
+                <span className="text-[10px] font-mono text-zinc-500 tabular-nums" aria-live="polite">
+                  {filteredKeys.length}/{paramKeys.length}
+                </span>
+              )}
+              <button
+                ref={searchHelpRef}
+                type="button"
+                onClick={() => setSearchHelpOpen((o) => !o)}
+                className="h-5 w-5 inline-flex items-center justify-center rounded text-zinc-500 hover:text-sky-300"
+                aria-label="Search help"
+                aria-expanded={searchHelpOpen}
+              >
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {searchHelpOpen && (
+              <Popover anchor={searchHelpRef.current} onClose={() => setSearchHelpOpen(false)} width={320} label="Search help">
+                <div id="param-search-help" className="p-3 space-y-1.5 text-[11px] text-zinc-300 leading-snug">
+                  <div className="font-bold text-zinc-100">Searching parameters</div>
+                  <p>
+                    <code className="text-sky-300">BATT_*</code> <code className="text-sky-300">FS_?_*</code>: <code>*</code> and <code>?</code> match
+                    whole names. Several add up: <code className="text-sky-300">BATT_* FS_*</code>.
+                  </p>
+                  <p>
+                    <code className="text-sky-300">voltage</code>: other words search the name, short name and description; every word must match.{' '}
+                    <code className="text-sky-300">BATT_* voltage</code> narrows the battery parameters.
+                  </p>
+                  <p>
+                    <code className="text-sky-300">-BATT2_*</code>: a leading <code>-</code> leaves matches out.
+                  </p>
+                  <p>
+                    <code className="text-sky-300">"low battery"</code>: quotes keep words together. Case doesn't matter.
+                  </p>
+                </div>
+              </Popover>
+            )}
           </div>
           {hasAnyDefaults && (
             <button
