@@ -1,10 +1,20 @@
 export interface ParamMeta {
   description: string;
+  /** Short name, e.g. "Battery monitoring". */
+  displayName?: string;
   units?: string;
   min?: number;
   max?: number;
+  /** Suggested step when editing. */
+  increment?: number;
   rebootRequired?: boolean;
+  readOnly?: boolean;
+  /** ArduPilot's audience for the parameter. */
+  user?: 'Standard' | 'Advanced';
+  /** Named values, for a parameter that takes one of a set. */
   values?: Record<number, string>;
+  /** Named bits (bit number → name), for a parameter that is a bitmask. */
+  bitmask?: Record<number, string>;
 }
 
 /**
@@ -302,62 +312,19 @@ const PARAM_ALIASES: Record<string, string> = {
   ARSPD_FBW_MAX: 'AIRSPEED_MAX',
 };
 
-// Online ArduPilot metadata catalog loaded dynamically per vehicle
-const onlineCatalogs: Record<string, Record<string, ParamMeta>> = {};
+// The catalogue for the connected vehicle and firmware, from ArduPilot's ParameterRepository (see paramCatalog.ts).
+let activeCatalog: Record<string, ParamMeta> | null = null;
 
-export async function fetchArduPilotParamCatalog(vehicleCategory: string): Promise<Record<string, ParamMeta> | null> {
-  const vehicleName =
-    vehicleCategory === 'plane'
-      ? 'ArduPlane'
-      : vehicleCategory === 'rover'
-        ? 'Rover'
-        : vehicleCategory === 'sub'
-          ? 'ArduSub'
-          : 'ArduCopter';
-
-  if (onlineCatalogs[vehicleName]) return onlineCatalogs[vehicleName];
-
-  try {
-    const url = `https://autotest.ardupilot.org/Parameters/${vehicleName}/apm.pdef.json`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const json = await res.json();
-    const catalog: Record<string, ParamMeta> = {};
-    const params = json?.[vehicleName] || json?.params || json;
-    for (const [key, meta] of Object.entries(params as Record<string, any>)) {
-      if (meta && typeof meta === 'object') {
-        const pMeta: ParamMeta = {
-          description: meta.Description || meta.HumanName || '',
-          units: meta.Units,
-          values: meta.Values,
-        };
-        if (meta.Range && Array.isArray(meta.Range) && meta.Range.length >= 2) {
-          pMeta.min = Number(meta.Range[0]);
-          pMeta.max = Number(meta.Range[1]);
-        }
-        catalog[key.toUpperCase()] = pMeta;
-      }
-    }
-    onlineCatalogs[vehicleName] = catalog;
-    return catalog;
-  } catch {
-    return null;
-  }
+/** Sets the catalogue that getParamMetadata looks in first; null falls back to the built-in descriptions. */
+export function setActiveParamCatalog(catalog: Record<string, ParamMeta> | null) {
+  activeCatalog = catalog;
 }
 
-export function getParamMetadata(name: string, vehicleCategory?: string): ParamMeta | null {
+export function getParamMetadata(name: string): ParamMeta | null {
   const upper = name.toUpperCase();
-  const vehicleName =
-    vehicleCategory === 'plane'
-      ? 'ArduPlane'
-      : vehicleCategory === 'rover'
-        ? 'Rover'
-        : vehicleCategory === 'sub'
-          ? 'ArduSub'
-          : 'ArduCopter';
 
-  if (onlineCatalogs[vehicleName]?.[upper]) {
-    return onlineCatalogs[vehicleName][upper];
+  if (activeCatalog?.[upper]) {
+    return activeCatalog[upper];
   }
 
   if (ARDUPILOT_PARAM_META[upper]) {
@@ -366,7 +333,7 @@ export function getParamMetadata(name: string, vehicleCategory?: string): ParamM
 
   const alias = PARAM_ALIASES[upper];
   if (alias) {
-    if (onlineCatalogs[vehicleName]?.[alias]) return onlineCatalogs[vehicleName][alias];
+    if (activeCatalog?.[alias]) return activeCatalog[alias];
     if (ARDUPILOT_PARAM_META[alias]) return ARDUPILOT_PARAM_META[alias];
   }
 

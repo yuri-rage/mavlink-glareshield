@@ -7,8 +7,8 @@ import {
   parseParamFile,
   serializeParamFile,
   areParamsDifferent,
-  fetchArduPilotParamCatalog,
 } from '../../mavlink/paramMetadata';
+import { useParamMetaStore } from '../../store/paramMetaStore';
 import { getVehicleCategory } from '../../mavlink/messages';
 import { decodePayload } from '../../mavlink/parser';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
@@ -65,9 +65,15 @@ export const ParametersWidget: React.FC = () => {
   const heartbeatType = useTelemetryStore((s) => s.heartbeat.type);
   const category = getVehicleCategory(heartbeatType);
 
+  // Metadata for this vehicle and firmware version; the table re-renders when it arrives.
+  const ensureParamMeta = useParamMetaStore((s) => s.ensure);
+  const paramMetaStatus = useParamMetaStore((s) => s.status);
+  const paramMetaCatalog = useParamMetaStore((s) => s.catalog);
+  const paramMetaSource = useParamMetaStore((s) => s.source);
+  const paramMetaSummary = useParamMetaStore((s) => s.summary);
   useEffect(() => {
-    void fetchArduPilotParamCatalog(category);
-  }, [category]);
+    ensureParamMeta(category, firmwareVersion);
+  }, [category, firmwareVersion, ensureParamMeta]);
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -271,12 +277,12 @@ export const ParametersWidget: React.FC = () => {
       }
       if (!q) return true;
       if (k.toLowerCase().includes(q)) return true;
-      const meta = getParamMetadata(k, category);
-      if (meta && meta.description.toLowerCase().includes(q)) return true;
+      const meta = getParamMetadata(k);
+      if (meta && (meta.description.toLowerCase().includes(q) || meta.displayName?.toLowerCase().includes(q))) return true;
       return false;
     });
     return matched.sort((a, b) => a.localeCompare(b));
-  }, [paramKeys, parameters, search, onlyModified, category]);
+  }, [paramKeys, parameters, search, onlyModified, paramMetaCatalog]);
 
   const hasAnyDefaults = paramStatus.hasDefaults || Object.values(parameters).some((p) => p.defaultValue !== undefined);
 
@@ -319,6 +325,28 @@ export const ParametersWidget: React.FC = () => {
               <Badge variant="secondary" className="text-[9px] font-mono">
                 STREAM
               </Badge>
+            )}
+            {paramMetaStatus !== 'idle' && (
+              <span
+                className={`text-[9px] font-mono px-1.5 py-0.5 rounded border inline-flex items-center gap-1 ${
+                  paramMetaStatus === 'loading'
+                    ? 'text-zinc-400 border-zinc-700'
+                    : paramMetaStatus === 'unavailable'
+                      ? 'text-zinc-400 border-zinc-700 bg-zinc-900'
+                      : paramMetaSource?.match === 'exact'
+                        ? 'text-emerald-300 border-emerald-700/50 bg-emerald-950/30'
+                        : 'text-amber-300 border-amber-700/50 bg-amber-950/30'
+                }`}
+                title={paramMetaSummary}
+                aria-label={paramMetaSummary}
+              >
+                {paramMetaStatus === 'loading' && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
+                {paramMetaStatus === 'ready' && paramMetaSource
+                  ? `${paramMetaSource.folder.replace('-', ' ')}${paramMetaSource.match === 'dev-same-minor' ? ' dev' : paramMetaSource.match === 'earlier' ? ' ≈' : ''}`
+                  : paramMetaStatus === 'loading'
+                    ? 'Metadata'
+                    : 'Built-in'}
+              </span>
             )}
           </div>
 

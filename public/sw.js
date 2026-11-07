@@ -29,9 +29,10 @@ self.addEventListener('activate', (event) => {
       .keys()
       .then((keys) =>
         Promise.all(
-          // Earlier deploys' shells (and their hashed bundles) are dropped; map tiles are kept.
+          // Earlier deploys' shells (and their hashed bundles) are dropped. Every other cache (map tiles, the
+          // app's parameter metadata) is kept.
           keys
-            .filter((k) => k !== SHELL_CACHE && k !== TILE_CACHE)
+            .filter((k) => k.startsWith(SHELL_PREFIX) && k !== SHELL_CACHE)
             .map((k) => caches.delete(k))
         )
       )
