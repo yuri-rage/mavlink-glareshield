@@ -26,6 +26,21 @@ interface DashboardGridProps {
   onEditCustomWidget?: (widget: CustomWidgetDefinition) => void;
 }
 
+const WIDTH_OPTIONS = [
+  { span: 3, label: '¼ width' },
+  { span: 4, label: '⅓ width' },
+  { span: 6, label: '½ width' },
+  { span: 8, label: '⅔ width' },
+  { span: 9, label: '¾ width' },
+  { span: 12, label: 'Full width' },
+];
+
+const HEIGHT_OPTIONS = [
+  { rows: 1, label: 'Compact' },
+  { rows: 2, label: 'Normal' },
+  { rows: 3, label: 'Tall' },
+];
+
 export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget }) => {
   const {
     profile,
@@ -406,13 +421,13 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                     >
                       <GripVertical className="h-3.5 w-3.5 text-sky-400 shrink-0" />
                       <span
-                        className="font-sans text-[11px] text-sky-400 font-bold truncate max-w-[110px] sm:max-w-[170px]"
+                        className="font-sans text-[11px] text-sky-400 font-bold truncate"
                         title={getWidgetTitle(widget.widgetId)}
                       >
                         {getWidgetTitle(widget.widgetId)}
                       </span>
                       <span
-                        className="hidden md:inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800/90 border border-zinc-700 text-[9px] font-mono text-zinc-400 shrink-0"
+                        className="hidden 2xl:inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800/90 border border-zinc-700 text-[9px] font-mono text-zinc-400 shrink-0"
                         title="Widget controls are locked in Edit Mode so you can safely drag to reorder"
                       >
                         <Lock className="h-2.5 w-2.5 text-amber-400" />
@@ -420,49 +435,34 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
-                      {/* Width toggles: 1/4, 1/3, 1/2, 2/3, 3/4, Full */}
-                      {[
-                        { span: 3, label: '1/4', title: '1/4 Width (3 cols)' },
-                        { span: 4, label: '1/3', title: '1/3 Width (4 cols)' },
-                        { span: 6, label: '1/2', title: 'Half Width (6 cols)' },
-                        { span: 8, label: '2/3', title: '2/3 Width (8 cols)' },
-                        { span: 9, label: '3/4', title: '3/4 Width (9 cols)' },
-                        { span: 12, label: 'Full', title: 'Full Width (12 cols)' },
-                      ].map((opt) => (
-                        <button
-                          key={opt.span}
-                          onClick={() => updateWidgetColSpan(widget.instanceId, opt.span)}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold transition-colors ${
-                            colSpan === opt.span ? 'bg-sky-500 text-white font-bold' : 'hover:bg-zinc-800 text-zinc-400'
-                          }`}
-                          title={opt.title}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-
-                      <div className="h-3 w-px bg-zinc-700 mx-0.5" />
-
-                      {/* Height presets: Compact, Normal, Tall */}
-                      {[
-                        { rows: 1, label: 'H:S', title: 'Compact Height' },
-                        { rows: 2, label: 'H:M', title: 'Normal Height' },
-                        { rows: 3, label: 'H:L', title: 'Tall Height' },
-                      ].map((hOpt) => (
-                        <button
-                          key={hOpt.rows}
-                          onClick={() => updateWidgetRowSpan(widget.instanceId, hOpt.rows)}
-                          className={`px-1 py-0.5 rounded text-[9px] font-mono font-semibold transition-colors ${
-                            rowSpan === hOpt.rows
-                              ? 'bg-emerald-600 text-white font-bold'
-                              : 'hover:bg-zinc-800 text-zinc-400'
-                          }`}
-                          title={hOpt.title}
-                        >
-                          {hOpt.label}
-                        </button>
-                      ))}
+                    <div className="flex items-center gap-1 shrink-0 justify-end">
+                      {/* Width and height as compact pickers, so the title keeps its room. */}
+                      <select
+                        value={colSpan}
+                        onChange={(e) => updateWidgetColSpan(widget.instanceId, Number(e.target.value))}
+                        className="h-6 rounded border border-zinc-700 bg-zinc-950 px-1 text-[10px] font-semibold text-sky-300 cursor-pointer"
+                        title="Widget width"
+                        aria-label="Widget width"
+                      >
+                        {WIDTH_OPTIONS.map((opt) => (
+                          <option key={opt.span} value={opt.span}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={rowSpan}
+                        onChange={(e) => updateWidgetRowSpan(widget.instanceId, Number(e.target.value))}
+                        className="h-6 rounded border border-zinc-700 bg-zinc-950 px-1 text-[10px] font-semibold text-emerald-300 cursor-pointer"
+                        title="Widget height"
+                        aria-label="Widget height"
+                      >
+                        {HEIGHT_OPTIONS.map((opt) => (
+                          <option key={opt.rows} value={opt.rows}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
 
                       <div className="h-3 w-px bg-zinc-700 mx-0.5" />
 

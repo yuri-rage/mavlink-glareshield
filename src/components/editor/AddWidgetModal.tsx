@@ -1,6 +1,6 @@
 import { BUILTIN_PANELS, builtinPanelId } from '../../lib/builtinWidgets';
 import { VALID_DISPLAY_TYPES, sanitizeWidgetDefinition } from '../../lib/widgetValidation';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { Modal } from '../ui/modal';
 import { Button } from '../ui/button';
@@ -253,6 +253,9 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
 }) => {
   const { profile, activeTabId, addWidgetToActiveTab, saveCustomWidget, deleteCustomWidget } = useDashboardStore();
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const uploadRef = useRef<HTMLInputElement>(null);
+  /** Deleting a definition also removes it from every tab, so it takes a second click. */
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [pendingImportWidget, setPendingImportWidget] = useState<CustomWidgetDefinition | null>(null);
 
   const activeTab = profile.tabs.find((t) => t.id === activeTabId) || profile.tabs[0];
@@ -365,7 +368,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
         ) : (
           <>
             {/* Action Header: Creator & Upload */}
-        <div className="flex items-center gap-2 p-3 bg-zinc-900/80 border border-zinc-800 rounded-xl">
+        <div className="flex flex-wrap items-center gap-2 p-3 bg-zinc-900/80 border border-zinc-800 rounded-xl">
           <Button
             variant="default"
             size="sm"
@@ -373,33 +376,36 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
               onClose();
               onOpenWidgetCreator();
             }}
-            className="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold gap-1.5 h-9"
+            className="flex-1 min-w-[9rem] bg-sky-500 hover:bg-sky-600 text-white font-bold gap-1.5 h-9"
           >
-            <Plus className="h-4 w-4" />
-            Build Custom Widget
+            <Plus className="h-4 w-4 shrink-0" />
+            <span className="truncate">Build Custom Widget</span>
           </Button>
 
-          <label className="flex-1">
-            <input
-              type="file"
-              accept=".json"
-              onChange={handleUploadJson}
-              className="hidden"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              type="button"
-              className="w-full gap-1.5 h-9 border-zinc-700 text-zinc-200 pointer-events-none"
-            >
-              <Upload className="h-4 w-4 text-emerald-400" />
-              Upload .json Widget
-            </Button>
-          </label>
+          <input
+            ref={uploadRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={(e) => {
+              handleUploadJson(e);
+              e.target.value = ''; // the same file can be chosen again
+            }}
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            type="button"
+            onClick={() => uploadRef.current?.click()}
+            className="flex-1 min-w-[9rem] gap-1.5 h-9 border-zinc-700 text-zinc-200"
+          >
+            <Upload className="h-4 w-4 text-emerald-400 shrink-0" />
+            <span className="truncate">Upload .json Widget</span>
+          </Button>
         </div>
 
         {/* Category Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto text-xs pb-1">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs pb-1">
           {['all', 'control', 'avionics', 'telemetry', 'custom'].map((cat) => (
             <button
               key={cat}
@@ -422,9 +428,9 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
             profile.customWidgets.map((cw) => (
               <div
                 key={cw.id}
-                className="flex items-start justify-between p-3 rounded-xl border border-sky-950/60 bg-sky-950/10 hover:border-sky-500/40 transition-all"
+                className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 p-3 rounded-xl border border-sky-950/60 bg-sky-950/10 hover:border-sky-500/40 transition-all"
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 min-w-0">
                   <div className="p-2 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400 mt-0.5">
                     <Zap className="h-4 w-4" />
                   </div>
@@ -444,7 +450,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                   </div>
                 </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
                     {onEditCustomWidget && (
                       <Button
                         size="sm"
@@ -456,20 +462,39 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                     )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 px-2 text-xs border-zinc-700 text-red-400 hover:text-red-300 hover:border-red-500/40"
-                      onClick={() => deleteCustomWidget(cw.id)}
-                      title="Delete custom widget definition"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    {confirmDeleteId === cw.id ? (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-8 px-2 text-xs font-bold bg-red-600 hover:bg-red-700 text-white gap-1"
+                        onClick={() => {
+                          deleteCustomWidget(cw.id);
+                          setConfirmDeleteId(null);
+                        }}
+                        onBlur={() => setConfirmDeleteId(null)}
+                        autoFocus
+                        title="Delete this definition and remove it from every tab"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete?
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-2 text-xs border-zinc-700 text-red-400 hover:text-red-300 hover:border-red-500/40"
+                        onClick={() => setConfirmDeleteId(cw.id)}
+                        title="Delete custom widget definition (asks to confirm)"
+                        aria-label={`Delete ${cw.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="default"
                       className="h-8 px-3 text-xs font-bold bg-sky-500 hover:bg-sky-600 text-white"
-                      onClick={() => handleAddBuiltIn(cw.id, 6)}
+                      onClick={() => handleAddBuiltIn(cw.id, cw.displayType === 'composite' ? 12 : 6)}
                     >
                       Place
                     </Button>
@@ -484,9 +509,9 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
             return (
               <div
                 key={item.id}
-                className="flex items-start justify-between p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/50 hover:border-zinc-700 transition-all"
+                className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 p-3 rounded-xl border border-zinc-800/80 bg-zinc-900/50 hover:border-zinc-700 transition-all"
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 min-w-0">
                   <div className="p-2 rounded-lg bg-zinc-800 text-zinc-300 mt-0.5">
                     <Icon className="h-4 w-4" />
                   </div>
@@ -506,7 +531,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 px-3 text-xs font-bold border-zinc-700 hover:bg-zinc-800"
+                  className="h-8 px-3 text-xs font-bold border-zinc-700 hover:bg-zinc-800 shrink-0 self-end sm:self-auto"
                   onClick={() => handleAddBuiltIn(item.id, item.defaultSpan)}
                 >
                   {isAlreadyOnTab ? 'Place Copy' : 'Place'}
