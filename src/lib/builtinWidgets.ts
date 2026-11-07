@@ -22,6 +22,7 @@ export const BUILTIN_PANELS: Record<string, BuiltinPanelInfo> = {
   'built-in-hud': { name: 'Heads-Up Display (HUD)', minHeightPx: 300 },
   'built-in-charts': { name: 'Telemetry Charts', minHeightPx: 300 },
   'built-in-statustext': { name: 'STATUSTEXT Console', minHeightPx: 280 },
+  'built-in-statustext-mini': { name: 'Mini STATUSTEXT' },
   'built-in-map': { name: 'Navigation Map', controls: 'mission waypoint changes and restart', large: true },
   'built-in-parameters': { name: 'Parameter Manager', minHeightPx: 480, controls: 'parameter writes', large: true },
   'built-in-ntrip': { name: 'RTK / NTRIP Injector', controls: 'RTCM correction injection', large: true },

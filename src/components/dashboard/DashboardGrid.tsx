@@ -74,6 +74,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       'built-in-gps-card': 'GNSS / GPS',
       'built-in-vfr-hud': 'VFR Telemetry',
       'built-in-statustext': 'Messages',
+      'built-in-statustext-mini': 'Mini Messages',
       'built-in-parameters': 'Parameters',
       'built-in-charts': 'Telemetry Graphs',
       'built-in-ntrip': 'NTRIP RTK Base Stream',

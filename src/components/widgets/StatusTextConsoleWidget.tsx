@@ -164,7 +164,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 bg-black/60 rounded-xl border border-zinc-850 p-1.5 font-mono text-xs overflow-y-auto min-h-[240px] max-h-[68vh] space-y-0.5 select-text"
+          className="flex-1 bg-black/60 rounded-xl border border-zinc-800 p-1.5 font-mono text-xs overflow-y-auto min-h-[240px] max-h-[68vh] space-y-0.5 select-text"
         >
           {displayed.length === 0 ? (
             <div className="text-zinc-600 text-center py-8 italic">

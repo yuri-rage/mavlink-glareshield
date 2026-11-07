@@ -417,7 +417,7 @@ export const ParametersWidget: React.FC = () => {
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 bg-black/60 rounded-xl border border-zinc-850 overflow-y-auto min-h-[240px] max-h-[68vh]"
+          className="flex-1 bg-black/60 rounded-xl border border-zinc-800 overflow-y-auto min-h-[240px] max-h-[68vh]"
         >
           {filteredKeys.length === 0 ? (
             <div className="text-zinc-500 text-center py-10 px-4 text-xs flex flex-col items-center gap-2">
