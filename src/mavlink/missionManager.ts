@@ -32,11 +32,6 @@ export class MissionManager {
     message: '',
   };
 
-  private waypoints: MissionWaypoint[] = [];
-  private fenceItems: FencePoint[] = [];
-  private rallyItems: RallyPoint[] = [];
-  private targetSys = 1;
-  private targetComp = 1;
   private isCancelled = false;
   private legacyAbort: (() => void) | null = null;
   private messageClearTimer: any = null;
@@ -396,9 +391,6 @@ export class MissionManager {
     const hb = useTelemetryStore.getState().heartbeat;
     const sysId = targetSys ?? (hb.systemId > 0 ? hb.systemId : 1);
     const compId = targetComp ?? (hb.componentId > 0 ? hb.componentId : 1);
-
-    this.targetSys = sysId;
-    this.targetComp = compId;
     this.isCancelled = false;
 
     // Handle multi-section QGC .plan files
@@ -631,7 +623,6 @@ export class MissionManager {
         const unpacked = this.unpackMissionDat(datData);
         if (unpacked !== null) {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} waypoints via MAVFTP!`);
-          this.waypoints = unpacked;
           useTelemetryStore.setState({ missionWaypoints: unpacked });
           this.setStatus({ waypointCount: unpacked.length });
           return unpacked;
@@ -664,7 +655,6 @@ export class MissionManager {
     }));
 
     waypoints.sort((a, b) => a.seq - b.seq);
-    this.waypoints = waypoints;
     useTelemetryStore.setState({ missionWaypoints: waypoints });
     this.setStatus({ waypointCount: waypoints.length });
     return waypoints;
@@ -698,7 +688,6 @@ export class MissionManager {
         const unpacked = this.unpackFenceDat(fenceData);
         if (unpacked !== null) {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} fence items via MAVFTP!`);
-          this.fenceItems = unpacked;
           useTelemetryStore.setState({ fencePoints: unpacked });
           this.setStatus({ fenceCount: unpacked.length });
           return unpacked;
@@ -735,13 +724,10 @@ export class MissionManager {
 
       fencePoints.sort((a, b) => a.seq - b.seq);
       console.log(`[MissionManager] Successfully downloaded ${fencePoints.length} fence points via MAVLink stream!`);
-      this.fenceItems = fencePoints;
       useTelemetryStore.setState({ fencePoints });
       this.setStatus({ fenceCount: fencePoints.length });
       return fencePoints;
     }
-
-    this.fenceItems = [];
     useTelemetryStore.setState({ fencePoints: [] });
     this.setStatus({ fenceCount: 0 });
     return [];
@@ -775,7 +761,6 @@ export class MissionManager {
         const unpacked = this.unpackRallyDat(rallyData);
         if (unpacked !== null) {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} rally points via MAVFTP!`);
-          this.rallyItems = unpacked;
           useTelemetryStore.setState({ rallyPoints: unpacked });
           this.setStatus({ rallyCount: unpacked.length });
           return unpacked;
@@ -801,7 +786,6 @@ export class MissionManager {
     }));
 
     rallyPoints.sort((a, b) => a.seq - b.seq);
-    this.rallyItems = rallyPoints;
     useTelemetryStore.setState({ rallyPoints });
     this.setStatus({ rallyCount: rallyPoints.length });
     return rallyPoints;
@@ -822,9 +806,6 @@ export class MissionManager {
     const hb = useTelemetryStore.getState().heartbeat;
     const sysId = targetSys ?? (hb.systemId > 0 ? hb.systemId : 1);
     const compId = targetComp ?? (hb.componentId > 0 ? hb.componentId : 1);
-
-    this.targetSys = sysId;
-    this.targetComp = compId;
     this.setStatus({
       isFetching: true,
       method: 'ftp',

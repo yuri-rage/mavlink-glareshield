@@ -4,12 +4,10 @@ import React, { useRef, useState } from 'react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { Modal } from '../ui/modal';
 import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { CustomWidgetDefinition, WidgetDisplayType } from '../../types/widget';
+import { CustomWidgetDefinition } from '../../types/widget';
 import { MAV_CMD } from '../../mavlink/messages';
 import {
   Compass,
-  Radio,
   Shield,
   MapPin,
   Milestone,

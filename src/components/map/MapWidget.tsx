@@ -1,3 +1,4 @@
+import 'leaflet/dist/leaflet.css';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
@@ -61,13 +62,6 @@ function renderVehicleSvg(type: number): string {
   }
 }
 
-function lerpAngle(current: number, target: number, t: number): number {
-  let diff = (target - current) % 360;
-  if (diff < -180) diff += 360;
-  if (diff > 180) diff -= 360;
-  return current + diff * t;
-}
-
 type MapLayerType = 'satellite' | 'street';
 
 interface GpsFix {
@@ -91,10 +85,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const hasConnectedInSession = useTelemetryStore((s) => s.hasConnectedInSession);
   const position = useTelemetryStore((s) => s.position);
   const attitude = useTelemetryStore((s) => s.attitude);
-  const vfr = useTelemetryStore((s) => s.vfr);
-  const navController = useTelemetryStore((s) => s.navController);
   const homePosition = useTelemetryStore((s) => s.homePosition);
-  const currentWaypointSeq = useTelemetryStore((s) => s.currentWaypointSeq);
   const missionWaypoints = useTelemetryStore((s) => s.missionWaypoints);
   const fencePoints = useTelemetryStore((s) => s.fencePoints);
   const rallyPoints = useTelemetryStore((s) => s.rallyPoints);
@@ -124,7 +115,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     } catch {}
   };
 
-  const { formatAltitude, altitudeMode, formatDistance, formatHomeVector, formatCrosstrack } = useUnitsStore();
+  const { formatAltitude, altitudeMode, formatHomeVector } = useUnitsStore();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const activeTileLayerRef = useRef<L.TileLayer | null>(null);

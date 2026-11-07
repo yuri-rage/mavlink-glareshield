@@ -2,6 +2,28 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import net from 'net';
+import fs from 'fs';
+
+/**
+ * Stamps a build ID into dist/sw.js, so each deploy gets its own app-shell cache and the worker can delete the
+ * previous deploy's cached bundles when it activates.
+ */
+function serviceWorkerVersionPlugin() {
+  let outDir = 'dist';
+  return {
+    name: 'sw-build-version',
+    apply: 'build' as const,
+    configResolved(config: { root: string; build: { outDir: string } }) {
+      outDir = path.resolve(config.root, config.build.outDir);
+    },
+    closeBundle() {
+      const file = path.join(outDir, 'sw.js');
+      if (!fs.existsSync(file)) return;
+      const id = Date.now().toString(36);
+      fs.writeFileSync(file, fs.readFileSync(file, 'utf8').split('__BUILD_ID__').join(id));
+    },
+  };
+}
 
 function ntripProxyPlugin() {
   const activeSockets = new Map<string, net.Socket>();
@@ -199,7 +221,7 @@ function ntripProxyPlugin() {
 }
 
 export default defineConfig({
-  plugins: [react(), ntripProxyPlugin()],
+  plugins: [react(), ntripProxyPlugin(), serviceWorkerVersionPlugin()],
   worker: {
     format: 'es',
   },
