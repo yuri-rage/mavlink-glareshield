@@ -552,5 +552,107 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   device.wakeIdle();
 }
 
+// ------------------------------------------------------------------------------------------------
+// WebUSB writes: one at a time, never late, and a stalled endpoint is cleared or reported
+// ------------------------------------------------------------------------------------------------
+{
+  const { USB_WRITE_MAX_AGE_MS, USB_WRITE_MAX_QUEUED } = await import('../src/mavlink/transport/webUsbSerialTransport.ts');
+  const frame = (n: number) => new Uint8Array([0xfd, n]);
+
+  // Writes never overlap.
+  {
+    const device = fakeUsbDevice();
+    let inFlight = 0;
+    let maxInFlight = 0;
+    device.transferOut = async (_ep: number, data: Uint8Array) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await tick(5);
+      device.written.push(new Uint8Array(data));
+      inFlight--;
+      return { bytesWritten: data.byteLength, status: 'ok' };
+    };
+    const t = new WebUsbSerialTransport('usb', { device });
+    await t.connect();
+    await Promise.all([1, 2, 3, 4, 5].map((n) => t.send(frame(n))));
+    check('WebUSB: writes go out one at a time, in order', maxInFlight === 1 && device.written.map((w: Uint8Array) => w[1]).join() === '1,2,3,4,5');
+    await Promise.race([t.disconnect(), tick(1500)]);
+    device.wakeIdle();
+  }
+
+  // A wedged endpoint: frames that waited too long are dropped, and the queue is capped.
+  {
+    const device = fakeUsbDevice();
+    let release: (() => void) | undefined;
+    let first = true;
+    device.transferOut = async (_ep: number, data: Uint8Array) => {
+      if (first) {
+        first = false;
+        await new Promise<void>((r) => (release = r));
+      }
+      device.written.push(new Uint8Array(data));
+      return { bytesWritten: data.byteLength, status: 'ok' };
+    };
+    const t = new WebUsbSerialTransport('usb', { device });
+    await t.connect();
+    const origWarn = console.warn;
+    console.warn = () => {};
+    const sends = Array.from({ length: USB_WRITE_MAX_QUEUED + 20 }, (_, i) => t.send(frame(i)).catch(() => {}));
+    await tick(USB_WRITE_MAX_AGE_MS + 200);
+    release!();
+    await Promise.all(sends);
+    console.warn = origWarn;
+    // Only the frame already in flight goes out; everything that waited behind it is stale.
+    check('WebUSB: frames held up past the age limit are dropped, not sent late', device.written.length === 1, `${device.written.length} written`);
+    await t.send(frame(200));
+    check('WebUSB: writes flow again once the endpoint recovers', device.written.length === 2 && last(device.written as Uint8Array[])[1] === 200);
+    await Promise.race([t.disconnect(), tick(1500)]);
+    device.wakeIdle();
+  }
+
+  // A stall: the halt is cleared and writes continue; repeated stalls report the link as failed.
+  {
+    const device = fakeUsbDevice();
+    let stalls = 1;
+    const halts: string[] = [];
+    device.clearHalt = async (dir: string, ep: number) => {
+      halts.push(`${dir}:${ep}`);
+    };
+    device.transferOut = async (_ep: number, data: Uint8Array) => {
+      if (stalls > 0) {
+        stalls--;
+        return { bytesWritten: 0, status: 'stall' };
+      }
+      device.written.push(new Uint8Array(data));
+      return { bytesWritten: data.byteLength, status: 'ok' };
+    };
+    const t = new WebUsbSerialTransport('usb', { device });
+    await t.connect();
+    const firstErr = await t.send(frame(1)).then(() => null, (e: Error) => e.message);
+    await t.send(frame(2));
+    check('WebUSB: a stall clears the halt and later writes succeed', firstErr === 'USB write stalled.' && halts.length === 1 && device.written.length === 1 && t.getStatus().kind === 'connected');
+
+    stalls = 10;
+    for (let i = 0; i < 3; i++) await t.send(frame(10 + i)).catch(() => {});
+    check('WebUSB: stalls that keep coming mark the link failed so it reconnects', t.getStatus().kind === 'error');
+    await Promise.race([t.disconnect(), tick(1500)]);
+    device.wakeIdle();
+  }
+
+  // A write that throws (device gone) takes the link off 'connected', as Web Serial does.
+  {
+    const device = fakeUsbDevice();
+    device.transferOut = async () => {
+      throw new Error('The device was disconnected.');
+    };
+    const t = new WebUsbSerialTransport('usb', { device });
+    await t.connect();
+    await t.send(frame(1)).catch(() => {});
+    check('WebUSB: a failed write reports the link as failed', t.getStatus().kind === 'error');
+    await Promise.race([t.disconnect(), tick(1500)]);
+    device.wakeIdle();
+  }
+}
+
 console.log(failures.length ? `\n${failures.length} transport check(s) FAILED` : '\nAll transport checks PASSED');
 process.exit(failures.length ? 1 : 0);
