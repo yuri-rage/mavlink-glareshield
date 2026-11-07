@@ -12,7 +12,7 @@ import { Badge } from '../ui/badge';
 import { Modal } from '../ui/modal';
 import { parseDroppedMissionFile, ParsedMissionFile } from '../../mavlink/missionFileParser';
 import { MissionItemIntData } from '../../mavlink/encoder';
-import { RefreshCw, Crosshair, Shield, Flag, Upload, AlertTriangle, Navigation, Home, Map as MapIcon } from 'lucide-react';
+import { RefreshCw, Crosshair, Shield, Flag, Upload, AlertTriangle, Navigation, Home, LocateFixed, Map as MapIcon } from 'lucide-react';
 import L from 'leaflet';
 
 function renderVehicleSvg(type: number): string {
@@ -169,7 +169,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
   // Fly-To-Here (DO_REPOSITION) state
   const [flyToMode, setFlyToMode] = useState(false);
-  const [pendingFlyTo, setPendingFlyTo] = useState<{ lat: number; lon: number } | null>(null);
+  /** The point picked to fly to; `accuracyM` is set when it is the browser's own location ("fly to me"). */
+  const [pendingFlyTo, setPendingFlyTo] = useState<{ lat: number; lon: number; accuracyM?: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState<string | null>(null);
   const [flyToAltInput, setFlyToAltInput] = useState<string>('20');
   const [activeFlyToTarget, setActiveFlyToTarget] = useState<{ lat: number; lon: number; alt: number } | null>(null);
   // Where the picked point sits in the map container, so the fly-to card stays beside it as the map moves.
@@ -486,6 +489,54 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     }
   };
 
+  const openFlyToPrompt = (lat: number, lon: number, accuracyM?: number) => {
+    const st = useTelemetryStore.getState();
+    if (st.heartbeat.lastHeartbeatTime === 0 || st.heartbeat.modeName === 'DISCONNECTED') return;
+    const curAlt = Math.max(10, Math.round(st.position.relativeAlt || 20));
+    setFlyToAltInput(String(curAlt));
+    setPendingFlyTo({ lat, lon, accuracyM });
+    setFlyToMode(false);
+  };
+
+  // Geolocation needs a secure page (https or localhost) and a browser that has it.
+  const canLocate = typeof navigator !== 'undefined' && 'geolocation' in navigator && (typeof window === 'undefined' || window.isSecureContext);
+
+  /** "Fly to me": the browser's location, offered in the same card as a picked point. */
+  const handleFlyToMe = () => {
+    if (!canLocate || locating) return;
+    setLocating(true);
+    setLocateError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        const { latitude: lat, longitude: lon, accuracy } = pos.coords;
+        const map = mapInstanceRef.current;
+        if (map && !map.getBounds().pad(-0.1).contains([lat, lon])) {
+          // Bring both the vehicle and the person into view.
+          setFollowVehicle(false);
+          followVehicleRef.current = false;
+          const v = useTelemetryStore.getState().position;
+          const pts: [number, number][] = [[lat, lon]];
+          if (v.lat !== 0 || v.lon !== 0) pts.push([v.lat, v.lon]);
+          map.fitBounds(L.latLngBounds(pts), { padding: [60, 60], maxZoom: Math.max(map.getZoom(), 17), animate: false });
+        }
+        openFlyToPrompt(lat, lon, accuracy);
+      },
+      (err) => {
+        setLocating(false);
+        setLocateError(
+          err.code === err.PERMISSION_DENIED
+            ? 'Location is blocked for this site. Allow it in the browser to use Fly to me.'
+            : err.code === err.TIMEOUT
+              ? 'Timed out finding your location.'
+              : 'Your location is not available.'
+        );
+        setTimeout(() => setLocateError(null), 6000);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+    );
+  };
+
   // Initialize Leaflet map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
@@ -542,15 +593,6 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     map.on('zoomend', () => {
       isInteractingRef.current = false;
     });
-
-    const openFlyToPrompt = (lat: number, lon: number) => {
-      const st = useTelemetryStore.getState();
-      if (st.heartbeat.lastHeartbeatTime === 0 || st.heartbeat.modeName === 'DISCONNECTED') return;
-      const curAlt = Math.max(10, Math.round(st.position.relativeAlt || 20));
-      setFlyToAltInput(String(curAlt));
-      setPendingFlyTo({ lat, lon });
-      setFlyToMode(false);
-    };
 
     // Right-click (or long-press on mobile) opens Guided Fly-To-Here prompt
     map.on('contextmenu', (e: L.LeafletMouseEvent) => {
@@ -855,9 +897,32 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       zIndexOffset: 310,
       interactive: false,
     }).addTo(map);
+    const extras: L.Layer[] = [];
+    if (pendingFlyTo.accuracyM !== undefined) {
+      extras.push(
+        L.circle([pendingFlyTo.lat, pendingFlyTo.lon], {
+          radius: pendingFlyTo.accuracyM,
+          color: '#60a5fa',
+          weight: 1,
+          fillOpacity: 0.12,
+          interactive: false,
+          pane: 'missionLinesPane',
+        }).addTo(map),
+        L.circleMarker([pendingFlyTo.lat, pendingFlyTo.lon], {
+          radius: 6,
+          color: '#ffffff',
+          weight: 2,
+          fillColor: '#3b82f6',
+          fillOpacity: 1,
+          interactive: false,
+          pane: 'missionMarkersPane',
+        }).addTo(map)
+      );
+    }
     return () => {
       map.off('move zoom resize', update);
       ghost.remove();
+      extras.forEach((l) => l.remove());
     };
   }, [pendingFlyTo]);
 
@@ -1414,10 +1479,30 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         </div>
 
         {/* Fly-To prompt (mission progress moved to the footer below the map) */}
-        {connected && flyToMode && !pendingFlyTo && (
-          <div className="absolute bottom-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] font-mono pointer-events-none shadow-md whitespace-nowrap">
-            <span className="text-sky-300 font-bold">Pick a point to fly to</span>
-            <span className="text-zinc-500"> · Esc to cancel</span>
+        {connected && (flyToMode || locating || locateError) && !pendingFlyTo && (
+          <div className="absolute bottom-2 left-2 right-2 sm:right-auto z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] font-mono shadow-md flex items-center gap-2 flex-wrap">
+            {locateError ? (
+              <span className="text-amber-400">{locateError}</span>
+            ) : locating ? (
+              <span className="text-sky-300 animate-pulse">Finding your location…</span>
+            ) : (
+              <>
+                <span>
+                  <span className="text-sky-300 font-bold">Pick a point to fly to</span>
+                  <span className="text-zinc-500"> · Esc to cancel</span>
+                </span>
+                {canLocate && (
+                  <button
+                    type="button"
+                    onClick={handleFlyToMe}
+                    className="inline-flex items-center gap-1 rounded-md border border-blue-500/40 bg-blue-500/10 px-1.5 py-0.5 font-sans font-bold text-blue-300 hover:bg-blue-500/20"
+                    title="Send the vehicle to where this device is (the browser asks for your location)"
+                  >
+                    <LocateFixed className="h-3 w-3" /> Fly to me
+                  </button>
+                )}
+              </>
+            )}
           </div>
         )}
         {pendingFlyTo && flyToAnchor && (
@@ -1430,6 +1515,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             onAltInput={setFlyToAltInput}
             modeName={heartbeat.modeName}
             armed={heartbeat.isArmed}
+            accuracyM={pendingFlyTo.accuracyM}
             onSend={handleConfirmFlyTo}
             onCancel={cancelFlyTo}
           />
