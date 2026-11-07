@@ -92,9 +92,11 @@ export const TogglePanel: React.FC<PanelProps> = ({ def, feedback, scheme }) => 
 
   const commandName = def.action ? getMavCmdName(def.action.commandId) : '';
 
+  // Laid out top-down with the slider pinned to the bottom, so side-by-side toggles line up however long their
+  // status text runs (or while one shows an acknowledgement).
   return (
-    <div className="space-y-2 py-1">
-      <div className="flex items-center justify-between gap-2">
+    <div className="flex-1 flex flex-col gap-2 py-1">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <span className="text-xs font-bold text-zinc-200 block">{feedbackOn !== null ? 'Vehicle State' : 'Switch State'}</span>
           <span className="text-[10px] text-zinc-500 font-mono">
@@ -102,7 +104,7 @@ export const TogglePanel: React.FC<PanelProps> = ({ def, feedback, scheme }) => 
             {feedbackOn !== null
               ? ` · ${feedbackText}`
               : relayMissing
-                ? ` · ${fbBinding?.label} not configured on the vehicle (last sent)`
+                ? ` · ${fbBinding?.label} not configured (last sent)`
                 : hasFeedback
                   ? ' · no feedback yet (last sent)'
                   : ' · last sent'}
@@ -120,18 +122,20 @@ export const TogglePanel: React.FC<PanelProps> = ({ def, feedback, scheme }) => 
         )}
         {slide && commandName && <span className="text-[10px] text-zinc-500 font-mono truncate shrink-0">{commandName}</span>}
       </div>
-      {slide && (
-        <SlideToConfirm
-          label={!linked ? 'NO LINK — Locked' : switchOn ? 'Slide to DISENGAGE' : 'Slide to ENGAGE'}
-          onConfirm={() => execute(!switchOn)}
-          disabled={!linked}
-          toneClass={
-            switchOn ? 'accent-amber-500 bg-amber-950/40 border-amber-800/60' : 'accent-emerald-500 bg-emerald-950/40 border-emerald-800/60'
-          }
-          ariaLabel={`${def.name}: ${switchOn ? 'on, slide right to turn off' : 'off, slide right to turn on'}`}
-        />
-      )}
       <AckChip ack={ack} />
+      {slide && (
+        <div className="mt-auto">
+          <SlideToConfirm
+            label={!linked ? 'NO LINK — Locked' : switchOn ? 'Slide to DISENGAGE' : 'Slide to ENGAGE'}
+            onConfirm={() => execute(!switchOn)}
+            disabled={!linked}
+            toneClass={
+              switchOn ? 'accent-amber-500 bg-amber-950/40 border-amber-800/60' : 'accent-emerald-500 bg-emerald-950/40 border-emerald-800/60'
+            }
+            ariaLabel={`${def.name}: ${switchOn ? 'on, slide right to turn off' : 'off, slide right to turn on'}`}
+          />
+        </div>
+      )}
     </div>
   );
 };

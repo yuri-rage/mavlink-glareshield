@@ -59,9 +59,12 @@ export function panelIcon(type: WidgetDisplayType): LucideIcon {
   }
 }
 
-/** Display types that grow to fill the space they are given (the rest are centred). */
+/**
+ * Display types that grow to fill the space they are given (the rest are centred). A toggle fills so its slider
+ * sits at the bottom of the cell and lines up with its neighbours'.
+ */
 export function panelFills(type: WidgetDisplayType): boolean {
-  return type === 'gauge-radial' || type === 'sparkline' || type === 'builtin';
+  return type === 'gauge-radial' || type === 'sparkline' || type === 'builtin' || type === 'toggle-switch';
 }
 
 export const WidgetPanel: React.FC<PanelProps> = (props) => {
