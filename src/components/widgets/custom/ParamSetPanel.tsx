@@ -296,6 +296,16 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
                         {st.kind === 'pending' ? 'writing…' : st.kind === 'saved' ? 'saved' : `not saved: ${st.text}`}
                       </span>
                     )}
+                    {item && item.defaultValue !== undefined && !conf && !isEditing && (
+                      <span
+                        className={`text-[9.5px] font-mono leading-none ${
+                          Math.abs(item.value - item.defaultValue) > 1e-6 ? 'text-amber-300' : 'text-zinc-600'
+                        }`}
+                        title={`Default: ${item.defaultValue}`}
+                      >
+                        def: {formatParamValue(item.defaultValue)}
+                      </span>
+                    )}
                   </div>
 
                   {isEditing && editor === 'bitmask' && meta?.bitmask && item && !conf && (
@@ -311,7 +321,14 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
                     />
                   )}
                   {details?.name === name && meta && (
-                    <ParamDetails name={name} meta={meta} anchor={details.anchor} onClose={() => setDetails(null)} source={metaSummary} />
+                    <ParamDetails
+                      name={name}
+                      meta={meta}
+                      anchor={details.anchor}
+                      onClose={() => setDetails(null)}
+                      source={metaSummary}
+                      defaultValue={item?.defaultValue}
+                    />
                   )}
                 </li>
               );

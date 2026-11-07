@@ -339,10 +339,20 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
         <div className="text-right flex items-center gap-1.5">
           <div>
             <span className="text-zinc-400 block text-[10px]">LIVE VALUE</span>
-            <span className="font-bold text-zinc-100">
-              {paramEntry !== undefined ? Number(paramEntry.value.toFixed(4)) : 'Not loaded'}{' '}
-              <span className="text-[10px] text-zinc-400">{control?.unit ?? ''}</span>
-            </span>
+            <div className="flex items-baseline justify-end gap-1 font-bold text-zinc-100">
+              <span>{paramEntry !== undefined ? Number(paramEntry.value.toFixed(4)) : 'Not loaded'}</span>
+              {control?.unit && <span className="text-[10px] text-zinc-400 font-normal">{control.unit}</span>}
+              {paramEntry?.defaultValue !== undefined && (
+                <span
+                  className={`text-[9.5px] font-mono font-normal ml-1 ${
+                    Math.abs(paramEntry.value - paramEntry.defaultValue) > 1e-6 ? 'text-amber-300' : 'text-zinc-500'
+                  }`}
+                  title={`Default: ${paramEntry.defaultValue}`}
+                >
+                  (def: {Number(paramEntry.defaultValue.toFixed(4))})
+                </span>
+              )}
+            </div>
           </div>
           <button
             type="button"
@@ -390,6 +400,18 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
             <Check className="h-3.5 w-3.5" />
             Apply
           </Button>
+          {paramEntry?.defaultValue !== undefined &&
+            Math.abs(paramEntry.value - paramEntry.defaultValue) > 1e-6 &&
+            input !== String(Number(paramEntry.defaultValue.toFixed(4))) && (
+              <button
+                type="button"
+                onClick={() => onInputChange(String(Number(paramEntry.defaultValue!.toFixed(4))))}
+                className="h-8 px-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-amber-300 text-[10px] font-mono shrink-0"
+                title={`Reset input to default: ${paramEntry.defaultValue}`}
+              >
+                Def
+              </button>
+            )}
         </div>
       )}
 

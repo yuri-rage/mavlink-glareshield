@@ -707,7 +707,14 @@ export const ParametersWidget: React.FC = () => {
                           />
                         )}
                         {details?.key === key && meta && (
-                          <ParamDetails name={key} meta={meta} anchor={details.anchor} onClose={() => setDetails(null)} source={paramMetaSummary} />
+                          <ParamDetails
+                            name={key}
+                            meta={meta}
+                            anchor={details.anchor}
+                            onClose={() => setDetails(null)}
+                            source={paramMetaSummary}
+                            defaultValue={item.defaultValue}
+                          />
                         )}
                       </td>
                       {hasAnyDefaults && (

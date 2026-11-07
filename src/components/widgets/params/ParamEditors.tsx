@@ -230,9 +230,11 @@ interface DetailsProps {
   onClose: () => void;
   /** Which metadata this came from, e.g. "Rover 4.6 parameter metadata, matching firmware 4.6.2." */
   source?: string;
+  /** The vehicle's default value for this parameter, if known. */
+  defaultValue?: number;
 }
 
-export const ParamDetails: React.FC<DetailsProps> = ({ name, meta, anchor, onClose, source }) => {
+export const ParamDetails: React.FC<DetailsProps> = ({ name, meta, anchor, onClose, source, defaultValue }) => {
   const options = meta.values ? sortedValueOptions(meta.values) : [];
   const bits = meta.bitmask ? bitmaskBits(meta.bitmask) : [];
   const range = meta.min !== undefined || meta.max !== undefined ? `${meta.min ?? '—'} to ${meta.max ?? '—'}${meta.units ? ` ${meta.units}` : ''}` : null;
@@ -249,11 +251,19 @@ export const ParamDetails: React.FC<DetailsProps> = ({ name, meta, anchor, onClo
       </div>
       <div className="overflow-y-auto px-3 py-2 space-y-2 flex-1 min-h-0">
         {meta.description && <p className="text-zinc-300 leading-relaxed whitespace-pre-line">{meta.description}</p>}
-        {(range || meta.units || meta.increment) && (
+        {(range || meta.units || meta.increment || defaultValue !== undefined) && (
           <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-0.5 text-[11px]">
             {range && (<><dt className="text-zinc-500">Range</dt><dd className="text-zinc-200 font-mono">{range}</dd></>)}
             {meta.units && !range && (<><dt className="text-zinc-500">Units</dt><dd className="text-zinc-200 font-mono">{meta.units}</dd></>)}
             {meta.increment && (<><dt className="text-zinc-500">Step</dt><dd className="text-zinc-200 font-mono">{meta.increment}</dd></>)}
+            {defaultValue !== undefined && (
+              <>
+                <dt className="text-zinc-500">Default</dt>
+                <dd className="text-zinc-200 font-mono">
+                  {formatParamValue(defaultValue)}{meta.units ? ` ${meta.units}` : ''}
+                </dd>
+              </>
+            )}
           </dl>
         )}
         {options.length > 0 && (
