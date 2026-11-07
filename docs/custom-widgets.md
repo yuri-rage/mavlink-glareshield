@@ -141,7 +141,7 @@ A binding says where a value comes from and how to present it.
 | `min`, `max` | The range of a gauge, bar or fixed chart axis. |
 | `warnThreshold`, `critThreshold` | Values where the widget turns amber and red. Gauges also draw these as zones. |
 | `thresholdInvert` | `false` (default): alert when the value is **above** the thresholds, as for temperature. `true`: alert when it is **below** them, as for voltage or satellite count. |
-| `label` | Name of the row, series or gauge, for widgets showing several values. |
+| `label` | Name of the row, series or gauge, for widgets showing several values. A time-series chart always shows a label you set in its legend, even for a single series. |
 | `color` | Hex colour of the series or row, for example `#f59e0b`. Only hex colours are accepted. |
 
 ### Which fields can be bound

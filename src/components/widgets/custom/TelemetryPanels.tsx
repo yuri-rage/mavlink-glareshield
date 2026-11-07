@@ -303,7 +303,15 @@ export const ChartPanel: React.FC<PanelProps> = (props) => {
 
   return (
     <div className="flex-1 min-h-[170px] flex flex-col">
-      <TimeSeriesChart series={series} config={{ yScale: 'auto', ...def.chart }} fixedMin={min} fixedMax={max} dimmed={staleAll} />
+      <TimeSeriesChart
+        series={series}
+        config={{ yScale: 'auto', ...def.chart }}
+        fixedMin={min}
+        fixedMax={max}
+        dimmed={staleAll}
+        // A label the user set is always shown; an unlabelled single series is named by the card title instead.
+        legendLabels={bindings.some((b) => Boolean(b.label?.trim()))}
+      />
     </div>
   );
 };
