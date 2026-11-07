@@ -702,7 +702,6 @@ export class MavFtpClient {
     const writePromise = new Promise<boolean>((resolve) => {
       let isDone = false;
       let session = 0;
-      let fileCreated = false;
       let currentOffset = 0;
       let stepTimer: any = null;
       let retryCount = 0;
@@ -836,7 +835,6 @@ export class MavFtpClient {
               if (stepTimer) clearTimeout(stepTimer);
               retryCount = 0;
               session = ftp.session;
-              fileCreated = true;
               phase = "write";
               console.log(
                 `[MAVFTP] CreateFile succeeded for ${filePath}. Session: ${session}`,

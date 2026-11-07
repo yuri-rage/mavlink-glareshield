@@ -23,8 +23,6 @@ export function getDefaultWsUrl(): string {
   return 'ws://localhost:56781';
 }
 
-export const DEFAULT_WS_URL = getDefaultWsUrl();
-
 function getStoredUrl(): string {
   try {
     if (typeof localStorage !== 'undefined') {

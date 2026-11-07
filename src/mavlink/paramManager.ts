@@ -273,9 +273,7 @@ export class ParamManager {
       return null;
     }
 
-    const numParams = view.getUint16(2, true);
-    const totalParams = view.getUint16(4, true);
-
+    // Bytes 2-5 hold the parameter counts; the entries are read until the buffer ends instead.
     let offset = 6;
     let lastName = '';
     const result: Record<string, { value: number; type: number; index: number; defaultValue?: number }> = {};
