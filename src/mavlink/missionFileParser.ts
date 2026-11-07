@@ -300,6 +300,21 @@ export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; item
         }
       }
 
+      // Breach return point, [lat, lon, alt]
+      const br = obj.geoFence.breachReturn;
+      if (Array.isArray(br) && br.length >= 2 && (br[0] !== 0 || br[1] !== 0)) {
+        fenceItems.push({
+          seq: fenceSeq++,
+          command: 5000,
+          frame: 0,
+          param1: 0,
+          x: br[0],
+          y: br[1],
+          z: br[2] ?? 0,
+          mission_type: 1,
+        });
+      }
+
       if (fenceItems.length > 0) {
         sections.push({
           type: 'fence',
@@ -483,7 +498,7 @@ export function parseDroppedMissionFile(filename: string, buffer: Uint8Array): P
     // Detect type based on explicit headers and commands, NOT loose filename substrings (e.g. fence_line_inspection.waypoints is a mission)
     const lines = text.trim().split(/\r?\n/);
     const headerLine = lines[0]?.trim().toUpperCase() || '';
-    const fenceCommands = [5001, 5002, 5003, 5004, 5005];
+    const fenceCommands = [5000, 5001, 5002, 5003, 5004];
     const isFenceCommands = wplItems.some((it) => fenceCommands.includes(it.command));
     const isRallyCommands = wplItems.some((it) => it.command === 5100);
 

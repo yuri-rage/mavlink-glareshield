@@ -16,6 +16,7 @@ This directory contains test suites for Glareshield's MAVLink protocol engine, v
 | :--- | :--- |
 | [`mavlink.test.ts`](file:///home/yuri/Projects/mavlink-glareshield/tests/mavlink.test.ts) | Core protocol and telemetry unit tests (run by `npm test`) |
 | [`golden.test.ts`](file:///home/yuri/Projects/mavlink-glareshield/tests/golden.test.ts) | Verifies parser, decoders, encoder, and MAVFTP against `vectors.json` (run by `npm test`) |
+| [`missionFiles.test.ts`](file:///home/yuri/Projects/mavlink-glareshield/tests/missionFiles.test.ts) | Saving the mission, fence and rally points to `.waypoints` and `.plan` files and loading them back (run by `npm test`) |
 | [`vectors.json`](file:///home/yuri/Projects/mavlink-glareshield/tests/vectors.json) | Committed golden vectors generated from pymavlink 2.4.50 (`ardupilotmega` dialect) |
 | [`gen_vectors.py`](file:///home/yuri/Projects/mavlink-glareshield/tests/gen_vectors.py) | Python script that regenerates `vectors.json` using pymavlink |
 | [`check_mock_bridge.py`](file:///home/yuri/Projects/mavlink-glareshield/tests/check_mock_bridge.py) | Validates live mock telemetry from `bridge/bridge.py` using pymavlink |

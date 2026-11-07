@@ -612,11 +612,11 @@ export function cmdHasLocation(command: number): boolean {
     case 191: // MAV_CMD_DO_GO_AROUND
     case 195: // MAV_CMD_DO_SET_ROI_LOCATION
     case 201: // MAV_CMD_DO_SET_ROI
+    case 5000: // MAV_CMD_NAV_FENCE_RETURN_POINT
     case 5001: // MAV_CMD_NAV_FENCE_POLYGON_VERTEX_INCLUSION
     case 5002: // MAV_CMD_NAV_FENCE_POLYGON_VERTEX_EXCLUSION
     case 5003: // MAV_CMD_NAV_FENCE_CIRCLE_INCLUSION
     case 5004: // MAV_CMD_NAV_FENCE_CIRCLE_EXCLUSION
-    case 5005: // MAV_CMD_NAV_FENCE_RETURN_POINT
     case 5100: // MAV_CMD_NAV_RALLY_POINT
       return true;
     default:
