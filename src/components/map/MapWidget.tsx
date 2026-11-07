@@ -6,14 +6,14 @@ import { messageRateManager } from '../../mavlink/rateManager';
 import { missionManager, MissionManagerStatus, groupFencePolygons } from '../../mavlink/missionManager';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { MAVLINK_MSG_ID, getVehicleCategory, getGuidedModeNum } from '../../mavlink/messages';
-import { Card, CardHeader, CardContent } from '../ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Modal } from '../ui/modal';
 import { Input } from '../ui/input';
 import { parseDroppedMissionFile, ParsedMissionFile } from '../../mavlink/missionFileParser';
 import { MissionItemIntData } from '../../mavlink/encoder';
-import { RefreshCw, Crosshair, Maximize2, Shield, Flag, X, Eraser, Upload, AlertTriangle, Navigation, Home } from 'lucide-react';
+import { RefreshCw, Crosshair, Maximize2, Shield, Flag, X, Eraser, Upload, AlertTriangle, Navigation, Home, Map as MapIcon } from 'lucide-react';
 import L from 'leaflet';
 
 function renderVehicleSvg(type: number): string {
@@ -1156,6 +1156,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <div ref={headerRef} className="flex items-center justify-between gap-1.5 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5 shrink-0">
+              <MapIcon className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+              Map
+            </CardTitle>
             {missionStatus.isFetching && (
               <Badge
                 variant={missionStatus.method === 'ftp' ? 'info' : 'secondary'}

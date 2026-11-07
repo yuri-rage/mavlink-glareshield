@@ -3,7 +3,7 @@ import { useTelemetryStore } from '../../store/telemetryStore';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { MAVLINK_MSG_ID } from '../../mavlink/messages';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Battery, Zap, Activity } from 'lucide-react';
+import { Battery, BatteryCharging, Gauge, Zap, Activity } from 'lucide-react';
 
 export const BatteryWidget: React.FC = () => {
   const battery = useTelemetryStore((state) => state.battery);
@@ -46,9 +46,6 @@ export const BatteryWidget: React.FC = () => {
             Battery
           </CardTitle>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-zinc-500 font-mono">
-              {hasLink && battery.consumedMah > 0 ? `${battery.consumedMah} mAh` : ''}
-            </span>
             <span
               className={`text-xs px-2 py-0.5 rounded-full border font-mono font-bold ${getPctColor(
                 battery.remaining
@@ -59,8 +56,8 @@ export const BatteryWidget: React.FC = () => {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="p-3 space-y-2.5 flex-1 flex flex-col justify-between">
-        {/* Voltage & Current large metrics */}
+      <CardContent className="p-3 space-y-2.5 flex-1 flex flex-col">
+        {/* Voltage, current, power and consumption, laid out like the neighbouring flight cards */}
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2.5 min-w-0">
             <span className="text-[10px] text-zinc-400 font-bold uppercase flex items-center gap-1 truncate">
@@ -81,10 +78,29 @@ export const BatteryWidget: React.FC = () => {
               <span className="text-xs text-zinc-400 font-normal">A</span>
             </div>
           </div>
+
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2.5 min-w-0">
+            <span className="text-[10px] text-zinc-400 font-bold uppercase flex items-center gap-1 truncate">
+              <Gauge className="h-3 w-3 text-emerald-400 shrink-0" /> Power
+            </span>
+            <div className="text-xl sm:text-2xl font-mono font-bold text-zinc-100 mt-0.5 truncate">
+              {hasLink ? Math.round(battery.voltage * battery.current) : '--'}{' '}
+              <span className="text-xs text-zinc-400 font-normal">W</span>
+            </div>
+          </div>
+
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2.5 min-w-0">
+            <span className="text-[10px] text-zinc-400 font-bold uppercase flex items-center gap-1 truncate">
+              <BatteryCharging className="h-3 w-3 text-amber-400 shrink-0" /> Consumed
+            </span>
+            <div className="text-xl sm:text-2xl font-mono font-bold text-zinc-100 mt-0.5 truncate">
+              {hasLink ? battery.consumedMah : '--'} <span className="text-xs text-zinc-400 font-normal">mAh</span>
+            </div>
+          </div>
         </div>
 
         {/* Cell Voltages when true per-cell telemetry is available */}
-        {hasPerCellTelemetry ? (
+        {hasPerCellTelemetry && (
           <div className="space-y-1">
             <span className="text-[10px] text-zinc-500 uppercase font-bold block">
               Cells ({battery.cellVoltages.length}S)
@@ -99,13 +115,6 @@ export const BatteryWidget: React.FC = () => {
                 </div>
               ))}
             </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 bg-zinc-900/50 border border-zinc-800/80 rounded-lg px-2.5 py-1.5">
-            <span>Consumed:</span>
-            <span className="font-bold text-zinc-200">
-              {hasLink ? `${battery.consumedMah} mAh` : '-- mAh'}
-            </span>
           </div>
         )}
       </CardContent>
