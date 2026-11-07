@@ -5,8 +5,6 @@ import {
   DashboardTab,
   PlacedWidget,
   CustomWidgetDefinition,
-  WidgetDisplayType,
-  MultiBarGroupType,
 } from '../types/widget';
 
 const DEFAULT_PROFILE: DashboardProfile = {

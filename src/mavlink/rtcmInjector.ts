@@ -596,8 +596,11 @@ export class RtcmInjector {
         };
       } else {
         // HTTP streaming mode:
-        // Try local Vite dev server proxy endpoint first (/api/ntrip-stream),
-        // which connects directly to the caster via raw TCP, strips ICY 200 OK headers, and streams without CORS issues.
+        // In the dev server, try its proxy endpoint first (/api/ntrip-stream), which connects directly to the caster
+        // via raw TCP, strips ICY 200 OK headers, and streams without CORS issues. The proxy only exists there: in a
+        // production build the request would carry the caster credentials to the site's host, and an SPA host answers
+        // any unknown path with index.html (200), which would then be read as the RTCM stream.
+        const devProxy = Boolean(import.meta.env?.DEV);
         const proxyUrl = `/api/ntrip-stream?host=${encodeURIComponent(host)}&port=${port}&mountpoint=${encodeURIComponent(mountpoint)}` +
           (config.username ? `&username=${encodeURIComponent(config.username)}` : '') +
           (config.password ? `&password=${encodeURIComponent(config.password)}` : '');
@@ -605,16 +608,20 @@ export class RtcmInjector {
         let response: Response | null = null;
         let usedProxy = false;
 
-        try {
-          this.ntripAbortController = new AbortController();
-          response = await fetch(proxyUrl, {
-            signal: this.ntripAbortController.signal,
-          });
-          if (response.ok) {
-            usedProxy = true;
+        if (devProxy) {
+          try {
+            this.ntripAbortController = new AbortController();
+            response = await fetch(proxyUrl, {
+              signal: this.ntripAbortController.signal,
+            });
+            if (response.ok && !(response.headers.get('content-type') ?? '').includes('text/html')) {
+              usedProxy = true;
+            } else {
+              response = null;
+            }
+          } catch {
+            response = null;
           }
-        } catch {
-          response = null;
         }
 
         // If local proxy endpoint is not available or returned non-ok (e.g. standalone production build):

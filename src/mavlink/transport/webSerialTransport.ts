@@ -313,19 +313,6 @@ export function getWebSerialNavigator(): WebSerialNavigatorLike | undefined {
   return candidate.serial;
 }
 
-export async function getAvailableWebSerialPorts(): Promise<WebSerialPortLike[]> {
-  const serial = getWebSerialNavigator();
-  if (!serial?.getPorts) {
-    return [];
-  }
-
-  return serial.getPorts();
-}
-
-export function getWebSerialPortInfo(port: WebSerialPortLike | undefined): WebSerialPortInfo | undefined {
-  return port?.getInfo?.();
-}
-
 function isRecoverableWebSerialReadError(message: string): boolean {
   const normalized = message.toLowerCase();
   return normalized.includes('break received');

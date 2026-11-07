@@ -5,6 +5,5 @@ export const GlareshieldWidget: React.FC = () => {
   return <ArmingModesWidget />;
 };
 
-export { ArmingModesWidget } from './ArmingModesWidget';
 export { AllFlightModesWidget } from './AllFlightModesWidget';
 export { SetSpeedWidget } from './SetSpeedWidget';

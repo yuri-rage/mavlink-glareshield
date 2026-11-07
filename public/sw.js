@@ -1,4 +1,7 @@
-const SHELL_CACHE = 'glareshield-shell-v1';
+// Replaced with a unique ID at build time (vite.config.ts), so every deploy has its own shell cache.
+const BUILD_ID = '__BUILD_ID__';
+const SHELL_PREFIX = 'glareshield-shell-';
+const SHELL_CACHE = SHELL_PREFIX + BUILD_ID;
 const TILE_CACHE = 'glareshield-tiles-v1';
 const MAX_CACHED_TILES = 600;
 
@@ -26,6 +29,7 @@ self.addEventListener('activate', (event) => {
       .keys()
       .then((keys) =>
         Promise.all(
+          // Earlier deploys' shells (and their hashed bundles) are dropped; map tiles are kept.
           keys
             .filter((k) => k !== SHELL_CACHE && k !== TILE_CACHE)
             .map((k) => caches.delete(k))
@@ -79,12 +83,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Same-origin app shell & assets: network-first falling back to cache
-  if (url.origin === self.location.origin) {
+  // Same-origin app shell & assets: network-first falling back to cache. API calls are never cached.
+  if (url.origin === self.location.origin && !url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          if (res && res.ok) {
+          if (res && res.ok && res.type === 'basic') {
             const copy = res.clone();
             caches.open(SHELL_CACHE).then((c) => c.put(req, copy));
           }

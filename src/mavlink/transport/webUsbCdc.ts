@@ -27,9 +27,8 @@
 export const USB_CLASS_CDC = 0x02;
 export const USB_CLASS_CDC_DATA = 0x0a;
 
-/** ArduPilot's allocated pid.codes identifiers. */
+/** ArduPilot's allocated pid.codes vendor ID (its boards use product IDs 0x5740 / 0x5741). */
 export const ARDUPILOT_USB_VENDOR_ID = 0x1209;
-export const ARDUPILOT_USB_PRODUCT_IDS = [0x5740, 0x5741] as const;
 
 /** Minimal shapes of the WebUSB objects this module reads. */
 export interface UsbEndpointLike {

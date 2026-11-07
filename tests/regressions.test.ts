@@ -22,7 +22,7 @@ const { MavlinkEncoder } = await import('../src/mavlink/encoder.ts');
 const { MavlinkParser, decodePayload } = await import('../src/mavlink/parser.ts');
 const { MAVLINK_MSG_ID, MAV_CMD } = await import('../src/mavlink/messages.ts');
 const { missionManager } = await import('../src/mavlink/missionManager.ts');
-const { parseParamFile, serializeParamFile, getParamMetadata, areParamsDifferent, formatParamValue } = await import('../src/mavlink/paramMetadata.ts');
+const { parseParamFile, serializeParamFile, getParamMetadata, areParamsDifferent } = await import('../src/mavlink/paramMetadata.ts');
 const { normalizeCalloutText, useAudioAlertsStore } = await import('../src/lib/audioAlerts.ts');
 const { computeMapBadgeVisibility } = await import('../src/components/map/mapBadgeVisibility.ts');
 

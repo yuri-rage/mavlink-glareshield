@@ -37,7 +37,6 @@ import {
   VolumeX,
   Milestone,
   RefreshCw,
-  Info,
   ExternalLink,
 } from 'lucide-react';
 import { BandwidthProfile } from '../../mavlink/rateManager';
@@ -94,7 +93,6 @@ export const Navbar: React.FC = () => {
     setAltitudeMode,
     formatAltitude,
     formatSpeed,
-    formatDistance,
     formatHomeVector,
   } = useUnitsStore();
   const {

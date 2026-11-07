@@ -3,7 +3,6 @@ import { MavlinkParser, decodePayload } from '../src/mavlink/parser.ts';
 import {
   MAVLINK_MSG_ID,
   getVehicleCategory,
-  getVehicleCategoryLabel,
   getVehicleModeName,
   getVehicleFlightModes,
   getAllVehicleFlightModes,
@@ -1668,7 +1667,7 @@ async function testFtpQueueCancel() {
 await testFtpQueueCancel();
 
 // 25. Test Mission File Packing, Parsing, and Drop Handling
-import { packDatFile, parseDroppedMissionFile, parseQgcWplText, parseQgcPlanJson } from '../src/mavlink/missionFileParser.ts';
+import { packDatFile, parseDroppedMissionFile } from '../src/mavlink/missionFileParser.ts';
 
 // Test 25a: packDatFile roundtrip with unpackMissionDat
 const testWps = [
@@ -1777,7 +1776,6 @@ import { mavlinkConnection } from '../src/mavlink/connection.ts';
 
 async function testMissionUploadFallback() {
   const originalSend = mavlinkConnection.send.bind(mavlinkConnection);
-  let step = 0;
 
   const emitPacket = (pktBytes: Uint8Array) => {
     const packets = new MavlinkParser().parse(pktBytes);
@@ -1870,7 +1868,6 @@ import {
   generateNmeaGga,
   RtcmFrameParser,
   rtcmInjector,
-  ecefToWgs84,
   extractRtcm1005Arp,
 } from '../src/mavlink/rtcmInjector.ts';
 

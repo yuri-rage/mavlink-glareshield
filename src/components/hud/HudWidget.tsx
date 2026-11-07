@@ -775,8 +775,6 @@ export const HudWidget: React.FC = () => {
     const gsUnit = isKtsMode ? 'KGS' : formatSpeed(vfr.groundspeed).unit.toUpperCase();
     const gsText = isKtsMode ? `${gsVal} ${gsUnit}` : `GS ${gsVal} ${gsUnit}`;
 
-    const gsMetrics = ctx.measureText(gsText);
-    const gsW = gsMetrics.width + 8;
     const gsH = 15;
     const gsY = spdBoxY + spdBoxH + 4;
 
