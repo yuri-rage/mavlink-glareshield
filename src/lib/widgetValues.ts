@@ -104,11 +104,26 @@ const STORE_SLICES: Record<string, string[]> = {
   SCALED_PRESSURE: ['pressure'],
 };
 
+/** One bit of an integer field (0 or 1): bit 0 is the least significant. */
+export function extractBit(value: number, bit: number): number {
+  return Math.floor(value / 2 ** bit) % 2;
+}
+
 /**
  * The raw bound value, before multiplier/offset: a number, a string for the few text fields, `null` for an
- * input that reports "unused" (RC 65535, servo 0), or undefined when nothing is known yet.
+ * input that reports "unused" (RC 65535, servo 0), or undefined when nothing is known yet. With `bit` set, it is
+ * that bit of the field (0 or 1).
  */
 export function resolveRawValue(
+  binding: Pick<WidgetDataBinding, 'messageName' | 'fieldName' | 'bit'> | undefined,
+  state: any
+): number | string | null | undefined {
+  const raw = resolveFieldValue(binding, state);
+  if (binding?.bit === undefined || typeof raw !== 'number' || !Number.isFinite(raw)) return raw;
+  return extractBit(Math.trunc(Math.abs(raw)), binding.bit);
+}
+
+function resolveFieldValue(
   binding: Pick<WidgetDataBinding, 'messageName' | 'fieldName'> | undefined,
   state: any
 ): number | string | null | undefined {
@@ -314,5 +329,5 @@ export function getAllBindings(def: Pick<CustomWidgetDefinition, 'binding' | 'bi
 
 /** Stable identity of a binding's base-unit series (what the sampler records). */
 export function bindingKey(binding: WidgetDataBinding): string {
-  return [binding.messageName, binding.fieldName, binding.multiplier ?? 1, binding.offset ?? 0].join('|');
+  return [binding.messageName, binding.fieldName, binding.multiplier ?? 1, binding.offset ?? 0, binding.bit ?? ''].join('|');
 }

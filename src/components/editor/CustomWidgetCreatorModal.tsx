@@ -126,6 +126,7 @@ export const COMMON_FIELDS: Record<string, string[]> = {
   ],
   WIND: ['direction', 'speed', 'speed_z'],
   VIBRATION: ['vibration_x', 'vibration_y', 'vibration_z', 'clipping_0', 'clipping_1', 'clipping_2'],
+  RELAY_STATUS: ['on', 'present'],
   EKF_STATUS_REPORT: [
     'flags',
     'velocity_variance',
@@ -1180,6 +1181,12 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
               With feedback the switch shows what the vehicle reports (e.g. the servo output it drives) instead of what was
               last sent.
             </p>
+            {commandId.trim() === '181' && (
+              <p className="text-[10px] text-sky-300/90 -mt-1">
+                Relay toggles follow the vehicle's RELAY_STATUS for relay {param1 || '0'} (RELAY{(Number(param1) || 0) + 1})
+                automatically. Set a field here only to follow something else.
+              </p>
+            )}
             {feedbackEnabled && (
               <>
                 <BindingEditor

@@ -42,9 +42,14 @@ export function useVehicleTarget() {
 /** Sends a command and tracks the vehicle's COMMAND_ACK (or timeout) for display under the control. */
 export function useCommandSender() {
   const [ack, setAck] = useState<AckView | null>(null);
-  const send = (packet: Uint8Array, label: string) => {
+  /** `onResult` hears the outcome (accepted / in progress / rejected, which includes no response). */
+  const send = (packet: Uint8Array, label: string, onResult?: (status: AckView['status']) => void) => {
     setAck({ status: 'pending', text: 'Sent, awaiting acknowledgement', time: Date.now() });
-    void sendTrackedCommand(packet, { label }).then((info) => setAck(describeAck(info)));
+    void sendTrackedCommand(packet, { label }).then((info) => {
+      const view = describeAck(info);
+      setAck(view);
+      onResult?.(view.status);
+    });
   };
   return { ack, send };
 }

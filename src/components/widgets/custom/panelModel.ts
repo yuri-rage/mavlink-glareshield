@@ -73,9 +73,35 @@ export function panelBindings(def: CustomWidgetDefinition): WidgetDataBinding[] 
   return MULTI_VALUE_TYPES.has(def.displayType) ? all : all.slice(0, 1);
 }
 
-/** The field a toggle switch reads its real state from, if it has one. */
+const DO_SET_RELAY = 181;
+
+/** The relay instance (0-15, as in DO_SET_RELAY param1) a toggle switches, if it switches a relay. */
+export function relayInstance(def: CustomWidgetDefinition): number | undefined {
+  if (def.displayType !== 'toggle-switch' || def.action?.commandId !== DO_SET_RELAY) return undefined;
+  const n = def.action.params?.[0];
+  return Number.isInteger(n) && n >= 0 && n <= 15 ? n : undefined;
+}
+
+/**
+ * The field a toggle switch reads its real state from, if it has one: its `feedback`, or for a relay toggle without
+ * one, that relay's bit of RELAY_STATUS.on.
+ */
 export function feedbackBinding(def: CustomWidgetDefinition): WidgetDataBinding | undefined {
-  return def.displayType === 'toggle-switch' && def.feedback?.messageName ? def.feedback : undefined;
+  if (def.displayType !== 'toggle-switch') return undefined;
+  if (def.feedback?.messageName) return def.feedback;
+  const relay = relayInstance(def);
+  if (relay === undefined) return undefined;
+  return { messageName: 'RELAY_STATUS', fieldName: 'on', bit: relay, decimals: 0, label: `RELAY${relay + 1}` };
+}
+
+/** True when a toggle follows RELAY_STATUS on its own (a relay toggle with no explicit feedback). */
+export function followsRelayStatus(def: CustomWidgetDefinition): boolean {
+  return !def.feedback?.messageName && relayInstance(def) !== undefined;
+}
+
+/** A toggle's feedback is "on" above this: the configured threshold, or 0 for a relay bit. */
+export function feedbackThreshold(def: CustomWidgetDefinition): number {
+  return followsRelayStatus(def) ? 0 : def.stateThreshold ?? 0;
 }
 
 export function isMultiGauge(def: CustomWidgetDefinition): boolean {

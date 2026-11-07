@@ -80,6 +80,8 @@ function sanitizeBinding(raw: unknown): WidgetDataBinding | undefined {
   }
   const decimals = finite(b.decimals);
   if (decimals !== undefined) out.decimals = Math.max(0, Math.min(6, Math.round(decimals)));
+  const bit = finite(b.bit);
+  if (bit !== undefined) out.bit = Math.max(0, Math.min(31, Math.round(bit)));
   if (b.thresholdInvert === true) out.thresholdInvert = true;
   if (b.unitKind === 'speed' || b.unitKind === 'altitude' || b.unitKind === 'distance') out.unitKind = b.unitKind;
   const label = text(b.label, 32);

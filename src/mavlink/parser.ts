@@ -753,6 +753,14 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
       };
     }
 
+    case MAVLINK_MSG_ID.RELAY_STATUS:
+      // One bit per relay instance (bit 0 = first relay): `on` is its state, `present` whether it is configured.
+      return {
+        time_boot_ms: getUint32(0),
+        on: getUint16(4),
+        present: getUint16(6),
+      };
+
     case MAVLINK_MSG_ID.RADIO_STATUS:
       return {
         rxerrors: getUint16(0),
