@@ -11,10 +11,11 @@ import { MiniStatusTextWidget } from './MiniStatusTextWidget';
 import { WaypointControlWidget } from './WaypointControlWidget';
 
 // Loaded on first use: each pulls in code the rest of the app doesn't need at startup (Leaflet and mission
-// parsing, the charts, parameter metadata, RTCM handling).
+// parsing, the charts, PID tuning, parameter metadata, RTCM handling).
 const MapWidget = lazy(() => import('../map/MapWidget').then((m) => ({ default: m.MapWidget })));
 const TelemetryChartsWidget = lazy(() => import('./TelemetryChartsWidget').then((m) => ({ default: m.TelemetryChartsWidget })));
 const ParametersWidget = lazy(() => import('./ParametersWidget').then((m) => ({ default: m.ParametersWidget })));
+const PidTuningWidget = lazy(() => import('./PidTuningWidget').then((m) => ({ default: m.PidTuningWidget })));
 const NtripWidget = lazy(() => import('./NtripWidget').then((m) => ({ default: m.NtripWidget })));
 
 /** Placeholder while a lazily loaded widget arrives. */
@@ -58,6 +59,8 @@ export function renderBuiltinWidget(widgetId: string, colSpan: number): React.Re
       return lazyWidget(<ParametersWidget />);
     case 'built-in-charts':
       return lazyWidget(<TelemetryChartsWidget />);
+    case 'built-in-pid-tuning':
+      return lazyWidget(<PidTuningWidget />);
     case 'built-in-ntrip':
       return lazyWidget(<NtripWidget />);
     case 'built-in-waypoints':

@@ -700,6 +700,21 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         rpm2: getFloat32(4),
       };
 
+    case MAVLINK_MSG_ID.PID_TUNING:
+      // One controller axis per message (see mavlink/pidTuning.ts); SRate and PDmod are MAVLink 2 extensions,
+      // read as 0 when an older firmware leaves them off.
+      return {
+        desired: getFloat32(0),
+        achieved: getFloat32(4),
+        FF: getFloat32(8),
+        P: getFloat32(12),
+        I: getFloat32(16),
+        D: getFloat32(20),
+        axis: getUint8(24),
+        SRate: getFloat32(25),
+        PDmod: getFloat32(29),
+      };
+
     case MAVLINK_MSG_ID.VIBRATION:
       return {
         time_usec: Number(getBigUint64(0)),

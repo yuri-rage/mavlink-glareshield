@@ -92,6 +92,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       'built-in-statustext-mini': 'Mini Messages',
       'built-in-parameters': 'Parameters',
       'built-in-charts': 'Telemetry Graphs',
+      'built-in-pid-tuning': 'PID Tuning',
       'built-in-ntrip': 'NTRIP RTK Base Stream',
       'built-in-waypoints': 'Waypoint Control',
     };

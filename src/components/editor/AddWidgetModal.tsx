@@ -24,6 +24,7 @@ import {
   Pencil,
   Trash2,
   Check,
+  Activity,
 } from 'lucide-react';
 
 function getMavCmdName(cmdId: number): string {
@@ -112,6 +113,15 @@ const BUILT_IN_CATALOG = [
     description: 'Rolling time-series graphs of altitude, groundspeed, and battery current.',
     icon: LineChart,
     defaultSpan: 12,
+  },
+  {
+    id: 'built-in-pid-tuning',
+    name: 'PID Tuning',
+    category: 'telemetry',
+    description:
+      "Desired vs achieved for one controller, with its P / I / D / FF terms, from PID_TUNING. Offers the vehicle type's own controllers and switches their reporting (GCS_PID_MASK).",
+    icon: Activity,
+    defaultSpan: 6,
   },
   {
     id: 'built-in-statustext',
