@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="820" viewBox="0 0 1000 820" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="860" viewBox="0 0 1000 860" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
   <title>Glareshield behind a local reverse proxy</title>
-  <desc>The browser loads Glareshield once from glareshield.yurirage.com. Pi-hole resolves mav.home.example.com and dotb.home.example.com to Nginx Proxy Manager, which holds a Let's Encrypt wildcard certificate, decrypts wss and https, and forwards them to bridge.py and Dock of the Base in their own LXC containers on a Proxmox host. Both exchange MAVLink with the ArduPilot vehicle, which is on the LAN through HaLow, over UDP port 14550.</desc>
+  <desc>The browser loads Glareshield once from glareshield.yurirage.com. Pi-hole resolves mav, dotb and cam under home.example.com to Nginx Proxy Manager, which holds a Let's Encrypt wildcard certificate, decrypts wss and https, and forwards them to bridge.py, Dock of the Base and go2rtc, each in its own LXC container on a Proxmox host. bridge.py and Dock of the Base exchange MAVLink with the ArduPilot vehicle over UDP 14550; go2rtc pulls the camera's MJPEG stream. The vehicle and camera are on the LAN through HaLow.</desc>
   <defs>
     <marker id="tls" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#34d399"/></marker>
     <marker id="plain" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#fb923c"/></marker>
@@ -26,25 +26,28 @@
     </style>
   </defs>
 
-  <rect x="0" y="0" width="1000" height="820" rx="14" fill="#0b1220"/>
+  <rect x="0" y="0" width="1000" height="860" rx="14" fill="#0b1220"/>
 
   <!-- Zones -->
   <rect class="zone" x="20" y="20" width="960" height="112" rx="10"/>
   <text class="zlabel" x="36" y="42">INTERNET</text>
-  <text class="note" x="36" y="74">MAVLink never crosses the internet:</text>
-  <text class="note" x="36" y="92">after step 1 the browser talks to</text>
-  <text class="note" x="36" y="110">the local network directly.</text>
+  <text class="note" x="36" y="74">Telemetry and video never cross the</text>
+  <text class="note" x="36" y="92">internet: after step 1 the browser talks</text>
+  <text class="note" x="36" y="110">to the local network directly.</text>
 
   <rect class="zone" x="20" y="146" width="960" height="106" rx="10"/>
   <text class="zlabel" x="36" y="168">YOUR DEVICE</text>
   <text class="note" x="36" y="188">phone, tablet or laptop on the LAN</text>
 
-  <rect class="zone" x="20" y="266" width="960" height="534" rx="10"/>
+  <rect class="zone" x="20" y="266" width="960" height="574" rx="10"/>
   <text class="zlabel" x="36" y="288">LOCAL NETWORK</text>
 
-  <rect class="group" x="40" y="400" width="920" height="248" rx="10"/>
-  <text class="zlabel" x="56" y="422">PROXMOX HOST</text>
-  <text class="dim" x="944" y="422" text-anchor="end">one LXC container each, each with its own LAN IP</text>
+  <rect class="group" x="40" y="404" width="920" height="264" rx="10"/>
+  <text class="zlabel" x="56" y="426">PROXMOX HOST</text>
+  <text class="dim" x="944" y="426" text-anchor="end">one LXC container each, each with its own LAN IP</text>
+
+  <rect class="group" x="120" y="718" width="840" height="114" rx="10"/>
+  <text class="zlabel" x="136" y="823">HALOW</text>
 
   <!-- Internet -->
   <rect class="box" x="330" y="44" width="340" height="66" rx="10"/>
@@ -63,25 +66,32 @@
   <text class="gsub mono" x="174" y="368" text-anchor="middle" font-size="11.5">→ 192.168.1.10</text>
 
   <!-- NPM -->
-  <rect class="box" x="330" y="440" width="340" height="88" rx="10"/>
-  <text class="title" x="500" y="466" text-anchor="middle">Nginx Proxy Manager</text>
-  <text class="sub" x="500" y="487" text-anchor="middle">wildcard Let's Encrypt cert; TLS ends here</text>
-  <text class="sub mono" x="500" y="508" text-anchor="middle" font-size="11.5">192.168.1.10</text>
+  <rect class="box" x="330" y="444" width="340" height="88" rx="10"/>
+  <text class="title" x="500" y="470" text-anchor="middle">Nginx Proxy Manager</text>
+  <text class="sub" x="500" y="491" text-anchor="middle">wildcard Let's Encrypt cert; TLS ends here</text>
+  <text class="sub mono" x="500" y="512" text-anchor="middle" font-size="11.5">192.168.1.10</text>
 
-  <!-- bridge -->
-  <rect class="box" x="64" y="562" width="252" height="70" rx="10"/>
-  <text class="title" x="190" y="590" text-anchor="middle">bridge.py</text>
-  <text class="sub mono" x="190" y="612" text-anchor="middle" font-size="11.5">192.168.1.11 · ws :56781</text>
+  <!-- Services -->
+  <rect class="box" x="64" y="586" width="252" height="66" rx="10"/>
+  <text class="title" x="190" y="613" text-anchor="middle">bridge.py</text>
+  <text class="sub mono" x="190" y="634" text-anchor="middle" font-size="11.5">192.168.1.11 · ws :56781</text>
 
-  <!-- DotB -->
-  <rect class="box" x="684" y="562" width="252" height="70" rx="10"/>
-  <text class="title" x="810" y="590" text-anchor="middle">Dock of the Base</text>
-  <text class="sub mono" x="810" y="612" text-anchor="middle" font-size="11.5">192.168.1.12 · web :8765</text>
+  <rect class="box" x="374" y="586" width="252" height="66" rx="10"/>
+  <text class="title" x="500" y="613" text-anchor="middle">Dock of the Base</text>
+  <text class="sub mono" x="500" y="634" text-anchor="middle" font-size="11.5">192.168.1.12 · web :8765</text>
 
-  <!-- Vehicle -->
-  <rect class="vehicle" x="330" y="712" width="340" height="66" rx="10"/>
-  <text class="title" x="500" y="739" text-anchor="middle">ArduPilot vehicle</text>
-  <text class="vsub" x="500" y="761" text-anchor="middle">on the LAN through HaLow</text>
+  <rect class="box" x="684" y="586" width="252" height="66" rx="10"/>
+  <text class="title" x="810" y="613" text-anchor="middle">go2rtc</text>
+  <text class="sub mono" x="810" y="634" text-anchor="middle" font-size="11.5">192.168.1.13 · MJPEG :1984</text>
+
+  <!-- HaLow devices -->
+  <rect class="vehicle" x="150" y="734" width="390" height="66" rx="10"/>
+  <text class="title" x="345" y="761" text-anchor="middle">ArduPilot vehicle</text>
+  <text class="vsub" x="345" y="783" text-anchor="middle">MAVLink over UDP</text>
+
+  <rect class="vehicle" x="684" y="734" width="252" height="66" rx="10"/>
+  <text class="title" x="810" y="761" text-anchor="middle">Camera</text>
+  <text class="vsub" x="810" y="783" text-anchor="middle">Amcrest / Dahua</text>
 
   <!-- 1: page load -->
   <line x1="500" y1="168" x2="500" y2="113" stroke="#34d399" stroke-width="2.5" marker-end="url(#tls)"/>
@@ -92,33 +102,42 @@
   <path d="M328,201 H174 V301" fill="none" stroke="#9ca3af" stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round" marker-end="url(#dns)"/>
   <text class="lbl dnsl" x="186" y="232">name lookup</text>
 
-  <!-- 2: wss to proxy -->
-  <line x1="420" y1="234" x2="420" y2="437" stroke="#34d399" stroke-width="2.5" marker-end="url(#tls)"/>
+  <!-- 2, 3, 4: browser to proxy -->
+  <line x1="420" y1="234" x2="420" y2="441" stroke="#34d399" stroke-width="2.5" marker-end="url(#tls)"/>
+  <line x1="500" y1="234" x2="500" y2="441" stroke="#34d399" stroke-width="2.5" marker-end="url(#tls)"/>
+  <line x1="580" y1="234" x2="580" y2="441" stroke="#34d399" stroke-width="2.5" marker-end="url(#tls)"/>
   <circle cx="420" cy="330" r="9" fill="#34d399"/><text class="num" x="420" y="334" text-anchor="middle">2</text>
-  <text class="lbl tlsl mono" x="406" y="391" text-anchor="end">wss://mav.home.example.com</text>
+  <circle cx="500" cy="352" r="9" fill="#34d399"/><text class="num" x="500" y="356" text-anchor="middle">3</text>
+  <circle cx="580" cy="374" r="9" fill="#34d399"/><text class="num" x="580" y="378" text-anchor="middle">4</text>
+  <g class="lbl tlsl mono">
+    <circle cx="618" cy="326" r="9" fill="#34d399"/><text class="num" x="618" y="330" text-anchor="middle">2</text>
+    <text x="634" y="331">wss://mav.home.example.com</text>
+    <circle cx="618" cy="352" r="9" fill="#34d399"/><text class="num" x="618" y="356" text-anchor="middle">3</text>
+    <text x="634" y="357">https://dotb.home.example.com</text>
+    <circle cx="618" cy="378" r="9" fill="#34d399"/><text class="num" x="618" y="382" text-anchor="middle">4</text>
+    <text x="634" y="383">https://cam.home.example.com</text>
+  </g>
 
-  <!-- 3: https to proxy -->
-  <line x1="580" y1="234" x2="580" y2="437" stroke="#34d399" stroke-width="2.5" marker-end="url(#tls)"/>
-  <circle cx="580" cy="330" r="9" fill="#34d399"/><text class="num" x="580" y="334" text-anchor="middle">3</text>
-  <text class="lbl tlsl mono" x="594" y="391">https://dotb.home.example.com</text>
+  <!-- proxy to services -->
+  <path d="M352,534 V556 H190 V583" fill="none" stroke="#fb923c" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#plain)"/>
+  <text class="lbl plainl mono" x="340" y="548" text-anchor="end">ws://192.168.1.11:56781</text>
+  <line x1="500" y1="534" x2="500" y2="583" stroke="#fb923c" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#plain)"/>
+  <text class="lbl plainl mono" x="516" y="572">http://192.168.1.12:8765</text>
+  <path d="M648,534 V556 H810 V583" fill="none" stroke="#fb923c" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#plain)"/>
+  <text class="lbl plainl mono" x="660" y="548">http://192.168.1.13:1984</text>
 
-  <!-- proxy to bridge -->
-  <path d="M352,530 V546 H190 V559" fill="none" stroke="#fb923c" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#plain)"/>
-  <text class="lbl plainl mono" x="340" y="540" text-anchor="end">ws://192.168.1.11:56781</text>
+  <!-- services to HaLow devices -->
+  <line x1="190" y1="655" x2="190" y2="731" stroke="#c084fc" stroke-width="2.5" marker-start="url(#udp)" marker-end="url(#udp)"/>
+  <text class="lbl udpl" x="202" y="684">UDP 14550</text>
+  <text class="note" x="202" y="701">telemetry, commands</text>
 
-  <!-- proxy to dotb -->
-  <path d="M648,530 V546 H810 V559" fill="none" stroke="#fb923c" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#plain)"/>
-  <text class="lbl plainl mono" x="660" y="540">http://192.168.1.12:8765</text>
+  <line x1="500" y1="655" x2="500" y2="731" stroke="#c084fc" stroke-width="2.5" marker-start="url(#udp)" marker-end="url(#udp)"/>
+  <text class="lbl udpl" x="512" y="684">UDP 14550</text>
+  <text class="note" x="512" y="701">RTCM3 corrections</text>
 
-  <!-- bridge to vehicle -->
-  <path d="M190,635 V745 H327" fill="none" stroke="#c084fc" stroke-width="2.5" marker-start="url(#udp)" marker-end="url(#udp)"/>
-  <text class="lbl udpl" x="202" y="676">UDP 14550</text>
-  <text class="note" x="202" y="693">telemetry and commands</text>
-
-  <!-- dotb to vehicle -->
-  <path d="M810,635 V745 H673" fill="none" stroke="#c084fc" stroke-width="2.5" marker-start="url(#udp)" marker-end="url(#udp)"/>
-  <text class="lbl udpl" x="798" y="676" text-anchor="end">UDP 14550</text>
-  <text class="note" x="798" y="693" text-anchor="end">RTCM3 corrections (GPS_RTCM_DATA)</text>
+  <line x1="810" y1="731" x2="810" y2="655" stroke="#fb923c" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#plain)"/>
+  <text class="lbl plainl" x="822" y="684">camera stream</text>
+  <text class="note" x="822" y="701">go2rtc logs in</text>
 
   <!-- Legend -->
   <g transform="translate(728,32)">
