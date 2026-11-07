@@ -120,6 +120,8 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
     switch (span) {
       case 12:
         return 'col-span-12';
+      case 9:
+        return 'col-span-12 lg:col-span-9';
       case 8:
         return 'col-span-12 lg:col-span-8';
       case 6:
@@ -418,12 +420,13 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
-                      {/* Width toggles: 1/4, 1/3, 1/2, 2/3, Full */}
+                      {/* Width toggles: 1/4, 1/3, 1/2, 2/3, 3/4, Full */}
                       {[
                         { span: 3, label: '1/4', title: '1/4 Width (3 cols)' },
                         { span: 4, label: '1/3', title: '1/3 Width (4 cols)' },
                         { span: 6, label: '1/2', title: 'Half Width (6 cols)' },
                         { span: 8, label: '2/3', title: '2/3 Width (8 cols)' },
+                        { span: 9, label: '3/4', title: '3/4 Width (9 cols)' },
                         { span: 12, label: 'Full', title: 'Full Width (12 cols)' },
                       ].map((opt) => (
                         <button
