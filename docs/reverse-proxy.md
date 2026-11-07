@@ -10,6 +10,15 @@ It describes one working setup:
 
 The same pattern works with other proxies (Caddy, Traefik, plain nginx), other local DNS servers, and Docker instead of LXC. Only the screens differ.
 
+### What is Dock of the Base?
+
+[Dock of the Base](https://github.com/yuri-rage/dock-of-the-base) is a companion project: an RTK base station for u-blox ZED-F9 and ZED-X20 GNSS receivers, run in Docker with a web UI for setup and monitoring. It:
+- configures the receiver as a base (survey-in, or a fixed position you enter);
+- sends RTCM3 corrections to rovers, directly over MAVLink (`GPS_RTCM_DATA` on UDP 14550, the path shown here), through its own NTRIP caster or TCP repeater, or out to external NTRIP services;
+- logs raw observations for post-processing (PPK), with RINEX conversion.
+
+It runs independently of Glareshield; the two only share the vehicle's MAVLink link. It's optional here. Without an RTK base, leave out its proxy host and DNS record. To get corrections from an online NTRIP caster instead, use Glareshield's RTK widget.
+
 Throughout this guide, `home.example.com` stands in for a subdomain of a domain you own, and `192.168.1.x` for your LAN addresses.
 
 ---
@@ -22,7 +31,7 @@ Throughout this guide, `home.example.com` stands in for a subdomain of a domain 
 2. **The app opens `wss://mav.home.example.com`.**
    - Pi-hole answers that name with the proxy's LAN address.
    - The proxy presents the trusted certificate, decrypts the connection, and forwards it as a plain WebSocket to `bridge.py`.
-3. **`https://dotb.home.example.com` works the same way** for the Dock of the Base web UI. Glareshield doesn't talk to Dock of the Base; it's just a second site behind the same proxy.
+3. **`https://dotb.home.example.com` works the same way** for the [Dock of the Base](#what-is-dock-of-the-base) web UI. Glareshield doesn't talk to Dock of the Base; it's a second site behind the same proxy, opened in its own tab.
 4. **The HUD opens `https://cam.home.example.com`** for its video background. The proxy forwards it to go2rtc, which holds the camera's login and serves its stream as MJPEG.
 5. **On the vehicle side,** `bridge.py` and Dock of the Base each exchange MAVLink with the vehicle over UDP 14550, and go2rtc pulls the camera's stream. Both devices are on the LAN through HaLow.
 
@@ -36,7 +45,7 @@ The legs from the proxy to the containers, and from the containers to the vehicl
 - **Nothing exposed to the internet.** The DNS challenge proves domain ownership through your DNS provider, so you don't open any port on your router.
 
 > [!CAUTION]
-> The bridge has no authentication: anything that can reach it can command the vehicle. go2rtc's web UI can show and edit its configuration, camera passwords included. Keep the proxy reachable only from your LAN, and do not port-forward 80/443 to it. [Step 7](#7-limit-access-to-your-lan-recommended) adds an access list as a second guard.
+> The bridge has no authentication: anything that can reach it can command the vehicle. go2rtc's web UI can show and edit its configuration, camera passwords included, and Dock of the Base stores NTRIP credentials in plain text. Keep the proxy reachable only from your LAN, and do not port-forward 80/443 to it. [Step 7](#7-limit-access-to-your-lan-recommended) adds an access list as a second guard.
 
 ---
 
@@ -46,6 +55,7 @@ The legs from the proxy to the containers, and from the containers to the vehicl
 - **Nginx Proxy Manager**, Pi-hole (or another local DNS server your devices use), and a machine for `bridge.py`.
 - **A vehicle that sends MAVLink over UDP** to the machines that need it (here, a flight controller on the LAN through HaLow).
 - For the HUD video: **a network camera** and **[go2rtc](https://github.com/AlexxIT/go2rtc)**.
+- Optional, for RTK corrections: **[Dock of the Base](https://github.com/yuri-rage/dock-of-the-base)** and a u-blox ZED-F9 or ZED-X20 receiver.
 
 The example addresses used below:
 
@@ -198,11 +208,14 @@ nslookup mav.home.example.com
 
 ## 7. Limit access to your LAN (recommended)
 
-The names only resolve inside your network, but an access list keeps the bridge and go2rtc private even if a name leaks or a port is forwarded by mistake.
+The names only resolve inside your network, but an access list keeps every service private even if a name leaks or a port is forwarded by mistake. Each one has a reason to stay off the internet:
+- the bridge can command the vehicle;
+- go2rtc's UI shows its configuration, camera password included;
+- Dock of the Base stores NTRIP credentials in plain text.
 
 1. Go to **Access Lists → Add Access List** and name it `LAN only`.
 2. On the **Access** tab, add an **allow** rule for your subnet, `192.168.1.0/24`. NPM refuses every address the list doesn't allow. Leave Authorization empty: browsers can't send Basic Auth credentials on a WebSocket handshake.
-3. Edit the `mav.home.example.com` and `cam.home.example.com` proxy hosts and set **Access List** to `LAN only` on each.
+3. Edit the `mav`, `cam` and `dotb` proxy hosts and set **Access List** to `LAN only` on each.
 
 ## 8. Connect
 

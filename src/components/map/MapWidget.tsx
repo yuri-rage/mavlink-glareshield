@@ -62,6 +62,9 @@ function renderVehicleSvg(type: number): string {
 }
 
 
+/** Within this horizontal distance of a fly-to target, the vehicle has arrived and the target is cleared. */
+const FLY_TO_ARRIVAL_M = 3;
+
 /** The fly-to target crosshair; a picked but unsent point is drawn fainter. */
 function flyToTargetSvg(opacity: number): string {
   return `
@@ -450,7 +453,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       points.push([position.lat, position.lon]);
     }
     missionWaypoints.forEach((w) => {
-      if (w.lat !== 0 || w.lon !== 0) points.push([w.lat, w.lon]);
+      // Commands without a location carry plain parameters in lat/lon (gimbal flags, shot numbers): skip them.
+      if (cmdHasLocation(w.command) && (w.lat !== 0 || w.lon !== 0)) points.push([w.lat, w.lon]);
     });
     fencePoints.forEach((f) => {
       if (f.lat !== 0 || f.lon !== 0) points.push([f.lat, f.lon]);
@@ -780,9 +784,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         if (pixelDist > 180 && !isFlyingToRef.current) {
           isFlyingToRef.current = true;
           map.panTo(latLng, { animate: true, duration: 0.4 });
+          // panTo onto the current view never fires moveend; release the lock after the 0.4 s pan has had time.
           const safetyTimer = setTimeout(() => {
             isFlyingToRef.current = false;
-          }, 500);
+          }, 800);
           map.once('moveend', () => {
             clearTimeout(safetyTimer);
             isFlyingToRef.current = false;
@@ -964,7 +969,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   useEffect(() => {
     if (!activeFlyToTarget || (position.lat === 0 && position.lon === 0)) return;
     const { distanceM } = computeDistanceAndBearing(position.lat, position.lon, activeFlyToTarget.lat, activeFlyToTarget.lon);
-    if (distanceM < 2) setActiveFlyToTarget(null);
+    // A little over the usual 2 m waypoint radius, so a vehicle holding just outside it still counts as there.
+    if (distanceM < FLY_TO_ARRIVAL_M) setActiveFlyToTarget(null);
   }, [activeFlyToTarget, position.lat, position.lon]);
 
   // Render active Fly-To target marker (only re-creates when target changes)
@@ -1052,16 +1058,26 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       sendTrackedCommand(modeCmd, { label: 'Mode GUIDED', targetKey: 'mode:GUIDED' });
     }
 
+    setPendingFlyTo(null);
+    // No link, no command: show nothing (the command feedback reports it as not sent).
+    if (mavlinkConnection.getStatus() !== 'connected') {
+      sendTrackedCommand(encoder.createDoReposition(sysId, compId, lat, lon, alt), { label: 'Fly To', targetKey: 'action:reposition' });
+      return;
+    }
+
     const repoCmd = encoder.createDoReposition(sysId, compId, lat, lon, alt);
     sendTrackedCommand(repoCmd, {
       label: `Fly To (${lat.toFixed(4)}, ${lon.toFixed(4)}) @ ${alt}m`,
       targetKey: 'action:reposition',
     }).then((ack) => {
-      // Drop the target if the vehicle refused it.
-      if (ack.result !== 0) setActiveFlyToTarget((t) => (t && t.lat === lat && t.lon === lon ? null : t));
+      // Drop the target only when the vehicle refused it. A timeout keeps it (over a lossy link the ACK can go
+      // missing while the vehicle is on its way), and so does NOT_SENT here: the command left, and the link
+      // dropped before the answer, which says nothing about where the vehicle is going. The mode and arming
+      // checks clear it once the vehicle is heard again.
+      const refused = ack.result > 0 && ack.result !== 5; // not ACCEPTED (0) or IN_PROGRESS (5)
+      if (refused) setActiveFlyToTarget((t) => (t && t.lat === lat && t.lon === lon ? null : t));
     });
     setActiveFlyToTarget({ lat, lon, alt });
-    setPendingFlyTo(null);
   };
 
   // Update mission waypoints rendering
@@ -1397,7 +1413,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                   });
                   const safetyTimer = setTimeout(() => {
                     isFlyingToRef.current = false;
-                  }, 500);
+                  }, 800);
                   mapInstanceRef.current.once('moveend', () => {
                     clearTimeout(safetyTimer);
                     isFlyingToRef.current = false;

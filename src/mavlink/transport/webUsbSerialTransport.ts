@@ -63,7 +63,19 @@ export interface UsbSerialDeviceLike {
   controlTransferOut(setup: UsbControlSetupLike, data?: ArrayBufferView): Promise<UsbOutTransferResultLike>;
   transferIn(endpointNumber: number, length: number): Promise<UsbInTransferResultLike>;
   transferOut(endpointNumber: number, data: ArrayBufferView): Promise<UsbOutTransferResultLike>;
+  /** Clears a stalled endpoint; WebUSB leaves it halted until this is called. */
+  clearHalt?(direction: 'in' | 'out', endpointNumber: number): Promise<void>;
 }
+
+/**
+ * A frame that waited this long behind a slow or wedged OUT endpoint is dropped rather than sent: a command
+ * (arm, mode change, fly-to) must not reach the vehicle seconds after it was given.
+ */
+export const USB_WRITE_MAX_AGE_MS = 1000;
+/** At most this many frames wait for the OUT endpoint; more are dropped at once. */
+export const USB_WRITE_MAX_QUEUED = 64;
+/** Stalls in a row (each followed by clearing the halt) before the link is reported as failed. */
+const USB_MAX_CONSECUTIVE_STALLS = 3;
 
 export interface WebUsbSerialTransportOptions {
   /** The device, or a resolver read at connect() time (see WebSerialTransport). */
@@ -103,6 +115,12 @@ export class WebUsbSerialTransport implements Transport {
   private connectPromise?: Promise<void>;
   private readLoopPromise?: Promise<void>;
   private writeQueue: Promise<void> = Promise.resolve();
+  private queuedWrites = 0;
+  /** Bumped on disconnect, so writes queued on a previous link don't touch this link's count. */
+  private writeGeneration = 0;
+  private consecutiveStalls = 0;
+  /** Frames dropped since the last warning, so a wedged endpoint logs once per burst, not once per frame. */
+  private droppedSinceWarn = 0;
   /** The comm interface, when claiming it was possible and necessary. */
   private claimedControlInterface?: number;
 
@@ -331,26 +349,77 @@ export class WebUsbSerialTransport implements Transport {
     if (!this.device || !this.port || this.status.kind !== 'connected') {
       throw new Error('WebUsbSerialTransport is not connected.');
     }
-    // WebUSB bulk OUT endpoints do not support simultaneous overlapping
-    // transferOut calls; serialize outbound writes through a promise chain.
+    if (this.queuedWrites >= USB_WRITE_MAX_QUEUED) {
+      this.noteDropped();
+      return;
+    }
+
+    // WebUSB bulk OUT endpoints do not support overlapping transferOut calls, so writes go one at a time.
+    const queuedAt = Date.now();
+    const generation = this.writeGeneration;
     const transfer = async () => {
+      if (generation !== this.writeGeneration) throw new Error('WebUsbSerialTransport is not connected.');
+      this.queuedWrites--;
       if (!this.device || !this.port || this.status.kind !== 'connected') {
         throw new Error('WebUsbSerialTransport is not connected.');
       }
-      const result = await this.device.transferOut(this.port.outEndpoint, frame);
+      if (Date.now() - queuedAt > USB_WRITE_MAX_AGE_MS) {
+        this.noteDropped();
+        return;
+      }
+      const device = this.device;
+      const endpoint = this.port.outEndpoint;
+      let result: UsbOutTransferResultLike;
+      try {
+        result = await device.transferOut(endpoint, frame);
+      } catch (error) {
+        // As for Web Serial: a failed write (unplugged, reset) takes the link off 'connected' so it reconnects.
+        const message = describeUsbError(error);
+        if (!this.intentionalDisconnect) this.updateStatus({ kind: 'error', message });
+        throw error instanceof Error ? error : new Error(message);
+      }
       if (result.status === 'stall') {
+        this.consecutiveStalls++;
+        // The endpoint stays halted, failing every later write, until the halt is cleared.
+        let cleared = false;
+        try {
+          if (device.clearHalt) {
+            await device.clearHalt('out', endpoint);
+            cleared = true;
+          }
+        } catch {
+          cleared = false;
+        }
+        if ((!cleared || this.consecutiveStalls >= USB_MAX_CONSECUTIVE_STALLS) && !this.intentionalDisconnect) {
+          this.updateStatus({ kind: 'error', message: 'USB writes keep stalling; reconnecting.' });
+        }
         throw new Error('USB write stalled.');
       }
+      this.consecutiveStalls = 0;
     };
 
+    this.queuedWrites++;
     const nextWrite = this.writeQueue.then(transfer, transfer);
     this.writeQueue = nextWrite.catch(() => {});
     return nextWrite;
   }
 
+  private noteDropped() {
+    if (this.droppedSinceWarn++ === 0) {
+      console.warn('[WebUSB] The link is not keeping up; dropping outbound frames rather than sending them late.');
+      setTimeout(() => {
+        if (this.droppedSinceWarn > 1) console.warn(`[WebUSB] Dropped ${this.droppedSinceWarn} outbound frames.`);
+        this.droppedSinceWarn = 0;
+      }, 5000);
+    }
+  }
+
   async disconnect(): Promise<void> {
     this.intentionalDisconnect = true;
+    this.writeGeneration++;
     this.writeQueue = Promise.resolve();
+    this.queuedWrites = 0;
+    this.consecutiveStalls = 0;
     const device = this.device;
     const port = this.port;
 
