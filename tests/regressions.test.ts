@@ -865,5 +865,30 @@ for (const [type, landCmd, opts, label] of [
   check('mission complete: a later mission is announced again', nextMission.length === 2);
 }
 
+// ------------------------------------------------------------------------------------------------
+// Restore defaults clears the app's saved settings and nothing else on the origin
+// ------------------------------------------------------------------------------------------------
+{
+  const { clearAppStorage } = await import('../src/lib/appStorage.ts');
+  const data = new Map<string, string>([
+    ['mavlink_glareshield_profile_v1', '{}'],
+    ['mavlink_glareshield_ws_url', 'wss://mav.home.example.com'],
+    ['mavlink_ntrip_config', '{}'],
+    ['glareshield_hud_video_config', '{}'],
+    ['glareshield_messages_sort', 'name'],
+    ['some_other_app', 'keep me'],
+  ]);
+  const storage = {
+    get length() { return data.size; },
+    key: (i: number) => [...data.keys()][i] ?? null,
+    getItem: (k: string) => data.get(k) ?? null,
+    setItem: (k: string, v: string) => void data.set(k, v),
+    removeItem: (k: string) => void data.delete(k),
+    clear: () => data.clear(),
+  } as unknown as Storage;
+  const removed = clearAppStorage(storage);
+  check('restore defaults: every app key is removed', removed === 5 && [...data.keys()].join() === 'some_other_app', [...data.keys()].join());
+}
+
 console.log(failures.length ? `\n${failures.length} regression check(s) FAILED` : '\nAll regression checks PASSED');
 process.exit(failures.length ? 1 : 0);
