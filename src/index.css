@@ -240,3 +240,12 @@ html.daylight-theme .text-purple-400 {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Map: a crosshair for picking points instead of Leaflet's grab hand; markers keep their pointer and a drag still
+   shows the grabbing hand. Selectors outrank leaflet.css, which loads later with the map. */
+.leaflet-container.gs-map.leaflet-grab {
+  cursor: crosshair;
+}
+body.leaflet-dragging .leaflet-container.gs-map.leaflet-grab {
+  cursor: grabbing;
+}
