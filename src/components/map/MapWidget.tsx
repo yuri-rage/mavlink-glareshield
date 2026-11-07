@@ -462,8 +462,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    const initialLat = position.lat !== 0 ? position.lat : 37.7749;
-    const initialLon = position.lon !== 0 ? position.lon : -122.4194;
+    const initialLat = position.lat !== 0 ? position.lat : 39.8283457;
+    const initialLon = position.lon !== 0 ? position.lon : -98.5794797;
 
     const map = L.map(mapContainerRef.current, {
       center: [initialLat, initialLon],
@@ -951,8 +951,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     fenceLayersRef.current = [];
 
     const homeWp = missionWaypoints.find((w) => w.seq === 0);
-    const defaultCenterLat = homeWp?.lat || position.lat || 37.7749;
-    const defaultCenterLon = homeWp?.lon || position.lon || -122.4194;
+    const defaultCenterLat = homeWp?.lat || position.lat || 39.8283457;
+    const defaultCenterLon = homeWp?.lon || position.lon || -98.5794797;
 
     // 1. Group polygon fences so consecutive polygon fences are rendered independently
     // and each contains only the number of vertices described by the fence file
