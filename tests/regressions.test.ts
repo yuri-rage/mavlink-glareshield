@@ -806,5 +806,64 @@ for (const [type, landCmd, opts, label] of [
   useTelemetryStore.setState({ heartbeat: hb });
 }
 
+// ------------------------------------------------------------------------------------------------
+// "Mission complete" follows the final "Reached waypoint n", whichever the autopilot sends first
+// ------------------------------------------------------------------------------------------------
+{
+  const { createMissionCompleteAnnouncer, MISSION_COMPLETE_TEXT_DELAY_MS } = await import('../src/lib/audioAlerts.ts');
+  const run = (steps: (a: any, spoken: string[], advance: (ms: number) => void) => void) => {
+    let t = 0;
+    let timers: { at: number; fn: () => void; id: number }[] = [];
+    let nextId = 1;
+    const spoken: string[] = [];
+    const a = createMissionCompleteAnnouncer((x) => spoken.push(x), {
+      set: (fn, ms) => { const id = nextId++; timers.push({ at: t + ms, fn, id }); return id; },
+      clear: (id) => { timers = timers.filter((x) => x.id !== id); },
+      now: () => t,
+    });
+    const advance = (ms: number) => {
+      t += ms;
+      for (const x of timers.filter((x) => x.at <= t)) { timers = timers.filter((y) => y !== x); x.fn(); }
+    };
+    steps(a, spoken, advance);
+    return spoken;
+  };
+  const say = (spoken: string[], text: string) => spoken.push(text);
+
+  const textFirst = run((a, spoken, advance) => {
+    a.fromStatusText();
+    advance(300);
+    say(spoken, 'Reached waypoint 7');
+    a.fromFinalWaypoint();
+    advance(MISSION_COMPLETE_TEXT_DELAY_MS * 2);
+  });
+  check('mission complete: text before the final arrival is spoken after "Reached waypoint"', textFirst.join(' | ') === 'Reached waypoint 7 | Mission complete', textFirst.join(' | '));
+
+  const arrivalFirst = run((a, spoken, advance) => {
+    say(spoken, 'Reached waypoint 7');
+    a.fromFinalWaypoint();
+    advance(200);
+    a.fromStatusText();
+    advance(MISSION_COMPLETE_TEXT_DELAY_MS * 2);
+  });
+  check('mission complete: arrival first, then text, is spoken once', arrivalFirst.join(' | ') === 'Reached waypoint 7 | Mission complete', arrivalFirst.join(' | '));
+
+  const textOnly = run((a, _spoken, advance) => {
+    a.fromStatusText();
+    advance(MISSION_COMPLETE_TEXT_DELAY_MS - 100);
+    a.fromStatusText(); // repeated text while waiting
+    advance(200);
+  });
+  check('mission complete: with no arrival callout, the text alone still announces it, once', textOnly.join(' | ') === 'Mission complete', textOnly.join(' | '));
+
+  const nextMission = run((a, _spoken, advance) => {
+    a.fromFinalWaypoint();
+    advance(60_000);
+    a.fromStatusText();
+    advance(MISSION_COMPLETE_TEXT_DELAY_MS + 10);
+  });
+  check('mission complete: a later mission is announced again', nextMission.length === 2);
+}
+
 console.log(failures.length ? `\n${failures.length} regression check(s) FAILED` : '\nAll regression checks PASSED');
 process.exit(failures.length ? 1 : 0);

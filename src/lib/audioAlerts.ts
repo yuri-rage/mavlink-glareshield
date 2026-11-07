@@ -628,6 +628,58 @@ export function isMissionCompleteText(text: string): boolean {
   return /\bmission\s+complete\b/i.test(text);
 }
 
+/**
+ * How long a "Mission complete" status text waits for the final waypoint's arrival message. ArduPilot usually
+ * sends the text a moment before MISSION_ITEM_REACHED for the last item, which made "Mission complete" play
+ * before "Reached waypoint n".
+ */
+export const MISSION_COMPLETE_TEXT_DELAY_MS = 1500;
+/** One completion is announced once, however many ways the autopilot reports it. */
+const MISSION_COMPLETE_DEDUP_MS = 15000;
+
+/**
+ * Says "Mission complete" once per completion, after the final waypoint's callout. The final arrival announces it
+ * at once (straight after "Reached waypoint n"); the status text announces it only if no arrival comes within
+ * MISSION_COMPLETE_TEXT_DELAY_MS (autopilots that skip the arrival, or a mission ending on a non-waypoint item).
+ */
+export function createMissionCompleteAnnouncer(
+  speak: (text: string) => void,
+  timers: { set: (fn: () => void, ms: number) => unknown; clear: (handle: unknown) => void; now: () => number } = {
+    set: (fn, ms) => setTimeout(fn, ms),
+    clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+    now: () => Date.now(),
+  }
+) {
+  let announcedAt = -Infinity;
+  let pending: unknown = null;
+  const announce = () => {
+    if (pending !== null) {
+      timers.clear(pending);
+      pending = null;
+    }
+    const now = timers.now();
+    if (now - announcedAt < MISSION_COMPLETE_DEDUP_MS) return;
+    announcedAt = now;
+    speak('Mission complete');
+  };
+  return {
+    /** The autopilot's "Mission complete" text arrived. */
+    fromStatusText() {
+      if (pending !== null || timers.now() - announcedAt < MISSION_COMPLETE_DEDUP_MS) return;
+      pending = timers.set(() => {
+        pending = null;
+        announce();
+      }, MISSION_COMPLETE_TEXT_DELAY_MS);
+    },
+    /** "Reached waypoint n" was just spoken for the mission's final item. */
+    fromFinalWaypoint: announce,
+    dispose() {
+      if (pending !== null) timers.clear(pending);
+      pending = null;
+    },
+  };
+}
+
 /** Highest mission item number, i.e. the waypoint whose arrival ends the mission. */
 export function lastMissionSeq(waypoints: { seq: number }[]): number {
   return waypoints.reduce((m, w) => Math.max(m, w.seq), 0);
@@ -643,14 +695,9 @@ export function useAudioAlertListener() {
   const waypointAnnounceEnabled = useAudioAlertsStore((state) => state.waypointAnnounceEnabled);
   const lastReachedWaypointSeq = useTelemetryStore((state) => state.lastReachedWaypointSeq);
   const finalMissionSeq = useTelemetryStore((state) => lastMissionSeq(state.missionWaypoints));
-  const missionCompleteAtRef = useRef<number>(0);
-  /** "Mission complete", once per completion however many ways the autopilot reports it. */
-  const announceMissionComplete = () => {
-    const now = Date.now();
-    if (now - missionCompleteAtRef.current < 15000) return;
-    missionCompleteAtRef.current = now;
-    speakCallout('Mission complete'); // queued, so it follows the final waypoint callout
-  };
+  const missionCompleteRef = useRef<ReturnType<typeof createMissionCompleteAnnouncer> | null>(null);
+  if (!missionCompleteRef.current) missionCompleteRef.current = createMissionCompleteAnnouncer((t) => speakCallout(t));
+  useEffect(() => () => missionCompleteRef.current?.dispose(), []);
   const currentWaypointSeq = useTelemetryStore((state) => state.currentWaypointSeq);
   const lastSeenIdRef = useRef<string | null>(statusMessages[0]?.id ?? null);
   const prevModeRef = useRef<string>(heartbeat.modeName);
@@ -700,7 +747,7 @@ export function useAudioAlertListener() {
 
     if (!soundEnabled || newMessages.length === 0) return;
 
-    if (newMessages.some((m) => isMissionCompleteText(m.text))) announceMissionComplete();
+    if (newMessages.some((m) => isMissionCompleteText(m.text))) missionCompleteRef.current?.fromStatusText();
 
     // Filter for warnings and above (severity <= 4)
     const alertMsgs = newMessages.filter((m) => m.severity <= 4);
@@ -768,7 +815,7 @@ export function useAudioAlertListener() {
     if (decision !== null) {
       lastSpokenWpRef.current = { seq: decision, time: Date.now() };
       speakCallout(`Reached waypoint ${decision}`);
-      if (finalMissionSeq > 0 && decision === finalMissionSeq) announceMissionComplete();
+      if (finalMissionSeq > 0 && decision === finalMissionSeq) missionCompleteRef.current?.fromFinalWaypoint();
     }
   }, [
     lastReachedWaypointSeq,
