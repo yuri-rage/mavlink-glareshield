@@ -37,7 +37,7 @@
     {
       "displayType": "gauge-radial",
       "binding": {
-        "messageName": "SERVO_OUTPUT_RAW (SCALED)",
+        "messageName": "SERVO_OUTPUT_RAW (scaled)",
         "fieldName": "servo1_scaled",
         "unit": "%",
         "min": -100,
