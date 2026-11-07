@@ -227,7 +227,8 @@ export const HudWidget: React.FC = () => {
     });
   };
 
-  // Register subscription for high-frequency attitude, VFR, NAV_CONTROLLER, IMU, and STATUSTEXT
+  // Register subscription for high-frequency attitude, VFR, NAV_CONTROLLER and IMU. (STATUSTEXT needs no request:
+  // the autopilot sends it whenever it has something to say.)
   useEffect(() => {
     messageRateManager.registerRequirement('hud-attitude', MAVLINK_MSG_ID.ATTITUDE);
     messageRateManager.registerRequirement('hud-vfr', MAVLINK_MSG_ID.VFR_HUD);
@@ -236,7 +237,6 @@ export const HudWidget: React.FC = () => {
     messageRateManager.registerRequirement('hud-imu', MAVLINK_MSG_ID.RAW_IMU);
     messageRateManager.registerRequirement('hud-scaled-imu', MAVLINK_MSG_ID.SCALED_IMU);
     messageRateManager.registerRequirement('hud-highres-imu', MAVLINK_MSG_ID.HIGHRES_IMU);
-    messageRateManager.registerRequirement('hud-status', MAVLINK_MSG_ID.STATUSTEXT);
     return () => {
       messageRateManager.unregisterRequirement('hud-attitude');
       messageRateManager.unregisterRequirement('hud-vfr');
@@ -245,7 +245,6 @@ export const HudWidget: React.FC = () => {
       messageRateManager.unregisterRequirement('hud-imu');
       messageRateManager.unregisterRequirement('hud-scaled-imu');
       messageRateManager.unregisterRequirement('hud-highres-imu');
-      messageRateManager.unregisterRequirement('hud-status');
     };
   }, []);
 
