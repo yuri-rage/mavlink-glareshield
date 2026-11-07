@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTelemetryStore } from '../../../store/telemetryStore';
 import { mavlinkConnection } from '../../../mavlink/connection';
-import { getMavCmdName } from '../../../mavlink/messages';
+import { getMavCmdName, getVehicleCategory } from '../../../mavlink/messages';
 import { Button } from '../../ui/button';
 import { AlertTriangle, Check, Play, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
 import {
@@ -229,9 +229,16 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
   const { sysId, compId } = useVehicleTarget();
   const paramId = def.paramControl?.paramId?.trim().toUpperCase() || 'WPNAV_SPEED';
   const paramEntry = useTelemetryStore((s) => s.parameters[paramId]);
+  const heartbeatType = useTelemetryStore((s) => s.heartbeat.type);
+  const firmwareVersion = useTelemetryStore((s) => s.firmwareVersion);
   // Anything the widget doesn't set comes from the vehicle's parameter metadata (range, step, units, named
-  // values), so a panel only needs the parameter's name. Re-read when the metadata arrives.
+  // values), so a panel only needs the parameter's name. Load the metadata if it hasn't been yet, and re-read
+  // when it arrives.
+  const ensureMeta = useParamMetaStore((s) => s.ensure);
   useParamMetaStore((s) => s.catalog);
+  useEffect(() => {
+    ensureMeta(getVehicleCategory(heartbeatType), firmwareVersion);
+  }, [heartbeatType, firmwareVersion, ensureMeta]);
   const meta = getParamMetadata(paramId);
   const control = effectiveParamControl(def.paramControl, meta);
 

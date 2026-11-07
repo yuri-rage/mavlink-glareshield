@@ -158,12 +158,19 @@ const cat = parsePdefJson(fixture);
   check('loader: a superseded request does not win', st().source?.folder === 'Sub-4.5', st().source?.folder);
 
   online = false;
-  (globalThis as any).fetch = async () => {
+  fetched.length = 0;
+  (globalThis as any).fetch = async (url: string) => {
+    fetched.push(url);
     throw new TypeError('Failed to fetch');
   };
+  st().ensure('rover', '4.4.0');
+  await settle();
+  check('loader: offline with only an earlier version cached finds it after 1 failed network try', st().source?.folder === 'Rover-4.2' && st().source?.fromCache === true && fetched.length === 1, `${st().source?.folder} after ${fetched.length} requests`);
+
+  fetched.length = 0;
   st().ensure('plane', '4.1.0');
   await settle();
-  check('loader: nothing cached and offline → built-in descriptions, said plainly', st().status === 'unavailable' && /built-in/.test(st().summary));
+  check('loader: nothing cached and offline → 1 network try, built-in descriptions, said plainly', st().status === 'unavailable' && /built-in/.test(st().summary) && fetched.length === 1, `${fetched.length} requests`);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -215,6 +222,8 @@ const cat = parsePdefJson(fixture);
   check('param-control: range, step and unit come from the metadata', filled.min === 0 && filled.max === 100 && filled.step === 0.1 && filled.unit === 'm/s');
   const own = effectiveParamControl({ paramId: 'CRUISE_SPEED', min: 1, unit: 'kn' }, cat.CRUISE_SPEED);
   check('param-control: what the widget sets wins', own.min === 1 && own.unit === 'kn' && own.max === 100);
+  const blankUnit = effectiveParamControl({ paramId: 'CRUISE_SPEED', unit: '' }, cat.CRUISE_SPEED);
+  check('param-control: blank unit string falls back to metadata units', blankUnit.unit === 'm/s');
   const opts = effectiveParamControl({ paramId: 'BATT_MONITOR' }, cat.BATT_MONITOR).options!;
   check('param-control: named values become the dropdown', opts[0].value === 0 && opts[0].label === 'Disabled' && opts.length === Object.keys(cat.BATT_MONITOR.values!).length);
   check('param-control: the widget\'s own options win', effectiveParamControl({ paramId: 'BATT_MONITOR', options: [{ label: 'Off', value: 0 }] }, cat.BATT_MONITOR).options!.length === 1);

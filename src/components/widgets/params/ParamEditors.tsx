@@ -103,14 +103,17 @@ interface EnumSelectProps {
 
 export const EnumSelect: React.FC<EnumSelectProps> = ({ name, values, editValue, onChange, onSave, onCancel, onCustom }) => {
   const options = sortedValueOptions(values);
-  const current = Number(editValue);
-  const known = options.some(([v]) => v === current);
+  const current = editValue.trim() === '' ? NaN : Number(editValue);
+  const known = Number.isFinite(current) && options.some(([v]) => v === current);
   return (
     <select
       autoFocus
       aria-label={`${name} value`}
       value={known ? String(current) : ''}
-      onChange={(e) => (e.target.value === CUSTOM ? onCustom() : onChange(e.target.value))}
+      onChange={(e) => {
+        if (e.target.value === CUSTOM) onCustom();
+        else if (e.target.value !== '') onChange(e.target.value);
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
           e.preventDefault();

@@ -18,6 +18,9 @@ import { CompositePanelList, PANEL_TYPE_OPTIONS, SPAN_OPTIONS, panelValueCount }
 import { BUILTIN_PANELS } from '../../lib/builtinWidgets';
 import { MAX_COMPOSITE_BINDINGS, MAX_PANELS, sanitizeParamSetEntries } from '../../lib/widgetValidation';
 import { expandParamPatterns } from '../../mavlink/paramMatch';
+import { getVehicleCategory } from '../../mavlink/messages';
+import { getParamMetadata } from '../../mavlink/paramMetadata';
+import { useParamMetaStore } from '../../store/paramMetaStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { BindingEditor, NumberField, SELECT_CLASS } from './BindingEditor';
@@ -264,14 +267,24 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   // Multi-bar config
   const [multiBarGroup, setMultiBarGroup] = useState<MultiBarGroupType>('rc-8');
 
-  // Param control config
+  // Param control config (blank fields fall back to the parameter's metadata)
   const [paramId, setParamId] = useState('WPNAV_SPEED');
-  const [paramUnit, setParamUnit] = useState('cm/s');
-  const [paramMin, setParamMin] = useState('50');
-  const [paramMax, setParamMax] = useState('2000');
-  const [paramStep, setParamStep] = useState('10');
+  const [paramUnit, setParamUnit] = useState('');
+  const [paramMin, setParamMin] = useState('');
+  const [paramMax, setParamMax] = useState('');
+  const [paramStep, setParamStep] = useState('');
   const [paramOptionsText, setParamOptionsText] = useState('');
   const [paramConfirm, setParamConfirm] = useState(true);
+
+  const heartbeatType = useTelemetryStore((s) => s.heartbeat.type);
+  const firmwareVersion = useTelemetryStore((s) => s.firmwareVersion);
+  const ensureParamMeta = useParamMetaStore((s) => s.ensure);
+  useParamMetaStore((s) => s.catalog);
+  useEffect(() => {
+    if (!isOpen) return;
+    ensureParamMeta(getVehicleCategory(heartbeatType), firmwareVersion);
+  }, [isOpen, heartbeatType, firmwareVersion, ensureParamMeta]);
+  const paramMeta = getParamMetadata(paramId.trim().toUpperCase() || 'WPNAV_SPEED');
 
   // Parameter set config: one entry per line (or comma separated)
   const [paramSetText, setParamSetText] = useState('');
@@ -328,10 +341,10 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
 
     const pc = w?.paramControl;
     setParamId(pc?.paramId || 'WPNAV_SPEED');
-    setParamUnit(pc ? pc.unit ?? '' : 'cm/s');
-    setParamMin(pc ? (pc.min !== undefined ? String(pc.min) : '') : '50');
-    setParamMax(pc ? (pc.max !== undefined ? String(pc.max) : '') : '2000');
-    setParamStep(pc ? (pc.step !== undefined ? String(pc.step) : '1') : '10');
+    setParamUnit(pc?.unit ?? '');
+    setParamMin(pc?.min !== undefined ? String(pc.min) : '');
+    setParamMax(pc?.max !== undefined ? String(pc.max) : '');
+    setParamStep(pc?.step !== undefined ? String(pc.step) : '');
     setParamConfirm(pc?.confirmation ?? true);
     setParamOptionsText(pc?.options ? pc.options.map((o) => `${o.label}:${o.value}`).join(', ') : '');
 
@@ -440,12 +453,15 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
         })
         .filter((x): x is { label: string; value: number } => x !== null);
 
+      const minVal = paramMin.trim() !== '' ? parseFloat(paramMin) : NaN;
+      const maxVal = paramMax.trim() !== '' ? parseFloat(paramMax) : NaN;
+      const stepVal = paramStep.trim() !== '' ? parseFloat(paramStep) : NaN;
       def.paramControl = {
         paramId: paramId.trim().toUpperCase() || 'WPNAV_SPEED',
-        unit: paramUnit.trim(),
-        min: paramMin.trim() !== '' ? parseFloat(paramMin) : undefined,
-        max: paramMax.trim() !== '' ? parseFloat(paramMax) : undefined,
-        step: paramStep.trim() !== '' ? parseFloat(paramStep) : 1,
+        unit: paramUnit.trim() || undefined,
+        min: Number.isFinite(minVal) ? minVal : undefined,
+        max: Number.isFinite(maxVal) ? maxVal : undefined,
+        step: Number.isFinite(stepVal) ? stepVal : undefined,
         options: parsedOptions.length > 0 ? parsedOptions : undefined,
         confirmation: paramConfirm,
       };
@@ -959,7 +975,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                 <label className="text-[11px] font-medium text-zinc-400">Unit</label>
                 <Input
                   type="text"
-                  placeholder="cm/s, m, %"
+                  placeholder={paramMeta?.units || 'auto'}
                   value={paramUnit}
                   onChange={(e) => setParamUnit(e.target.value)}
                   className="h-8 text-xs font-mono"
@@ -970,6 +986,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                 <Input
                   type="number"
                   step="any"
+                  placeholder={paramMeta?.min !== undefined ? String(paramMeta.min) : 'auto'}
                   value={paramMin}
                   onChange={(e) => setParamMin(e.target.value)}
                   className="h-8 text-xs font-mono"
@@ -980,6 +997,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                 <Input
                   type="number"
                   step="any"
+                  placeholder={paramMeta?.max !== undefined ? String(paramMeta.max) : 'auto'}
                   value={paramMax}
                   onChange={(e) => setParamMax(e.target.value)}
                   className="h-8 text-xs font-mono"
@@ -990,6 +1008,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                 <Input
                   type="number"
                   step="any"
+                  placeholder={paramMeta?.increment !== undefined ? String(paramMeta.increment) : '1'}
                   value={paramStep}
                   onChange={(e) => setParamStep(e.target.value)}
                   className="h-8 text-xs font-mono"
