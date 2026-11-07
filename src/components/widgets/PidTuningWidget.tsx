@@ -10,6 +10,7 @@ import { useTelemetryStore } from '../../store/telemetryStore';
 import { useParamMetaStore } from '../../store/paramMetaStore';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { messageRateManager } from '../../mavlink/rateManager';
+import { paramManager } from '../../mavlink/paramManager';
 import { getVehicleCategory, MAVLINK_MSG_ID, type VehicleCategory } from '../../mavlink/messages';
 import { getParamMetadata } from '../../mavlink/paramMetadata';
 import {
@@ -139,7 +140,7 @@ export const PidTuningWidget: React.FC = () => {
   // Read GCS_PID_MASK if the parameter list hasn't brought it.
   useEffect(() => {
     if (!linked || maskEntry || axes.length === 0) return;
-    mavlinkConnection.send(mavlinkConnection.getEncoder().createParamRequestRead(sysId, compId, -1, MASK_PARAM));
+    paramManager.requestParam(sysId, compId, MASK_PARAM);
   }, [linked, maskEntry, axes.length, sysId, compId]);
 
   // GCS_PID_MASK writes, confirmed when the vehicle echoes the value.

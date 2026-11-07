@@ -4,6 +4,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTelemetryStore } from '../../../store/telemetryStore';
 import { mavlinkConnection } from '../../../mavlink/connection';
+import { paramManager } from '../../../mavlink/paramManager';
 import { getMavCmdName, getVehicleCategory } from '../../../mavlink/messages';
 import { Button } from '../../ui/button';
 import { AlertTriangle, Check, Play, RefreshCw, ToggleLeft, ToggleRight } from 'lucide-react';
@@ -248,10 +249,7 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
   const [status, setStatus] = useState<ParamStatus>(null);
   const pendingWriteRef = useRef<{ value: number; time: number } | null>(null);
 
-  const requestParam = () => {
-    const encoder = mavlinkConnection.getEncoder();
-    mavlinkConnection.send(encoder.createParamRequestRead(sysId, compId, -1, paramId));
-  };
+  const requestParam = () => paramManager.requestParam(sysId, compId, paramId);
 
   // Ask the vehicle for the parameter if it hasn't been loaded.
   useEffect(() => {
