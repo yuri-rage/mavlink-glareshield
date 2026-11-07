@@ -1648,6 +1648,9 @@ mavlinkConnection.onStatus((status) => {
   }
 });
 
+/** How recently a vehicle heartbeat must have arrived for a background request's timeout to be worth logging. */
+const HOUSEKEEPING_VEHICLE_WINDOW_MS = 6000;
+
 export function sendTrackedCommand(
   packet: Uint8Array,
   meta?: { label?: string; targetKey?: string }
@@ -1757,6 +1760,12 @@ mavlinkConnection.onSend((data) => {
           if (list.length === 0) pendingCommands.delete(cmdId);
         }
         const now = Date.now();
+        // A background request into a link with no vehicle on it (bridge up, autopilot off or out of range) is
+        // expected to go unanswered; logging each one buries the console. Losing the vehicle is reported by the
+        // heartbeat watchdog, not here, and commands the person sent are always reported.
+        const hb = useTelemetryStore.getState().heartbeat;
+        const vehicleHeard = hb.lastHeartbeatTime > 0 && now - hb.lastHeartbeatTime < HOUSEKEEPING_VEHICLE_WINDOW_MS;
+        const logTimeout = !isHousekeeping || Boolean(timedOutEntry?.label) || vehicleHeard;
         const timeoutMsg = {
           severity: isHousekeeping ? 6 : 4, // INFO for background housekeeping, WARNING for user commands
           severityLabel: isHousekeeping ? 'INFO' : 'WARNING',
@@ -1789,7 +1798,7 @@ mavlinkConnection.onSend((data) => {
                 },
               }
             : {}),
-          statusMessages: appendStatusMessage(s.statusMessages, timeoutMsg, now),
+          ...(logTimeout ? { statusMessages: appendStatusMessage(s.statusMessages, timeoutMsg, now) } : {}),
         }));
       }, 5000);
 

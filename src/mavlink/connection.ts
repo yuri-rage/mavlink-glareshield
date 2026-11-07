@@ -1,7 +1,6 @@
 import { MavlinkParser, MavlinkPacket } from './parser';
 import { MavlinkEncoder } from './encoder';
 import { messageRateManager } from './rateManager';
-import { MAVLINK_MSG_ID } from './messages';
 import {
   WebSerialTransport,
   WebSocketTransport,
@@ -356,11 +355,9 @@ export class MavlinkConnection {
         this.setStatus('connected');
         this.startHeartbeat();
         this.startStats();
-        messageRateManager.resetCache();
-        try {
-          const req = this.encoder.createRequestMessage(1, 1, MAVLINK_MSG_ID.AUTOPILOT_VERSION);
-          this.send(req);
-        } catch {}
+        // Stream rates and the autopilot version are requested once a vehicle's heartbeat arrives
+        // (telemetryStore), not into a link that may have nothing on the other end.
+        messageRateManager.resetForLink();
         break;
       case 'error':
         console.warn(`MAVLink ${transport.kind} link error:`, status.message);
@@ -380,6 +377,7 @@ export class MavlinkConnection {
 
   /** The link failed or closed on its own: report it, tear down, and schedule a reconnect (as before). */
   private handleLinkLoss(error?: string) {
+    messageRateManager.resetForLink();
     this.detachTransport();
     this.cleanup();
     if (error) this.setStatus('error', error);

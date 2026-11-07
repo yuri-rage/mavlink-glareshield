@@ -312,7 +312,8 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   const ws = last(FakeWebSocket.instances)!;
   check('MavlinkConnection/ws: connects', conn.getStatus() === 'connected', statuses.join(','));
   check('MavlinkConnection/ws: a second connect() while connecting opens no extra socket', FakeWebSocket.instances.length === before + 1);
-  check('MavlinkConnection/ws: requests AUTOPILOT_VERSION on connect', ws.sent.some((d) => d instanceof Uint8Array && msgIdOf(d) === MAVLINK_MSG_ID.COMMAND_LONG));
+  // Nothing may be on the other end of a bridge yet; requests wait for a vehicle heartbeat (telemetryStore).
+  check('MavlinkConnection/ws: sends no commands before a vehicle is heard', !ws.sent.some((d) => d instanceof Uint8Array && msgIdOf(d) === MAVLINK_MSG_ID.COMMAND_LONG));
   const hb = vehicleHeartbeat();
   ws.serverMessage(hb.slice(0, 5).buffer);
   ws.serverMessage(hb.slice(5).buffer);
@@ -422,6 +423,7 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   port1.push(vehicleHeartbeat());
   await waitFor(() => packets.length === 1);
   check('MavlinkConnection/serial: bytes from the port are parsed as MAVLink', packets.length === 1 && packets[0].messageId === 0);
+  conn.send(conn.getEncoder().createRequestMessage(1, 1, MAVLINK_MSG_ID.AUTOPILOT_VERSION));
   await waitFor(() => port1.written.length > 0);
   check('MavlinkConnection/serial: outbound MAVLink is written to the port', port1.written.some((c: Uint8Array) => msgIdOf(c) === MAVLINK_MSG_ID.COMMAND_LONG));
 
