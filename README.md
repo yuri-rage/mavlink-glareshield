@@ -58,7 +58,7 @@ Choose either Mission Planner or the Docker bridge:
 
 **USB serial, no bridge (Chrome / Edge, or Chrome on Android):** in the same dialog choose **Link Type → USB Serial**, pick the baud rate, click **Connect Now**, and select your telemetry radio or flight controller. See [Direct USB Serial](docs/connection-guide.md#option-5-direct-usb-serial-no-bridge).
 
-📖 **For detailed setup (including USB Serial radios, TCP, direct Python bridge usage, self-signed certificate acceptance, and remote tunnels), see the [Browser & Network Connection Guide](docs/connection-guide.md).**
+📖 **For detailed setup (including USB Serial radios, TCP, direct Python bridge usage, self-signed certificate acceptance, and remote tunnels), see the [Browser & Network Connection Guide](docs/connection-guide.md).** To serve the bridge over `wss://` with a trusted certificate from your own domain, see [Reverse Proxy Setup](docs/reverse-proxy.md).
 
 ---
 

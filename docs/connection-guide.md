@@ -240,6 +240,8 @@ google-chrome \
 
 For an automated setup that handles real public certificates (e.g. Let's Encrypt or Cloudflare Zero Trust) with zero browser trust configuration required:
 
+📖 **For a complete walkthrough with Nginx Proxy Manager, a Let's Encrypt wildcard certificate and Pi-hole local DNS, see the [Reverse Proxy Setup guide](reverse-proxy.md).**
+
 > [!CAUTION]
 > **CRITICAL SECURITY WARNING: NEVER EXPOSE AN UNAUTHENTICATED BRIDGE TO THE OPEN INTERNET**
 > 
