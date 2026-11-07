@@ -1,6 +1,6 @@
 import 'leaflet/dist/leaflet.css';
-import React, { useEffect, useRef, useState } from 'react';
-import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useTelemetryStore, sendTrackedCommand, computeDistanceAndBearing } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { missionManager, MissionManagerStatus, groupFencePolygons } from '../../mavlink/missionManager';
@@ -10,10 +10,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Modal } from '../ui/modal';
-import { Input } from '../ui/input';
 import { parseDroppedMissionFile, ParsedMissionFile } from '../../mavlink/missionFileParser';
 import { MissionItemIntData } from '../../mavlink/encoder';
-import { RefreshCw, Crosshair, Maximize2, Shield, Flag, Eraser, Upload, AlertTriangle, Navigation, Home, Map as MapIcon } from 'lucide-react';
+import { RefreshCw, Crosshair, Shield, Flag, Upload, AlertTriangle, Navigation, Home, Map as MapIcon } from 'lucide-react';
 import L from 'leaflet';
 
 function renderVehicleSvg(type: number): string {
@@ -62,7 +61,22 @@ function renderVehicleSvg(type: number): string {
   }
 }
 
-type MapLayerType = 'satellite' | 'street';
+
+/** The fly-to target crosshair; a picked but unsent point is drawn fainter. */
+function flyToTargetSvg(opacity: number): string {
+  return `
+        <div style="opacity:${opacity}; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.9)); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="14" cy="14" r="10" stroke="#38bdf8" stroke-width="2" fill="rgba(14,165,233,0.25)"/>
+            <circle cx="14" cy="14" r="3" fill="#38bdf8"/>
+            <line x1="14" y1="1" x2="14" y2="7" stroke="#38bdf8" stroke-width="2"/>
+            <line x1="14" y1="21" x2="14" y2="27" stroke="#38bdf8" stroke-width="2"/>
+            <line x1="1" y1="14" x2="7" y2="14" stroke="#38bdf8" stroke-width="2"/>
+            <line x1="21" y1="14" x2="27" y2="14" stroke="#38bdf8" stroke-width="2"/>
+          </svg>
+        </div>
+      `;
+}
 
 interface GpsFix {
   t: number;
@@ -75,6 +89,8 @@ interface GpsFix {
 import { computeMapBadgeVisibility } from './mapBadgeVisibility';
 import { MapMissionFooter } from './MapMissionFooter';
 import { MissionMenu } from './MissionMenu';
+import { MapViewMenu, type MapLayerType } from './MapViewMenu';
+import { FlyToPopover } from './FlyToPopover';
 
 interface MapWidgetProps {
   colSpan?: number;
@@ -156,9 +172,17 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const [pendingFlyTo, setPendingFlyTo] = useState<{ lat: number; lon: number } | null>(null);
   const [flyToAltInput, setFlyToAltInput] = useState<string>('20');
   const [activeFlyToTarget, setActiveFlyToTarget] = useState<{ lat: number; lon: number; alt: number } | null>(null);
+  // Where the picked point sits in the map container, so the fly-to card stays beside it as the map moves.
+  const [flyToAnchor, setFlyToAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
 
   useEffect(() => {
     flyToModeRef.current = flyToMode;
+    if (!flyToMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFlyToMode(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, [flyToMode]);
 
   const [missionStatus, setMissionStatus] = useState<MissionManagerStatus>({
@@ -469,6 +493,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     const initialLat = position.lat !== 0 ? position.lat : 39.8283457;
     const initialLon = position.lon !== 0 ? position.lon : -98.5794797;
 
+    mapContainerRef.current.classList.add('gs-map');
     const map = L.map(mapContainerRef.current, {
       center: [initialLat, initialLon],
       zoom: 17,
@@ -532,7 +557,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       openFlyToPrompt(e.latlng.lat, e.latlng.lng);
     });
 
-    // Left-click when Fly-To Mode toolbar button is armed
+    // Left-click picks the point while the Fly To button is armed
     map.on('click', (e: L.LeafletMouseEvent) => {
       if (flyToModeRef.current) {
         openFlyToPrompt(e.latlng.lat, e.latlng.lng);
@@ -810,6 +835,48 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     homeMarkerRef.current = m;
   }, [homePosition.lat, homePosition.lon, homePosition.source, homePosition.distanceM, missionWaypoints]);
 
+  // While a point is picked, track it on screen and mark it on the map.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !pendingFlyTo) {
+      setFlyToAnchor(null);
+      return;
+    }
+    const update = () => {
+      const pt = map.latLngToContainerPoint([pendingFlyTo.lat, pendingFlyTo.lon]);
+      const size = map.getSize();
+      setFlyToAnchor({ x: pt.x, y: pt.y, width: size.x, height: size.y });
+    };
+    update();
+    map.on('move zoom resize', update);
+    const ghost = L.marker([pendingFlyTo.lat, pendingFlyTo.lon], {
+      icon: L.divIcon({ className: 'flyto-target-marker', html: flyToTargetSvg(0.55), iconSize: [28, 28], iconAnchor: [14, 14] }),
+      pane: 'missionMarkersPane',
+      zIndexOffset: 310,
+      interactive: false,
+    }).addTo(map);
+    return () => {
+      map.off('move zoom resize', update);
+      ghost.remove();
+    };
+  }, [pendingFlyTo]);
+
+  // A sent target stays on the map until the vehicle gets there or leaves GUIDED.
+  useEffect(() => {
+    if (!activeFlyToTarget) return;
+    if (heartbeat.modeName !== 'GUIDED' && heartbeat.modeName !== 'DISCONNECTED') {
+      // Allow a moment for the mode change that the fly-to itself may have asked for.
+      const t = setTimeout(() => {
+        if (useTelemetryStore.getState().heartbeat.modeName !== 'GUIDED') setActiveFlyToTarget(null);
+      }, 3000);
+      return () => clearTimeout(t);
+    }
+    if (position.lat !== 0 || position.lon !== 0) {
+      const { distanceM } = computeDistanceAndBearing(position.lat, position.lon, activeFlyToTarget.lat, activeFlyToTarget.lon);
+      if (distanceM < 2) setActiveFlyToTarget(null);
+    }
+  }, [activeFlyToTarget, heartbeat.modeName, position.lat, position.lon]);
+
   // Render active Fly-To target marker and dashed vector line
   useEffect(() => {
     if (!mapInstanceRef.current) return;
@@ -826,18 +893,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     const targetIcon = L.divIcon({
       className: 'flyto-target-marker',
-      html: `
-        <div style="filter: drop-shadow(0 2px 5px rgba(0,0,0,0.9)); width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="14" cy="14" r="10" stroke="#38bdf8" stroke-width="2" fill="rgba(14,165,233,0.25)"/>
-            <circle cx="14" cy="14" r="3" fill="#38bdf8"/>
-            <line x1="14" y1="1" x2="14" y2="7" stroke="#38bdf8" stroke-width="2"/>
-            <line x1="14" y1="21" x2="14" y2="27" stroke="#38bdf8" stroke-width="2"/>
-            <line x1="1" y1="14" x2="7" y2="14" stroke="#38bdf8" stroke-width="2"/>
-            <line x1="21" y1="14" x2="27" y2="14" stroke="#38bdf8" stroke-width="2"/>
-          </svg>
-        </div>
-      `,
+      html: flyToTargetSvg(1),
       iconSize: [28, 28],
       iconAnchor: [14, 14],
     });
@@ -873,7 +929,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     }
   }, [activeFlyToTarget, position.lat, position.lon]);
 
-  const handleConfirmFlyTo = (switchToGuidedFirst: boolean) => {
+  const cancelFlyTo = useCallback(() => setPendingFlyTo(null), []);
+
+  const handleConfirmFlyTo = () => {
     if (!pendingFlyTo) return;
     const alt = Math.max(2, Number(flyToAltInput) || 20);
     const { lat, lon } = pendingFlyTo;
@@ -881,7 +939,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     const sysId = heartbeat.systemId || 1;
     const compId = heartbeat.componentId || 1;
 
-    if (switchToGuidedFirst && heartbeat.modeName !== 'GUIDED') {
+    // DO_REPOSITION asks for the change to GUIDED itself (param2 bit 0); set the mode too, for firmware that ignores it.
+    if (heartbeat.modeName !== 'GUIDED') {
       const guidedNum = getGuidedModeNum(heartbeat.type);
       const modeCmd = encoder.createSetMode(sysId, compId, guidedNum);
       sendTrackedCommand(modeCmd, { label: 'Mode GUIDED', targetKey: 'mode:GUIDED' });
@@ -891,6 +950,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     sendTrackedCommand(repoCmd, {
       label: `Fly To (${lat.toFixed(4)}, ${lon.toFixed(4)}) @ ${alt}m`,
       targetKey: 'action:reposition',
+    }).then((ack) => {
+      // Drop the target if the vehicle refused it.
+      if (ack.result !== 0) setActiveFlyToTarget((t) => (t && t.lat === lat && t.lon === lon ? null : t));
     });
     setActiveFlyToTarget({ lat, lon, alt });
     setPendingFlyTo(null);
@@ -1195,101 +1257,22 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           </div>
 
           <div ref={rightControlsRef} className="flex items-center gap-1 sm:gap-1.5 ml-auto shrink-0">
-            {/* Aspect Ratio Selector when in full-width mode */}
-            {isFullWidth && (
-              <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-[10px] font-sans font-medium">
-                <button
-                  onClick={() => handleAspectChange('1:1')}
-                  className={`px-1.5 py-0.5 rounded transition-colors ${
-                    aspectRatio === '1:1'
-                      ? 'bg-zinc-800 text-sky-400 font-bold shadow-sm'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                  title="1:1 Square Aspect Ratio"
-                >
-                  1:1
-                </button>
-                <button
-                  onClick={() => handleAspectChange('4:3')}
-                  className={`px-1.5 py-0.5 rounded transition-colors ${
-                    aspectRatio === '4:3'
-                      ? 'bg-zinc-800 text-sky-400 font-bold shadow-sm'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                  title="4:3 Tactical Aspect Ratio"
-                >
-                  4:3
-                </button>
-                <button
-                  onClick={() => handleAspectChange('16:9')}
-                  className={`px-1.5 py-0.5 rounded transition-colors ${
-                    aspectRatio === '16:9'
-                      ? 'bg-zinc-800 text-sky-400 font-bold shadow-sm'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                  title="16:9 Widescreen Aspect Ratio"
-                >
-                  16:9
-                </button>
-              </div>
-            )}
-
-            {/* Map Imagery Selector (Satellite / Streets) */}
-            <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-[10px] font-sans font-medium">
-              <button
-                onClick={() => setMapLayer('satellite')}
-                className={`px-1.5 py-0.5 rounded transition-colors ${
-                  mapLayer === 'satellite'
-                    ? 'bg-zinc-800 text-sky-400 font-bold shadow-sm'
-                    : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-                title="Esri World Imagery (Satellite)"
-              >
-                Sat
-              </button>
-              <button
-                onClick={() => setMapLayer('street')}
-                className={`px-1.5 py-0.5 rounded transition-colors ${
-                  mapLayer === 'street'
-                    ? 'bg-zinc-800 text-sky-400 font-bold shadow-sm'
-                    : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-                title="OpenStreetMap Standard Map"
-              >
-                Map
-              </button>
-            </div>
-
-            {flightTrace.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearTrace}
-                className="h-7 w-7 p-0 text-xs font-bold text-zinc-400 hover:text-amber-400 border-zinc-800"
-                title="Clear flight trace"
-              >
-                <Eraser className="h-3.5 w-3.5 text-amber-400" />
-              </Button>
-            )}
-
             <Button
               variant={flyToMode ? 'default' : 'outline'}
               size="sm"
               disabled={!connected}
               onClick={() => setFlyToMode((v) => !v)}
-              className={`h-7 px-2 text-xs font-bold gap-1 ${
-                flyToMode
-                  ? 'bg-sky-500 text-white ring-2 ring-sky-300'
-                  : 'text-zinc-300 hover:text-white disabled:opacity-40'
-              }`}
+              aria-pressed={flyToMode}
+              className={`h-7 w-7 p-0 ${flyToMode ? 'bg-sky-500 text-white ring-2 ring-sky-300' : 'text-zinc-300 hover:text-white disabled:opacity-40'}`}
               title={
                 connected
-                  ? 'Click map (or right-click anywhere) to send Guided Fly-To-Here (DO_REPOSITION)'
-                  : 'Connect to a vehicle to use Fly-To-Here'
+                  ? flyToMode
+                    ? 'Pick a point on the map (Esc to cancel)'
+                    : 'Fly to a point: click here, then the map. Right-click or long-press the map works too.'
+                  : 'Connect to a vehicle to use Fly To'
               }
             >
-              <Navigation className="h-3.5 w-3.5 text-sky-300" />
-              <span className="hidden sm:inline text-[11px]">{flyToMode ? 'Click Map…' : 'Fly To'}</span>
+              <Navigation className={`h-3.5 w-3.5 ${flyToMode ? '' : 'text-sky-300'}`} />
             </Button>
 
             <Button
@@ -1319,15 +1302,15 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               <Crosshair className="h-3.5 w-3.5" />
             </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleFitBounds}
-              className="h-7 w-7 p-0 text-xs font-bold text-zinc-300 hover:text-white"
-              title="Fit map to vehicle, waypoints, and fence"
-            >
-              <Maximize2 className="h-3.5 w-3.5 text-sky-400" />
-            </Button>
+            <MapViewMenu
+              layer={mapLayer}
+              onLayer={setMapLayer}
+              aspect={isFullWidth ? aspectRatio : undefined}
+              onAspect={isFullWidth ? handleAspectChange : undefined}
+              onFit={handleFitBounds}
+              tracePoints={flightTrace.length}
+              onClearTrace={clearTrace}
+            />
 
             <MissionMenu
               connected={connected}
@@ -1431,82 +1414,29 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         </div>
 
         {/* Fly-To prompt (mission progress moved to the footer below the map) */}
-        {connected && flyToMode && (
+        {connected && flyToMode && !pendingFlyTo && (
           <div className="absolute bottom-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] font-mono pointer-events-none shadow-md whitespace-nowrap">
-            <span className="text-sky-300 font-bold animate-pulse">Click any point on the map to command Guided Fly-To…</span>
+            <span className="text-sky-300 font-bold">Pick a point to fly to</span>
+            <span className="text-zinc-500"> · Esc to cancel</span>
           </div>
+        )}
+        {pendingFlyTo && flyToAnchor && (
+          <FlyToPopover
+            lat={pendingFlyTo.lat}
+            lon={pendingFlyTo.lon}
+            anchor={flyToAnchor}
+            bounds={flyToAnchor}
+            altInput={flyToAltInput}
+            onAltInput={setFlyToAltInput}
+            modeName={heartbeat.modeName}
+            armed={heartbeat.isArmed}
+            onSend={handleConfirmFlyTo}
+            onCancel={cancelFlyTo}
+          />
         )}
       </CardContent>
 
       <MapMissionFooter />
-
-      {/* Guided Fly-To-Here Confirmation Modal */}
-      {pendingFlyTo && (
-        <Modal
-          isOpen={true}
-          onClose={() => setPendingFlyTo(null)}
-          title="Guided Fly-To-Here (DO_REPOSITION)"
-          description="Command the vehicle to fly directly to the selected map coordinates."
-        >
-          <div className="space-y-3 text-xs">
-            <div className="bg-zinc-900/80 border border-zinc-800 rounded-lg p-3 space-y-2 font-mono">
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-400 font-sans">Target Latitude:</span>
-                <span className="text-sky-400 font-bold">{pendingFlyTo.lat.toFixed(6)}°</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-400 font-sans">Target Longitude:</span>
-                <span className="text-sky-400 font-bold">{pendingFlyTo.lon.toFixed(6)}°</span>
-              </div>
-              <div className="flex items-center justify-between pt-1 border-t border-zinc-800">
-                <label className="text-zinc-300 font-sans font-semibold">Target Altitude (m AGL):</label>
-                <Input
-                  type="number"
-                  min={2}
-                  max={1000}
-                  step={1}
-                  value={flyToAltInput}
-                  onChange={(e) => setFlyToAltInput(e.target.value)}
-                  className="h-7 w-24 text-xs font-mono text-right"
-                />
-              </div>
-            </div>
-
-            {heartbeat.modeName !== 'GUIDED' && (
-              <div className="p-2.5 rounded-lg bg-amber-950/60 border border-amber-500/40 text-amber-200 flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-                <div>
-                  Vehicle is currently in <b>{heartbeat.modeName}</b> mode. ArduPilot requires <b>GUIDED</b> mode to execute reposition commands.
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
-              <Button variant="outline" size="sm" onClick={() => setPendingFlyTo(null)}>
-                Cancel
-              </Button>
-              {heartbeat.modeName !== 'GUIDED' && (
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="bg-amber-600 hover:bg-amber-500 text-white font-bold"
-                  onClick={() => handleConfirmFlyTo(true)}
-                >
-                  Switch to GUIDED & Fly Here
-                </Button>
-              )}
-              <Button
-                variant="default"
-                size="sm"
-                className="bg-sky-600 hover:bg-sky-500 text-white font-bold"
-                onClick={() => handleConfirmFlyTo(false)}
-              >
-                Send Fly-To Command
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
 
       {/* Confirmation Modal with Armed/Auto Warning and Summary */}
       {pendingUpload && (
