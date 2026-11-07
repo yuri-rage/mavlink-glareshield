@@ -417,7 +417,7 @@ export function effectiveParamControl(control: WidgetParamControl | undefined, m
   if (c.min === undefined && meta.min !== undefined) c.min = meta.min;
   if (c.max === undefined && meta.max !== undefined) c.max = meta.max;
   if (c.step === undefined && meta.increment !== undefined) c.step = meta.increment;
-  if (c.unit === undefined && meta.units) c.unit = meta.units;
+  if (!c.unit && meta.units) c.unit = meta.units;
   if ((!c.options || c.options.length === 0) && meta.values && !meta.bitmask) {
     c.options = sortedValueOptions(meta.values).map(([value, label]) => ({ label, value }));
   }

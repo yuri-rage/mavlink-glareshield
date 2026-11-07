@@ -102,6 +102,7 @@ export const useParamMetaStore = create<ParamMetaState>((set, get) => ({
     void (async () => {
       const cache = await openCache();
       const candidates = catalogCandidates(vehicle, version);
+      let networkFailed = false;
       for (const c of candidates) {
         if (get().requestKey !== key) return; // superseded (another vehicle or version connected)
         let catalog: Record<string, ParamMeta> | null = null;
@@ -117,12 +118,14 @@ export const useParamMetaStore = create<ParamMetaState>((set, get) => ({
         } catch {
           catalog = null;
         }
-        if (!catalog) {
+        if (!catalog && !networkFailed) {
           try {
             catalog = await download(c);
             if (catalog) await store(cache, c, catalog);
           } catch {
-            // Offline or the host is unreachable: an earlier version may still be cached.
+            // Offline or the host is unreachable: stop trying the network, but still check the cache for an
+            // earlier version.
+            networkFailed = true;
             catalog = null;
           }
         }

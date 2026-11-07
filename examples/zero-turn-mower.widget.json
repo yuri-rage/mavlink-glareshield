@@ -1,0 +1,142 @@
+{
+  "id": "custom-mw5l6a91-43f1",
+  "name": "Zero Turn Mower",
+  "description": "",
+  "category": "control",
+  "displayType": "composite",
+  "colorScheme": "default",
+  "panels": [
+    {
+      "displayType": "builtin",
+      "widgetId": "built-in-gps-card",
+      "span": 3
+    },
+    {
+      "displayType": "gauge-radial",
+      "binding": {
+        "messageName": "RPM",
+        "fieldName": "rpm1",
+        "unit": "rpm",
+        "multiplier": 1,
+        "decimals": 0,
+        "min": 0,
+        "max": 4000,
+        "warnThreshold": 1000,
+        "critThreshold": 500,
+        "thresholdInvert": true
+      },
+      "gauge": {
+        "style": "needle",
+        "majorTicks": 8,
+        "minorTicks": 5
+      },
+      "title": "Engine RPM",
+      "span": 3,
+      "colorScheme": "red"
+    },
+    {
+      "displayType": "gauge-radial",
+      "binding": {
+        "messageName": "SERVO_OUTPUT_RAW (SCALED)",
+        "fieldName": "servo1_scaled",
+        "unit": "%",
+        "min": -100,
+        "max": 100,
+        "decimals": 0,
+        "multiplier": 100
+      },
+      "gauge": {
+        "sweep": 240,
+        "majorTicks": 8,
+        "minorTicks": 5,
+        "style": "needle"
+      },
+      "title": "Throttle (L)",
+      "span": 3,
+      "colorScheme": "red"
+    },
+    {
+      "displayType": "gauge-radial",
+      "binding": {
+        "messageName": "SERVO_OUTPUT_RAW (scaled)",
+        "fieldName": "servo3_scaled",
+        "unit": "%",
+        "multiplier": 100,
+        "decimals": 0,
+        "min": -100,
+        "max": 100
+      },
+      "gauge": {
+        "style": "needle",
+        "majorTicks": 8,
+        "minorTicks": 5
+      },
+      "title": "Throttle (R)",
+      "span": 3,
+      "colorScheme": "red"
+    },
+    {
+      "displayType": "toggle-switch",
+      "action": {
+        "label": "Trigger Command",
+        "commandId": 181,
+        "params": [
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "confirmation": true
+      },
+      "title": "Ignition",
+      "span": 3
+    },
+    {
+      "displayType": "toggle-switch",
+      "action": {
+        "label": "Trigger Command",
+        "commandId": 181,
+        "params": [
+          2,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "confirmation": true
+      },
+      "title": "Mower PTO",
+      "span": 3
+    },
+    {
+      "displayType": "builtin",
+      "widgetId": "built-in-statustext-mini",
+      "span": 6
+    },
+    {
+      "displayType": "sparkline",
+      "binding": {
+        "messageName": "NAV_CONTROLLER_OUTPUT",
+        "fieldName": "xtrack_error",
+        "unit": "cm",
+        "multiplier": 100,
+        "decimals": 1,
+        "min": -60,
+        "max": 50,
+        "color": "#e5a50a",
+        "label": "Err",
+        "warnThreshold": 33,
+        "critThreshold": 300
+      },
+      "chart": {
+        "yScale": "fixed"
+      },
+      "title": "Crosstrack"
+    }
+  ]
+}

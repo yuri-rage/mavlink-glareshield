@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Check, Download, Lock, ChevronDown, Loader2 } from 'lucide-react';
 import { useTelemetryStore } from '../../../store/telemetryStore';
 import { mavlinkConnection } from '../../../mavlink/connection';
-import { paramManager } from '../../../mavlink/paramManager';
+import { paramManager, type ParamManagerStatus } from '../../../mavlink/paramManager';
 import { getVehicleCategory } from '../../../mavlink/messages';
 import { formatParamValue, getParamMetadata } from '../../../mavlink/paramMetadata';
 import { bitmaskSummary, valueLabel } from '../../../mavlink/paramBits';
@@ -19,6 +19,8 @@ import { useVehicleTarget, type PanelProps } from './panelKit';
 export const MAX_PARAM_SET_ROWS = 150;
 /** How long to wait for the vehicle to echo a written value. */
 const ECHO_TIMEOUT_MS = 4000;
+/** How long to wait for a single PARAM_REQUEST_READ reply before showing "not on this vehicle". */
+const READ_TIMEOUT_MS = 2500;
 
 type RowStatus = { kind: 'pending' | 'saved' | 'failed'; text?: string };
 
@@ -39,22 +41,51 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
     ensureMeta(getVehicleCategory(heartbeatType), firmwareVersion);
   }, [heartbeatType, firmwareVersion, ensureMeta]);
 
-  const downloaded = Object.keys(parameters);
-  const rows = useMemo(() => expandParamPatterns(entries, downloaded), [entries.join('\n'), downloaded.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [fetchStatus, setFetchStatus] = useState<ParamManagerStatus>({ isFetching: false, method: 'idle', paramCount: 0 });
+  useEffect(() => paramManager.onStatusChange(setFetchStatus), []);
+
+  const downloaded = useMemo(() => Object.keys(parameters), [parameters]);
+  const rows = useMemo(() => expandParamPatterns(entries, downloaded), [entries.join('\n'), downloaded]); // eslint-disable-line react-hooks/exhaustive-deps
   const shown = rows.slice(0, MAX_PARAM_SET_ROWS);
   const hasPatterns = entries.some((e) => isParamPattern(e) && !e.startsWith('-'));
 
   // Exact names that aren't loaded: ask for just those (cheap), as param-control does.
   const requested = useRef(new Set<string>());
+  const readTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const [pendingReads, setPendingReads] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => () => readTimers.current.forEach(clearTimeout), []);
   useEffect(() => {
-    if (!linked) return;
+    if (!linked) {
+      requested.current.clear();
+      readTimers.current.forEach(clearTimeout);
+      readTimers.current = [];
+      setPendingReads((prev) => (prev.size === 0 ? prev : new Set()));
+      return;
+    }
     const enc = mavlinkConnection.getEncoder();
+    const sentNow: string[] = [];
     for (const r of rows) {
       if (!r.present && !requested.current.has(r.name)) {
         requested.current.add(r.name);
+        sentNow.push(r.name);
         mavlinkConnection.send(enc.createParamRequestRead(sysId, compId, -1, r.name));
       }
     }
+    if (sentNow.length === 0) return;
+    setPendingReads((prev) => {
+      const next = new Set(prev);
+      for (const n of sentNow) next.add(n);
+      return next;
+    });
+    const timer = setTimeout(() => {
+      readTimers.current = readTimers.current.filter((t) => t !== timer);
+      setPendingReads((prev) => {
+        const next = new Set(prev);
+        for (const n of sentNow) next.delete(n);
+        return next;
+      });
+    }, READ_TIMEOUT_MS);
+    readTimers.current.push(timer);
   }, [rows, linked, sysId, compId]);
 
   const [editing, setEditing] = useState<string | null>(null);
@@ -139,7 +170,8 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
     return <p className="text-xs text-zinc-500 italic py-2">No parameters chosen. Edit the widget to list some (names or patterns like BATT_*).</p>;
   }
 
-  const notDownloaded = downloaded.length === 0;
+  // Individual PARAM_REQUEST_READ replies fill only the exact names asked for; patterns still need the full list.
+  const notDownloaded = fetchStatus.paramCount === 0 && downloaded.every((n) => requested.current.has(n));
 
   return (
     <div className="flex-1 flex flex-col min-h-0 gap-1.5">
@@ -148,11 +180,12 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
           <span>Patterns need the vehicle's parameter list.</span>
           <button
             type="button"
-            disabled={!linked}
+            disabled={!linked || fetchStatus.isFetching}
             onClick={() => paramManager.fetchParameters()}
             className="inline-flex items-center gap-1 rounded border border-sky-700/60 px-1.5 py-0.5 text-sky-300 hover:bg-sky-950/40 disabled:opacity-40"
           >
-            <Download className="h-3 w-3" /> Download
+            {fetchStatus.isFetching ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+            {fetchStatus.isFetching ? 'Downloading…' : 'Download'}
           </button>
         </div>
       )}
@@ -184,7 +217,7 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
                   <div className="min-w-0 max-w-[60%] flex flex-col items-end gap-0.5 font-mono text-[11px]">
                     {!item ? (
                       <span className="text-zinc-600 italic font-sans text-[10px]">
-                        {notDownloaded ? (linked ? 'loading…' : 'not loaded') : present ? '…' : 'not on this vehicle'}
+                        {!linked ? 'not loaded' : fetchStatus.isFetching || pendingReads.has(name) ? 'loading…' : present ? '…' : 'not on this vehicle'}
                       </span>
                     ) : conf ? (
                       <div className={`flex flex-wrap items-center justify-end gap-1 rounded px-1 py-0.5 ${conf.outOfRange ? 'bg-red-950/50 border border-red-700/50' : 'bg-amber-950/40 border border-amber-700/50'}`}>
