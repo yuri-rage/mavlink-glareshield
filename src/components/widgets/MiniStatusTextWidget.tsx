@@ -1,10 +1,11 @@
-// A compact STATUSTEXT log: the newest messages one per line, sized like the control widgets by default and
-// growing with the row it sits in (the list never sets the card's height, it fills what the card is given).
+// A compact STATUSTEXT log: one message per line, newest at the top or the bottom. Sized like the control widgets by
+// default and growing with the row it sits in (the list never sets the card's height, it fills what the card is given).
 
 import React, { useState } from 'react';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Terminal, Trash2 } from 'lucide-react';
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Terminal, Trash2 } from 'lucide-react';
+import { useMessageSort } from '../../lib/useMessageSort';
 
 /** Severity filters, cycled by the header button: show messages at or above this severity (lower is worse). */
 const FILTERS = [
@@ -27,7 +28,10 @@ export const MiniStatusTextWidget: React.FC = () => {
   const clearMessages = useTelemetryStore((s) => s.clearMessages);
   const [filter, setFilter] = useState(0);
   const { max, label } = FILTERS[filter];
-  const shown = max >= 7 ? messages : messages.filter((m) => m.severity <= max);
+  const filtered = max >= 7 ? messages : messages.filter((m) => m.severity <= max);
+  // Its own remembered order, separate from the full console's.
+  const { sortOrder, toggleSortOrder, displayed: shown, scrollRef, onScroll } = useMessageSort(filtered, 'glareshield_mini_messages_sort');
+  const newestFirst = sortOrder === 'newest';
 
   return (
     <Card className="h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
@@ -51,6 +55,15 @@ export const MiniStatusTextWidget: React.FC = () => {
             </button>
             <button
               type="button"
+              onClick={toggleSortOrder}
+              className="h-6 w-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-200"
+              title={newestFirst ? 'Newest at the top (click for newest at the bottom)' : 'Newest at the bottom (click for newest at the top)'}
+              aria-label={newestFirst ? 'Order: newest first' : 'Order: oldest first'}
+            >
+              {newestFirst ? <ArrowDownWideNarrow className="h-3.5 w-3.5" /> : <ArrowUpNarrowWide className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              type="button"
               onClick={clearMessages}
               className="h-6 w-6 flex items-center justify-center rounded text-zinc-500 hover:text-red-400"
               title="Clear messages"
@@ -65,7 +78,7 @@ export const MiniStatusTextWidget: React.FC = () => {
       <CardContent className="p-2 flex-1 flex flex-col min-h-0">
         {/* Absolutely positioned so the list fills the card instead of sizing it. */}
         <div className="relative flex-1 min-h-[104px]">
-          <div className="absolute inset-0 overflow-y-auto rounded-lg bg-black/50 border border-zinc-800 px-1.5 py-1 font-mono text-[11px] select-text">
+          <div ref={scrollRef} onScroll={onScroll} className="absolute inset-0 overflow-y-auto rounded-lg bg-black/50 border border-zinc-800 px-1.5 py-1 font-mono text-[11px] select-text">
             {shown.length === 0 ? (
               <div className="h-full flex items-center justify-center text-zinc-600 italic text-[11px]">
                 {messages.length === 0 ? 'No messages yet' : `No ${label} messages`}

@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useMessageSort } from '../../lib/useMessageSort';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useAudioAlertsStore } from '../../lib/audioAlerts';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
@@ -6,38 +7,11 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Terminal, Trash2, Volume2, VolumeX, ArrowUpDown, MessageSquare } from 'lucide-react';
 
-const STORAGE_KEY_SORT = 'glareshield_messages_sort';
-
-const getInitialSortOrder = (): 'newest' | 'oldest' => {
-  if (typeof localStorage !== 'undefined') {
-    const saved = localStorage.getItem(STORAGE_KEY_SORT);
-    if (saved === 'newest' || saved === 'oldest') {
-      return saved;
-    }
-  }
-  return 'newest';
-};
-
 export const StatusTextConsoleWidget: React.FC = () => {
   const statusMessages = useTelemetryStore((state) => state.statusMessages);
   const clearMessages = useTelemetryStore((state) => state.clearMessages);
   const { soundEnabled, toggleSound, voiceEnabled, toggleVoice } = useAudioAlertsStore();
   const [filterSeverity, setFilterSeverity] = useState<number | null>(null);
-  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>(getInitialSortOrder);
-
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const isAtBottomRef = useRef(true);
-  const prevSortOrderRef = useRef(sortOrder);
-
-  const toggleSortOrder = () => {
-    setSortOrder((prev) => {
-      const next = prev === 'newest' ? 'oldest' : 'newest';
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_SORT, next);
-      }
-      return next;
-    });
-  };
 
   const getSeverityBadgeVariant = (sev: number) => {
     if (sev <= 2) return 'destructive'; // Emergency, Alert, Critical
@@ -50,29 +24,10 @@ export const StatusTextConsoleWidget: React.FC = () => {
     ? statusMessages
     : statusMessages.filter((m) => m.severity <= filterSeverity);
 
-  const displayed = sortOrder === 'newest' ? filtered : [...filtered].reverse();
-
-  const handleScroll = () => {
-    if (!scrollContainerRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 30;
-  };
-
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const sortOrderChanged = prevSortOrderRef.current !== sortOrder;
-    prevSortOrderRef.current = sortOrder;
-
-    if (sortOrder === 'oldest') {
-      if (sortOrderChanged || isAtBottomRef.current) {
-        container.scrollTop = container.scrollHeight;
-      }
-    } else if (sortOrderChanged) {
-      container.scrollTop = 0;
-    }
-  }, [displayed.length, sortOrder]);
+  const { sortOrder, toggleSortOrder, displayed, scrollRef: scrollContainerRef, onScroll: handleScroll } = useMessageSort(
+    filtered,
+    'glareshield_messages_sort'
+  );
 
   return (
     <Card className="border-zinc-800 bg-zinc-950/90 shadow-md flex flex-col h-full min-h-[380px] sm:min-h-[540px]">
