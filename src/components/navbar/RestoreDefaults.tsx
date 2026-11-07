@@ -17,7 +17,7 @@ const RESETS = [
   'Map shape and the cached mission, fence and rally points',
 ];
 
-const KEEPS = ["The vehicle's own parameters and mission", 'The downloaded voice model and cached map tiles'];
+const KEEPS = ["The vehicle's own parameters and mission", 'The downloaded voice model, parameter descriptions and cached map tiles'];
 
 export const RestoreDefaults: React.FC = () => {
   const [confirming, setConfirming] = useState(false);
