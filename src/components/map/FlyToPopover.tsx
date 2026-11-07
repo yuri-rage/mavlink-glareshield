@@ -2,7 +2,7 @@
 // (DO_REPOSITION). Enter sends, Escape cancels.
 
 import React, { useEffect, useRef } from 'react';
-import { Minus, Navigation, Plus, X } from 'lucide-react';
+import { LocateFixed, Minus, Navigation, Plus, X } from 'lucide-react';
 
 interface FlyToPopoverProps {
   lat: number;
@@ -15,6 +15,8 @@ interface FlyToPopoverProps {
   onAltInput: (v: string) => void;
   modeName: string;
   armed: boolean;
+  /** Set when the point is this device's location: the fix's accuracy in metres. */
+  accuracyM?: number;
   onSend: () => void;
   onCancel: () => void;
 }
@@ -23,7 +25,7 @@ const CARD_W = 232;
 const CARD_H = 160;
 const GAP = 14;
 
-export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bounds, altInput, onAltInput, modeName, armed, onSend, onCancel }) => {
+export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bounds, altInput, onAltInput, modeName, armed, accuracyM, onSend, onCancel }) => {
   const sendRef = useRef<HTMLButtonElement | null>(null);
   const inGuided = modeName === 'GUIDED';
 
@@ -73,7 +75,15 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
     >
       <div className="flex items-center justify-between px-2.5 pt-2">
         <span className="flex items-center gap-1.5 font-bold text-sky-300">
-          <Navigation className="h-3.5 w-3.5" /> Fly here
+          {accuracyM !== undefined ? (
+            <>
+              <LocateFixed className="h-3.5 w-3.5 text-blue-400" /> Fly to me
+            </>
+          ) : (
+            <>
+              <Navigation className="h-3.5 w-3.5" /> Fly here
+            </>
+          )}
         </span>
         <button type="button" data-cancel onClick={onCancel} className="p-0.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800" aria-label="Cancel">
           <X className="h-3.5 w-3.5" />
@@ -81,6 +91,9 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
       </div>
       <div className="px-2.5 pt-0.5 font-mono text-[10px] text-zinc-400">
         {lat.toFixed(6)}, {lon.toFixed(6)}
+        {accuracyM !== undefined && (
+          <span className={accuracyM > 30 ? 'text-amber-400' : 'text-zinc-500'}> ±{Math.round(accuracyM)} m</span>
+        )}
       </div>
 
       <div className="px-2.5 pt-2 flex items-center gap-1.5">
@@ -112,6 +125,8 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
           <span className="text-amber-400">Vehicle is disarmed; it will not move until armed.</span>
         ) : !inGuided ? (
           <span className="text-amber-400">Switches from {modeName} to GUIDED.</span>
+        ) : accuracyM !== undefined ? (
+          <span className="text-amber-400">It will come to where you are standing.</span>
         ) : (
           <span className="text-zinc-500">Enter to send · Esc to cancel</span>
         )}
