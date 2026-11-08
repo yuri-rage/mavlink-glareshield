@@ -341,17 +341,6 @@ export class MavlinkEncoder {
     return this.packV2(MAVLINK_MSG_ID.MISSION_REQUEST_INT, payload);
   }
 
-  // Request Mission Item Float (Msg ID 40)
-  public createMissionRequest(targetSystem = 1, targetComponent = 1, seq: number, missionType = 0): Uint8Array {
-    const payload = new Uint8Array(5);
-    const view = new DataView(payload.buffer);
-    view.setUint16(0, seq, true);
-    payload[2] = targetSystem;
-    payload[3] = targetComponent;
-    payload[4] = missionType;
-    return this.packV2(MAVLINK_MSG_ID.MISSION_REQUEST, payload);
-  }
-
   // Mission ACK (Msg ID 47)
   public createMissionAck(targetSystem = 1, targetComponent = 1, type = 0, missionType = 0): Uint8Array {
     const payload = new Uint8Array(4);

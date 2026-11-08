@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 import statistics as st
+import sys
 
 FPS = 60.0
 DT = 1.0 / FPS
@@ -185,4 +186,33 @@ if __name__ == "__main__":
     res_unhandled = run_stop_and_move(mode="unhandled")
     print(f"Mutate stationary: backward jumps: {res_mutate['backward_jumps_count']} (largest: {res_mutate['max_backward_jump_m']}), resume step: {res_mutate['max_resume_step_m']}")
     print(f"Shipped push:      backward jumps: {res_shipped['backward_jumps_count']} (largest: {res_shipped['max_backward_jump_m']}), resume step: {res_shipped['max_resume_step_m']} (normal: {res_shipped['normal_frame_step_m']})")
-    print(f"Unhandled gap:     backward jumps: {res_unhandled['backward_jumps_count']}, resume step: {res_unhandled['max_resume_step_m']} (crawl then jump)")
+    print(f"Unhandled gap:     backward jumps: {res_unhandled['backward_jumps_count']}, resume step: {res_unhandled['max_resume_step_m']}")
+
+    # --- Assertions: the shipped algorithm must keep these properties (exit 1 otherwise) --------------------------
+    failures: list[str] = []
+
+    def num(text: str) -> float:
+        return float(str(text).split()[0])
+
+    for zoom, pxs in [(17, 15.9), (19, 63.5)]:
+        for hz in [1.5, 3.0, 6.0]:
+            shp = run(pxs, hz, mode="shipped")
+            lo, hi = (float(x) for x in str(shp["speed min/max (x true)"]).split("/"))
+            if not (0.95 <= lo and hi <= 1.05):
+                failures.append(f"zoom {zoom} GPS {hz} Hz: marker speed {lo:.2f}-{hi:.2f}x true (want 0.95-1.05)")
+            off_max = float(str(shp["vehicle off-centre px (mean/max)"]).split("/")[1])
+            if off_max > 1.0:
+                failures.append(f"zoom {zoom} GPS {hz} Hz: vehicle {off_max:.1f} px off centre (want <= 1)")
+
+    if num(res_shipped["backward_jumps_count"]) != 0:
+        failures.append(f"stop-and-move: {res_shipped['backward_jumps_count']} backward jumps (want 0)")
+    if num(res_shipped["max_resume_step_m"]) > 2 * num(res_shipped["normal_frame_step_m"]):
+        failures.append(f"stop-and-move: resume step {res_shipped['max_resume_step_m']} (want <= 2x {res_shipped['normal_frame_step_m']})")
+    # The simulation must still be able to see the problem the gap handling fixes.
+    if num(res_mutate["backward_jumps_count"]) == 0:
+        failures.append("stop-and-move: the in-place stationary refresh no longer shows backward jumps; the simulation has lost its sensitivity")
+
+    if failures:
+        print("\nFAILED:\n  " + "\n  ".join(failures))
+        sys.exit(1)
+    print("\nAll follow-loop checks passed")

@@ -778,6 +778,23 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
       return { ofs: getUint32(0), id: getUint16(4), count, data };
     }
 
+    case MAVLINK_MSG_ID.SYSTEM_TIME:
+      return { time_unix_usec: Number(getBigUint64(0)), time_boot_ms: getUint32(8) };
+
+    case MAVLINK_MSG_ID.ATTITUDE_QUATERNION: {
+      const [q1, q2, q3, q4] = [getFloat32(4), getFloat32(8), getFloat32(12), getFloat32(16)];
+      return {
+        time_boot_ms: getUint32(0),
+        q1,
+        q2,
+        q3,
+        q4,
+        rollspeed: getFloat32(20),
+        pitchspeed: getFloat32(24),
+        yawspeed: getFloat32(28),
+      };
+    }
+
     case MAVLINK_MSG_ID.EXTENDED_SYS_STATE:
       return { vtol_state: getUint8(0), landed_state: getUint8(1) };
 

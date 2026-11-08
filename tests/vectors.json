@@ -578,6 +578,28 @@
    }
   },
   {
+   "name": "SYSTEM_TIME",
+   "msgid": 2,
+   "hex": "fd0b0000000101020000408a6c02fc42060006120f1863",
+   "expect": {
+    "time_unix_usec": 1762500000123456,
+    "time_boot_ms": 987654
+   }
+  },
+  {
+   "name": "ATTITUDE_QUATERNION",
+   "msgid": 31,
+   "hex": "fd2000000001011f0000e11000000000003f0000003f000000bf0000003f0000803e000000be0000c03fdccb",
+   "expect": {
+    "time_boot_ms": 4321,
+    "q1": 0.5,
+    "q3": -0.5,
+    "rollspeed": 0.25,
+    "pitchspeed": -0.125,
+    "yawspeed": 1.5
+   }
+  },
+  {
    "name": "EXTENDED_SYS_STATE in forward flight, in air",
    "msgid": 245,
    "hex": "fd020000000101f5000004021fa0",
@@ -927,19 +949,6 @@
    "msgid": 51,
    "payload": "0700010101",
    "crc_extra": 196
-  },
-  {
-   "name": "MISSION_REQUEST (float)",
-   "method": "createMissionRequest",
-   "args": [
-    1,
-    1,
-    7,
-    0
-   ],
-   "msgid": 40,
-   "payload": "07000101",
-   "crc_extra": 230
   },
   {
    "name": "MISSION_ACK",

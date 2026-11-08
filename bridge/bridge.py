@@ -275,8 +275,6 @@ class BridgeServer:
         # Mock MAVFTP file store and session tracking
         self.mock_files: dict[str, bytearray] = {}
         self.refresh_mock_log_files()
-        self.mock_ftp_sessions: dict[int, dict[str, Any]] = {}
-        self.next_ftp_session_id = 1
 
         # Mock MAVLink mission upload state
         self.mock_mission_upload_count = 0

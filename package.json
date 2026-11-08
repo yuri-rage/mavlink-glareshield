@@ -7,7 +7,7 @@
     "dev": "vite --host",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "npx tsx tests/mavlink.test.ts && npx tsx tests/golden.test.ts && npx tsx tests/transport.test.ts && npx tsx tests/widgets.test.ts && npx tsx tests/missionFiles.test.ts && npx tsx tests/paramCatalog.test.ts && npx tsx tests/pidTuning.test.ts && npx tsx tests/logs.test.ts && npx tsx tests/safety.test.ts",
+    "test": "npx tsx tests/mavlink.test.ts && npx tsx tests/golden.test.ts && npx tsx tests/transport.test.ts && npx tsx tests/widgets.test.ts && npx tsx tests/missionFiles.test.ts && npx tsx tests/paramCatalog.test.ts && npx tsx tests/pidTuning.test.ts && npx tsx tests/logs.test.ts && npx tsx tests/safety.test.ts && npx tsx tests/ftp_ardupilot.test.ts && npx tsx tests/regressions.test.ts",
     "test:widgets": "npx tsx tests/widgets.test.ts",
     "test:transport": "npx tsx tests/transport.test.ts",
     "test:golden": "npx tsx tests/golden.test.ts",
@@ -17,7 +17,8 @@
     "test:regressions": "npx tsx tests/regressions.test.ts",
     "test:bridge-security": "python3 tests/check_bridge_security.py",
     "test:bridge-udp": "python3 tests/check_bridge_udp_target.py",
-    "test:review": "npm run test:ftp-sim && npm run test:regressions && npm run test:bridge-security && npm run test:bridge-udp"
+    "test:follow": "python3 tests/follow_sim.py",
+    "test:review": "npm run test:mock && npm run test:bridge-security && npm run test:bridge-udp && npm run test:follow"
   },
   "dependencies": {
     "@diffusionstudio/vits-web": "^1.0.3",

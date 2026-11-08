@@ -14,7 +14,6 @@ const cache = await import('../src/lib/messageCache.ts');
 const { valueSampler, SampleRing } = await import('../src/lib/valueSampler.ts');
 const { computeYRange } = await import('../src/components/widgets/custom/TimeSeriesChart.tsx');
 const { describeAck } = await import('../src/components/widgets/custom/panelModel.ts');
-const { extractBoundValueFromState } = await import('../src/lib/widgetValues.ts');
 const { sanitizeWidgetDefinition, cleanBinding } = await import('../src/lib/widgetValidation.ts');
 const { MAVLINK_MSG_ID } = await import('../src/mavlink/messages.ts');
 
@@ -127,11 +126,14 @@ check('messageCache: "(scaled)" pseudo-messages resolve to the real message', ca
 }
 {
   const rcState = { rc: { channels: [1500, 65535, 1850], chancount: 16, rssi: 255 }, parameters: {} };
-  check('extractBoundValueFromState (legacy text): raw RC channel stays unscaled text', extractBoundValueFromState({ messageName: 'RC_CHANNELS', fieldName: 'chan3_raw', decimals: 2 }, rcState) === '1850');
-  check('extractBoundValueFromState: an unused RC channel reads "--"', extractBoundValueFromState({ messageName: 'RC_CHANNELS', fieldName: 'chan2_raw' }, rcState) === '--');
-  check('extractBoundValueFromState: RSSI 255 (unknown) reads "--"', extractBoundValueFromState({ messageName: 'RC_CHANNELS', fieldName: 'rssi' }, rcState) === '--');
+  const text = (b: any, st: any) => values.readBinding(b, st, 'ms', 5, Date.now()).text;
+  check('readBinding: a raw RC channel shows whole microseconds by default', text({ messageName: 'RC_CHANNELS', fieldName: 'chan3_raw' }, rcState) === '1850');
+  check('readBinding: …and the binding\'s own decimals when set', text({ messageName: 'RC_CHANNELS', fieldName: 'chan3_raw', decimals: 2 }, rcState) === '1850.00');
+  check('readBinding: other fields keep one decimal by default', text({ messageName: 'ATTITUDE', fieldName: 'roll' }, { attitude: { roll: 1.25 } }) !== '1');
+  check('readBinding: an unused RC channel reads "--"', text({ messageName: 'RC_CHANNELS', fieldName: 'chan2_raw' }, rcState) === '--');
+  check('readBinding: RSSI 255 (unknown) reads "--"', text({ messageName: 'RC_CHANNELS', fieldName: 'rssi' }, rcState) === '--');
   check('resolveRawValue: scaled RC channel maps PWM to -1..1', values.resolveRawValue({ messageName: 'RC_CHANNELS (scaled)', fieldName: 'chan1_scaled' }, rcState) === 0);
-  check('extractBoundValueFromState: multiplier and decimals apply to other fields', extractBoundValueFromState({ messageName: 'ATTITUDE', fieldName: 'roll', multiplier: 2, decimals: 1 }, { attitude: { roll: 1.25 } }) === '2.5');
+  check('readBinding: multiplier and decimals apply to other fields', text({ messageName: 'ATTITUDE', fieldName: 'roll', multiplier: 2, decimals: 1 }, { attitude: { roll: 1.25 } }) === '2.5', text({ messageName: 'ATTITUDE', fieldName: 'roll', multiplier: 2, decimals: 1 }, { attitude: { roll: 1.25 } }));
 }
 check('evaluateAlert: rising thresholds', values.evaluateAlert(70, { messageName: 'X', fieldName: 'y', warnThreshold: 60, critThreshold: 80 }) === 'warn' && values.evaluateAlert(85, { messageName: 'X', fieldName: 'y', warnThreshold: 60, critThreshold: 80 }) === 'crit');
 check('evaluateAlert: inverted thresholds (low voltage)', values.evaluateAlert(14.0, { messageName: 'X', fieldName: 'y', warnThreshold: 14.8, critThreshold: 14.2, thresholdInvert: true }) === 'crit');

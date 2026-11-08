@@ -20,6 +20,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Sliders, RefreshCw, Check, Search, Zap, X, Download, Upload, AlertTriangle, Info, Loader2, Lock, ChevronDown } from 'lucide-react';
+import { downloadFile } from '../../lib/download';
 
 const ROW_HEIGHT = 38;
 const DEFAULT_VIEWPORT_HEIGHT = 440;
@@ -176,16 +177,7 @@ export const ParametersWidget: React.FC = () => {
       plainMap[k] = parameters[k].value;
     }
     const content = serializeParamFile(plainMap, firmwareVersion);
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const datePart = new Date().toISOString().slice(0, 10);
-    a.href = url;
-    a.download = `ardupilot-params-${datePart}.param`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadFile(`ardupilot-params-${new Date().toISOString().slice(0, 10)}.param`, content, 'text/plain;charset=utf-8');
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

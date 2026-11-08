@@ -1,7 +1,9 @@
 // Built-in widget components by ID, for the dashboard grid and for composite widget panels.
 
 import React, { Suspense, lazy } from 'react';
-import { GlareshieldWidget, AllFlightModesWidget, SetSpeedWidget } from '../glareshield/GlareshieldWidget';
+import { ArmingModesWidget } from '../glareshield/ArmingModesWidget';
+import { AllFlightModesWidget } from '../glareshield/AllFlightModesWidget';
+import { SetSpeedWidget } from '../glareshield/SetSpeedWidget';
 import { HudWidget } from '../hud/HudWidget';
 import { BatteryWidget } from './BatteryWidget';
 import { GpsWidget } from './GpsWidget';
@@ -36,7 +38,7 @@ export function renderBuiltinWidget(widgetId: string, colSpan: number): React.Re
   switch (widgetId) {
     case 'built-in-glareshield':
     case 'built-in-arm-modes':
-      return <GlareshieldWidget />;
+      return <ArmingModesWidget />;
     case 'built-in-all-modes':
       return <AllFlightModesWidget />;
     case 'built-in-set-speed':

@@ -1,3 +1,4 @@
+import { feedbackBadge, feedbackRing } from './commandFeedback';
 import React, { useState, useEffect } from 'react';
 import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
 import { useUnitsStore, UnitSystem } from '../../store/unitsStore';
@@ -13,9 +14,6 @@ import {
 import {
   Gauge,
   RotateCcw,
-  CheckCircle2,
-  XCircle,
-  Loader2,
 } from 'lucide-react';
 
 function toActiveUnits(speedMs: number, system: UnitSystem): number {
@@ -81,25 +79,8 @@ export const SetSpeedWidget: React.FC = () => {
   const currentTargetDisplay = Number(toActiveUnits(currentSpeedMs, system).toFixed(1));
   const coarseStep = category === 'rover' || system === 'ms' ? 2 : 5;
 
-  const getFeedbackBadge = (key: string) => {
-    if (!commandFeedback || commandFeedback.targetKey !== key) return null;
-    if (nowMs - commandFeedback.time > 6000 && commandFeedback.status !== 'pending') return null;
-    if (commandFeedback.status === 'pending') {
-      return <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400 shrink-0" />;
-    }
-    if (commandFeedback.status === 'accepted') {
-      return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />;
-    }
-    return <XCircle className="h-3.5 w-3.5 text-rose-400 shrink-0" />;
-  };
-
-  const getFeedbackRing = (key: string) => {
-    if (!commandFeedback || commandFeedback.targetKey !== key) return '';
-    if (nowMs - commandFeedback.time > 6000 && commandFeedback.status !== 'pending') return '';
-    if (commandFeedback.status === 'pending') return 'ring-2 ring-sky-400/70';
-    if (commandFeedback.status === 'accepted') return 'ring-2 ring-emerald-500/80';
-    return 'ring-2 ring-rose-500/90 bg-rose-950/30';
-  };
+  const getFeedbackBadge = (key: string) => feedbackBadge(commandFeedback, key, nowMs, 'h-3.5 w-3.5');
+  const getFeedbackRing = (key: string) => feedbackRing(commandFeedback, key, nowMs);
 
   const handleStepSpeed = (deltaDisplay: number) => {
     const nextDisplay = Math.max(0.5, currentTargetDisplay + deltaDisplay);

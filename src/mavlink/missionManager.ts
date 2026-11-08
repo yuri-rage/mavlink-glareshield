@@ -3,7 +3,7 @@ import { MAVLINK_MSG_ID, cmdHasLocation } from './messages';
 import { decodePayload, MavlinkPacket } from './parser';
 import { mavFtpClient } from './ftp';
 import { MissionItemIntData } from './encoder';
-import { parseDroppedMissionFile, packDatFile, MissionFileType } from './missionFileParser';
+import { parseDroppedMissionFile, packDatFile, readDat, MissionFileType } from './missionFileParser';
 import { useTelemetryStore, MissionWaypoint, FencePoint, RallyPoint } from '../store/telemetryStore';
 
 export interface MissionManagerStatus {
@@ -851,63 +851,27 @@ export class MissionManager {
    * Standard ArduPilot MAVLink 2 entry is 38 bytes (with mission_type); legacy is 37 bytes.
    */
   public unpackMissionDat(data: Uint8Array): MissionWaypoint[] | null {
-    if (data.length < 10) return null;
-
-    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-    const magic = view.getUint16(0, true);
-
-    if (magic !== 0x763d) {
-      console.warn(`[MissionManager] Invalid mission.dat magic: 0x${magic.toString(16)}, expected 0x763d`);
+    const dat = readDat(data);
+    if (!dat) {
+      console.warn('[MissionManager] Not a mission.dat file (bad length or magic, expected 0x763d)');
       return null;
     }
-
-    const numItems = view.getUint16(8, true);
-    if (numItems === 0) return [];
-
-    let itemSize = 38;
-    if (numItems > 0) {
-      const calcSize = Math.floor((data.length - 10) / numItems);
-      if (calcSize === 37 || calcSize === 38) {
-        itemSize = calcSize;
-      }
-    }
-
-    const waypoints: MissionWaypoint[] = [];
-    let offset = 10;
-    for (let i = 0; i < numItems && offset + itemSize <= data.length; i++) {
-      const p1 = view.getFloat32(offset + 0, true);
-      const p2 = view.getFloat32(offset + 4, true);
-      const p3 = view.getFloat32(offset + 8, true);
-      const p4 = view.getFloat32(offset + 12, true);
-      const command = view.getUint16(offset + 30, true);
-      // x and y are degrees * 1e7 only for commands with a location; otherwise they are plain param5/param6,
-      // as MISSION_ITEM_INT decoding treats them.
-      const scale = cmdHasLocation(command) ? 1e7 : 1;
-      const x = view.getInt32(offset + 16, true) / scale;
-      const y = view.getInt32(offset + 20, true) / scale;
-      const z = view.getFloat32(offset + 24, true);
-      const seq = view.getUint16(offset + 28, true);
-      const frame = view.getUint8(offset + 34);
-      const current = view.getUint8(offset + 35) === 1;
-
-      waypoints.push({
-        seq,
-        command,
-        lat: x,
-        lon: y,
-        alt: z,
-        current,
-        frame,
-        param1: p1,
-        param2: p2,
-        param3: p3,
-        param4: p4,
-      });
-
-      offset += itemSize;
-    }
-
-    return waypoints;
+    return dat.items.map((it) => {
+      const scale = cmdHasLocation(it.command) ? 1e7 : 1;
+      return {
+        seq: it.seq,
+        command: it.command,
+        lat: it.rawX / scale,
+        lon: it.rawY / scale,
+        alt: it.z,
+        current: it.current,
+        frame: it.frame,
+        param1: it.param1,
+        param2: it.param2,
+        param3: it.param3,
+        param4: it.param4,
+      };
+    });
   }
 
   /**
@@ -916,56 +880,27 @@ export class MissionManager {
    * Followed by num_items entries.
    */
   public unpackFenceDat(data: Uint8Array): FencePoint[] | null {
-    if (data.length < 10) return null;
-
-    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-    const magic = view.getUint16(0, true);
-
-    if (magic !== 0x763d) {
-      console.warn(`[MissionManager] Invalid fence.dat magic: 0x${magic.toString(16)}, expected 0x763d`);
+    const dat = readDat(data);
+    if (!dat) {
+      console.warn('[MissionManager] Not a fence.dat file (bad length or magic, expected 0x763d)');
       return null;
     }
-
-    const numItems = view.getUint16(8, true);
-    if (numItems === 0) return [];
-
-    let itemSize = 38;
-    if (numItems > 0) {
-      const calcSize = Math.floor((data.length - 10) / numItems);
-      if (calcSize === 37 || calcSize === 38) {
-        itemSize = calcSize;
-      }
-    }
-
-    const fencePoints: FencePoint[] = [];
-    let offset = 10;
-    for (let i = 0; i < numItems && offset + itemSize <= data.length; i++) {
-      const param1 = view.getFloat32(offset + 0, true);
-      const x = view.getInt32(offset + 16, true) / 1e7;
-      const y = view.getInt32(offset + 20, true) / 1e7;
-      const z = view.getFloat32(offset + 24, true);
-      const seq = view.getUint16(offset + 28, true);
-      const command = view.getUint16(offset + 30, true);
-
+    return dat.items.map((it) => {
+      const { command, param1 } = it;
       const isCircle = command === 5004 || command === 5005 || (command === 5003 && param1 > 0);
       const isInclusion = command === 5001 || command === 5005 || (command === 5003 && param1 > 0);
-
-      fencePoints.push({
-        seq,
+      return {
+        seq: it.seq,
         command,
-        lat: x,
-        lon: y,
-        alt: z,
+        lat: it.rawX / 1e7,
+        lon: it.rawY / 1e7,
+        alt: it.z,
         param1,
         vertexCount: !isCircle ? Math.round(param1) : undefined,
         radius: isCircle ? param1 : undefined,
         inclusion: isInclusion,
-      });
-
-      offset += itemSize;
-    }
-
-    return fencePoints;
+      };
+    });
   }
 
   /**
@@ -974,46 +909,12 @@ export class MissionManager {
    * Followed by num_items entries.
    */
   public unpackRallyDat(data: Uint8Array): RallyPoint[] | null {
-    if (data.length < 10) return null;
-
-    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-    const magic = view.getUint16(0, true);
-
-    if (magic !== 0x763d) {
-      console.warn(`[MissionManager] Invalid rally.dat magic: 0x${magic.toString(16)}, expected 0x763d`);
+    const dat = readDat(data);
+    if (!dat) {
+      console.warn('[MissionManager] Not a rally.dat file (bad length or magic, expected 0x763d)');
       return null;
     }
-
-    const numItems = view.getUint16(8, true);
-    if (numItems === 0) return [];
-
-    let itemSize = 38;
-    if (numItems > 0) {
-      const calcSize = Math.floor((data.length - 10) / numItems);
-      if (calcSize === 37 || calcSize === 38) {
-        itemSize = calcSize;
-      }
-    }
-
-    const rallyPoints: RallyPoint[] = [];
-    let offset = 10;
-    for (let i = 0; i < numItems && offset + itemSize <= data.length; i++) {
-      const x = view.getInt32(offset + 16, true) / 1e7;
-      const y = view.getInt32(offset + 20, true) / 1e7;
-      const z = view.getFloat32(offset + 24, true);
-      const seq = view.getUint16(offset + 28, true);
-
-      rallyPoints.push({
-        seq,
-        lat: x,
-        lon: y,
-        alt: z,
-      });
-
-      offset += itemSize;
-    }
-
-    return rallyPoints;
+    return dat.items.map((it) => ({ seq: it.seq, lat: it.rawX / 1e7, lon: it.rawY / 1e7, alt: it.z }));
   }
 }
 

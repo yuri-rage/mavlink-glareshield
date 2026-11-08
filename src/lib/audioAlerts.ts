@@ -269,8 +269,9 @@ async function prewarmCoreCallouts() {
   const phrases = [
     'Motors armed',
     'Motors disarmed',
-    'Telemetry lost',
-    'Telemetry restored',
+    // Exactly as the link watchdog says them (the cache is keyed by the spoken text).
+    'Warning: telemetry link lost',
+    'Telemetry link restored',
     'Mission complete',
     'Restarting mission',
   ];

@@ -6,6 +6,7 @@ import { Download, FileJson, Flag, FolderOpen, RefreshCw, Route, Shield, X } fro
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { missionFileStem, toQgcPlan, toQgcWpl, waypointsToItems, fenceToItems, rallyToItems } from '../../mavlink/missionFileWriter';
 import { HeaderMenu, MenuItem, MenuSection } from './HeaderMenu';
+import { downloadFile } from '../../lib/download';
 
 interface MissionMenuProps {
   connected: boolean;
@@ -20,17 +21,7 @@ interface MissionMenuProps {
 /** File types the upload preview understands. */
 const OPEN_ACCEPT = '.plan,.waypoints,.txt,.fence,.rally,.dat,.json';
 
-function saveText(filename: string, text: string, type: string) {
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Some browsers start the download after click() returns.
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+const saveText = (filename: string, text: string, type: string) => downloadFile(filename, text, type);
 
 export const MissionMenu: React.FC<MissionMenuProps> = ({ connected, isFetching, isUploading, onFetch, onCancelFetch, onOpenFile }) => {
   const fileRef = useRef<HTMLInputElement | null>(null);
