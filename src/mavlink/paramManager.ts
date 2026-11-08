@@ -10,6 +10,11 @@ export interface ParamManagerStatus {
   paramCount: number;
   hasDefaults?: boolean;
   message?: string;
+  /**
+   * The stored values came from an earlier connection to this vehicle and haven't been refreshed yet (another
+   * GCS or the vehicle itself may have changed them since).
+   */
+  fromPreviousConnection?: boolean;
 }
 
 /** One parameter as unpacked from param.pck. */
@@ -38,12 +43,19 @@ export class ParamManager {
   private backgroundLoad: Promise<boolean> | null = null;
   /** Vehicles ("sys/comp/type") a background read has been tried for on this connection: once each. */
   private backgroundTried = new Set<string>();
+  /** The vehicle ("sysid/type") the stored list belongs to; another vehicle's heartbeat clears it. */
+  private listOwner: string | null = null;
+  /** When the list's vehicle was last heard. */
+  private ownerSeenAt = 0;
 
   constructor() {
     mavlinkConnection.onPacket((packet: MavlinkPacket) => {
       this.handlePacket(packet);
     });
     // A new connection may be a different vehicle: its defaults and single reads start over.
+    // A new connection may be a different vehicle: its defaults and single reads start over. The stored values
+    // are kept (a brief link drop to the same vehicle shouldn't empty the table) but flagged as old, and the
+    // count is reset so they are read again once the vehicle is heard.
     mavlinkConnection.onStatus((status) => {
       if (status === 'connected') return;
       this.backgroundTried.clear();
@@ -52,6 +64,10 @@ export class ParamManager {
       if (this.defaultsTimer) {
         clearTimeout(this.defaultsTimer);
         this.defaultsTimer = null;
+      }
+      const hasValues = Object.keys(useTelemetryStore.getState().parameters).length > 0;
+      if (this.status.paramCount > 0 || this.status.isFetching || hasValues) {
+        this.setStatus({ isFetching: false, method: 'idle', paramCount: 0, fromPreviousConnection: hasValues });
       }
     });
   }
@@ -114,7 +130,41 @@ export class ParamManager {
     }, 2500);
   }
 
+  /** "sysid/type" of the vehicle currently heard, or null. */
+  private currentVehicleKey(): string | null {
+    const hb = useTelemetryStore.getState().heartbeat;
+    return hb.lastHeartbeatTime > 0 ? `${hb.systemId}/${hb.type}` : null;
+  }
+
+  /** The autopilot's own heartbeat: notices a different vehicle, and refreshes values from an earlier connection. */
+  private handleHeartbeat(packet: MavlinkPacket) {
+    const type = packet.payload[4];
+    const autopilot = packet.payload[5];
+    if (packet.componentId !== 1 || autopilot === 8 /* MAV_AUTOPILOT_INVALID */ || type === 6 /* MAV_TYPE_GCS */) return;
+    const key = `${packet.systemId}/${type}`;
+    const now = Date.now();
+    if (key === this.listOwner) this.ownerSeenAt = now;
+    // Another vehicle, and the list's own vehicle has gone quiet: it replaced it, so the stored list is not its
+    // list. (Two vehicles heard at once on a shared network is not a replacement; the list is kept.)
+    if (this.listOwner !== null && key !== this.listOwner && now - this.ownerSeenAt > 5000) {
+      this.listOwner = null;
+      this.defaults.clear();
+      this.singleReads.clear();
+      useTelemetryStore.setState({ parameters: {} });
+      this.setStatus({ isFetching: false, method: 'idle', paramCount: 0, hasDefaults: false, fromPreviousConnection: false, message: undefined });
+      return;
+    }
+    if (this.status.fromPreviousConnection && mavlinkConnection.getStatus() === 'connected') {
+      // Same vehicle back: read the list again in the background (MAVFTP); the Parameters widget also refreshes.
+      this.scheduleBackgroundLoad(packet.systemId, packet.componentId);
+    }
+  }
+
   private handlePacket(packet: MavlinkPacket) {
+    if (packet.messageId === MAVLINK_MSG_ID.HEARTBEAT) {
+      this.handleHeartbeat(packet);
+      return;
+    }
     if (packet.messageId !== MAVLINK_MSG_ID.PARAM_VALUE) return;
     const data = decodePayload(packet.messageId, packet.payload);
 
@@ -141,8 +191,11 @@ export class ParamManager {
     this.legacyExpected = data.param_count || this.legacyExpected;
 
     const pct = this.legacyExpected > 0 ? Math.round((this.legacyIndices.size / this.legacyExpected) * 100) : 0;
+    this.listOwner = this.currentVehicleKey();
+    this.ownerSeenAt = Date.now();
     this.setStatus({
       paramCount: this.legacyIndices.size,
+      fromPreviousConnection: false,
       message: `Streaming params: ${this.legacyIndices.size} / ${this.legacyExpected} (${pct}%)`,
     });
 
@@ -213,7 +266,9 @@ export class ParamManager {
     const hasDefaults = Object.values(unpacked).some((p) => p.defaultValue !== undefined);
     useTelemetryStore.setState((state) => ({ parameters: { ...state.parameters, ...unpacked } }));
     this.singleReads.clear();
-    this.setStatus({ isFetching: false, method, paramCount: count, hasDefaults, message });
+    this.listOwner = this.currentVehicleKey();
+    this.ownerSeenAt = Date.now();
+    this.setStatus({ isFetching: false, method, paramCount: count, hasDefaults, message, fromPreviousConnection: false });
     return hasDefaults;
   }
 

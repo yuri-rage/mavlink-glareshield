@@ -150,6 +150,13 @@ function loadInitialProfile(): DashboardProfile {
             title: OLD_TO_NEW_TITLES[t.title] || t.title,
           }));
         }
+        // Saved widgets get the same structural cleaning as imports (older saved formats, or storage edited by
+        // hand), but keep the confirmation settings their owner chose.
+        if (parsed && Array.isArray(parsed.customWidgets)) {
+          parsed.customWidgets = parsed.customWidgets
+            .filter((w: unknown) => w && typeof w === 'object' && typeof (w as CustomWidgetDefinition).id === 'string')
+            .map((w: CustomWidgetDefinition) => sanitizeWidgetDefinition(w, { forceConfirmation: false }));
+        }
         return parsed;
       }
     }

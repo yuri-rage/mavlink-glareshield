@@ -118,16 +118,18 @@ export const ParametersWidget: React.FC = () => {
 
   const paramKeys = useMemo(() => Object.keys(parameters), [parameters]);
 
-  // Automatically fetch parameters when widget opens and link is active without a full parameter list
+  // Automatically fetch parameters when widget opens and link is active without a full parameter list, or when
+  // the stored values are from an earlier connection.
   useEffect(() => {
-    if (connected && !paramManager.hasParamList(paramKeys) && !paramStatus.isFetching && !autoFetchedRef.current) {
+    const needsList = !paramManager.hasParamList(paramKeys) || paramStatus.fromPreviousConnection;
+    if (connected && needsList && !paramStatus.isFetching && !autoFetchedRef.current) {
       autoFetchedRef.current = true;
       paramManager.fetchParameters();
     }
     if (!connected) {
       autoFetchedRef.current = false;
     }
-  }, [connected, paramKeys, paramStatus.isFetching]);
+  }, [connected, paramKeys, paramStatus.isFetching, paramStatus.fromPreviousConnection]);
 
   const encoder = mavlinkConnection.getEncoder();
 
@@ -435,6 +437,11 @@ export const ParametersWidget: React.FC = () => {
         {paramStatus.message && paramStatus.isFetching && (
           <p className="text-[10px] text-sky-400 font-mono mt-1 animate-pulse">
             {paramStatus.message}
+          </p>
+        )}
+        {paramStatus.fromPreviousConnection && !paramStatus.isFetching && (
+          <p className="text-[11px] text-amber-400 mt-1" role="status">
+            Values are from the previous connection{connected ? ' and will refresh' : ''}; they may have changed since.
           </p>
         )}
       </CardHeader>

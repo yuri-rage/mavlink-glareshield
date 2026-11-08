@@ -1,3 +1,4 @@
+import { profileVehicleControls } from '../../lib/vehicleControls';
 import React, { useState } from 'react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { DashboardProfile } from '../../types/widget';
@@ -156,26 +157,39 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
                 <b className="text-zinc-400">Custom Widgets:</b> {pendingProfile.customWidgets?.length || 0}
               </div>
 
-              {pendingProfile.customWidgets?.some((w) => !!w.action) && (
-                <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded mt-2 space-y-1 text-amber-200">
-                  <div className="font-bold flex items-center gap-1.5 text-amber-300">
-                    <AlertTriangle className="h-4 w-4" />
-                    Contains Action Commands:
-                  </div>
-                  <ul className="list-disc list-inside text-[11px] text-zinc-300 space-y-0.5">
-                    {pendingProfile.customWidgets
-                      .filter((w) => !!w.action)
-                      .map((w) => (
-                        <li key={w.id}>
-                          <b>{w.name}</b>: {w.action?.label} (MAV_CMD {w.action?.commandId})
-                        </li>
-                      ))}
-                  </ul>
-                  <div className="text-[11px] text-amber-400 mt-1">
-                    * Confirmation is enforced on all imported actions to safeguard vehicle flight.
-                  </div>
-                </div>
-              )}
+              {(() => {
+                const found = profileVehicleControls(pendingProfile);
+                const custom = found.filter((c) => !c.builtin);
+                const builtin = found.filter((c) => c.builtin);
+                return (
+                  <>
+                    {custom.length > 0 && (
+                      <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded mt-2 space-y-1 text-amber-200">
+                        <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                          <AlertTriangle className="h-4 w-4" />
+                          Custom widgets that act on the vehicle:
+                        </div>
+                        <ul className="list-disc list-inside text-[11px] text-zinc-300 space-y-0.5">
+                          {custom.map((c, i) => (
+                            <li key={`${c.name}-${i}`}>
+                              <b>{c.name}</b>: {c.controls.join('; ')}
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="text-[11px] text-amber-400 mt-1">
+                          * Confirmation is enforced on every imported command and parameter write.
+                        </div>
+                      </div>
+                    )}
+                    {builtin.length > 0 && (
+                      <div className="text-[11px] text-zinc-400 mt-2">
+                        <b className="text-zinc-300">Built-in widgets with vehicle controls</b> (their own confirmations, as
+                        when you place them yourself): {builtin.map((c) => c.name).join(', ')}.
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             <div className="flex items-center gap-2 pt-2">

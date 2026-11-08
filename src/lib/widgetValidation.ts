@@ -147,7 +147,7 @@ function sanitizeAction(raw: unknown): WidgetAction | undefined {
   return { label: text(a.label) ?? '', commandId: Math.round(commandId), params, confirmation: a.confirmation === true };
 }
 
-function sanitizePanel(raw: unknown): WidgetPanelDefinition | undefined {
+function sanitizePanel(raw: unknown, opts: SanitizeOptions): WidgetPanelDefinition | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const r = raw as Record<string, unknown>;
   if (r.displayType === 'builtin') {
@@ -163,7 +163,7 @@ function sanitizePanel(raw: unknown): WidgetPanelDefinition | undefined {
   }
   // A panel is cleaned exactly as a widget would be; composites can't nest.
   const type = r.displayType === 'composite' ? 'stat-card' : (r.displayType as WidgetDisplayType);
-  const clean = sanitizeWidgetDefinition({ ...(r as object), id: 'panel', name: 'panel', category: 'custom', displayType: type } as CustomWidgetDefinition);
+  const clean = sanitizeWidgetDefinition({ ...(r as object), id: 'panel', name: 'panel', category: 'custom', displayType: type } as CustomWidgetDefinition, opts);
   const out: WidgetPanelDefinition = { displayType: clean.displayType as PanelDisplayType };
   const title = text(r.title, 40);
   if (title) out.title = title;
@@ -192,8 +192,17 @@ function capCompositeBindings(panels: WidgetPanelDefinition[]): WidgetPanelDefin
   return panels;
 }
 
+export interface SanitizeOptions {
+  /**
+   * Turn confirmation on for every command and parameter write (default). Imports from files or links always
+   * do; widgets loaded back from this browser's own storage keep the confirmation setting their owner chose.
+   */
+  forceConfirmation?: boolean;
+}
+
 /** Normalise an untrusted widget definition in place-safe fashion (returns a cleaned copy). */
-export function sanitizeWidgetDefinition(raw: CustomWidgetDefinition): CustomWidgetDefinition {
+export function sanitizeWidgetDefinition(raw: CustomWidgetDefinition, opts: SanitizeOptions = {}): CustomWidgetDefinition {
+  const force = opts.forceConfirmation !== false;
   const w: CustomWidgetDefinition = { ...raw };
   if (!VALID_DISPLAY_TYPES.has(w.displayType)) w.displayType = 'stat-card';
   if (w.displayType === 'multi-bar' && (!w.multiBarConfig || !VALID_MULTI_BAR_GROUPS.has(w.multiBarConfig.group))) {
@@ -218,17 +227,23 @@ export function sanitizeWidgetDefinition(raw: CustomWidgetDefinition): CustomWid
   }
   if (w.displayType === 'composite') {
     const panels = Array.isArray(raw.panels) ? raw.panels.slice(0, MAX_PANELS) : [];
-    w.panels = capCompositeBindings(panels.map(sanitizePanel).filter((p): p is WidgetPanelDefinition => Boolean(p)));
+    w.panels = capCompositeBindings(panels.map((p) => sanitizePanel(p, opts)).filter((p): p is WidgetPanelDefinition => Boolean(p)));
   } else if ('panels' in w) {
     delete w.panels;
   }
   if (raw.action !== undefined) w.action = sanitizeAction(raw.action);
-  if (w.action) w.action = { ...w.action, confirmation: true };
-  if (w.paramControl) w.paramControl = { ...w.paramControl, confirmation: true };
+  if (w.action && force) w.action = { ...w.action, confirmation: true };
+  if (w.paramControl) {
+    w.paramControl =
+      typeof w.paramControl === 'object' && typeof w.paramControl.paramId === 'string'
+        ? { ...w.paramControl, confirmation: force ? true : w.paramControl.confirmation !== false }
+        : undefined;
+  }
   if (raw.paramSet !== undefined) {
+    const rawSet = raw.paramSet as { params?: unknown; confirmation?: unknown } | null;
     w.paramSet =
-      raw.paramSet && typeof raw.paramSet === 'object'
-        ? { params: sanitizeParamSetEntries((raw.paramSet as { params?: unknown }).params), confirmation: true }
+      rawSet && typeof rawSet === 'object'
+        ? { params: sanitizeParamSetEntries(rawSet.params), confirmation: force ? true : rawSet.confirmation !== false }
         : undefined;
   }
   return w;

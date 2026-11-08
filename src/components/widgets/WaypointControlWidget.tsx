@@ -50,13 +50,16 @@ export const WaypointControlWidget: React.FC = () => {
     voiceEnabled,
   } = useAudioAlertsStore();
 
-  const [selectedWpInput, setSelectedWpInput] = useState<number>(() => currentWaypointSeq || 1);
+  // The dropdown only picks a waypoint (null = follow the active one); Go sends the jump, after a confirm.
+  const [pickedWp, setPickedWp] = useState<number | null>(null);
+  const selectedWpInput = pickedWp ?? (currentWaypointSeq || 1);
+  const goConfirm = useConfirmStep();
   const isAutoMode = heartbeat.modeName === 'AUTO';
   const restartConfirm = useConfirmStep();
   const etaFormatted = formatEta(navController.wpDist, vfr.groundspeed);
 
   const handleNavigateTo = async (targetSeq: number) => {
-    setSelectedWpInput(targetSeq);
+    setPickedWp(null);
     await navigateTo(targetSeq);
   };
 
@@ -213,7 +216,7 @@ export const WaypointControlWidget: React.FC = () => {
             {/* Direct Jump to Chosen Waypoint Dropdown */}
             <div className="space-y-1.5 pt-1">
               <label className="text-[11px] font-medium text-zinc-400 flex items-center justify-between">
-                <span>Navigate Immediately to Waypoint:</span>
+                <span>Jump to Waypoint:</span>
                 {activeWp && (
                   <span className="text-[10px] font-mono text-zinc-500">
                     Active: {getMavCmdName(activeWp.command).replace(/^(NAV_|MAV_CMD_NAV_)/, '')}
@@ -223,12 +226,13 @@ export const WaypointControlWidget: React.FC = () => {
 
               <div className="flex items-center gap-1.5">
                 <select
-                  value={currentWaypointSeq || selectedWpInput}
+                  value={selectedWpInput}
                   onChange={(e) => {
+                    goConfirm.cancel();
                     const val = Number(e.target.value);
-                    setSelectedWpInput(val);
-                    void handleNavigateTo(val);
+                    setPickedWp(val === currentWaypointSeq ? null : val);
                   }}
+                  aria-label="Waypoint to jump to" 
                   disabled={!connected || userWpCount === 0 || isPending}
                   className="bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md px-2.5 py-1.5 text-xs font-mono flex-1 focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:opacity-50 cursor-pointer"
                 >
@@ -245,17 +249,40 @@ export const WaypointControlWidget: React.FC = () => {
                   })}
                 </select>
 
-                <Button
-                  variant="default"
-                  size="sm"
-                  disabled={!connected || isPending}
-                  onClick={() => handleNavigateTo(selectedWpInput)}
-                  className="h-8 px-3 text-xs font-bold gap-1 bg-sky-600 hover:bg-sky-500 text-white shrink-0"
-                  title="Command autopilot to fly directly to chosen waypoint"
-                >
-                  <Navigation className="h-3 w-3" />
-                  <span>Go</span>
-                </Button>
+                {goConfirm.armed ? (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    disabled={!connected || isPending}
+                    onClick={() => {
+                      goConfirm.cancel();
+                      void handleNavigateTo(selectedWpInput);
+                    }}
+                    onBlur={goConfirm.cancel}
+                    className="h-8 px-3 text-xs font-bold gap-1 bg-amber-600 hover:bg-amber-500 text-white shrink-0 animate-pulse"
+                    title={`Confirm: fly directly to WP ${selectedWpInput}`}
+                    autoFocus
+                  >
+                    <Navigation className="h-3 w-3" />
+                    <span>Go to WP {selectedWpInput}?</span>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    disabled={!connected || isPending || selectedWpInput === currentWaypointSeq}
+                    onClick={goConfirm.arm}
+                    className="h-8 px-3 text-xs font-bold gap-1 bg-sky-600 hover:bg-sky-500 text-white shrink-0 disabled:opacity-40"
+                    title={
+                      selectedWpInput === currentWaypointSeq
+                        ? 'Already the active waypoint'
+                        : `Fly directly to WP ${selectedWpInput}; asks to confirm`
+                    }
+                  >
+                    <Navigation className="h-3 w-3" />
+                    <span>Go</span>
+                  </Button>
+                )}
               </div>
             </div>
 
