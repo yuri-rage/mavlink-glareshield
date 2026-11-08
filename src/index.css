@@ -232,6 +232,64 @@ html.daylight-theme .text-purple-400 {
   color: #7e22ce !important;
 }
 
+/* Hover states. The surface rules above match a class that starts with the name, so hover: variants kept their
+   dark colours: a hovered row or button turned dark grey (or dark navy, amber, …) on the light theme. */
+html.daylight-theme :is([class*='hover:bg-zinc-9'], [class*='hover:bg-zinc-8']):hover {
+  background-color: #e2e8f0 !important;
+}
+html.daylight-theme [class*='hover:bg-sky-9']:hover {
+  background-color: #e0f2fe !important;
+}
+html.daylight-theme [class*='hover:bg-cyan-9']:hover {
+  background-color: #cffafe !important;
+}
+html.daylight-theme [class*='hover:bg-emerald-9']:hover {
+  background-color: #d1fae5 !important;
+}
+html.daylight-theme [class*='hover:bg-amber-9']:hover {
+  background-color: #fef3c7 !important;
+}
+html.daylight-theme :is([class*='hover:bg-red-9'], [class*='hover:bg-rose-9'], [class*='hover:bg-red-8']):hover {
+  background-color: #fee2e2 !important;
+}
+
+/* Row dividers (logs, parameter lists) drew black lines. */
+html.daylight-theme [class*='divide-zinc-'] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e2e8f0 !important;
+}
+
+/* Inline edit inputs (parameter values) were black with dark blue text. */
+html.daylight-theme :is([class*=' bg-black\/9'], [class^='bg-black\/9']) {
+  background-color: #ffffff !important;
+}
+
+/* Selected filter pills and the pre-arm button use -900 shades, and the active Loiter mode cyan. */
+html.daylight-theme :is([class*=' bg-amber-900'], [class^='bg-amber-900']) {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+}
+html.daylight-theme :is([class*=' bg-red-900'], [class^='bg-red-900']) {
+  background-color: #fee2e2 !important;
+  color: #991b1b !important;
+}
+html.daylight-theme :is([class*=' bg-cyan-950'], [class^='bg-cyan-950']) {
+  background-color: #cffafe !important;
+  color: #155e75 !important;
+}
+
+/* The phone tab bar's overflow fade was black. */
+html.daylight-theme .bg-gradient-to-l[class*='from-zinc-950'] {
+  background-image: linear-gradient(to left, #f8fafc, rgb(248 250 252 / 0.8), transparent) !important;
+}
+
+/* Map popups. */
+html.daylight-theme .leaflet-popup-content-wrapper,
+html.daylight-theme .leaflet-popup-tip {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
 /* Hide scrollbars cleanly where horizontal scroll hints are used */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
