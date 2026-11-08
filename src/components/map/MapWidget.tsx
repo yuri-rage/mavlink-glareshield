@@ -113,6 +113,25 @@ function homePopupHtml(home: {
   }`;
 }
 
+// The map's view, kept across unmounts (switching dashboard tabs) so it comes back as it was left. Zoom is also
+// kept across reloads.
+const ZOOM_KEY = 'mavlink_glareshield_map_zoom';
+interface SavedMapView {
+  zoom: number;
+  center: [number, number];
+  follow: boolean;
+  layer: MapLayerType;
+}
+let savedMapView: SavedMapView | null = null;
+function initialZoom(): number {
+  if (savedMapView) return savedMapView.zoom;
+  try {
+    const z = Number(localStorage.getItem(ZOOM_KEY));
+    if (Number.isFinite(z) && z >= 1 && z <= 22) return z;
+  } catch {}
+  return 17;
+}
+
 export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const heartbeat = useTelemetryStore((s) => s.heartbeat);
   const connected = heartbeat.lastHeartbeatTime > 0 && heartbeat.modeName !== 'DISCONNECTED';
@@ -177,12 +196,14 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       }),
     []
   );
-  const followVehicleRef = useRef<boolean>(true);
+  const followVehicleRef = useRef<boolean>(savedMapView?.follow ?? true);
   const isInteractingRef = useRef<boolean>(false);
   const isFlyingToRef = useRef<boolean>(false);
 
-  const [followVehicle, setFollowVehicle] = useState(true);
-  const [mapLayer, setMapLayer] = useState<MapLayerType>('satellite');
+  const [followVehicle, setFollowVehicle] = useState(() => savedMapView?.follow ?? true);
+  const [mapLayer, setMapLayer] = useState<MapLayerType>(() => savedMapView?.layer ?? 'satellite');
+  const mapLayerRef = useRef(mapLayer);
+  mapLayerRef.current = mapLayer;
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [pendingUpload, setPendingUpload] = useState<{
@@ -567,21 +588,36 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    const initialLat = position.lat !== 0 ? position.lat : 39.8283457;
-    const initialLon = position.lon !== 0 ? position.lon : -98.5794797;
+    const hasFix = position.lat !== 0 || position.lon !== 0;
+    // Following: centre on the vehicle. Otherwise back where the user left the map.
+    const [initialLat, initialLon] =
+      savedMapView && !(savedMapView.follow && hasFix)
+        ? savedMapView.center
+        : [hasFix ? position.lat : 39.8283457, hasFix ? position.lon : -98.5794797];
+    const following = savedMapView?.follow ?? true;
 
     mapContainerRef.current.classList.add('gs-map');
     const map = L.map(mapContainerRef.current, {
       center: [initialLat, initialLon],
-      zoom: 17,
+      zoom: initialZoom(),
       maxZoom: 22,
       zoomControl: false,
-      scrollWheelZoom: 'center',
-      touchZoom: 'center',
+      scrollWheelZoom: following ? 'center' : true,
+      touchZoom: following ? 'center' : true,
     });
 
-    // Default to Google Satellite imagery
-    const tileLayer = createTileLayer('satellite');
+    const saveView = () => {
+      const c = map.getCenter();
+      savedMapView = { zoom: map.getZoom(), center: [c.lat, c.lng], follow: followVehicleRef.current, layer: mapLayerRef.current };
+    };
+    map.on('moveend', saveView);
+    map.on('zoomend', () => {
+      try {
+        localStorage.setItem(ZOOM_KEY, String(map.getZoom()));
+      } catch {}
+    });
+
+    const tileLayer = createTileLayer(mapLayerRef.current);
     tileLayer.addTo(map);
     activeTileLayerRef.current = tileLayer;
 
@@ -675,6 +711,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     mapInstanceRef.current = map;
 
     return () => {
+      saveView();
       map.remove();
       mapInstanceRef.current = null;
     };
