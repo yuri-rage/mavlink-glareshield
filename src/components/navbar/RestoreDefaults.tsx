@@ -7,6 +7,7 @@ import { Button } from '../ui/button';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { restoreDefaultsAndReload } from '../../lib/appStorage';
+import { downloadFile } from '../../lib/download';
 
 const RESETS = [
   'Dashboard tabs, layout and custom widgets',
@@ -31,12 +32,7 @@ export const RestoreDefaults: React.FC = () => {
   }, [confirming]);
 
   const exportDashboard = () => {
-    const url = URL.createObjectURL(new Blob([exportProfileJson()], { type: 'application/json' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `mavlink-glareshield-profile-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadFile(`mavlink-glareshield-profile-${new Date().toISOString().slice(0, 10)}.json`, exportProfileJson(), 'application/json');
   };
 
   if (!confirming) {

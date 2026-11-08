@@ -225,6 +225,12 @@ dcase("RPM",
       vehicle.rpm_encode(5400.0, 5420.0),
       {"rpm1": 5400.0, "rpm2": 5420.0})
 
+# --- SYSTEM_TIME, ATTITUDE_QUATERNION -------------------------------------------
+dcase("SYSTEM_TIME", vehicle.system_time_encode(1762500000123456, 987654),
+      {"time_unix_usec": 1762500000123456, "time_boot_ms": 987654})
+dcase("ATTITUDE_QUATERNION", vehicle.attitude_quaternion_encode(4321, 0.5, 0.5, -0.5, 0.5, 0.25, -0.125, 1.5),
+      {"time_boot_ms": 4321, "q1": 0.5, "q3": -0.5, "rollspeed": 0.25, "pitchspeed": -0.125, "yawspeed": 1.5})
+
 # --- Landed / VTOL state, ESC blocks, gimbal, camera, engine, generator ---------------
 dcase("EXTENDED_SYS_STATE in forward flight, in air", vehicle.extended_sys_state_encode(4, 2),
       {"vtol_state": 4, "landed_state": 2})
@@ -302,7 +308,6 @@ ecase("PARAM_SET 16-char id", "createParamSet", [1, 1, "SERIAL1_PROTOCOL", 2, 2]
 ecase("MISSION_REQUEST_LIST rally", "createMissionRequestList", [1, 1, 2],
       vehicle.mission_request_list_encode(1, 1, 2))
 ecase("MISSION_REQUEST_INT", "createMissionRequestInt", [1, 1, 7, 1], vehicle.mission_request_int_encode(1, 1, 7, 1))
-ecase("MISSION_REQUEST (float)", "createMissionRequest", [1, 1, 7, 0], vehicle.mission_request_encode(1, 1, 7, 0))
 ecase("MISSION_ACK", "createMissionAck", [1, 1, 0, 1], vehicle.mission_ack_encode(1, 1, 0, 1))
 
 # --- FTP: app packFtpMessage encode + parseFtpPayload decode ---------------

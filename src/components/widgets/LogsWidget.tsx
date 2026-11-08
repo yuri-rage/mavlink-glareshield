@@ -7,6 +7,7 @@ import { downloadName, logManager, type LogEntry, type LogList, type LogTransfer
 import { cn } from '../../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useVehicleTarget } from './custom/panelKit';
+import { downloadFile } from '../../lib/download';
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -31,16 +32,7 @@ function formatStart(entry: LogEntry): string {
   });
 }
 
-function saveBytes(data: Uint8Array, name: string) {
-  const url = URL.createObjectURL(new Blob([data as BlobPart], { type: 'application/octet-stream' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
+const saveBytes = (data: Uint8Array, name: string) => downloadFile(name, data);
 
 interface Transfer {
   id: number;

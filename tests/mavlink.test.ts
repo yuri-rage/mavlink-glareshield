@@ -1108,7 +1108,8 @@ if (Math.abs(decodedHighres.nz - 2.0) > 0.01) {
 console.log('IMU and Nz load factor decoding verified successfully!');
 
 // 19. Test Extended Telemetry Store Slices, Custom Widget Value Extraction & Dashboard Reordering
-import { extractBoundValueFromState, scalePwmToUnitRange } from '../src/lib/widgetValues.ts';
+import { readBinding, scalePwmToUnitRange } from '../src/lib/widgetValues.ts';
+const extractBoundValueFromState = (b: any, st: any) => readBinding(b, st, 'ms', 5).text;
 import { useDashboardStore } from '../src/store/dashboardStore.ts';
 
 // Test WIND (msg 168) -> store & custom widget binding

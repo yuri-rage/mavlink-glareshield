@@ -19,6 +19,7 @@
 // connected firmware actually has, so an older version doesn't offer a controller it can't report.
 
 import type { VehicleCategory } from './messages';
+import { hasBit, withBit } from './paramBits';
 
 /** MAVLink PID_TUNING_AXIS values, named as in the enum, for cache names that stay the same on every vehicle. */
 export const PID_AXIS_ENUM_NAMES: Record<number, string> = {
@@ -129,18 +130,14 @@ export function pidPickerAxes(controllers: PidController[], seenAxes: Iterable<n
   return out;
 }
 
-/** Whether `bit` is set in a GCS_PID_MASK value. */
+/** Whether `bit` is set in a GCS_PID_MASK value (false for an axis with no bit, -1). */
 export function maskHasBit(mask: number, bit: number): boolean {
-  return bit >= 0 && Math.floor(Math.max(0, mask) / 2 ** bit) % 2 === 1;
+  return bit >= 0 && hasBit(mask, bit);
 }
 
-/** GCS_PID_MASK with `bit` set or cleared. */
+/** GCS_PID_MASK with `bit` set or cleared (unchanged for an axis with no bit, -1). */
 export function withMaskBit(mask: number, bit: number, on: boolean): number {
-  const m = Math.max(0, Math.trunc(mask));
-  if (bit < 0) return m;
-  const has = maskHasBit(m, bit);
-  if (has === on) return m;
-  return on ? m + 2 ** bit : m - 2 ** bit;
+  return bit < 0 ? Math.max(0, Math.trunc(mask)) : withBit(mask, bit, on);
 }
 
 /** The PID_TUNING fields, in chart order. */

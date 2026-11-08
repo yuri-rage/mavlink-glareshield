@@ -15,13 +15,9 @@ const STORAGE_KEY_LINK_KIND = 'mavlink_glareshield_link_kind';
 const STORAGE_KEY_SERIAL_BAUD = 'mavlink_glareshield_serial_baud';
 
 export type LinkKind = LinkConfig['kind'];
-export function getDefaultWsUrl(): string {
-  if (typeof window !== 'undefined' && window.location) {
-    const host = window.location.hostname || 'localhost';
-    return `ws://${host}:56781`;
-  }
-  return 'ws://localhost:56781';
-}
+// The bridge's default address lives with the connection; re-exported for existing imports.
+import { getDefaultWsUrl } from '../mavlink/connection';
+export { getDefaultWsUrl };
 
 function getStoredUrl(): string {
   try {

@@ -4,7 +4,7 @@
 // parameters), then from the generic message cache, which covers every decoded field of every message.
 
 import type { CustomWidgetDefinition, WidgetDataBinding, WidgetUnitKind } from '../types/widget';
-import { getCachedField, getLastSeen } from './messageCache';
+import { baseMessageName, getCachedField, getLastSeen } from './messageCache';
 
 export const DEFAULT_STALE_AFTER_SEC = 3;
 
@@ -196,30 +196,6 @@ function resolveFieldValue(
   return getCachedField(msg, fieldName);
 }
 
-/**
- * Legacy text form of a bound value (multiplier and decimals applied; '--' when unknown), kept for the existing
- * text-based callers and tests. Raw RC channel values are shown unscaled, as before.
- */
-export function extractBoundValueFromState(
-  binding: CustomWidgetDefinition['binding'],
-  state: any
-): number | string | null {
-  if (!binding) return null;
-  const { multiplier = 1, decimals = 1 } = binding;
-  const raw = resolveRawValue(binding, state);
-  if (raw === undefined || raw === null) return '--';
-  const msg = binding.messageName.toUpperCase();
-  const isRawRc =
-    (msg === 'RC_CHANNELS' || msg === 'RC_CHANNELS_RAW') &&
-    (binding.fieldName === 'rssi' || /^chan\d+(?:_raw)?$/i.test(binding.fieldName));
-  if (isRawRc) return String(raw);
-  if (typeof raw === 'number') {
-    const transformed = raw * multiplier;
-    return decimals !== undefined ? transformed.toFixed(decimals) : transformed;
-  }
-  return raw;
-}
-
 // -----------------------------------------------------------------------------------------------------------------
 // Numeric pipeline
 // -----------------------------------------------------------------------------------------------------------------
@@ -271,6 +247,18 @@ export function toDisplayUnits(base: number, binding: WidgetDataBinding, system:
   return conv ? base * conv.factor : base;
 }
 
+/**
+ * Decimals for a binding that doesn't set any: none for raw PWM / RC / RSSI values (whole microseconds or counts,
+ * where 1850.0 only adds noise), one otherwise.
+ */
+function defaultDecimals(binding: WidgetDataBinding): number {
+  const msg = baseMessageName(binding.messageName);
+  const rawRc =
+    (msg === 'RC_CHANNELS' || msg === 'RC_CHANNELS_RAW') && (binding.fieldName === 'rssi' || /^chan\d+(?:_raw)?$/i.test(binding.fieldName));
+  const rawServo = msg === 'SERVO_OUTPUT_RAW' && /^servo\d+_raw$/i.test(binding.fieldName);
+  return rawRc || rawServo ? 0 : 1;
+}
+
 function formatNumber(value: number, decimals: number | undefined): string {
   if (!Number.isFinite(value)) return '--';
   return value.toFixed(Math.max(0, Math.min(6, decimals ?? 1)));
@@ -299,12 +287,12 @@ export function readBinding(
     if (!Number.isFinite(parsed)) return { base: null, value: null, text: raw, unit, stale, ageMs };
     const base = applyBindingTransform(parsed, binding);
     const v = toDisplayUnits(base, binding, system);
-    return { base, value: v, text: formatNumber(v, binding.decimals), unit, stale, ageMs };
+    return { base, value: v, text: formatNumber(v, binding.decimals ?? defaultDecimals(binding)), unit, stale, ageMs };
   }
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return { base: null, value: null, text: '--', unit, stale, ageMs };
   const base = applyBindingTransform(raw, binding);
   const value = toDisplayUnits(base, binding, system);
-  return { base, value, text: formatNumber(value, binding.decimals), unit, stale, ageMs };
+  return { base, value, text: formatNumber(value, binding.decimals ?? defaultDecimals(binding)), unit, stale, ageMs };
 }
 
 export type AlertState = 'normal' | 'warn' | 'crit';

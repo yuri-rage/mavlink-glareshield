@@ -5,6 +5,7 @@ import { DashboardProfile } from '../../types/widget';
 import { Modal } from '../ui/modal';
 import { Button } from '../ui/button';
 import { Download, Upload, RotateCcw, Copy, Check, AlertTriangle, Layers } from 'lucide-react';
+import { downloadFile } from '../../lib/download';
 
 interface ProfileManagerModalProps {
   isOpen: boolean;
@@ -19,14 +20,7 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
   const [pendingProfile, setPendingProfile] = useState<DashboardProfile | null>(null);
 
   const handleDownload = () => {
-    const jsonStr = exportProfileJson();
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `mavlink-glareshield-profile-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile(`mavlink-glareshield-profile-${new Date().toISOString().slice(0, 10)}.json`, exportProfileJson(), 'application/json');
   };
 
   const handleCopy = () => {

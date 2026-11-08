@@ -9,49 +9,47 @@ This directory contains test suites for Glareshield's MAVLink protocol engine, v
 5. **`regressions.test.ts`**: QGC `.plan` files as QGroundControl writes them for ArduPilot (takeoff and land-start without coordinates, fixed-wing and VTOL landing patterns), the 720-byte RTCM fragmentation edge, and version polling against a vehicle that never answers.
 6. **`check_bridge_security.py`**: Starts the mock bridge and checks the WebSocket Origin allowlist (including `Origin: null`) and that the bridge's NTRIP client can't be used as a relay to arbitrary local ports or have request lines injected.
 7. **`check_bridge_udp_target.py`**: Runs the bridge in UDP mode with a simulated vehicle and a simulated second GCS (e.g. Mission Planner) on the same port, and checks that Glareshield's commands only ever go to the vehicle.
+8. **`follow_sim.py`**: Simulates the map's follow-vehicle loop (marker interpolation between GPS fixes, whole-pixel camera steps) and checks that the marker moves at true speed, stays centred, and doesn't jump backwards or lurch when the vehicle stops and moves again.
 
 ## Files
 
 | File | Purpose |
 | :--- | :--- |
-| [`mavlink.test.ts`](file:///home/yuri/Projects/mavlink-glareshield/tests/mavlink.test.ts) | Core protocol and telemetry unit tests (run by `npm test`) |
-| [`golden.test.ts`](file:///home/yuri/Projects/mavlink-glareshield/tests/golden.test.ts) | Verifies parser, decoders, encoder, and MAVFTP against `vectors.json` (run by `npm test`) |
-| [`missionFiles.test.ts`](file:///home/yuri/Projects/mavlink-glareshield/tests/missionFiles.test.ts) | Saving the mission, fence and rally points to `.waypoints` and `.plan` files and loading them back (run by `npm test`) |
-| [`vectors.json`](file:///home/yuri/Projects/mavlink-glareshield/tests/vectors.json) | Committed golden vectors generated from pymavlink 2.4.50 (`ardupilotmega` dialect) |
-| [`gen_vectors.py`](file:///home/yuri/Projects/mavlink-glareshield/tests/gen_vectors.py) | Python script that regenerates `vectors.json` using pymavlink |
-| [`check_mock_bridge.py`](file:///home/yuri/Projects/mavlink-glareshield/tests/check_mock_bridge.py) | Validates live mock telemetry from `bridge/bridge.py` using pymavlink |
-| `ftp_ardupilot.test.ts` | MAVFTP upload/read against an ArduPilot-faithful simulator (run by `npm run test:ftp-sim`) |
-| `regressions.test.ts` | QGC plan parsing, RTCM 720-byte edge, version-poll limits (run by `npm run test:regressions`) |
+| [`mavlink.test.ts`](mavlink.test.ts) | Core protocol and telemetry unit tests (run by `npm test`) |
+| [`golden.test.ts`](golden.test.ts) | Verifies parser, decoders, encoder, and MAVFTP against `vectors.json` (run by `npm test`) |
+| [`missionFiles.test.ts`](missionFiles.test.ts) | Saving the mission, fence and rally points to `.waypoints` and `.plan` files and loading them back (run by `npm test`) |
+| [`vectors.json`](vectors.json) | Committed golden vectors generated from pymavlink 2.4.50 (`ardupilotmega` dialect) |
+| [`gen_vectors.py`](gen_vectors.py) | Python script that regenerates `vectors.json` using pymavlink |
+| [`check_mock_bridge.py`](check_mock_bridge.py) | Validates live mock telemetry from `bridge/bridge.py` using pymavlink |
+| `ftp_ardupilot.test.ts` | MAVFTP upload/read against an ArduPilot-faithful simulator (run by `npm test`) |
+| `regressions.test.ts` | QGC plan parsing, RTCM 720-byte edge, version-poll limits, message-cache reset (run by `npm test`) |
 | `check_bridge_security.py` | Bridge Origin allowlist and NTRIP relay checks (run by `npm run test:bridge-security`) |
 | `check_bridge_udp_target.py` | UDP reply target stays on the vehicle when another GCS shares the port (run by `npm run test:bridge-udp`) |
-| [`bridge-mock-fix.patch`](file:///home/yuri/Projects/mavlink-glareshield/tests/bridge-mock-fix.patch) | Reference diff fixing mock telemetry struct layouts (applied to `bridge/bridge.py`) |
+| `follow_sim.py` | Map follow-loop smoothness checks (run by `npm run test:follow`) |
+| [`bridge-mock-fix.patch`](bridge-mock-fix.patch) | Reference diff fixing mock telemetry struct layouts (applied to `bridge/bridge.py`) |
 
 ## Running Tests
 
 ### Standard Test Suite (No Python required)
-Runs both unit tests and golden vector tests:
+Unit tests, golden vectors, the ArduPilot MAVFTP simulator and the QGC/RTCM regressions:
 ```bash
 npm test
-```
-
-### Mock Bridge Live Verification (Requires Python + pymavlink)
-Validates that `bridge/bridge.py --mock` sends packets matching pymavlink schemas:
-```bash
-python3 tests/check_mock_bridge.py
-# Or verify against an existing bridge instance:
-python3 tests/check_mock_bridge.py --url ws://127.0.0.1:56781
-```
-
-### Review Regression Checks
-These encode behaviour verified against ArduPilot and QGroundControl source. They are kept out of `npm test` until the corresponding fixes land; move them in once they pass.
-```bash
-npm run test:review          # all three
-npm run test:ftp-sim         # MAVFTP vs simulated ArduPilot
-npm run test:regressions     # .plan parsing, RTCM edge, version polling
-npm run test:bridge-security # needs: pip install websockets
+npm run test:ftp-sim         # just the MAVFTP simulator
+npm run test:regressions     # just the regressions
 ```
 
 Unlike the mock bridge (which echoes the request `seq`), the simulator in `ftp_ardupilot.test.ts` answers with `seq + 1` exactly as ArduPilot does, so it is the one to trust for sequence handling.
+
+### Python Checks (Requires Python; `pip install pymavlink websockets`)
+These start the bridge themselves:
+```bash
+npm run test:review          # all four below
+npm run test:mock            # mock bridge telemetry decoded by pymavlink
+npm run test:bridge-security # Origin allowlist, NTRIP relay
+npm run test:bridge-udp      # UDP reply target with a second GCS on the port
+npm run test:follow          # map follow loop (no packages needed)
+```
+To check a bridge that's already running: `python3 tests/check_mock_bridge.py --url ws://127.0.0.1:56781`.
 
 ### Regenerating Golden Vectors
 Only needed when adding new message decoders or updating to a newer pymavlink dialect:

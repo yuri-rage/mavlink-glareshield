@@ -28,6 +28,7 @@ import { cleanBinding } from '../../lib/widgetValidation';
 import { getObservedCatalog } from '../../lib/messageCache';
 import { CustomWidgetRenderer } from '../widgets/CustomWidgetRenderer';
 import { WINDOW_CHOICES } from '../widgets/custom/TimeSeriesChart';
+import { downloadFile } from '../../lib/download';
 
 interface CustomWidgetCreatorModalProps {
   isOpen: boolean;
@@ -617,13 +618,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
 
   const handleDownloadWidgetJson = () => {
     const def = buildDefinition();
-    const blob = new Blob([JSON.stringify(def, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${def.name.toLowerCase().replace(/\s+/g, '-')}.widget.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile(`${def.name.toLowerCase().replace(/\s+/g, '-')}.widget.json`, JSON.stringify(def, null, 2), 'application/json');
   };
 
   const addExtra = () => {

@@ -382,6 +382,56 @@ export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; item
  * Supports binary .dat files (mission.dat, fence.dat, rally.dat), QGC WPL text files (.waypoints, .fence, .rally),
  * and QGC .plan JSON files.
  */
+/** One item of an ArduPilot .dat file, as stored (x / y are the raw int32 values). */
+export interface DatItem {
+  seq: number;
+  command: number;
+  frame: number;
+  current: boolean;
+  param1: number;
+  param2: number;
+  param3: number;
+  param4: number;
+  rawX: number;
+  rawY: number;
+  z: number;
+}
+
+/**
+ * Reads ArduPilot's mission / fence / rally .dat format (MAVFTP @MISSION/*.dat, and files saved from it):
+ * a 10-byte header (magic 0x763d, data_type, options, start, num_items) then num_items packed items of 38 bytes
+ * (37 in some older files: the size is worked out from the file length). Null when the magic is wrong.
+ */
+export function readDat(data: Uint8Array): { dataType: number; items: DatItem[] } | null {
+  if (data.length < 10) return null;
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  if (view.getUint16(0, true) !== 0x763d) return null;
+  const dataType = view.getUint16(2, true);
+  const numItems = view.getUint16(8, true);
+  let itemSize = 38;
+  if (numItems > 0) {
+    const calcSize = Math.floor((data.length - 10) / numItems);
+    if (calcSize === 37 || calcSize === 38) itemSize = calcSize;
+  }
+  const items: DatItem[] = [];
+  for (let i = 0, offset = 10; i < numItems && offset + itemSize <= data.length; i++, offset += itemSize) {
+    items.push({
+      param1: view.getFloat32(offset + 0, true),
+      param2: view.getFloat32(offset + 4, true),
+      param3: view.getFloat32(offset + 8, true),
+      param4: view.getFloat32(offset + 12, true),
+      rawX: view.getInt32(offset + 16, true),
+      rawY: view.getInt32(offset + 20, true),
+      z: view.getFloat32(offset + 24, true),
+      seq: view.getUint16(offset + 28, true),
+      command: view.getUint16(offset + 30, true),
+      frame: view.getUint8(offset + 34),
+      current: view.getUint8(offset + 35) === 1,
+    });
+  }
+  return { dataType, items };
+}
+
 export function parseDroppedMissionFile(filename: string, buffer: Uint8Array): ParsedMissionFile | null {
   const lowerName = filename.toLowerCase();
 
@@ -391,7 +441,6 @@ export function parseDroppedMissionFile(filename: string, buffer: Uint8Array): P
     const magic = view.getUint16(0, true);
     if (magic === 0x763d) {
       const dataType = view.getUint16(2, true);
-      const numItems = view.getUint16(8, true);
 
       // Rely on the binary header dataType (0=mission, 1=fence, 2=rally)
       let detectedType: MissionFileType = 'mission';
@@ -418,47 +467,23 @@ export function parseDroppedMissionFile(filename: string, buffer: Uint8Array): P
       }
 
       // Unpack binary items so we have them available for legacy fallback and validation
-      const items: MissionItemIntData[] = [];
-      let itemSize = 38;
-      if (numItems > 0) {
-        const calcSize = Math.floor((buffer.length - 10) / numItems);
-        if (calcSize === 37 || calcSize === 38) {
-          itemSize = calcSize;
-        }
-      }
-
-      let offset = 10;
-      for (let i = 0; i < numItems && offset + itemSize <= buffer.length; i++) {
-        const p1 = view.getFloat32(offset + 0, true);
-        const p2 = view.getFloat32(offset + 4, true);
-        const p3 = view.getFloat32(offset + 8, true);
-        const p4 = view.getFloat32(offset + 12, true);
-        const command = view.getUint16(offset + 30, true);
-        const hasLoc = cmdHasLocation(command);
-        const x = hasLoc ? (view.getInt32(offset + 16, true) / 1e7) : view.getInt32(offset + 16, true);
-        const y = hasLoc ? (view.getInt32(offset + 20, true) / 1e7) : view.getInt32(offset + 20, true);
-        const z = view.getFloat32(offset + 24, true);
-        const seq = view.getUint16(offset + 28, true);
-        const frame = view.getUint8(offset + 34);
-        const current = view.getUint8(offset + 35) === 1;
-
-        items.push({
-          seq,
-          command,
-          x,
-          y,
-          z,
-          current,
-          frame,
-          param1: p1,
-          param2: p2,
-          param3: p3,
-          param4: p4,
+      const items: MissionItemIntData[] = (readDat(buffer)?.items ?? []).map((it) => {
+        const hasLoc = cmdHasLocation(it.command);
+        return {
+          seq: it.seq,
+          command: it.command,
+          x: hasLoc ? it.rawX / 1e7 : it.rawX,
+          y: hasLoc ? it.rawY / 1e7 : it.rawY,
+          z: it.z,
+          current: it.current,
+          frame: it.frame,
+          param1: it.param1,
+          param2: it.param2,
+          param3: it.param3,
+          param4: it.param4,
           mission_type: missionType,
-        });
-
-        offset += itemSize;
-      }
+        };
+      });
 
       return {
         type: detectedType,

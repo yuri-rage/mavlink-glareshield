@@ -1,3 +1,4 @@
+import { feedbackBadge, feedbackRing } from './commandFeedback';
 import React, { useState, useEffect, useRef } from 'react';
 import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
@@ -70,25 +71,8 @@ export const ArmingModesWidget: React.FC = () => {
   const sysId = heartbeat.systemId || 1;
   const compId = heartbeat.componentId || 1;
 
-  const getFeedbackBadge = (key: string) => {
-    if (!commandFeedback || commandFeedback.targetKey !== key) return null;
-    if (nowMs - commandFeedback.time > 6000 && commandFeedback.status !== 'pending') return null;
-    if (commandFeedback.status === 'pending') {
-      return <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400 shrink-0" />;
-    }
-    if (commandFeedback.status === 'accepted') {
-      return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />;
-    }
-    return <XCircle className="h-3.5 w-3.5 text-rose-400 shrink-0" />;
-  };
-
-  const getFeedbackRing = (key: string) => {
-    if (!commandFeedback || commandFeedback.targetKey !== key) return '';
-    if (nowMs - commandFeedback.time > 6000 && commandFeedback.status !== 'pending') return '';
-    if (commandFeedback.status === 'pending') return 'ring-2 ring-sky-400/70';
-    if (commandFeedback.status === 'accepted') return 'ring-2 ring-emerald-500/80';
-    return 'ring-2 ring-rose-500/90 bg-rose-950/30';
-  };
+  const getFeedbackBadge = (key: string) => feedbackBadge(commandFeedback, key, nowMs, 'h-3.5 w-3.5');
+  const getFeedbackRing = (key: string) => feedbackRing(commandFeedback, key, nowMs);
 
   const handleArm = (arm: boolean) => {
     const cmd = encoder.createArmDisarm(sysId, compId, arm);
