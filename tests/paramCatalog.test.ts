@@ -268,5 +268,133 @@ const cat = parsePdefJson(fixture);
   check('param list: anything else in the store (a download or a loaded file) is', paramManager.hasParamList(['GCS_PID_MASK', 'BATT_MONITOR']) === true);
 }
 
+// ------------------------------------------------------------------------------------------------
+// Value formatting: clean for display, exact for .param files
+// ------------------------------------------------------------------------------------------------
+{
+  const { formatParamValue, serializeParamFile, parseParamFile } = await import('../src/mavlink/paramMetadata.ts');
+  const f32 = Math.fround;
+  check('format: float32 noise is hidden', formatParamValue(f32(0.2)) === '0.2' && formatParamValue(f32(0.15)) === '0.15');
+  check('format: integers and blanks', formatParamValue(2000) === '2000' && formatParamValue(NaN) === '-');
+  const hard = [123456.78, 3.14159265, 0.123456789, 0.000123456789, 1013.2501, -98765.4321];
+  check(
+    'format: values needing 8-9 digits read back as the same float32',
+    hard.every((v) => f32(parseFloat(formatParamValue(f32(v)))) === f32(v)),
+    hard.map((v) => formatParamValue(f32(v))).join(' ')
+  );
+  let seed = 12345;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+  let bad = 0;
+  for (let i = 0; i < 20000; i++) {
+    const v = f32((rnd() - 0.5) * 10 ** Math.floor(rnd() * 12 - 6));
+    const s = formatParamValue(v);
+    if (f32(parseFloat(s)) !== v || s.replace(/[-.]|e.*$/g, '').replace(/^0+/, '').length > 9) bad++;
+  }
+  check('format: 20000 random float32 values round-trip in at most 9 digits', bad === 0, `${bad} bad`);
+  const params = { A_HARD: f32(123456.78), B_PI: f32(3.14159265), C_INT: 7 };
+  const back = parseParamFile(serializeParamFile(params));
+  check('param file: save then load gives back the identical float32 values', Object.entries(params).every(([k, v]) => f32(back[k]) === v), JSON.stringify(back));
+}
+
+// ------------------------------------------------------------------------------------------------
+// Background list read after a single read
+// ------------------------------------------------------------------------------------------------
+{
+  const { paramManager } = await import('../src/mavlink/paramManager.ts');
+  const { mavFtpClient } = await import('../src/mavlink/ftp.ts');
+  const { mavlinkConnection } = await import('../src/mavlink/connection.ts');
+  const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
+  const conn = mavlinkConnection as any;
+  conn.send = () => {};
+  const pm = paramManager as any;
+
+  // A param.pck with defaults: RTL_ALT 2000 (default 1500, explicit), WPNAV_SPEED 500 (at its default).
+  const pck = () => {
+    const buf = new Uint8Array(64);
+    const dv = new DataView(buf.buffer);
+    dv.setUint16(0, 0x671c, true);
+    dv.setUint16(2, 2, true);
+    dv.setUint16(4, 2, true);
+    let o = 6;
+    const put = (name: string, common: number, val: number, def?: number) => {
+      const suffix = name.slice(common);
+      buf[o++] = 4 | (def !== undefined ? 0x10 : 0);
+      buf[o++] = ((suffix.length - 1) << 4) | common;
+      new TextEncoder().encodeInto(suffix, buf.subarray(o));
+      o += suffix.length;
+      dv.setFloat32(o, val, true);
+      o += 4;
+      if (def !== undefined) {
+        dv.setFloat32(o, def, true);
+        o += 4;
+      }
+    };
+    put('RTL_ALT', 0, 2000, 1500);
+    put('WPNAV_SPEED', 0, 500);
+    return buf.subarray(0, o);
+  };
+  const reads: string[] = [];
+  let reply: Uint8Array | null = null;
+  (mavFtpClient as any).readFile = async (_s: number, _c: number, path: string) => {
+    reads.push(path);
+    return reply;
+  };
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const goOnline = (type: number) => {
+    conn.status = 'connected';
+    useTelemetryStore.setState((s: any) => ({ heartbeat: { ...s.heartbeat, lastHeartbeatTime: Date.now(), type }, parameters: {} }));
+    pm.setStatus({ isFetching: false, method: 'idle', paramCount: 0 });
+  };
+  const goOffline = () => conn.setStatus('disconnected');
+
+  goOffline();
+  goOnline(2);
+  conn.status = 'connected';
+  useTelemetryStore.setState((s: any) => ({ heartbeat: { ...s.heartbeat, lastHeartbeatTime: 0 } }));
+  paramManager.requestParam(1, 1, 'RTL_ALT');
+  await wait(400);
+  check('background read: not tried before a vehicle is heard (only the bridge)', reads.length === 0);
+
+  goOnline(2);
+  reply = null; // no MAVFTP on this vehicle
+  paramManager.requestParam(1, 1, 'RTL_ALT');
+  await wait(400);
+  paramManager.requestParam(1, 1, 'RTL_ALT');
+  paramManager.requestParam(1, 1, 'GCS_PID_MASK');
+  await wait(400);
+  check('background read: tried once per vehicle, not again after it fails', reads.length === 1 && reads[0].includes('withdefaults=1'), JSON.stringify(reads));
+
+  goOffline();
+  goOnline(2);
+  reply = pck();
+  reads.length = 0;
+  paramManager.requestParam(1, 1, 'RTL_ALT');
+  await wait(400);
+  const store = useTelemetryStore.getState().parameters;
+  check('background read: a new connection tries again', reads.length === 1);
+  check('background read: fills the whole list, values and defaults', store.RTL_ALT?.value === 2000 && store.RTL_ALT?.defaultValue === 1500 && store.WPNAV_SPEED?.defaultValue === 500);
+  check('background read: counts as the downloaded list (patterns work)', paramManager.hasParamList(Object.keys(store)));
+  paramManager.requestParam(1, 1, 'FLTMODE1');
+  await wait(400);
+  check('background read: not repeated once the list is loaded', reads.length === 1);
+
+  // A Download clicked while the background read is still going waits for it instead of reading the file again.
+  goOffline();
+  goOnline(10);
+  reads.length = 0;
+  let release: (v: Uint8Array) => void = () => {};
+  (mavFtpClient as any).readFile = (_s: number, _c: number, path: string) => {
+    reads.push(path);
+    return new Promise<Uint8Array>((r) => (release = r));
+  };
+  paramManager.requestParam(1, 1, 'RTL_ALT');
+  await wait(350);
+  const download = paramManager.fetchParameters(1, 1);
+  release(pck());
+  await download;
+  check('Download during the background read reuses it (one file read)', reads.length === 1 && paramManager.hasParamList(Object.keys(useTelemetryStore.getState().parameters)), JSON.stringify(reads));
+  goOffline();
+}
+
 console.log(failures.length ? `\n${failures.length} FAILED` : '\nAll parameter catalogue checks passed');
 process.exit(failures.length ? 1 : 0);

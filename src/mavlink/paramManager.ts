@@ -12,6 +12,9 @@ export interface ParamManagerStatus {
   message?: string;
 }
 
+/** One parameter as unpacked from param.pck. */
+type ParamEntry = { value: number; type: number; index: number; defaultValue?: number };
+
 export class ParamManager {
   private status: ParamManagerStatus = {
     isFetching: false,
@@ -30,13 +33,26 @@ export class ParamManager {
   private singleReads = new Set<string>();
   /** Firmware default values learned from @PARAM/param.pck?withdefaults=1. */
   private defaults = new Map<string, number>();
-  private defaultsLoaded = false;
-  private defaultsLoading = false;
   private defaultsTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The background list read in progress (see scheduleBackgroundLoad), so a Download can wait for it. */
+  private backgroundLoad: Promise<boolean> | null = null;
+  /** Vehicles ("sys/comp/type") a background read has been tried for on this connection: once each. */
+  private backgroundTried = new Set<string>();
 
   constructor() {
     mavlinkConnection.onPacket((packet: MavlinkPacket) => {
       this.handlePacket(packet);
+    });
+    // A new connection may be a different vehicle: its defaults and single reads start over.
+    mavlinkConnection.onStatus((status) => {
+      if (status === 'connected') return;
+      this.backgroundTried.clear();
+      this.defaults.clear();
+      this.singleReads.clear();
+      if (this.defaultsTimer) {
+        clearTimeout(this.defaultsTimer);
+        this.defaultsTimer = null;
+      }
     });
   }
 
@@ -159,54 +175,64 @@ export class ParamManager {
     if (!id) return;
     this.singleReads.add(id);
     mavlinkConnection.send(mavlinkConnection.getEncoder().createParamRequestRead(sysId, compId, -1, id));
-    this.scheduleDefaultsFetch(sysId, compId);
+    this.scheduleBackgroundLoad(sysId, compId);
   }
 
   /**
-   * Quietly reads @PARAM/param.pck?withdefaults=1 once via MAVFTP when single parameters are requested so
-   * ParamPanel and ParamSetPanel have defaultValue even before the full Parameters widget is opened.
+   * Once per vehicle and connection, after a widget reads a single parameter, quietly reads the whole list
+   * via MAVFTP (@PARAM/param.pck?withdefaults=1). That one file is the full list with defaults, so it fills
+   * the store as a Download would: widgets get defaults, and Parameter set patterns work, without opening the
+   * Parameters widget. Not retried on that connection if it fails (no MAVFTP); a Download still falls back to
+   * the PARAM_VALUE stream.
    */
-  private scheduleDefaultsFetch(sysId: number, compId: number) {
-    if (this.defaultsLoaded || this.defaultsLoading || this.status.isFetching) return;
+  private scheduleBackgroundLoad(sysId: number, compId: number) {
+    if (this.backgroundLoad || this.status.isFetching || this.status.paramCount > 0) return;
     if (mavlinkConnection.getStatus() !== 'connected') return;
+    const hb = useTelemetryStore.getState().heartbeat;
+    // Only once a vehicle is heard: with just the bridge connected the read would fail and use up the try.
+    if (!(hb.lastHeartbeatTime > 0 && Date.now() - hb.lastHeartbeatTime < 5000)) return;
+    const key = `${sysId}/${compId}/${hb.type}`;
+    if (this.backgroundTried.has(key)) return;
     if (this.defaultsTimer) clearTimeout(this.defaultsTimer);
     this.defaultsTimer = setTimeout(() => {
       this.defaultsTimer = null;
-      void this.loadDefaultsOnly(sysId, compId);
+      if (this.backgroundLoad || this.status.isFetching || this.backgroundTried.has(key)) return;
+      this.backgroundTried.add(key);
+      this.backgroundLoad = this.loadListQuietly(sysId, compId).finally(() => {
+        this.backgroundLoad = null;
+      });
     }, 300);
   }
 
-  private async loadDefaultsOnly(sysId: number, compId: number) {
-    if (this.defaultsLoaded || this.defaultsLoading || this.status.isFetching) return;
-    if (mavlinkConnection.getStatus() !== 'connected') return;
-    this.defaultsLoading = true;
+  /** Stores an unpacked param.pck as the full list. */
+  private applyFullList(unpacked: Record<string, ParamEntry>, method: 'ftp', message: string) {
+    for (const [k, v] of Object.entries(unpacked)) {
+      if (v.defaultValue !== undefined) this.defaults.set(k, v.defaultValue);
+    }
+    const count = Object.keys(unpacked).length;
+    const hasDefaults = Object.values(unpacked).some((p) => p.defaultValue !== undefined);
+    useTelemetryStore.setState((state) => ({ parameters: { ...state.parameters, ...unpacked } }));
+    this.singleReads.clear();
+    this.setStatus({ isFetching: false, method, paramCount: count, hasDefaults, message });
+    return hasDefaults;
+  }
+
+  /** The background read: true when the list was loaded. */
+  private async loadListQuietly(sysId: number, compId: number): Promise<boolean> {
     try {
+      const startTime = Date.now();
       const pckData = await mavFtpClient.readFile(sysId, compId, '@PARAM/param.pck?withdefaults=1', 239, 1500);
-      if (this.status.isFetching || !pckData || pckData.length < 6) return;
+      // No isFetching check: a Download started meanwhile waits for this read and uses its result. A cancel
+      // aborts the MAVFTP read, which then returns null.
+      if (!pckData || pckData.length < 6) return false;
       const unpacked = this.unpackParamPck(pckData);
-      if (!unpacked) return;
-      for (const [k, v] of Object.entries(unpacked)) {
-        if (v.defaultValue !== undefined) this.defaults.set(k, v.defaultValue);
-      }
-      if (this.defaults.size > 0) {
-        this.defaultsLoaded = true;
-        useTelemetryStore.setState((state) => {
-          let changed = false;
-          const next = { ...state.parameters };
-          for (const [k, cur] of Object.entries(next)) {
-            const defVal = this.defaults.get(k);
-            if (defVal !== undefined && cur.defaultValue === undefined) {
-              next[k] = { ...cur, defaultValue: defVal };
-              changed = true;
-            }
-          }
-          return changed ? { parameters: next } : state;
-        });
-      }
+      if (!unpacked || Object.keys(unpacked).length === 0) return false;
+      const count = Object.keys(unpacked).length;
+      this.applyFullList(unpacked, 'ftp', `Loaded ${count} params via MAVFTP in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+      return true;
     } catch {
-      // MAVFTP unavailable: single reads still work via PARAM_VALUE without defaults.
-    } finally {
-      this.defaultsLoading = false;
+      // MAVFTP unavailable: single reads still work via PARAM_VALUE, without defaults.
+      return false;
     }
   }
 
@@ -251,8 +277,16 @@ export class ParamManager {
       clearTimeout(this.defaultsTimer);
       this.defaultsTimer = null;
     }
-
     this.isCancelled = false;
+    // A background read of the same file is already under way: wait for it instead of downloading it twice.
+    // Cancel aborts it (MAVFTP abort) like a normal download.
+    if (this.backgroundLoad) {
+      this.setStatus({ isFetching: true, method: 'ftp', message: 'Downloading params via MAVFTP…' });
+      const loaded = await this.backgroundLoad;
+      if (loaded || this.isCancelled) return; // loaded, or the user cancelled while waiting
+      this.setStatus({ isFetching: false, method: 'idle' });
+    }
+
     const hb = useTelemetryStore.getState().heartbeat;
     const sysId = targetSys ?? (hb.systemId > 0 ? hb.systemId : 1);
     const compId = targetComp ?? (hb.componentId > 0 ? hb.componentId : 1);
@@ -304,24 +338,11 @@ export class ParamManager {
           const duration = Date.now() - startTime;
           const hasDefaults = Object.values(unpacked).some((p) => p.defaultValue !== undefined);
           console.log(`[ParamManager] Successfully unpacked ${count} parameters via MAVFTP (hasDefaults=${hasDefaults}) in ${duration}ms!`);
-
-          for (const [k, v] of Object.entries(unpacked)) {
-            if (v.defaultValue !== undefined) this.defaults.set(k, v.defaultValue);
-          }
-          if (hasDefaults) this.defaultsLoaded = true;
-
-          useTelemetryStore.setState((state) => ({
-            parameters: { ...state.parameters, ...unpacked },
-          }));
-          this.singleReads.clear();
-
-          this.setStatus({
-            isFetching: false,
-            method: 'ftp',
-            paramCount: count,
-            hasDefaults,
-            message: `Loaded ${count} params${hasDefaults ? ' (with defaults)' : ''} via MAVFTP in ${(duration / 1000).toFixed(1)}s`,
-          });
+          this.applyFullList(
+            unpacked,
+            'ftp',
+            `Loaded ${count} params${hasDefaults ? ' (with defaults)' : ''} via MAVFTP in ${(duration / 1000).toFixed(1)}s`
+          );
           return;
         }
       }
@@ -366,7 +387,7 @@ export class ParamManager {
    *   name suffix (name_len bytes)
    *   value (based on ptype)
    */
-  public unpackParamPck(data: Uint8Array): Record<string, { value: number; type: number; index: number; defaultValue?: number }> | null {
+  public unpackParamPck(data: Uint8Array): Record<string, ParamEntry> | null {
     if (data.length < 6) return null;
 
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
