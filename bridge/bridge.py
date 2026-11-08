@@ -82,6 +82,7 @@ MSG_WIND = 168
 MSG_RANGEFINDER = 173
 MSG_EKF_STATUS_REPORT = 193
 MSG_PID_TUNING = 194
+MSG_EXTENDED_SYS_STATE = 245
 MSG_RPM = 226
 MSG_GPS_RTCM_DATA = 233
 MSG_VIBRATION = 241
@@ -125,6 +126,7 @@ CRC_EXTRA = {
     MSG_RANGEFINDER: 83,
     MSG_EKF_STATUS_REPORT: 71,
     MSG_PID_TUNING: 98,
+    MSG_EXTENDED_SYS_STATE: 130,
     MSG_RPM: 207,
     MSG_GPS_RTCM_DATA: 35,
     MSG_VIBRATION: 90,
@@ -1228,6 +1230,13 @@ class BridgeServer:
                     "<IBBBBB", self.flight_mode, 2, 3, base_mode, 4, 3
                 )  # Quad, ArduPilot, Active
                 await self.broadcast(self.encoder.pack(MSG_HEARTBEAT, hb))
+
+                # EXTENDED_SYS_STATE: not a VTOL; in the air while armed, on the ground otherwise
+                await self.broadcast(
+                    self.encoder.pack(
+                        MSG_EXTENDED_SYS_STATE, struct.pack("<BB", 0, 2 if self.armed else 1)
+                    )
+                )
 
                 # SYS_STATUS
                 load = 180  # 18.0%

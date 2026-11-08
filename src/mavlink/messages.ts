@@ -51,6 +51,14 @@ export const MAVLINK_MSG_ID = {
   HOME_POSITION: 242,
   STATUSTEXT: 253,
   ESC_TELEMETRY_1_TO_4: 11030,
+  MOUNT_STATUS: 158,
+  CAMERA_FEEDBACK: 180,
+  EFI_STATUS: 225,
+  EXTENDED_SYS_STATE: 245,
+  GIMBAL_DEVICE_ATTITUDE_STATUS: 285,
+  GENERATOR_STATUS: 373,
+  ESC_TELEMETRY_5_TO_8: 11031,
+  ESC_TELEMETRY_9_TO_12: 11032,
 } as const;
 
 // CRC Extra seed byte per message ID for ArduPilot / Common dialect
@@ -106,6 +114,14 @@ export const MAVLINK_MESSAGE_CRC_EXTRA: Record<number, number> = {
   [MAVLINK_MSG_ID.HOME_POSITION]: 104,
   [MAVLINK_MSG_ID.STATUSTEXT]: 83,
   [MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4]: 144,
+  [MAVLINK_MSG_ID.MOUNT_STATUS]: 134,
+  [MAVLINK_MSG_ID.CAMERA_FEEDBACK]: 52,
+  [MAVLINK_MSG_ID.EFI_STATUS]: 208,
+  [MAVLINK_MSG_ID.EXTENDED_SYS_STATE]: 130,
+  [MAVLINK_MSG_ID.GIMBAL_DEVICE_ATTITUDE_STATUS]: 137,
+  [MAVLINK_MSG_ID.GENERATOR_STATUS]: 117,
+  [MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8]: 133,
+  [MAVLINK_MSG_ID.ESC_TELEMETRY_9_TO_12]: 85,
 };
 
 // Common MAV_CMD IDs
@@ -642,3 +658,21 @@ export function extractFirmwareVersion(text: string): string | null {
   if (genericMatch) return genericMatch[1];
   return null;
 }
+
+/** MAV_LANDED_STATE (EXTENDED_SYS_STATE.landed_state). */
+export const LANDED_STATE_NAMES: Record<number, string> = {
+  0: 'Unknown',
+  1: 'On ground',
+  2: 'In air',
+  3: 'Taking off',
+  4: 'Landing',
+};
+
+/** MAV_VTOL_STATE (EXTENDED_SYS_STATE.vtol_state). 0 means the vehicle isn't a VTOL. */
+export const VTOL_STATE_NAMES: Record<number, string> = {
+  0: 'Not VTOL',
+  1: 'Transition to forward flight',
+  2: 'Transition to hover',
+  3: 'Hover (multicopter)',
+  4: 'Forward flight',
+};

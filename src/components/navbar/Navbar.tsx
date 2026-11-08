@@ -39,8 +39,15 @@ import {
   RefreshCw,
   ExternalLink,
 } from 'lucide-react';
-import { BandwidthProfile } from '../../mavlink/rateManager';
-import { getVehicleCategory, getVehicleCategoryLabel, getVehicleFlightModes } from '../../mavlink/messages';
+import { BandwidthProfile, messageRateManager } from '../../mavlink/rateManager';
+import {
+  getVehicleCategory,
+  getVehicleCategoryLabel,
+  getVehicleFlightModes,
+  LANDED_STATE_NAMES,
+  MAVLINK_MSG_ID,
+  VTOL_STATE_NAMES,
+} from '../../mavlink/messages';
 
 const STORAGE_KEY_THEME = 'mavlink_glareshield_theme';
 
@@ -70,6 +77,20 @@ export const Navbar: React.FC = () => {
     disconnect,
   } = useConnectionStore();
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
+  // Landed and VTOL state (EXTENDED_SYS_STATE), for the arm menu. Copter and Plane send it; Rover doesn't.
+  const extendedState = useTelemetryStore((state) => state.extendedState);
+  useEffect(() => {
+    messageRateManager.registerRequirement('navbar-extended-state', MAVLINK_MSG_ID.EXTENDED_SYS_STATE);
+    return () => messageRateManager.unregisterRequirement('navbar-extended-state');
+  }, []);
+  const stateFresh = extendedState.lastUpdate > 0 && Date.now() - extendedState.lastUpdate < 5000;
+  const landed = stateFresh ? extendedState.landedState : 0;
+  const airborne = landed === 2 || landed === 3 || landed === 4;
+  const flightStateText = stateFresh
+    ? [landed > 0 ? LANDED_STATE_NAMES[landed] : null, extendedState.vtolState > 0 ? VTOL_STATE_NAMES[extendedState.vtolState] : null]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
   const battery = useTelemetryStore((state) => state.battery);
   const gps = useTelemetryStore((state) => state.gps);
   const vfr = useTelemetryStore((state) => state.vfr);
@@ -489,7 +510,11 @@ export const Navbar: React.FC = () => {
                           {armConfirmAction === 'force_arm' &&
                             'WARNING: Force Arm bypasses all ArduPilot pre-arm safety checks. Exercise extreme caution!'}
                           {armConfirmAction === 'disarm' &&
-                            'Motors will power down immediately. WARNING: If vehicle is airborne, it will crash!'}
+                            (airborne
+                              ? `The vehicle reports it is ${landed === 2 ? 'in the air' : landed === 3 ? 'taking off' : 'landing'}. Disarming cuts motor power now: it will fall.`
+                              : landed === 1
+                                ? 'Motors will power down immediately. The vehicle reports it is on the ground.'
+                                : 'Motors will power down immediately. WARNING: If vehicle is airborne, it will crash!')}
                           {armConfirmAction === 'force_disarm' &&
                             'CRITICAL: Emergency force disarm will instantly kill motor power regardless of flight status!'}
                         </p>
@@ -544,6 +569,14 @@ export const Navbar: React.FC = () => {
                           <div className="text-xs font-semibold text-zinc-200">
                             Vehicle is {heartbeat.isArmed ? 'ARMED' : 'DISARMED'}
                           </div>
+                          {flightStateText && (
+                            <span
+                              className={`ml-auto text-[10px] font-medium ${airborne ? 'text-amber-300' : 'text-zinc-400'}`}
+                              title="Reported by the vehicle (EXTENDED_SYS_STATE)"
+                            >
+                              {flightStateText}
+                            </span>
+                          )}
                         </div>
 
                         <p className="text-[11px] text-zinc-400 mb-3 leading-snug">

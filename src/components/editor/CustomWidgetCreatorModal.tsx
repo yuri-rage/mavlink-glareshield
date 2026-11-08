@@ -150,6 +150,16 @@ const COMMON_FIELDS: Record<string, string[]> = {
   RANGEFINDER: ['distance', 'voltage'],
   DISTANCE_SENSOR: ['current_distance', 'min_distance', 'max_distance', 'signal_quality'],
   RPM: ['rpm1', 'rpm2'],
+  // Landed state (0 unknown, 1 on ground, 2 in air, 3 taking off, 4 landing) and VTOL state (3 hover, 4 forward).
+  EXTENDED_SYS_STATE: ['landed_state', 'vtol_state'],
+  ESC_TELEMETRY_5_TO_8: ['rpm5', 'rpm6', 'rpm7', 'rpm8', 'temp5', 'temp6', 'temp7', 'temp8', 'curr5', 'curr6', 'curr7', 'curr8', 'volt5', 'volt6', 'volt7', 'volt8'],
+  ESC_TELEMETRY_9_TO_12: ['rpm9', 'rpm10', 'rpm11', 'rpm12', 'temp9', 'temp10', 'temp11', 'temp12', 'curr9', 'curr10', 'curr11', 'curr12'],
+  // Gimbal attitude in degrees (from the quaternion); yaw is vehicle-relative unless flags has the earth-frame bit.
+  GIMBAL_DEVICE_ATTITUDE_STATUS: ['roll', 'pitch', 'yaw', 'angular_velocity_z', 'flags', 'failure_flags'],
+  MOUNT_STATUS: ['pitch', 'roll', 'yaw', 'mount_mode'],
+  CAMERA_FEEDBACK: ['img_idx', 'completed_captures', 'lat', 'lng', 'alt_rel', 'yaw'],
+  EFI_STATUS: ['rpm', 'health', 'engine_load', 'throttle_position', 'fuel_flow', 'fuel_consumed', 'cylinder_head_temperature', 'exhaust_gas_temperature', 'ignition_voltage', 'fuel_pressure'],
+  GENERATOR_STATUS: ['generator_speed', 'bus_voltage', 'battery_current', 'load_current', 'power_generated', 'runtime', 'time_until_maintenance', 'generator_temperature', 'rectifier_temperature'],
   ESC_TELEMETRY_1_TO_4: [
     'rpm1',
     'rpm2',

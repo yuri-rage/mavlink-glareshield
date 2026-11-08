@@ -578,6 +578,102 @@
    }
   },
   {
+   "name": "EXTENDED_SYS_STATE in forward flight, in air",
+   "msgid": 245,
+   "hex": "fd020000000101f5000004021fa0",
+   "expect": {
+    "vtol_state": 4,
+    "landed_state": 2
+   }
+  },
+  {
+   "name": "ESC_TELEMETRY_5_TO_8 motor numbers",
+   "msgid": 11031,
+   "hex": "fd2c0000000101172b004c064006340628067800dc004a01b801d2045901c80137027c15e0154416a8160700080009000a00292a2b2c3e5a",
+   "expect": {
+    "rpm5": 5500,
+    "rpm8": 5800,
+    "temp6": 42,
+    "curr5": 1.2,
+    "volt7": 15.88
+   }
+  },
+  {
+   "name": "ESC_TELEMETRY_9_TO_12 motor numbers",
+   "msgid": 11032,
+   "hex": "fd2c0000000101182b00dc05dc05dc05dc05000000000000640000000000000000006400c8002c01900100000000000000001e1f2021b134",
+   "expect": {
+    "rpm9": 100,
+    "rpm12": 400,
+    "temp12": 33,
+    "curr12": 1.0
+   }
+  },
+  {
+   "name": "MOUNT_STATUS centidegrees to degrees",
+   "msgid": 158,
+   "hex": "fd0f00000001019e00006ceeffffe204000050460000019a03fae9",
+   "expect": {
+    "pitch": -45,
+    "roll": 12.5,
+    "yaw": 180,
+    "mount_mode": 3
+   }
+  },
+  {
+   "name": "GIMBAL_DEVICE_ATTITUDE_STATUS quaternion to Euler",
+   "msgid": 285,
+   "hex": "fd3100000001011d010040e20100ea46773f00000000ee83843e00000000cdcccc3dcdcc4c3e9a99993e000000000010019a0000c03f0000803e0726dc",
+   "expect": {
+    "time_boot_ms": 123456,
+    "flags": 4096,
+    "pitch": 30,
+    "roll": 0,
+    "yaw": 0,
+    "delta_yaw": 1.5,
+    "gimbal_device_id": 7
+   }
+  },
+  {
+   "name": "CAMERA_FEEDBACK photo position",
+   "msgid": 180,
+   "hex": "fd2e0000000101b4000000401e18240a0600a725fd14cb077bc000509a44000075420000c03f000020c00000b44200000c422a000100012be931",
+   "expect": {
+    "img_idx": 42,
+    "lat": 35.2134567,
+    "lng": -106.5678901,
+    "alt_rel": 61.25,
+    "yaw": 90,
+    "completed_captures": 43
+   }
+  },
+  {
+   "name": "EFI_STATUS engine",
+   "msgid": 225,
+   "hex": "fd490000000101e10000000000000020cb450000f1420000104000005c4200002842000000009a99ca420000a0420000c84100003443000040410000c03f000016440000003f0000000001cdcc5c4100002040c01f",
+   "expect": {
+    "health": 1,
+    "rpm": 6500,
+    "fuel_consumed": 120.5,
+    "cylinder_head_temperature": 180,
+    "ignition_voltage": 13.8,
+    "fuel_pressure": 2.5
+   }
+  },
+  {
+   "name": "GENERATOR_STATUS",
+   "msgid": 373,
+   "hex": "fd2900000001017501000400000000000000000048410000f2410080bb4400004a4200000000201c0000c4ffffff70172d00553864",
+   "expect": {
+    "status": 4,
+    "generator_speed": 6000,
+    "bus_voltage": 50.5,
+    "runtime": 7200,
+    "time_until_maintenance": -60,
+    "generator_temperature": 85
+   }
+  },
+  {
    "name": "PID_TUNING roll with extensions",
    "msgid": 194,
    "hex": "fd210000000101c200000000003f0000c03e0000003e0000803e000080bd0000003d01000020400000403fc6cc",

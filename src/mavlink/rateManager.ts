@@ -12,6 +12,8 @@ const EVENT_ONLY_MESSAGES = new Set<number>([
   MAVLINK_MSG_ID.COMMAND_ACK,
   MAVLINK_MSG_ID.MISSION_ACK,
   MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL,
+  // One per photo taken.
+  MAVLINK_MSG_ID.CAMERA_FEEDBACK,
 ]);
 
 export interface RateLimits {
@@ -72,6 +74,13 @@ export class MessageRateManager {
     [MAVLINK_MSG_ID.VIBRATION]: 2,
     [MAVLINK_MSG_ID.RELAY_STATUS]: 1,
     [MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4]: 4,
+    [MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8]: 4,
+    [MAVLINK_MSG_ID.ESC_TELEMETRY_9_TO_12]: 4,
+    [MAVLINK_MSG_ID.EXTENDED_SYS_STATE]: 1,
+    [MAVLINK_MSG_ID.MOUNT_STATUS]: 2,
+    [MAVLINK_MSG_ID.GIMBAL_DEVICE_ATTITUDE_STATUS]: 2,
+    [MAVLINK_MSG_ID.EFI_STATUS]: 1,
+    [MAVLINK_MSG_ID.GENERATOR_STATUS]: 1,
     // Tuning: fast enough to see a step response (x0.5 / x2 for the low / high profiles). Only sent while
     // GCS_PID_MASK selects an axis, and then once per selected axis.
     [MAVLINK_MSG_ID.PID_TUNING]: 10,

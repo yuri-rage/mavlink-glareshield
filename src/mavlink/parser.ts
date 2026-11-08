@@ -726,38 +726,126 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         clipping_2: getUint32(28),
       };
 
-    case MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4: {
+    case MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4:
+    case MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8:
+    case MAVLINK_MSG_ID.ESC_TELEMETRY_9_TO_12: {
+      // Same layout for each block of four; the named fields carry the motor number (rpm5 is the first motor
+      // of ESC_TELEMETRY_5_TO_8), the arrays index within the block.
+      const first =
+        messageId === MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4 ? 1 : messageId === MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8 ? 5 : 9;
       const voltage = [getUint16(0) / 100, getUint16(2) / 100, getUint16(4) / 100, getUint16(6) / 100];
       const current = [getUint16(8) / 100, getUint16(10) / 100, getUint16(12) / 100, getUint16(14) / 100];
       const totalcurrent = [getUint16(16), getUint16(18), getUint16(20), getUint16(22)];
       const rpm = [getUint16(24), getUint16(26), getUint16(28), getUint16(30)];
       const count = [getUint16(32), getUint16(34), getUint16(36), getUint16(38)];
       const temperature = [getUint8(40), getUint8(41), getUint8(42), getUint8(43)];
+      const out: Record<string, unknown> = { voltage, current, totalcurrent, rpm, count, temperature };
+      for (let i = 0; i < 4; i++) {
+        out[`rpm${first + i}`] = rpm[i];
+        out[`temp${first + i}`] = temperature[i];
+        out[`curr${first + i}`] = current[i];
+        out[`volt${first + i}`] = voltage[i];
+      }
+      return out;
+    }
+
+    case MAVLINK_MSG_ID.EXTENDED_SYS_STATE:
+      return { vtol_state: getUint8(0), landed_state: getUint8(1) };
+
+    case MAVLINK_MSG_ID.MOUNT_STATUS:
+      // ArduPilot: a = pitch, b = roll, c = yaw, in centidegrees.
       return {
-        voltage,
-        current,
-        totalcurrent,
-        rpm,
-        count,
-        temperature,
-        rpm1: rpm[0],
-        rpm2: rpm[1],
-        rpm3: rpm[2],
-        rpm4: rpm[3],
-        temp1: temperature[0],
-        temp2: temperature[1],
-        temp3: temperature[2],
-        temp4: temperature[3],
-        curr1: current[0],
-        curr2: current[1],
-        curr3: current[2],
-        curr4: current[3],
-        volt1: voltage[0],
-        volt2: voltage[1],
-        volt3: voltage[2],
-        volt4: voltage[3],
+        pointing_a: getInt32(0),
+        pointing_b: getInt32(4),
+        pointing_c: getInt32(8),
+        target_system: getUint8(12),
+        target_component: getUint8(13),
+        mount_mode: getUint8(14),
+        pitch: getInt32(0) / 100,
+        roll: getInt32(4) / 100,
+        yaw: getInt32(8) / 100,
+      };
+
+    case MAVLINK_MSG_ID.GIMBAL_DEVICE_ATTITUDE_STATUS: {
+      const q = [getFloat32(4), getFloat32(8), getFloat32(12), getFloat32(16)];
+      const [w, x, y, z] = q;
+      const deg = 180 / Math.PI;
+      return {
+        time_boot_ms: getUint32(0),
+        q,
+        angular_velocity_x: getFloat32(20),
+        angular_velocity_y: getFloat32(24),
+        angular_velocity_z: getFloat32(28),
+        failure_flags: getUint32(32),
+        flags: getUint16(36),
+        target_system: getUint8(38),
+        target_component: getUint8(39),
+        delta_yaw: getFloat32(40),
+        delta_yaw_velocity: getFloat32(44),
+        gimbal_device_id: getUint8(48),
+        // Euler angles (degrees) from the quaternion. Yaw is relative to the vehicle unless flags says earth
+        // frame (GIMBAL_DEVICE_FLAGS_YAW_IN_EARTH_FRAME).
+        roll: Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)) * deg,
+        pitch: Math.asin(Math.max(-1, Math.min(1, 2 * (w * y - z * x)))) * deg,
+        yaw: Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)) * deg,
       };
     }
+
+    case MAVLINK_MSG_ID.CAMERA_FEEDBACK:
+      return {
+        time_usec: Number(getBigUint64(0)),
+        lat: getInt32(8) / 1e7,
+        lng: getInt32(12) / 1e7,
+        alt_msl: getFloat32(16),
+        alt_rel: getFloat32(20),
+        roll: getFloat32(24),
+        pitch: getFloat32(28),
+        yaw: getFloat32(32),
+        foc_len: getFloat32(36),
+        img_idx: getUint16(40),
+        target_system: getUint8(42),
+        cam_idx: getUint8(43),
+        flags: getUint8(44),
+        completed_captures: getUint16(45),
+      };
+
+    case MAVLINK_MSG_ID.EFI_STATUS:
+      return {
+        ecu_index: getFloat32(0),
+        rpm: getFloat32(4),
+        fuel_consumed: getFloat32(8),
+        fuel_flow: getFloat32(12),
+        engine_load: getFloat32(16),
+        throttle_position: getFloat32(20),
+        spark_dwell_time: getFloat32(24),
+        barometric_pressure: getFloat32(28),
+        intake_manifold_pressure: getFloat32(32),
+        intake_manifold_temperature: getFloat32(36),
+        cylinder_head_temperature: getFloat32(40),
+        ignition_timing: getFloat32(44),
+        injection_time: getFloat32(48),
+        exhaust_gas_temperature: getFloat32(52),
+        throttle_out: getFloat32(56),
+        pt_compensation: getFloat32(60),
+        health: getUint8(64),
+        ignition_voltage: getFloat32(65),
+        fuel_pressure: getFloat32(69),
+      };
+
+    case MAVLINK_MSG_ID.GENERATOR_STATUS:
+      return {
+        status: Number(getBigUint64(0)),
+        battery_current: getFloat32(8),
+        load_current: getFloat32(12),
+        power_generated: getFloat32(16),
+        bus_voltage: getFloat32(20),
+        bat_current_setpoint: getFloat32(24),
+        runtime: getUint32(28),
+        time_until_maintenance: getInt32(32),
+        generator_speed: getUint16(36),
+        rectifier_temperature: getInt16(38),
+        generator_temperature: getInt16(40),
+      };
 
     case MAVLINK_MSG_ID.GPS_RTCM_DATA: {
       const len = getUint8(1);
