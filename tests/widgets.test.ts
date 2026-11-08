@@ -379,7 +379,7 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   check('relay toggle: out-of-range relay numbers get no automatic feedback', pm.relayInstance({ ...relayToggle, action: { ...relayToggle.action, params: [16, 0, 0, 0, 0, 0, 0] } }) === undefined && pm.relayInstance({ ...relayToggle, action: { ...relayToggle.action, params: [1.5, 0, 0, 0, 0, 0, 0] } }) === undefined);
 }
 
-// Servo outputs normalise like ArduPilot: SERVOn_REVERSED flips the sign, so +1 is the function's positive side.
+// Scaled values normalise like ArduPilot: SERVOn_REVERSED flips servo outputs, RCn_REVERSED / RCn_REV flip RC inputs.
 {
   const P = (o: Record<string, number>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { value: v }]));
   const { scaleServoOutput } = values;
@@ -388,7 +388,18 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   check('servo scaled: reversed uses the other side\'s range (asymmetric trim)', Math.abs(scaleServoOutput(1300, 2, P({ SERVO2_MIN: 1100, SERVO2_TRIM: 1400, SERVO2_MAX: 1900, SERVO2_REVERSED: 1 })) - 1 / 3) < 1e-9);
   check('servo scaled: reversed at trim is 0, not -0', Object.is(scaleServoOutput(1500, 3, P({ SERVO3_REVERSED: 1 })), 0));
   check('servo scaled: another output\'s reversal does not apply', scaleServoOutput(2000, 4, P({ SERVO3_REVERSED: 1 })) === 1);
-  check('servo scaled: older firmware RCn_REV = -1 reverses', scaleServoOutput(2000, 5, P({ RC5_REV: -1 })) === -1);
+  check('servo scaled: RCn_REVERSED / RCn_REV never reverse an output', scaleServoOutput(2000, 5, P({ RC5_REVERSED: 1, RC5_REV: -1 })) === 1);
+
+  const { scaleRcInput } = values;
+  check('rc scaled: normal input, 1900 µs = +0.8', Math.abs(scaleRcInput(1900, 1, P({ RC1_REVERSED: 0 })) - 0.8) < 1e-9);
+  check('rc scaled: RCn_REVERSED = 1 flips it', Math.abs(scaleRcInput(1900, 1, P({ RC1_REVERSED: 1 })) + 0.8) < 1e-9);
+  check('rc scaled: older firmware RCn_REV = -1 flips it', scaleRcInput(2000, 2, P({ RC2_REV: -1 })) === -1);
+  check('rc scaled: RCn_REV = 1 is normal', scaleRcInput(2000, 2, P({ RC2_REV: 1 })) === 1);
+  check('rc scaled: SERVOn_REVERSED does not reverse an input', scaleRcInput(2000, 3, P({ SERVO3_REVERSED: 1 })) === 1);
+  check('rc scaled: reversed at trim is 0, not -0', Object.is(scaleRcInput(1500, 4, P({ RC4_REVERSED: 1 })), 0));
+  const rcState: any = { rc: { channels: [1900, 1100], chancount: 8 }, parameters: P({ RC1_REVERSED: 1 }) };
+  const rcR = values.readBinding({ messageName: 'RC_CHANNELS (SCALED)', fieldName: 'chan1_scaled', decimals: 2 }, rcState, 'ms', 3, Date.now());
+  check('rc scaled binding: honours RCn_REVERSED', rcR.text === '-0.80', rcR.text);
   check('servo scaled: no parameters, defaults and not reversed', scaleServoOutput(1000, 6, undefined) === -1);
 
   const state: any = { servo: { servos: [1900, 1100] }, parameters: P({ SERVO1_REVERSED: 1 }) };
@@ -397,6 +408,8 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   const pm = await import('../src/components/widgets/custom/panelModel.ts');
   const bars = pm.extractMultiBarItems('servo-8-scaled', state);
   check('servo multi-bar: S1 reversed, S2 not', bars[0].value === -0.8 && bars[1].value === -0.8, JSON.stringify(bars.slice(0, 2).map((b: any) => b.value)));
+  const rcBars = pm.extractMultiBarItems('rc-8-scaled', rcState);
+  check('rc multi-bar: CH1 reversed, CH2 not', rcBars[0].value === -0.8 && rcBars[1].value === -0.8, JSON.stringify(rcBars.slice(0, 2).map((b: any) => b.value)));
   const raw = pm.extractMultiBarItems('servo-8', state);
   check('servo multi-bar raw µs: unchanged by reversal', raw[0].value === 1900);
 }
