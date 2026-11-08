@@ -921,5 +921,21 @@ for (const [type, landCmd, opts, label] of [
   (mavlinkConnection as any).getStatus = origStatus;
 }
 
+// --- Binding cache across connections (review A4) -----------------------------------------------
+{
+  const { recordPacket, getCachedField } = await import('../src/lib/messageCache.ts');
+  const conn = mavlinkConnection as any;
+  const vfr = new Uint8Array(20);
+  new DataView(vfr.buffer).setFloat32(4, 7.5, true); // groundspeed
+  conn.setStatus('connected');
+  recordPacket({ version: 2, sequence: 0, systemId: 1, componentId: 1, messageId: MAVLINK_MSG_ID.VFR_HUD, payload: vfr, crc: 0, raw: new Uint8Array() } as any);
+  check('binding cache: value recorded', getCachedField('VFR_HUD', 'groundspeed') === 7.5);
+  conn.setStatus('disconnected');
+  check('binding cache: kept while the link is down (shown as stale)', getCachedField('VFR_HUD', 'groundspeed') === 7.5);
+  conn.setStatus('connected');
+  check('binding cache: emptied when a new connection starts', getCachedField('VFR_HUD', 'groundspeed') === undefined);
+  conn.setStatus('disconnected');
+}
+
 console.log(failures.length ? `\n${failures.length} regression check(s) FAILED` : '\nAll regression checks PASSED');
 process.exit(failures.length ? 1 : 0);

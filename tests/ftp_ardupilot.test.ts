@@ -11,6 +11,8 @@
  *                             (this is how a retry with the SAME seq recovers a lost ACK)
  *     - one fd per session:   CreateFile / OpenFileRO while a file is open -> NAK Fail
  *     - TerminateSession on an already-closed session -> ACK
+ *     - open of a missing file -> NAK FailErrno, errno ENOENT
+ *     - ResetSessions closes the open file whatever its session
  *
  *   libraries/AP_Filesystem/AP_Filesystem_Mission.cpp + AP_Mission::get_item()
  *     - reading @MISSION/mission.dat regenerates it from storage: seq = index, current = 0,
@@ -28,7 +30,7 @@ const { MavlinkParser } = await import('../src/mavlink/parser.ts');
 const { packDatFile } = await import('../src/mavlink/missionFileParser.ts');
 
 const ACK = 128, NAK = 129;
-const ERR_FAIL = 1, ERR_EOF = 6, ERR_INVALID_SESSION = 4, ERR_FILE_NOT_FOUND = 10;
+const ERR_FAIL = 1, ERR_FAIL_ERRNO = 2, ERR_EOF = 6, ERR_INVALID_SESSION = 4, ENOENT = 2;
 const TIMEOUT_MS = 300;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -91,7 +93,7 @@ class ArduPilotFtpSim {
     this.emit(p, 2 + (this.o.delayReply?.(req) ?? 0));
   }
 
-  private nak(req: Req, code: number) { this.reply(req, NAK, 0, Uint8Array.of(code)); }
+  private nak(req: Req, code: number, errno?: number) { this.reply(req, NAK, 0, errno === undefined ? Uint8Array.of(code) : Uint8Array.of(code, errno)); }
 
   private onRequest(bytes: Uint8Array) {
     if (this.lost()) return;
@@ -132,7 +134,8 @@ class ArduPilotFtpSim {
         if (this.fd) return this.nak(req, ERR_FAIL);
         const path = name();
         const stored = this.committed[path];
-        if (!stored) return this.nak(req, ERR_FILE_NOT_FOUND);
+        // AP_Filesystem open() fails with errno set; GCS_FTP replies FailErrno with the errno.
+        if (!stored) return this.nak(req, ERR_FAIL_ERRNO, ENOENT);
         const buf = path.startsWith('@MISSION/') ? regenerateMissionDat(stored) : stored.slice();
         this.fd = { mode: 'r', path, buf, len: buf.length };
         return this.reply(req, ACK, 0, new Uint8Array(new Uint32Array([buf.length]).buffer));
@@ -283,6 +286,25 @@ for (const loss of [0.1, 0.2]) {
   await sleep(50);
   check('burst read with ArduPilot seq numbering returns the exact file', same(got, file), `${got?.length ?? 0} bytes`);
   check('burst read closes its session', sim.fd === null);
+}
+
+// 7. A missing file is answered at once: no retries (each would cost a round trip, e.g. probing log folders).
+{
+  const sim = new ArduPilotFtpSim({ files: {} });
+  sim.install();
+  const got = await mavFtpClient.readFile(1, 1, '/APM/LOGS/LASTLOG.TXT', 239, TIMEOUT_MS);
+  const opens = sim.requests.filter((r) => r.startsWith(`${FTP_OPCODE.OpenFileRO}#`)).length;
+  check('missing file: null after a single open, no retries', got === null && opens === 1, sim.requests.join(' '));
+}
+
+// 8. A file left open by an earlier transfer: ResetSessions clears it and the read goes ahead.
+{
+  const file = Uint8Array.from({ length: 700 }, (_, i) => (i * 11) & 0xff);
+  const sim = new ArduPilotFtpSim({ files: { '@PARAM/param.pck': file } });
+  sim.install();
+  sim.fd = { mode: 'r', path: 'stale', buf: new Uint8Array(1), len: 1 };
+  const got = await mavFtpClient.readFile(1, 1, '@PARAM/param.pck', 239, TIMEOUT_MS);
+  check('stale open file: sessions reset, then the read succeeds', same(got, file) && sim.requests.some((r) => r.startsWith(`${FTP_OPCODE.ResetSessions}#`)), sim.requests.slice(0, 4).join(' '));
 }
 
 console.log(failures.length ? `\n${failures.length} MAVFTP ArduPilot-sim check(s) FAILED` : '\nAll MAVFTP ArduPilot-sim checks PASSED');

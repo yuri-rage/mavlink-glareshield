@@ -95,7 +95,11 @@ self.addEventListener('fetch', (event) => {
           }
           return res;
         })
-        .catch(() => caches.match(req).then((c) => c || caches.match('/index.html')))
+        // Offline: the cached copy, or for a page load the app shell. A missing script, style or data file stays a
+        // network error; answering it with index.html (status 200) made the failure look like a parse error.
+        .catch(() =>
+          caches.match(req).then((c) => c || (req.mode === 'navigate' ? caches.match('/index.html') : Response.error()))
+        )
     );
   }
 });

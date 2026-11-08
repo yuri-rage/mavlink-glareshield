@@ -165,3 +165,12 @@ export function resetMessageCache(): void {
 }
 
 mavlinkConnection.onPacket((packet) => recordPacket(packet));
+
+// A new connection starts with an empty cache: the previous connection's values (possibly another vehicle's) would
+// otherwise stay bound until each message arrived again. While a link is down the last values stay, shown as stale
+// by their age.
+let lastStatus: string | null = null;
+mavlinkConnection.onStatus((status) => {
+  if (status === 'connected' && lastStatus !== null && lastStatus !== 'connected') resetMessageCache();
+  lastStatus = status;
+});
