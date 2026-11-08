@@ -330,18 +330,22 @@ export const HudWidget: React.FC = () => {
 
     // Geometric layouts for HUD overlay instruments
     const PITCH_SCALE = 4.2; // Pixels per degree
+    // Readout text and its boxes grow with the HUD: 1x up to a 520 x 380 HUD, at most 1.3x, so a large HUD is
+    // easier to read and a small one keeps its layout. The pitch ladder's spacing doesn't change.
+    const ts = Math.max(1, Math.min(1.3, Math.min(width / 520, height / 380)));
+    const hudFont = (px: number, weight = 'bold') => `${weight} ${(px * ts).toFixed(1)}px ui-monospace, SFMono-Regular, monospace`;
     const disarmY = cy - 18 * PITCH_SCALE; // Steady disarm banner positioned ~18 deg above wings level horizon
-    const failsafeY = disarmY + 25; // Directly below DISARMED
+    const failsafeY = disarmY + 25 * ts; // Directly below DISARMED
     const isFlashVisible = flashTick % 2 === 0;
 
     const spdBoxX = 10;
-    const spdBoxW = 62;
-    const spdBoxH = 30;
+    const spdBoxW = 62 * ts;
+    const spdBoxH = 30 * ts;
     const spdBoxY = cy - spdBoxH / 2;
 
-    const altBoxW = 62;
+    const altBoxW = 62 * ts;
     const altBoxX = width - altBoxW - 10;
-    const altBoxH = 30;
+    const altBoxH = 30 * ts;
     const altBoxY = cy - altBoxH / 2;
 
     const tapeWidth = Math.min(280, width - 110);
@@ -366,31 +370,31 @@ export const HudWidget: React.FC = () => {
 
     // Instrument cutouts (evenodd winding rule cuts these out of the ladder drawing)
     // Left speed tape corridor (bracket, IAS box, GS readout)
-    ctx.rect(0, cy - 68, spdBoxX + spdBoxW + 8, 136);
+    ctx.rect(0, cy - 68 * ts, spdBoxX + spdBoxW + 8, 136 * ts);
     // Right altitude tape corridor (bracket, Alt box, VVI readout)
-    ctx.rect(altBoxX - 8, cy - 68, width - altBoxX + 8, 136);
+    ctx.rect(altBoxX - 8, cy - 68 * ts, width - altBoxX + 8, 136 * ts);
     // Top compass tape & digital heading box
-    ctx.rect(cx - tapeWidth / 2 - 2, 0, tapeWidth + 4, 40);
+    ctx.rect(cx - tapeWidth / 2 - 2, 0, tapeWidth + 4, 40 * ts);
     // Bottom left WP progress readout
-    ctx.rect(0, height - 44, 145, 44);
+    ctx.rect(0, height - 44 * ts, 145 * ts, 44 * ts);
     // Bottom right Throttle readout
-    ctx.rect(width - 95, height - 32, 95, 32);
+    ctx.rect(width - 95 * ts, height - 32 * ts, 95 * ts, 32 * ts);
     // Top left Load Factor (Nz) readout
-    ctx.rect(0, 0, 80, 30);
+    ctx.rect(0, 0, 80 * ts, 30 * ts);
     // Top right Home vector readout (if active)
     if (hasLink && homePosition.distanceM !== null) {
-      ctx.rect(width - 155, 0, 155, 30);
+      ctx.rect(width - 155 * ts, 0, 155 * ts, 30 * ts);
     }
     // Link lost banner (if active)
     if (!hasLink) {
-      ctx.rect(cx - 130, 40, 260, 26);
+      ctx.rect(cx - 130 * ts, 40 * ts, 260 * ts, 26 * ts);
     }
     // Central DISARMED / FAILSAFE annunciation cutouts
     if (hasLink && !heartbeat.isArmed) {
-      ctx.rect(cx - 56, disarmY - 11, 112, 22);
+      ctx.rect(cx - 56 * ts, disarmY - 11 * ts, 112 * ts, 22 * ts);
     }
     if (isFailsafe && isFlashVisible) {
-      ctx.rect(cx - 56, failsafeY - 11, 112, 22);
+      ctx.rect(cx - 56 * ts, failsafeY - 11 * ts, 112 * ts, 22 * ts);
     }
     ctx.clip('evenodd');
 
@@ -415,7 +419,7 @@ export const HudWidget: React.FC = () => {
     ctx.stroke();
 
     // Pitch Ladder (MIL-STD style)
-    ctx.font = '10px ui-monospace, SFMono-Regular, monospace';
+    ctx.font = hudFont(10, 'normal');
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -730,14 +734,14 @@ export const HudWidget: React.FC = () => {
 
       if (isCard) {
         ctx.fillStyle = HUD_HIGHLIGHT;
-        ctx.font = 'bold 10px ui-monospace, monospace';
+        ctx.font = hudFont(10);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         const label = normDeg === 0 ? 'N' : normDeg === 90 ? 'E' : normDeg === 180 ? 'S' : 'W';
         ctx.fillText(label, x, tapeY + 12);
       } else if (isMajor) {
         ctx.fillStyle = HUD_BRIGHT;
-        ctx.font = 'bold 9px ui-monospace, monospace';
+        ctx.font = hudFont(10);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.fillText((normDeg / 10).toFixed(0).padStart(2, '0'), x, tapeY + 12);
@@ -758,12 +762,12 @@ export const HudWidget: React.FC = () => {
     // Digital Heading Box
     ctx.strokeStyle = HUD_GREEN;
     ctx.lineWidth = 1.2;
-    ctx.strokeRect(cx - 24, 2, 48, 14);
+    ctx.strokeRect(cx - 24 * ts, 2, 48 * ts, 14 * ts);
     ctx.fillStyle = HUD_HIGHLIGHT;
-    ctx.font = 'bold 10px ui-monospace, monospace';
+    ctx.font = hudFont(10);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`${curHdg.toFixed(0).padStart(3, '0')}°`, cx, 9);
+    ctx.fillText(`${curHdg.toFixed(0).padStart(3, '0')}°`, cx, 2 + 7 * ts);
 
     // =========================================================
     // 5. Left: Airspeed / Groundspeed Ladder & Prominent IAS
@@ -788,14 +792,14 @@ export const HudWidget: React.FC = () => {
     ctx.strokeRect(spdBoxX, spdBoxY, spdBoxW, spdBoxH);
 
     ctx.fillStyle = HUD_HIGHLIGHT;
-    ctx.font = 'bold 14px ui-monospace, SFMono-Regular, monospace';
+    ctx.font = hudFont(14);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(primarySpeedVal, spdBoxX + spdBoxW / 2, spdBoxY + 10);
+    ctx.fillText(primarySpeedVal, spdBoxX + spdBoxW / 2, spdBoxY + 10 * ts);
 
     ctx.fillStyle = HUD_BRIGHT;
-    ctx.font = 'bold 8px ui-monospace, monospace';
-    ctx.fillText(primarySpeedUnit, spdBoxX + spdBoxW / 2, spdBoxY + 22);
+    ctx.font = hudFont(10);
+    ctx.fillText(primarySpeedUnit, spdBoxX + spdBoxW / 2, spdBoxY + 22 * ts);
 
     // Groundspeed readout beneath box (Pitch ladder is masked behind this region)
     const gsVal = !hasLink
@@ -808,11 +812,11 @@ export const HudWidget: React.FC = () => {
     const gsUnit = isKtsMode ? 'KGS' : formatSpeed(vfr.groundspeed).unit.toUpperCase();
     const gsText = isKtsMode ? `${gsVal} ${gsUnit}` : `GS ${gsVal} ${gsUnit}`;
 
-    const gsH = 15;
+    const gsH = 15 * ts;
     const gsY = spdBoxY + spdBoxH + 4;
 
     ctx.fillStyle = HUD_BRIGHT;
-    ctx.font = 'bold 9px ui-monospace, monospace';
+    ctx.font = hudFont(10);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(gsText, spdBoxX + 4, gsY + gsH / 2);
@@ -835,26 +839,26 @@ export const HudWidget: React.FC = () => {
         : vfr.alt;
     const altFormatted = formatAltitude(rawAltM);
     ctx.fillStyle = HUD_HIGHLIGHT;
-    ctx.font = 'bold 14px ui-monospace, SFMono-Regular, monospace';
+    ctx.font = hudFont(14);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(hasLink ? altFormatted.value : '--.-', altBoxX + altBoxW / 2, altBoxY + 10);
+    ctx.fillText(hasLink ? altFormatted.value : '--.-', altBoxX + altBoxW / 2, altBoxY + 10 * ts);
 
     ctx.fillStyle = HUD_BRIGHT;
-    ctx.font = 'bold 8px ui-monospace, monospace';
-    ctx.fillText(`${altFormatted.unit.toUpperCase()} ${altitudeMode.toUpperCase()}`, altBoxX + altBoxW / 2, altBoxY + 22);
+    ctx.font = hudFont(10);
+    ctx.fillText(`${altFormatted.unit.toUpperCase()} ${altitudeMode.toUpperCase()}`, altBoxX + altBoxW / 2, altBoxY + 22 * ts);
 
     // Vertical Speed / Climb Rate readout beneath box (Pitch ladder is masked behind this region)
     const climbFormatted = formatClimb(vfr.climb);
     const vviText = hasLink ? climbFormatted.full : `-- ${climbFormatted.unit}`;
     const vviMetrics = ctx.measureText(vviText);
     const vviW = vviMetrics.width + 8;
-    const vviH = 15;
+    const vviH = 15 * ts;
     const vviY = altBoxY + altBoxH + 4;
     const vviX = width - vviW - 10;
 
     ctx.fillStyle = Math.abs(vfr.climb) > 0.3 ? HUD_HIGHLIGHT : HUD_BRIGHT;
-    ctx.font = 'bold 9px ui-monospace, monospace';
+    ctx.font = hudFont(10);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(vviText, vviX + 4, vviY + vviH / 2);
@@ -888,13 +892,13 @@ export const HudWidget: React.FC = () => {
     const thrText = hasLink ? `THR: ${Math.round(vfr.throttle)}%` : 'THR: --%';
 
     const wpPadX = 7;
-    ctx.font = 'bold 10px ui-monospace, SFMono-Regular, monospace';
+    ctx.font = hudFont(10);
     const w1 = ctx.measureText(wpLine1).width;
-    ctx.font = 'bold 9.5px ui-monospace, SFMono-Regular, monospace';
+    ctx.font = hudFont(9.5);
     const w2 = wpLine2 ? ctx.measureText(wpLine2).width : 0;
     const wpBoxW = Math.max(w1, w2) + wpPadX * 2;
     const isTwoLine = Boolean(wpLine2);
-    const wpBoxH = isTwoLine ? 32 : 20;
+    const wpBoxH = (isTwoLine ? 32 : 20) * ts;
     const wpBoxX = 10;
     const wpBoxY = height - wpBoxH - 8;
 
@@ -907,23 +911,23 @@ export const HudWidget: React.FC = () => {
     ctx.textBaseline = 'middle';
     if (isTwoLine) {
       ctx.fillStyle = HUD_HIGHLIGHT;
-      ctx.font = 'bold 10px ui-monospace, SFMono-Regular, monospace';
-      ctx.fillText(wpLine1, wpBoxX + wpPadX, wpBoxY + 9);
+      ctx.font = hudFont(10);
+      ctx.fillText(wpLine1, wpBoxX + wpPadX, wpBoxY + 9 * ts);
 
       ctx.fillStyle = HUD_BRIGHT;
-      ctx.font = 'bold 9.5px ui-monospace, SFMono-Regular, monospace';
-      ctx.fillText(wpLine2, wpBoxX + wpPadX, wpBoxY + 22);
+      ctx.font = hudFont(9.5);
+      ctx.fillText(wpLine2, wpBoxX + wpPadX, wpBoxY + 22 * ts);
     } else {
       ctx.fillStyle = HUD_HIGHLIGHT;
-      ctx.font = 'bold 10px ui-monospace, SFMono-Regular, monospace';
-      ctx.fillText(wpLine1, wpBoxX + wpPadX, wpBoxY + 10);
+      ctx.font = hudFont(10);
+      ctx.fillText(wpLine1, wpBoxX + wpPadX, wpBoxY + 10 * ts);
     }
 
     // Lower Right: THR (Pitch ladder is masked behind this region)
-    ctx.font = 'bold 11px ui-monospace, SFMono-Regular, monospace';
+    ctx.font = hudFont(11);
     const thrMetrics = ctx.measureText(thrText);
     const thrBoxW = thrMetrics.width + wpPadX * 2;
-    const thrBoxH = 20;
+    const thrBoxH = 20 * ts;
     const thrBoxX = width - thrBoxW - 10;
     const thrBoxY = height - thrBoxH - 8;
 
@@ -934,7 +938,7 @@ export const HudWidget: React.FC = () => {
     ctx.fillStyle = HUD_HIGHLIGHT;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(thrText, thrBoxX + wpPadX, thrBoxY + 10);
+    ctx.fillText(thrText, thrBoxX + wpPadX, thrBoxY + 10 * ts);
 
     // =========================================================
     // 8. Upper Left: Normal Load Factor (Nz) in G & Upper Right: Home Vector
@@ -945,15 +949,15 @@ export const HudWidget: React.FC = () => {
         : Math.min(9.9, Math.max(-4.0, 1 / Math.max(0.15, Math.cos(attitude.roll))));
     const nzText = hasLink ? `${nzVal.toFixed(1)} G` : '-- G';
 
-    ctx.font = 'bold 11px ui-monospace, SFMono-Regular, monospace';
+    ctx.font = hudFont(11);
     ctx.textBaseline = 'middle';
 
     const nzMetrics = ctx.measureText(nzText);
     const nzPadX = 7;
     const nzBoxW = nzMetrics.width + nzPadX * 2;
-    const nzBoxH = 20;
+    const nzBoxH = 20 * ts;
     const nzBoxX = 10;
-    const nzBoxY = 16 - nzBoxH / 2;
+    const nzBoxY = 16 * ts - nzBoxH / 2;
 
     // Normal Load Factor (Nz) Box (Pitch ladder is masked behind this region)
     ctx.strokeStyle = HUD_BORDER;
@@ -962,7 +966,7 @@ export const HudWidget: React.FC = () => {
 
     ctx.fillStyle = HUD_HIGHLIGHT;
     ctx.textAlign = 'left';
-    ctx.fillText(nzText, nzBoxX + nzPadX, 16);
+    ctx.fillText(nzText, nzBoxX + nzPadX, 16 * ts);
 
     // Upper Right: Home Distance & Bearing (Symbology: "H 000°/0.0 NM")
     if (hasLink && homePosition.distanceM !== null) {
@@ -976,7 +980,7 @@ export const HudWidget: React.FC = () => {
       ctx.strokeRect(hmBoxX, nzBoxY, hmBoxW, nzBoxH);
       ctx.fillStyle = HUD_HIGHLIGHT;
       ctx.textAlign = 'left';
-      ctx.fillText(homeText, hmBoxX + nzPadX, 16);
+      ctx.fillText(homeText, hmBoxX + nzPadX, 16 * ts);
     }
 
     // =========================================================
@@ -984,12 +988,12 @@ export const HudWidget: React.FC = () => {
     // =========================================================
     if (!hasLink) {
       const flagText = hasConnectedInSession ? 'LINK LOST — STALE DATA' : 'NO LINK — STANDBY';
-      ctx.font = 'bold 11px ui-monospace, SFMono-Regular, monospace';
+      ctx.font = hudFont(11);
       const flMetrics = ctx.measureText(flagText);
       const flW = flMetrics.width + 20;
-      const flH = 22;
+      const flH = 22 * ts;
       const flX = cx - flW / 2;
-      const flY = 42;
+      const flY = 42 * ts;
       ctx.fillStyle = hasConnectedInSession ? 'rgba(69, 10, 10, 0.92)' : 'rgba(9, 9, 11, 0.88)';
       ctx.fillRect(flX, flY, flW, flH);
       ctx.strokeStyle = hasConnectedInSession ? '#ef4444' : '#f59e0b';
@@ -1007,7 +1011,7 @@ export const HudWidget: React.FC = () => {
     // Steady DISARMED text about 20 degrees above the wings level horizon
     if (hasLink && !heartbeat.isArmed) {
       ctx.save();
-      ctx.font = 'bold 18px ui-monospace, SFMono-Regular, monospace';
+      ctx.font = hudFont(18);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = HUD_BRIGHT;
@@ -1018,7 +1022,7 @@ export const HudWidget: React.FC = () => {
     // Flashing FAILSAFE text directly below the area where DISARMED is displayed
     if (isFailsafe && isFlashVisible) {
       ctx.save();
-      ctx.font = 'bold 18px ui-monospace, SFMono-Regular, monospace';
+      ctx.font = hudFont(18);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = HUD_BRIGHT;

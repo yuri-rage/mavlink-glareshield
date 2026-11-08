@@ -260,16 +260,16 @@ export const WaypointControlWidget: React.FC = () => {
             </div>
 
             {/* Live Waypoint Navigation Metrics Strip */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-zinc-900/70 border border-zinc-800/80 rounded-lg p-2 text-xs font-mono">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-zinc-900/70 border border-zinc-800/80 rounded-lg p-2 text-xs sm:text-[13px] font-mono">
               <div className="flex flex-col">
-                <span className="text-[10px] text-zinc-500 font-sans">Distance</span>
+                <span className="text-[11px] text-zinc-500 font-sans">Distance</span>
                 <span className="text-sky-400 font-bold">
                   {navController.wpDist > 0 ? formatDistance(navController.wpDist).full : '--'}
                 </span>
               </div>
 
               <div className="flex flex-col">
-                <span className="text-[10px] text-zinc-500 font-sans flex items-center gap-0.5">
+                <span className="text-[11px] text-zinc-500 font-sans flex items-center gap-0.5">
                   <Compass className="h-2.5 w-2.5" /> Bearing
                 </span>
                 <span className="text-zinc-200 font-bold">
@@ -278,7 +278,7 @@ export const WaypointControlWidget: React.FC = () => {
               </div>
 
               <div className="flex flex-col">
-                <span className="text-[10px] text-zinc-500 font-sans">X-Track</span>
+                <span className="text-[11px] text-zinc-500 font-sans">X-Track</span>
                 <span
                   className={
                     Math.abs(navController.xtrackError) > 3
@@ -291,7 +291,7 @@ export const WaypointControlWidget: React.FC = () => {
               </div>
 
               <div className="flex flex-col">
-                <span className="text-[10px] text-zinc-500 font-sans">ETA</span>
+                <span className="text-[11px] text-zinc-500 font-sans">ETA</span>
                 <span className="text-emerald-400 font-bold">{etaFormatted}</span>
               </div>
             </div>

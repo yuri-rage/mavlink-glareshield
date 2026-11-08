@@ -202,7 +202,7 @@ export const PidTuningWidget: React.FC = () => {
           <button
             type="button"
             onClick={() => pidTuningRecorder.clear()}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-zinc-800 hover:bg-zinc-800 text-[10px] font-bold text-zinc-300 uppercase"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-zinc-800 hover:bg-zinc-800 text-[11px] font-bold text-zinc-300 uppercase"
             title="Clear the recorded history"
           >
             <Eraser className="h-3 w-3" />

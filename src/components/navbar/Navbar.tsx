@@ -765,14 +765,14 @@ export const Navbar: React.FC = () => {
         )}
 
         {/* Persistent Global Telemetry Status Strip (Health First, Battery, GPS, Alt/Spd, Home, Flight Time) */}
-        <div className="relative border-t border-zinc-800/80 bg-zinc-900/70 min-h-[30px] flex items-center overflow-hidden">
-          <div className="px-2.5 sm:px-6 py-1 flex items-center gap-3 sm:gap-5 text-[11px] font-mono overflow-x-auto no-scrollbar w-full">
+        <div className="relative border-t border-zinc-800/80 bg-zinc-900/70 min-h-[30px] md:min-h-[34px] flex items-center overflow-hidden">
+          <div className="px-2.5 sm:px-6 py-1 flex items-center gap-3 sm:gap-5 text-[11px] md:text-[13px] font-mono overflow-x-auto no-scrollbar w-full">
             {/* Pre-Arm & Subsystem Health Pill (Rank 3 - first on mobile for immediate visibility) */}
           <div className="relative shrink-0">
             <button
               type="button"
               onClick={() => setIsPreArmMenuOpen(true)}
-              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-sans font-bold uppercase tracking-wider transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] md:text-[11px] font-sans font-bold uppercase tracking-wider transition-colors ${
                 !isHeartbeatActive
                   ? 'border-zinc-800 bg-zinc-900 text-zinc-500'
                   : preArm.isReady && !vibeWarning
@@ -823,7 +823,7 @@ export const Navbar: React.FC = () => {
                       : 'text-emerald-400'
               }`}
             />
-            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">BAT</span>
+            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px] md:text-[11px]">BAT</span>
             <span
               className={`font-bold ${
                 !isHeartbeatActive || battery.voltage <= 0
@@ -854,7 +854,7 @@ export const Navbar: React.FC = () => {
                     : 'text-amber-400'
               }`}
             />
-            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">GPS</span>
+            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px] md:text-[11px]">GPS</span>
             <span className="font-bold text-zinc-100">
               {isHeartbeatActive ? `${gps.fixLabel} (${gps.satellites})` : '--'}
             </span>
@@ -864,7 +864,7 @@ export const Navbar: React.FC = () => {
 
           {/* Altitude & Speed Pill */}
           <div className="flex items-center gap-1.5 shrink-0" title="Active Altitude & Speed">
-            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">
+            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px] md:text-[11px]">
               {altitudeMode.toUpperCase()}
             </span>
             <span className="font-bold text-sky-300">
@@ -892,7 +892,7 @@ export const Navbar: React.FC = () => {
                 homePosition.source !== 'none' ? 'text-amber-400' : 'text-zinc-500'
               }`}
             />
-            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">HOME</span>
+            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px] md:text-[11px]">HOME</span>
             <span className="font-bold text-zinc-100">
               {isHeartbeatActive && homePosition.distanceM !== null
                 ? formatHomeVector(homePosition.bearingDeg, homePosition.distanceM)
@@ -910,7 +910,7 @@ export const Navbar: React.FC = () => {
             title="Cumulative Armed Flight Time"
           >
             <Clock className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px]">FLT</span>
+            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px] md:text-[11px]">FLT</span>
             <span className="font-bold text-zinc-200">{formatDurationClock(totalArmedMs)}</span>
           </div>
         </div>

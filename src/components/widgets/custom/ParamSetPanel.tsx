@@ -225,16 +225,16 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
                 <li key={name} className="py-1 flex items-center gap-2 min-w-0">
                   <div className="min-w-[38%] flex-1 basis-0" title={meta?.description ? `${name}\n${meta.description}` : name}>
                     <div className="flex items-center gap-1 min-w-0">
-                      <span className="font-mono text-[11px] font-semibold text-zinc-200 truncate">{name}</span>
+                      <span className="font-mono text-xs font-semibold text-zinc-200 truncate">{name}</span>
                       {meta && <DetailsButton name={name} onClick={(b) => setDetails((d) => (d?.name === name ? null : { name, anchor: b }))} />}
-                      {meta?.rebootRequired && <span className="text-[8.5px] px-1 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">Reboot</span>}
+                      {meta?.rebootRequired && <span className="text-[9.5px] px-1 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">Reboot</span>}
                     </div>
                     {(meta?.displayName || meta?.description) && (
-                      <div className="text-[10px] text-zinc-500 truncate leading-tight">{meta.displayName || meta.description}</div>
+                      <div className="text-[11px] text-zinc-500 truncate leading-tight">{meta.displayName || meta.description}</div>
                     )}
                   </div>
 
-                  <div className="min-w-0 flex-1 flex flex-col items-end gap-0.5 font-mono text-[11px]">
+                  <div className="min-w-0 flex-1 flex flex-col items-end gap-0.5 font-mono text-xs">
                     {!item ? (
                       <span className="text-zinc-600 italic font-sans text-[10px]">
                         {!linked ? 'not loaded' : fetchStatus.isFetching || pendingReads.has(name) ? 'loading…' : present ? '…' : 'not on this vehicle'}
@@ -273,14 +273,14 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
                           }}
                           className="h-6 w-20 rounded border border-sky-500 bg-black/90 px-1 text-sky-300 focus:outline-none"
                         />
-                        {meta?.units && <span className="text-[10px] text-zinc-500 font-sans">{meta.units}</span>}
+                        {meta?.units && <span className="text-[11px] text-zinc-500 font-sans">{meta.units}</span>}
                         <button type="button" onClick={() => save(name)} className="h-5 px-1.5 text-[10px] bg-emerald-500/20 text-emerald-400 rounded border border-emerald-500/40 font-sans font-semibold">Save</button>
                         <button type="button" onClick={stopEdit} className="h-5 px-1 text-[10px] text-zinc-400 hover:text-zinc-200" aria-label="Cancel">✕</button>
                       </div>
                     ) : meta?.readOnly ? (
                       <span className="inline-flex items-center gap-1 text-zinc-300">
                         {formatParamValue(item.value)}
-                        {meta.units && <span className="text-[10px] text-zinc-500 font-sans">{meta.units}</span>}
+                        {meta.units && <span className="text-[11px] text-zinc-500 font-sans">{meta.units}</span>}
                         <Lock className="h-2.5 w-2.5 text-zinc-600" aria-label="read-only" />
                       </span>
                     ) : (
@@ -291,15 +291,15 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
                         className={`inline-flex items-center gap-1 rounded px-1 text-sky-400 hover:bg-sky-500/10 max-w-full ${isEditing ? 'ring-1 ring-sky-500/60 bg-sky-500/10' : ''}`}
                       >
                         <span>{formatParamValue(isEditing && editor === 'bitmask' ? editNum : item.value)}</span>
-                        {meta?.units && <span className="text-[10px] text-zinc-500 font-sans">{meta.units}</span>}
+                        {meta?.units && <span className="text-[11px] text-zinc-500 font-sans">{meta.units}</span>}
                         {meta?.bitmask ? (
-                          <span className="text-[10px] text-zinc-400 font-sans truncate max-w-[140px] inline-flex items-center gap-0.5">
+                          <span className="text-[11px] text-zinc-400 font-sans truncate max-w-[140px] inline-flex items-center gap-0.5">
                             {bitmaskSummary(isEditing ? editNum : item.value, meta.bitmask)}
                             <ChevronDown className="h-2.5 w-2.5 shrink-0" />
                           </span>
                         ) : (
                           valueLabel(meta?.values, item.value) && (
-                            <span className="text-[10px] text-zinc-400 font-sans truncate max-w-[140px]">({valueLabel(meta?.values, item.value)})</span>
+                            <span className="text-[11px] text-zinc-400 font-sans truncate max-w-[140px]">({valueLabel(meta?.values, item.value)})</span>
                           )
                         )}
                       </button>

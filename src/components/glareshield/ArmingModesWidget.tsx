@@ -339,7 +339,7 @@ export const ArmingModesWidget: React.FC = () => {
             } ${getFeedbackRing('arm')}`}
           >
             <div className="flex items-center justify-between mb-1 gap-2">
-              <span className="text-[11px] font-semibold text-zinc-300 flex items-center gap-1.5 min-w-0">
+              <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5 min-w-0">
                 {!isVehicleConnected ? (
                   <Shield className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
                 ) : heartbeat.isArmed ? (
@@ -384,7 +384,7 @@ export const ArmingModesWidget: React.FC = () => {
                       : 'cursor-pointer accent-emerald-500 bg-emerald-950/40 border border-emerald-800/60'
                 }`}
               />
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-[11px] font-bold uppercase tracking-wider text-zinc-200">
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-xs font-bold uppercase tracking-wider text-zinc-200">
                 {!isVehicleConnected
                   ? 'NO LINK — Locked'
                   : heartbeat.isArmed

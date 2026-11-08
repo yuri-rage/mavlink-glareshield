@@ -1516,7 +1516,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         )}
 
         {/* GPS Coordinate readout HUD overlay in top-left (decoupled from bottom Leaflet attribution) */}
-        <div className="absolute top-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] font-mono text-zinc-300 flex flex-wrap items-center gap-2.5 pointer-events-none shadow-md">
+        <div className="absolute top-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs font-mono text-zinc-300 flex flex-wrap items-center gap-2.5 pointer-events-none shadow-md">
           <span>
             Lat: <b className="text-sky-400">{hasValidPosition ? position.lat.toFixed(6) : '--'}</b>
           </span>

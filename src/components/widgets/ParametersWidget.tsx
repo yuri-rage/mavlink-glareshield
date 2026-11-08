@@ -326,18 +326,18 @@ export const ParametersWidget: React.FC = () => {
               PARAMETERS ({paramKeys.length})
             </CardTitle>
             {paramStatus.method === 'ftp' && (
-              <Badge variant="info" className="text-[9px] font-mono gap-0.5">
+              <Badge variant="info" className="text-[10px] font-mono gap-0.5">
                 <Zap className="h-2.5 w-2.5" /> MAVFTP
               </Badge>
             )}
             {paramStatus.method === 'legacy' && (
-              <Badge variant="secondary" className="text-[9px] font-mono">
+              <Badge variant="secondary" className="text-[10px] font-mono">
                 STREAM
               </Badge>
             )}
             {paramMetaStatus !== 'idle' && (
               <span
-                className={`text-[9px] font-mono px-1.5 py-0.5 rounded border inline-flex items-center gap-1 ${
+                className={`text-[10px] font-mono px-1.5 py-0.5 rounded border inline-flex items-center gap-1 ${
                   paramMetaStatus === 'loading'
                     ? 'text-zinc-400 border-zinc-700'
                     : paramMetaStatus === 'unavailable'
@@ -371,7 +371,7 @@ export const ParametersWidget: React.FC = () => {
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              className="h-7 px-2 text-[11px] font-semibold gap-1 text-zinc-300 hover:text-white border-zinc-700"
+              className="h-7 px-2 text-xs font-semibold gap-1 text-zinc-300 hover:text-white border-zinc-700"
               title="Load and compare a .param file against current vehicle parameters"
             >
               <Upload className="h-3 w-3 text-amber-400" />
@@ -383,7 +383,7 @@ export const ParametersWidget: React.FC = () => {
               size="sm"
               disabled={paramKeys.length === 0}
               onClick={handleExportParams}
-              className="h-7 px-2 text-[11px] font-semibold gap-1 text-zinc-300 hover:text-white border-zinc-700 disabled:opacity-40"
+              className="h-7 px-2 text-xs font-semibold gap-1 text-zinc-300 hover:text-white border-zinc-700 disabled:opacity-40"
               title="Export all loaded parameters to a .param file"
             >
               <Download className="h-3 w-3 text-emerald-400" />
@@ -432,12 +432,12 @@ export const ParametersWidget: React.FC = () => {
               placeholder="Search: BATT_*  FS_*  failsafe  -BATT2_*"
               value={search}
               onChange={handleSearchChange}
-              className="h-8 pl-8 pr-20 text-xs font-mono"
+              className="h-8 pl-8 pr-20 text-xs sm:text-[13px] font-mono"
               aria-describedby="param-search-help"
             />
             <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
               {!searchQuery.empty && (
-                <span className="text-[10px] font-mono text-zinc-500 tabular-nums" aria-live="polite">
+                <span className="text-[11px] font-mono text-zinc-500 tabular-nums" aria-live="polite">
                   {filteredKeys.length}/{paramKeys.length}
                 </span>
               )}
@@ -477,7 +477,7 @@ export const ParametersWidget: React.FC = () => {
           {hasAnyDefaults && (
             <button
               onClick={() => setOnlyModified((v) => !v)}
-              className={`h-8 px-2.5 rounded-lg border text-[11px] font-semibold whitespace-nowrap transition-colors ${
+              className={`h-8 px-2.5 rounded-lg border text-xs font-semibold whitespace-nowrap transition-colors ${
                 onlyModified
                   ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
                   : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
@@ -519,7 +519,7 @@ export const ParametersWidget: React.FC = () => {
               )}
             </div>
           ) : (
-            <table className="w-full text-xs font-mono">
+            <table className="w-full text-xs sm:text-[13px] font-mono">
               <thead className="bg-zinc-900/95 sticky top-0 border-b border-zinc-800 text-zinc-400 text-left z-10 backdrop-blur-sm">
                 <tr>
                   <th className="py-1.5 px-3">Parameter</th>
@@ -583,7 +583,7 @@ export const ParametersWidget: React.FC = () => {
                             </span>
                           )}
                         </div>
-                        {subtitle && <div className="text-[10px] text-zinc-500 font-sans truncate leading-tight">{subtitle}</div>}
+                        {subtitle && <div className="text-[11px] text-zinc-500 font-sans truncate leading-tight">{subtitle}</div>}
                       </td>
                       <td className="py-1 px-3 font-mono">
                         {isEditing && editor === 'enum' ? (
@@ -632,7 +632,7 @@ export const ParametersWidget: React.FC = () => {
                                 }`}
                                 autoFocus
                               />
-                              {meta?.units && <span className="text-[10px] text-zinc-400 font-sans">{meta.units}</span>}
+                              {meta?.units && <span className="text-[11px] text-zinc-400 font-sans">{meta.units}</span>}
                               <button
                                 onClick={() => handleSaveParam(key)}
                                 className="h-5 px-1.5 text-[10px] bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded border border-emerald-500/40 font-sans font-semibold"
@@ -645,7 +645,7 @@ export const ParametersWidget: React.FC = () => {
                               </button>
                             </div>
                             {(meta?.min !== undefined || meta?.max !== undefined || valueLabel(meta?.values, parsedEditNum)) && (
-                              <span className={`text-[9px] font-sans ${outOfRange ? 'text-amber-400 font-semibold' : 'text-zinc-500'}`}>
+                              <span className={`text-[10px] font-sans ${outOfRange ? 'text-amber-400 font-semibold' : 'text-zinc-500'}`}>
                                 {meta?.min !== undefined || meta?.max !== undefined
                                   ? `Range: ${meta?.min ?? '—'} to ${meta?.max ?? '—'} ${meta?.units ?? ''}`
                                   : ''}
@@ -656,8 +656,8 @@ export const ParametersWidget: React.FC = () => {
                         ) : readOnly ? (
                           <span className="inline-flex items-center gap-1.5 text-zinc-300 px-1 py-0.5 -mx-1" title={`${key} is read-only`}>
                             <span>{formatParamValue(item.value)}</span>
-                            {meta?.units && <span className="text-[10px] text-zinc-500 font-sans">{meta.units}</span>}
-                            {enumLabel && <span className="text-[10px] text-zinc-500 font-sans truncate max-w-[130px]">({enumLabel})</span>}
+                            {meta?.units && <span className="text-[11px] text-zinc-500 font-sans">{meta.units}</span>}
+                            {enumLabel && <span className="text-[11px] text-zinc-500 font-sans truncate max-w-[130px]">({enumLabel})</span>}
                             <Lock className="h-2.5 w-2.5 text-zinc-600" aria-label="read-only" />
                           </span>
                         ) : (
@@ -671,12 +671,12 @@ export const ParametersWidget: React.FC = () => {
                             aria-haspopup={meta?.bitmask ? 'dialog' : undefined}
                           >
                             <span>{formatParamValue(isEditing && editor === 'bitmask' ? parsedEditNum : item.value)}</span>
-                            {meta?.units && <span className="text-[10px] text-zinc-400 font-sans">{meta.units}</span>}
+                            {meta?.units && <span className="text-[11px] text-zinc-400 font-sans">{meta.units}</span>}
                             {enumLabel && !bitsLabel && (
-                              <span className="text-[10px] text-zinc-400 font-sans truncate max-w-[130px]">({enumLabel})</span>
+                              <span className="text-[11px] text-zinc-400 font-sans truncate max-w-[130px]">({enumLabel})</span>
                             )}
                             {bitsLabel && (
-                              <span className="text-[10px] text-zinc-400 font-sans truncate max-w-[160px] inline-flex items-center gap-0.5">
+                              <span className="text-[11px] text-zinc-400 font-sans truncate max-w-[160px] inline-flex items-center gap-0.5">
                                 {isEditing && editor === 'bitmask' ? bitmaskSummary(parsedEditNum, meta!.bitmask!) : bitsLabel}
                                 <ChevronDown className="h-2.5 w-2.5 shrink-0" />
                               </span>
@@ -789,7 +789,7 @@ export const ParametersWidget: React.FC = () => {
                   </div>
 
                   <div className="border border-zinc-800 rounded-lg overflow-hidden">
-                    <table className="w-full text-xs font-mono">
+                    <table className="w-full text-xs sm:text-[13px] font-mono">
                       <thead className="bg-zinc-900 text-zinc-400 border-b border-zinc-800 text-left">
                         <tr>
                           <th className="py-1.5 px-3 w-8">Write</th>
@@ -819,7 +819,7 @@ export const ParametersWidget: React.FC = () => {
                               <td className="py-1.5 px-3">
                                 <div className="font-semibold text-zinc-200">{entry.name}</div>
                                 {meta?.description && (
-                                  <div className="text-[10px] text-zinc-500 font-sans truncate max-w-[260px]">
+                                  <div className="text-[11px] text-zinc-500 font-sans truncate max-w-[260px]">
                                     {meta.description}
                                   </div>
                                 )}

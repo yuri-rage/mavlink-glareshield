@@ -60,7 +60,7 @@ export const BatteryWidget: React.FC = () => {
         {/* Voltage, current, power and consumption, laid out like the neighbouring flight cards */}
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2.5 min-w-0">
-            <span className="text-[10px] text-zinc-400 font-bold uppercase flex items-center gap-1 truncate">
+            <span className="text-[11px] text-zinc-400 font-bold uppercase flex items-center gap-1 truncate">
               <Zap className="h-3 w-3 text-amber-400 shrink-0" /> Voltage
             </span>
             <div className="text-xl sm:text-2xl font-mono font-bold text-zinc-100 mt-0.5 truncate">
@@ -70,7 +70,7 @@ export const BatteryWidget: React.FC = () => {
           </div>
 
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2.5 min-w-0">
-            <span className="text-[10px] text-zinc-400 font-bold uppercase flex items-center gap-1 truncate">
+            <span className="text-[11px] text-zinc-400 font-bold uppercase flex items-center gap-1 truncate">
               <Activity className="h-3 w-3 text-sky-400 shrink-0" /> Current
             </span>
             <div className="text-xl sm:text-2xl font-mono font-bold text-zinc-100 mt-0.5 truncate">
@@ -80,7 +80,7 @@ export const BatteryWidget: React.FC = () => {
           </div>
 
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2.5 min-w-0">
-            <span className="text-[10px] text-zinc-400 font-bold uppercase flex items-center gap-1 truncate">
+            <span className="text-[11px] text-zinc-400 font-bold uppercase flex items-center gap-1 truncate">
               <Gauge className="h-3 w-3 text-emerald-400 shrink-0" /> Power
             </span>
             <div className="text-xl sm:text-2xl font-mono font-bold text-zinc-100 mt-0.5 truncate">
@@ -90,7 +90,7 @@ export const BatteryWidget: React.FC = () => {
           </div>
 
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2.5 min-w-0">
-            <span className="text-[10px] text-zinc-400 font-bold uppercase flex items-center gap-1 truncate">
+            <span className="text-[11px] text-zinc-400 font-bold uppercase flex items-center gap-1 truncate">
               <BatteryCharging className="h-3 w-3 text-amber-400 shrink-0" /> Consumed
             </span>
             <div className="text-xl sm:text-2xl font-mono font-bold text-zinc-100 mt-0.5 truncate">
@@ -102,13 +102,13 @@ export const BatteryWidget: React.FC = () => {
         {/* Cell Voltages when true per-cell telemetry is available */}
         {hasPerCellTelemetry && (
           <div className="space-y-1">
-            <span className="text-[10px] text-zinc-500 uppercase font-bold block">
+            <span className="text-[11px] text-zinc-500 uppercase font-bold block">
               Cells ({battery.cellVoltages.length}S)
             </span>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
               {battery.cellVoltages.map((v, i) => (
                 <div key={i} className="bg-zinc-900/80 border border-zinc-800 rounded p-1 text-center min-w-0">
-                  <span className="text-[8px] text-zinc-500 block truncate">C{i + 1}</span>
+                  <span className="text-[10px] text-zinc-500 block truncate">C{i + 1}</span>
                   <span className="text-xs font-mono font-semibold text-zinc-200 truncate block">
                     {v.toFixed(2)}
                   </span>

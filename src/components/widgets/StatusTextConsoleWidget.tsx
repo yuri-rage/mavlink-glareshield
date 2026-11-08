@@ -54,7 +54,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
               variant="ghost"
               size="sm"
               onClick={toggleVoice}
-              className={`h-7 px-2 text-[11px] font-sans font-semibold gap-1 ${
+              className={`h-7 px-2 text-xs font-sans font-semibold gap-1 ${
                 voiceEnabled ? 'text-emerald-400 hover:text-emerald-300' : 'text-zinc-500 hover:text-zinc-300'
               }`}
               title={voiceEnabled ? 'Spoken voice callouts enabled (click to mute voice)' : 'Spoken voice callouts muted (click to enable)'}
@@ -91,7 +91,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
         <div className="flex items-center gap-1.5 mb-2 overflow-x-auto pb-1 text-xs">
           <button
             onClick={() => setFilterSeverity(null)}
-            className={`px-2 py-0.5 rounded text-[11px] font-sans font-semibold transition-colors ${
+            className={`px-2 py-0.5 rounded text-xs font-sans font-semibold transition-colors ${
               filterSeverity === null ? 'bg-zinc-700 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -99,7 +99,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
           </button>
           <button
             onClick={() => setFilterSeverity(4)}
-            className={`px-2 py-0.5 rounded text-[11px] font-sans font-semibold transition-colors ${
+            className={`px-2 py-0.5 rounded text-xs font-sans font-semibold transition-colors ${
               filterSeverity === 4 ? 'bg-amber-900 text-amber-200 font-bold' : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -107,7 +107,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
           </button>
           <button
             onClick={() => setFilterSeverity(2)}
-            className={`px-2 py-0.5 rounded text-[11px] font-sans font-semibold transition-colors ${
+            className={`px-2 py-0.5 rounded text-xs font-sans font-semibold transition-colors ${
               filterSeverity === 2 ? 'bg-red-900 text-red-200 font-bold' : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -127,15 +127,15 @@ export const StatusTextConsoleWidget: React.FC = () => {
             </div>
           ) : (
             displayed.map((msg) => (
-              <div key={msg.id} className="flex items-center gap-1.5 hover:bg-zinc-900/60 py-0.5 px-1.5 rounded transition-colors text-[11px]">
-                <span className="text-zinc-500 text-[10px] whitespace-nowrap font-mono">{msg.time}</span>
-                <Badge variant={getSeverityBadgeVariant(msg.severity)} className="text-[8.5px] px-1 py-0 h-3.5 leading-none">
+              <div key={msg.id} className="flex items-center gap-1.5 hover:bg-zinc-900/60 py-0.5 px-1.5 rounded transition-colors text-[13px]">
+                <span className="text-zinc-500 text-[11px] whitespace-nowrap font-mono">{msg.time}</span>
+                <Badge variant={getSeverityBadgeVariant(msg.severity)} className="text-[10px] px-1 py-0 h-4 leading-none">
                   {msg.severityLabel}
                 </Badge>
                 {msg.count !== undefined && msg.count > 1 && (
                   <Badge
                     variant="outline"
-                    className="text-[9px] font-mono px-1 py-0 h-3.5 leading-none bg-sky-950/70 border-sky-600/40 text-sky-300 font-bold shrink-0 shadow-sm"
+                    className="text-[10px] font-mono px-1 py-0 h-4 leading-none bg-sky-950/70 border-sky-600/40 text-sky-300 font-bold shrink-0 shadow-sm"
                     title={`${msg.count} consecutive identical messages`}
                   >
                     ×{msg.count}

@@ -45,7 +45,7 @@ export const MiniStatusTextWidget: React.FC = () => {
             <button
               type="button"
               onClick={() => setFilter((f) => (f + 1) % FILTERS.length)}
-              className={`h-6 px-1.5 rounded text-[10px] font-semibold font-sans transition-colors ${
+              className={`h-6 px-1.5 rounded text-[11px] font-semibold font-sans transition-colors ${
                 filter === 0 ? 'text-zinc-400 hover:text-zinc-200' : filter === 1 ? 'bg-amber-900/70 text-amber-200' : 'bg-red-900/70 text-red-200'
               }`}
               title="Severity filter (click to change)"
@@ -78,7 +78,7 @@ export const MiniStatusTextWidget: React.FC = () => {
       <CardContent className="p-2 flex-1 flex flex-col min-h-0">
         {/* Absolutely positioned so the list fills the card instead of sizing it. */}
         <div className="relative flex-1 min-h-[104px]">
-          <div ref={scrollRef} onScroll={onScroll} className="absolute inset-0 overflow-y-auto rounded-lg bg-black/50 border border-zinc-800 px-1.5 py-1 font-mono text-[11px] select-text">
+          <div ref={scrollRef} onScroll={onScroll} className="absolute inset-0 overflow-y-auto rounded-lg bg-black/50 border border-zinc-800 px-1.5 py-1 font-mono text-xs select-text">
             {shown.length === 0 ? (
               <div className="h-full flex items-center justify-center text-zinc-600 italic text-[11px]">
                 {messages.length === 0 ? 'No messages yet' : `No ${label} messages`}
@@ -87,10 +87,10 @@ export const MiniStatusTextWidget: React.FC = () => {
               <ul className="space-y-px">
                 {shown.map((m) => (
                   <li key={m.id} className="flex items-baseline gap-1.5 leading-snug min-w-0" title={`${m.time} ${m.severityLabel}: ${m.text}`}>
-                    <span className="text-[9.5px] text-zinc-600 tabular-nums shrink-0">{m.time}</span>
-                    <span className={`text-[9px] font-bold shrink-0 w-7 ${sevTone(m.severity)}`}>{SEV_SHORT[m.severity] ?? m.severityLabel}</span>
+                    <span className="text-[10.5px] text-zinc-500 tabular-nums shrink-0">{m.time}</span>
+                    <span className={`text-[10px] font-bold shrink-0 w-8 ${sevTone(m.severity)}`}>{SEV_SHORT[m.severity] ?? m.severityLabel}</span>
                     <span className={`truncate ${lineTone(m.severity)}`}>{m.text}</span>
-                    {m.count !== undefined && m.count > 1 && <span className="text-[9.5px] text-sky-400 font-bold shrink-0">×{m.count}</span>}
+                    {m.count !== undefined && m.count > 1 && <span className="text-[10.5px] text-sky-400 font-bold shrink-0">×{m.count}</span>}
                   </li>
                 ))}
               </ul>
