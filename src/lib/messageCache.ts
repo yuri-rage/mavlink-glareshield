@@ -6,7 +6,7 @@
 // creator offers as bindable fields.
 
 import { mavlinkConnection } from '../mavlink/connection';
-import { decodePayload, type MavlinkPacket } from '../mavlink/parser';
+import { decodePacket, type MavlinkPacket } from '../mavlink/parser';
 import { MAVLINK_MSG_ID } from '../mavlink/messages';
 import { pidAxisMessageName } from '../mavlink/pidTuning';
 import { pidTuningRecorder } from './pidTuningRecorder';
@@ -110,7 +110,7 @@ export function recordPacket(packet: MavlinkPacket, now = Date.now()): void {
   lastSeen.set(name, now);
   let decoded: Record<string, unknown>;
   try {
-    decoded = decodePayload(packet.messageId, packet.payload) ?? {};
+    decoded = decodePacket(packet) ?? {};
   } catch {
     return;
   }

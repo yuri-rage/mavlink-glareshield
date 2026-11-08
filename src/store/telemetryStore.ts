@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { MAVLINK_MSG_ID, getVehicleModeName, extractFirmwareVersion, isVehicleAutopilotHeartbeat, getMavCmdName, MAV_CMD } from '../mavlink/messages';
-import { decodePayload, MavlinkPacket } from '../mavlink/parser';
+import { decodePacket, MavlinkPacket } from '../mavlink/parser';
 import { mavlinkConnection } from '../mavlink/connection';
 import { messageRateManager } from '../mavlink/rateManager';
 
@@ -818,7 +818,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       return;
     }
 
-    const data = decodePayload(packet.messageId, packet.payload);
+    const data = decodePacket(packet);
 
     set((state) => {
       const now = Date.now();
@@ -1862,13 +1862,31 @@ useTelemetryStore.subscribe((state) => {
   lastFp = state.fencePoints;
   lastRp = state.rallyPoints;
 
-  const currentNav = {
+  // A mission download changes the list once per item; write the cache once it settles, not per item (each
+  // write serializes the whole mission into localStorage).
+  if (navSaveTimer) clearTimeout(navSaveTimer);
+  navSaveTimer = setTimeout(flushNavCache, 400);
+});
+
+let navSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function flushNavCache() {
+  navSaveTimer = null;
+  const state = useTelemetryStore.getState();
+  saveNavCache({
     missionWaypoints: state.missionWaypoints,
     fencePoints: state.fencePoints,
     rallyPoints: state.rallyPoints,
-  };
-  saveNavCache(currentNav);
-});
+  });
+}
+// Don't lose a pending write when the page closes.
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    if (navSaveTimer) {
+      clearTimeout(navSaveTimer);
+      flushNavCache();
+    }
+  });
+}
 
 /**
  * Commands the autopilot to navigate immediately to a specified waypoint sequence.

@@ -1,6 +1,6 @@
 // Read-only custom widget panels: numbers, lists, gauges, charts, compass, bars and LEDs.
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useTelemetryStore } from '../../../store/telemetryStore';
 import { evaluateAlert, toDisplayUnits, type BindingReading } from '../../../lib/widgetValues';
 import { valueSampler } from '../../../lib/valueSampler';
@@ -10,7 +10,7 @@ import { LinearGauge } from './LinearGauge';
 import { GaugeGrid, type GridGauge } from './GaugeGrid';
 import { TimeSeriesChart, type ChartSeries } from './TimeSeriesChart';
 import { ACCENT_HEX, SERIES_HEX, useChromeColors, type ColorScheme } from './palette';
-import { displayBinding, extractMultiBarItems, gaugeLevels, isMultiGauge, multiBarGroup, seriesLabel } from './panelModel';
+import { displayBinding, extractMultiBarItems, gaugeLevels, isMultiGauge, multiBarGroup, multiBarItemsEqual, seriesLabel, type MultiBarItem } from './panelModel';
 import type { PanelProps } from './panelKit';
 
 /** The primary value in display units, with its range (min / max are configured in base units). */
@@ -178,7 +178,15 @@ export const ValueListPanel: React.FC<PanelProps> = ({ bindings, readings }) => 
 
 export const MultiBarPanel: React.FC<PanelProps> = ({ def, scheme }) => {
   const group = multiBarGroup(def);
-  const items = useTelemetryStore((s) => extractMultiBarItems(group, s));
+  // The bars are built fresh from the store each time; handing back the previous list while it draws the same
+  // keeps this panel from re-rendering on every telemetry packet (attitude alone arrives many times a second).
+  const last = useRef<MultiBarItem[] | null>(null);
+  const items = useTelemetryStore((s) => {
+    const next = extractMultiBarItems(group, s);
+    if (last.current && multiBarItemsEqual(last.current, next)) return last.current;
+    last.current = next;
+    return next;
+  });
   return (
     <div className="space-y-1.5 py-0.5">
       {items.map((item) => {
