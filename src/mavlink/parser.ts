@@ -749,6 +749,22 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
       return out;
     }
 
+    case MAVLINK_MSG_ID.LOG_ENTRY:
+      return {
+        time_utc: getUint32(0),
+        size: getUint32(4),
+        id: getUint16(8),
+        num_logs: getUint16(10),
+        last_log_num: getUint16(12),
+      };
+
+    case MAVLINK_MSG_ID.LOG_DATA: {
+      const count = Math.min(90, getUint8(6));
+      const data = new Uint8Array(count);
+      for (let i = 0; i < count; i++) data[i] = getUint8(7 + i); // trailing zeros trimmed on the wire read as 0
+      return { ofs: getUint32(0), id: getUint16(4), count, data };
+    }
+
     case MAVLINK_MSG_ID.EXTENDED_SYS_STATE:
       return { vtol_state: getUint8(0), landed_state: getUint8(1) };
 

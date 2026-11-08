@@ -18,6 +18,9 @@ const MAV_AUTOPILOT_INVALID = 8;
 const SKIPPED = new Set<number>(
   [
     'PARAM_VALUE',
+    // Log listing and download traffic: bulk data, nothing to bind to.
+    'LOG_ENTRY',
+    'LOG_DATA',
     'STATUSTEXT',
     'COMMAND_ACK',
     'COMMAND_INT',
