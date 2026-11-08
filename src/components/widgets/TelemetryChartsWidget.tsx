@@ -72,7 +72,7 @@ export const TelemetryChartsWidget: React.FC = () => {
             <button
               type="button"
               onClick={() => setViewMode((m) => (m === 'stacked' ? 'combined' : 'stacked'))}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-zinc-800 hover:bg-zinc-800 text-[10px] font-bold text-zinc-300 uppercase"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-zinc-800 hover:bg-zinc-800 text-[11px] font-bold text-zinc-300 uppercase"
               title={viewMode === 'stacked' ? 'One axis per value (click for a single shared axis)' : 'One shared axis (click for an axis per value)'}
             >
               {viewMode === 'stacked' ? (

@@ -163,7 +163,7 @@ export const LogsWidget: React.FC = () => {
               type="button"
               onClick={() => setConfirmErase((c) => !c)}
               disabled={!!blocked || !!transfer || !list || list.numLogs === 0}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-zinc-800 hover:bg-red-950/40 hover:text-red-300 text-[10px] font-bold text-zinc-400 uppercase disabled:opacity-40"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-zinc-800 hover:bg-red-950/40 hover:text-red-300 text-[11px] font-bold text-zinc-400 uppercase disabled:opacity-40"
               title="Delete every log on the vehicle"
             >
               <Trash2 className="h-3 w-3" />

@@ -36,10 +36,10 @@ export interface TimeSeriesChartProps {
 }
 
 export const WINDOW_CHOICES = [10, 30, 60, 300] as const;
-const LEFT = 44;
+const LEFT = 50;
 const RIGHT = 8;
 const TOP = 6;
-const BOTTOM = 18;
+const BOTTOM = 19;
 const FRAME_MS = 66; // ~15 fps
 
 function windowLabel(sec: number): string {
@@ -93,7 +93,7 @@ export const ChartControls: React.FC<{
           key={sec}
           type="button"
           onClick={() => onWindow(sec)}
-          className={`px-1.5 py-0.5 text-[10px] font-mono ${
+          className={`px-1.5 py-0.5 text-[11px] font-mono ${
             windowSec === sec ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
           }`}
           aria-pressed={windowSec === sec}
@@ -205,7 +205,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
       const yOf = (v: number) => TOP + (1 - (v - yLo) / ySpan) * plotH;
 
       // Grid and axes.
-      ctx.font = '10px ui-monospace, monospace';
+      ctx.font = '11px ui-monospace, monospace';
       ctx.textBaseline = 'middle';
       const yCount = Math.max(3, Math.min(8, Math.floor(plotH / 22)));
       const yStep = niceStep(yLo, yHi, yCount);
@@ -351,9 +351,9 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
         });
         const ago = (end - t) / 1000;
         const header = ago < 0.05 ? 'now' : `-${ago.toFixed(1)}s`;
-        ctx.font = '10px ui-monospace, monospace';
+        ctx.font = '11px ui-monospace, monospace';
         const boxW = Math.max(...[header, ...lines.map((l) => l.text)].map((s) => ctx.measureText(s).width)) + 16;
-        const boxH = 14 * (lines.length + 1) + 6;
+        const boxH = 15 * (lines.length + 1) + 6;
         const bx = hx + 10 + boxW > LEFT + plotW ? hx - 10 - boxW : hx + 10;
         const by = TOP + 4;
         ctx.fillStyle = colors.panel;
@@ -368,7 +368,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
         ctx.fillText(header, bx + 8, by + 4);
         lines.forEach((l, i) => {
           ctx.fillStyle = l.color;
-          ctx.fillText(l.text, bx + 8, by + 4 + 14 * (i + 1));
+          ctx.fillText(l.text, bx + 8, by + 4 + 15 * (i + 1));
         });
       }
     };
@@ -406,9 +406,9 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
           {series.map((s, i) => (
             <span key={s.key + i} className="flex items-baseline gap-1 min-w-0">
               <span className="h-2 w-2 rounded-full shrink-0 self-center" style={{ background: s.color }} />
-              {(series.length > 1 || legendLabels) && <span className="text-[10px] text-zinc-400 truncate">{s.label}</span>}
-              <span className={`${series.length > 1 ? 'text-sm' : 'text-2xl'} font-bold text-zinc-100`}>{latest[i] ?? '--'}</span>
-              <span className="text-[10px] text-zinc-400">{s.unit}</span>
+              {(series.length > 1 || legendLabels) && <span className="text-xs text-zinc-400 truncate">{s.label}</span>}
+              <span className={`${series.length > 1 ? 'text-base' : 'text-2xl'} font-bold text-zinc-100`}>{latest[i] ?? '--'}</span>
+              <span className="text-xs text-zinc-400">{s.unit}</span>
             </span>
           ))}
         </div>

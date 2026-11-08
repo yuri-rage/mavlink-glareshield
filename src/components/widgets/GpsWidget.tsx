@@ -98,27 +98,27 @@ export const GpsWidget: React.FC = () => {
       <CardContent className="p-3 space-y-2.5 flex-1 flex flex-col justify-between">
         {/* Metric stats grid: 2x2 grid prevents truncation at 1/3 card width */}
         <div className="grid grid-cols-2 gap-2">
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-1 min-w-0">
-            <span className="text-[10px] text-zinc-400 font-bold uppercase shrink-0">Sats</span>
-            <div className="text-sm sm:text-base font-mono font-bold text-zinc-100 whitespace-nowrap">
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-x-1 min-w-0">
+            <span className="text-[11px] text-zinc-400 font-bold uppercase shrink-0">Sats</span>
+            <div className="ml-auto text-sm sm:text-base font-mono font-bold text-zinc-100 whitespace-nowrap">
               {!hasLink ? '--' : gps2 ? `${gps.satellites} / ${gps2.satellites}` : gps.satellites}
             </div>
           </div>
 
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-1 min-w-0">
-            <span className="text-[10px] text-zinc-400 font-bold uppercase shrink-0">HDOP</span>
-            <div className="text-sm sm:text-base font-mono font-bold text-zinc-100 whitespace-nowrap">
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-x-1 min-w-0">
+            <span className="text-[11px] text-zinc-400 font-bold uppercase shrink-0">HDOP</span>
+            <div className="ml-auto text-sm sm:text-base font-mono font-bold text-zinc-100 whitespace-nowrap">
               {hasLink && gps.hdop > 0 && gps.hdop < 90 ? gps.hdop.toFixed(2) : '--'}
             </div>
           </div>
 
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-1 min-w-0">
-            <span className="text-[10px] text-zinc-400 font-bold uppercase shrink-0">Speed</span>
-            <div className="text-sm sm:text-base font-mono font-bold text-zinc-100 whitespace-nowrap">
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-x-1 min-w-0">
+            <span className="text-[11px] text-zinc-400 font-bold uppercase shrink-0">Speed</span>
+            <div className="ml-auto text-sm sm:text-base font-mono font-bold text-zinc-100 whitespace-nowrap">
               {hasLink ? (
                 <>
                   {spdFormatted.value}{' '}
-                  <span className="text-[10px] text-zinc-400 font-normal">{spdFormatted.unit}</span>
+                  <span className="text-[11px] text-zinc-400 font-normal">{spdFormatted.unit}</span>
                 </>
               ) : (
                 '--'
@@ -126,12 +126,12 @@ export const GpsWidget: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-1 min-w-0">
-            <span className="text-[10px] text-zinc-400 font-bold uppercase shrink-0">
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-x-1 min-w-0">
+            <span className="text-[11px] text-zinc-400 font-bold uppercase shrink-0">
               {hasAnyYaw ? getYawLabel() : 'COG'}
             </span>
             <div
-              className="text-sm sm:text-base font-mono font-bold text-zinc-100 whitespace-nowrap"
+              className="ml-auto text-sm sm:text-base font-mono font-bold text-zinc-100 whitespace-nowrap"
               title={hasAnyYaw ? getYawDisplay() : `${gps.cog.toFixed(0)}°`}
             >
               {!hasLink
@@ -144,7 +144,7 @@ export const GpsWidget: React.FC = () => {
         </div>
 
         {/* Position coordinates readout */}
-        <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-2 space-y-1 font-mono text-xs">
+        <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-2 space-y-1 font-mono text-xs sm:text-[13px]">
           <div className="flex justify-between items-center text-zinc-300">
             <span className="text-zinc-500">Lat:</span>
             <span className="font-bold text-zinc-200 truncate">

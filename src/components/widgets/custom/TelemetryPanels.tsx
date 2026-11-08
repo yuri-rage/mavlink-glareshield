@@ -167,7 +167,7 @@ export const ValueListPanel: React.FC<PanelProps> = ({ bindings, readings }) => 
               level === 'crit' ? 'text-red-400' : level === 'warn' ? 'text-amber-300' : 'text-zinc-100'
             }`}
           >
-            {r?.text ?? '--'} <span className="text-[10px] font-normal text-zinc-500">{r?.unit}</span>
+            {r?.text ?? '--'} <span className="text-[11px] font-normal text-zinc-500">{r?.unit}</span>
           </span>
         </React.Fragment>
       );
@@ -194,7 +194,7 @@ export const MultiBarPanel: React.FC<PanelProps> = ({ def, scheme }) => {
         const barColor = isCrit ? 'bg-red-500' : isWarn ? 'bg-amber-500' : scheme.bg;
         return (
           <div key={item.label} className="space-y-0.5">
-            <div className="flex justify-between items-center text-[10px] font-mono">
+            <div className="flex justify-between items-center text-[11px] font-mono">
               <span className="text-zinc-400 font-semibold">{item.label}</span>
               <span className={isCrit ? 'text-red-400 font-bold' : isWarn ? 'text-amber-300 font-bold' : 'text-zinc-200'}>
                 {item.displayValue ?? `${item.value} ${item.unit}`.trim()}
@@ -262,7 +262,7 @@ export const CompassPanel: React.FC<PanelProps> = (props) => {
             ▲ {secondary.label} {secondary.text}
           </div>
         )}
-        <div className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">
+        <div className="text-[11px] text-zinc-500 uppercase tracking-wider mt-0.5">
           {def.binding?.messageName || 'VECTOR'} · {def.binding?.fieldName || 'deg'}
         </div>
         {def.description && <div className="text-[10px] text-zinc-400 mt-1">{def.description}</div>}
@@ -325,7 +325,7 @@ export const LedPanel: React.FC<PanelProps> = (props) => {
       <div className={`h-5 w-5 rounded-full border shadow-lg ${on ? `${props.scheme.ledActive} animate-pulse` : 'bg-zinc-800 border-zinc-700'}`} />
       <div>
         <span className="text-sm font-bold text-zinc-200">{primary?.stale ? 'NO DATA' : on ? 'ACTIVE / HIGH' : 'INACTIVE / LOW'}</span>
-        <span className="text-[10px] text-zinc-500 block font-mono">
+        <span className="text-[11px] text-zinc-500 block font-mono">
           Value: {boundText} {unit} · on above {threshold}
         </span>
       </div>

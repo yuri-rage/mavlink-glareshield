@@ -136,18 +136,18 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
             {stale.count > 0 && (
               <Badge
                 variant="secondary"
-                className="text-[9px] px-1.5 py-0 font-mono uppercase"
+                className="text-[10px] px-1.5 py-0 font-mono uppercase"
                 title={`No ${stale.messages.join(', ')} received for ${stale.ageSec}s`}
               >
                 Stale {stale.ageSec}s
               </Badge>
             )}
             {alert !== 'normal' && !stale.all && (
-              <Badge variant={alert === 'crit' ? 'destructive' : 'warning'} className="text-[9px] px-1.5 py-0 font-mono uppercase animate-pulse">
+              <Badge variant={alert === 'crit' ? 'destructive' : 'warning'} className="text-[10px] px-1.5 py-0 font-mono uppercase animate-pulse">
                 {alert === 'crit' ? 'CRIT' : 'WARN'}
               </Badge>
             )}
-            <Badge variant="secondary" className="text-[9px] font-sans font-semibold capitalize">
+            <Badge variant="secondary" className="text-[10px] font-sans font-semibold capitalize">
               {definition.category}
             </Badge>
           </div>
@@ -172,7 +172,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                 >
                   {/* A built-in widget brings its own title row. */}
                   {title && p.def.displayType !== 'builtin' && (
-                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1 mb-1.5 truncate">
+                    <h4 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1 mb-1.5 truncate">
                       <Icon className={`h-3 w-3 shrink-0 ${p.scheme.icon}`} />
                       <span className="truncate">{title}</span>
                     </h4>

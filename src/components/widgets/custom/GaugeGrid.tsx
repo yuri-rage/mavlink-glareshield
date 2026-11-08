@@ -38,7 +38,7 @@ export const GaugeGrid: React.FC<{ gauges: GridGauge[]; config?: WidgetGaugeConf
     >
       {gauges.map((g) => (
         <div key={g.key} className="flex flex-col min-h-0 min-w-0">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 text-center truncate leading-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 text-center truncate leading-4">
             {g.label}
           </div>
           <div className="relative flex-1 min-h-0">

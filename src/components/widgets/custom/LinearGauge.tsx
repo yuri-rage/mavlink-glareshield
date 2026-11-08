@@ -49,9 +49,9 @@ export const LinearGauge: React.FC<LinearGaugeProps> = ({
   return (
     <div className={`${compact ? 'space-y-0.5' : 'space-y-1.5'} transition-opacity ${dimmed ? 'opacity-40' : ''}`}>
       <div className="flex justify-between items-baseline font-mono gap-2 min-w-0">
-        {label && <span className="text-[11px] text-zinc-400 font-semibold truncate">{label}</span>}
+        {label && <span className="text-xs text-zinc-400 font-semibold truncate">{label}</span>}
         <span className={`${compact ? 'text-sm' : 'text-2xl'} font-bold ${valueClass} ${label ? 'ml-auto' : ''} whitespace-nowrap`}>
-          {text} <span className={`${compact ? 'text-[10px]' : 'text-xs'} font-normal text-zinc-400`}>{unit}</span>
+          {text} <span className={`${compact ? 'text-[11px]' : 'text-xs'} font-normal text-zinc-400`}>{unit}</span>
         </span>
         {secondary && (
           <span className="text-[10px] font-mono truncate" style={{ color: '#d946ef' }}>
@@ -87,7 +87,7 @@ export const LinearGauge: React.FC<LinearGaugeProps> = ({
             />
           ))}
         </div>
-        <div className="relative h-3.5 mt-0.5 text-[9px] font-mono text-zinc-500">
+        <div className="relative h-4 mt-0.5 text-[10px] font-mono text-zinc-500">
           {ticks.map((t, i) => (
             <span
               key={t}
