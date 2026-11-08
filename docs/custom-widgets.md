@@ -624,6 +624,7 @@ A panel can also hold one of the dashboard's built-in widgets: set `displayType`
 | `built-in-vfr-hud` | VFR Flight Metrics | |
 | `built-in-hud` | Heads-Up Display | At least 300 px tall. A second HUD opens a second camera stream. |
 | `built-in-charts` | Telemetry Charts | At least 300 px tall |
+| `built-in-logs` | Onboard Logs | At least 220 px tall. Controls: log download and erase |
 | `built-in-pid-tuning` | PID Tuning | At least 380 px tall. Controls: GCS_PID_MASK (which controllers report) |
 | `built-in-statustext` | STATUSTEXT Console | At least 280 px tall |
 | `built-in-statustext-mini` | Mini STATUSTEXT | Compact; newest at the top or the bottom (header toggle). Grows with the panels beside it. |

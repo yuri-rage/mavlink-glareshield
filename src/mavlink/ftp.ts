@@ -186,6 +186,11 @@ export function packFtpMessage(
   return encoder.packV2(MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL, payload);
 }
 
+export interface ReadFileOptions {
+  /** Read only if the vehicle reports exactly this size when the file opens; otherwise resolve null. */
+  expectedSize?: number;
+}
+
 export class MavFtpClient {
   private seq = 0;
   private currentAbort: (() => void) | null = null;
@@ -232,6 +237,7 @@ export class MavFtpClient {
     chunkSize = 239,
     timeoutMs = 1500,
     onProgress?: (bytesReceived: number, totalBytes: number) => void,
+    options: ReadFileOptions = {},
   ): Promise<Uint8Array | null> {
     const generation = this.queueGeneration;
     const nextTransfer = this.transferQueue.then(
@@ -247,6 +253,7 @@ export class MavFtpClient {
           chunkSize,
           timeoutMs,
           onProgress,
+          options,
         );
       },
       () => {
@@ -261,6 +268,7 @@ export class MavFtpClient {
           chunkSize,
           timeoutMs,
           onProgress,
+          options,
         );
       },
     );
@@ -275,6 +283,7 @@ export class MavFtpClient {
     chunkSize = 239,
     timeoutMs = 1500,
     onProgress?: (bytesReceived: number, totalBytes: number) => void,
+    options: ReadFileOptions = {},
   ): Promise<Uint8Array | null> {
     this.activeTransferId++;
     const hb = useTelemetryStore.getState().heartbeat;
@@ -469,6 +478,14 @@ export class MavFtpClient {
                 console.log(
                   `[MAVFTP] OpenFileRO succeeded for ${filePath}. Session: ${session}, Size: ${fileSize} bytes.`,
                 );
+                if (options.expectedSize !== undefined && fileSize !== options.expectedSize) {
+                  // Not the file the caller meant (e.g. a log number that maps to another log): don't read it.
+                  console.log(
+                    `[MAVFTP] ${filePath} is ${fileSize} bytes, expected ${options.expectedSize}; not reading it.`,
+                  );
+                  finish(null);
+                  return;
+                }
                 if (fileSize > 0) {
                   buffer = new Uint8Array(fileSize);
                 }

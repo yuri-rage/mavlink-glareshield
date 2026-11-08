@@ -83,6 +83,12 @@ MSG_RANGEFINDER = 173
 MSG_EKF_STATUS_REPORT = 193
 MSG_PID_TUNING = 194
 MSG_EXTENDED_SYS_STATE = 245
+MSG_LOG_REQUEST_LIST = 117
+MSG_LOG_ENTRY = 118
+MSG_LOG_REQUEST_DATA = 119
+MSG_LOG_DATA = 120
+MSG_LOG_ERASE = 121
+MSG_LOG_REQUEST_END = 122
 MSG_RPM = 226
 MSG_GPS_RTCM_DATA = 233
 MSG_VIBRATION = 241
@@ -127,6 +133,8 @@ CRC_EXTRA = {
     MSG_EKF_STATUS_REPORT: 71,
     MSG_PID_TUNING: 98,
     MSG_EXTENDED_SYS_STATE: 130,
+    MSG_LOG_ENTRY: 56,
+    MSG_LOG_DATA: 134,
     MSG_RPM: 207,
     MSG_GPS_RTCM_DATA: 35,
     MSG_VIBRATION: 90,
@@ -247,6 +255,14 @@ class BridgeServer:
         self.flight_mode = 0  # STABILIZE
         # GCS_PID_MASK: bits 0-3 select roll, pitch, yaw and accel Z PID_TUNING (Copter's layout).
         self.gcs_pid_mask = 0
+        # Onboard logs: list entries 1-3 are log files 7-9 (oldest first, like ArduPilot). The newest is the
+        # active log: its file has grown past its listed size, so MAVFTP is refused and LOG_DATA is used.
+        self.mock_logs = []  # (file number, listed size, time_utc, data)
+        for num, size, t in ((7, 120_000, 1_762_500_000), (8, 45_000, 1_762_510_000), (9, 30_000, 0)):
+            data = bytes(((i * 7 + num) % 251) for i in range(size))
+            self.mock_logs.append((num, size, t, data))
+        self.log_stream_task = None
+        self.log_data_requests = 0
         # Simulated controller response per PID_TUNING axis: [achieved, velocity, integrator].
         self.pid_state = {axis: [0.0, 0.0, 0.0] for axis in (1, 2, 3, 4)}
         self.sim_lat = 37.7749
@@ -258,6 +274,7 @@ class BridgeServer:
 
         # Mock MAVFTP file store and session tracking
         self.mock_files: dict[str, bytearray] = {}
+        self.refresh_mock_log_files()
         self.mock_ftp_sessions: dict[int, dict[str, Any]] = {}
         self.next_ftp_session_id = 1
 
@@ -731,6 +748,36 @@ class BridgeServer:
                 )
                 await self.broadcast(self.encoder.pack(MSG_PARAM_VALUE, val_bytes))
 
+            elif msgid in (MSG_LOG_REQUEST_LIST, MSG_LOG_REQUEST_DATA, MSG_LOG_ERASE, MSG_LOG_REQUEST_END):
+                if self.armed:
+                    pass  # ArduPilot ignores log requests while armed
+                elif msgid == MSG_LOG_REQUEST_LIST:
+                    start, end = struct.unpack("<HH", payload.ljust(6, b"\x00")[:4])
+                    n = len(self.mock_logs)
+                    if n == 0:
+                        await self.broadcast(self.encoder.pack(MSG_LOG_ENTRY, struct.pack("<IIHHH", 0, 0, 0, 0, 0)))
+                    else:
+                        last = min(end, n)
+                        for entry in range(max(1, start), last + 1):
+                            _num, size, t, _d = self.mock_logs[entry - 1]
+                            await self.broadcast(
+                                self.encoder.pack(MSG_LOG_ENTRY, struct.pack("<IIHHH", t, size, entry, n, last))
+                            )
+                elif msgid == MSG_LOG_REQUEST_DATA:
+                    ofs, count, log_id = struct.unpack("<IIH", payload.ljust(12, b"\x00")[:10])
+                    if 1 <= log_id <= len(self.mock_logs):
+                        if self.log_stream_task and not self.log_stream_task.done():
+                            self.log_stream_task.cancel()
+                        self.log_stream_task = asyncio.create_task(self.stream_mock_log(log_id - 1, ofs, count))
+                elif msgid == MSG_LOG_REQUEST_END:
+                    if self.log_stream_task and not self.log_stream_task.done():
+                        self.log_stream_task.cancel()
+                    self.log_data_requests = 0
+                elif msgid == MSG_LOG_ERASE:
+                    print("[MOCK] LOG_ERASE")
+                    self.mock_logs = []
+                    self.refresh_mock_log_files()
+
             elif msgid == MSG_PARAM_REQUEST_READ:
                 if len(payload) < 20:
                     payload = payload.ljust(20, b"\x00")
@@ -1193,6 +1240,39 @@ class BridgeServer:
                     await self.broadcast(
                         self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
                     )
+
+    def refresh_mock_log_files(self):
+        """The SD card as MAVFTP sees it: /APM/LOGS/LASTLOG.TXT and one .BIN per log."""
+        for k in [k for k in self.mock_files if k.startswith("/APM/LOGS/")]:
+            del self.mock_files[k]
+        if not self.mock_logs:
+            return
+        self.mock_files["/APM/LOGS/LASTLOG.TXT"] = bytearray(f"{self.mock_logs[-1][0]}\r\n".encode())
+        for i, (num, size, _t, data) in enumerate(self.mock_logs):
+            on_disk = data + (bytes(500) if i == len(self.mock_logs) - 1 else b"")  # active log kept growing
+            self.mock_files[f"/APM/LOGS/{num:08d}.BIN"] = bytearray(on_disk)
+
+    async def stream_mock_log(self, log_index: int, ofs: int, count: int):
+        """LOG_DATA for one LOG_REQUEST_DATA; the first request drops a few packets so the GCS must fill gaps."""
+        num, size, _t, data = self.mock_logs[log_index]
+        self.log_data_requests += 1
+        drop = self.log_data_requests == 1
+        end = min(size, ofs + count)
+        n = 0
+        while ofs < end:
+            chunk = data[ofs : min(end, ofs + 90)]
+            if not (drop and n % 97 == 5):
+                pkt = struct.pack("<IHB", ofs, log_index + 1, len(chunk)) + chunk.ljust(90, b"\x00")
+                await self.broadcast(self.encoder.pack(MSG_LOG_DATA, pkt))
+            ofs += len(chunk)
+            n += 1
+            if n % 40 == 0:
+                await asyncio.sleep(0.005)
+        if end >= size:
+            # End of log: a LOG_DATA with count 0 at the end offset.
+            await self.broadcast(
+                self.encoder.pack(MSG_LOG_DATA, struct.pack("<IHB", size, log_index + 1, 0) + bytes(90))
+            )
 
     def mock_pid_tuning(self, axis: int, elapsed: float) -> bytes:
         """One PID_TUNING payload: step inputs tracked by a slightly underdamped response."""

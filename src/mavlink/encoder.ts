@@ -254,6 +254,40 @@ export class MavlinkEncoder {
     return this.packV2(MAVLINK_MSG_ID.PARAM_REQUEST_LIST, payload);
   }
 
+  // Onboard logs (ArduPilot ignores these while armed)
+  /** LOG_REQUEST_LIST: the vehicle answers with one LOG_ENTRY per log in [start, end]. */
+  public createLogRequestList(targetSystem = 1, targetComponent = 1, start = 0, end = 0xffff): Uint8Array {
+    const payload = new Uint8Array(6);
+    const view = new DataView(payload.buffer);
+    view.setUint16(0, start, true);
+    view.setUint16(2, end, true);
+    payload[4] = targetSystem;
+    payload[5] = targetComponent;
+    return this.packV2(MAVLINK_MSG_ID.LOG_REQUEST_LIST, payload);
+  }
+
+  /** LOG_REQUEST_DATA: stream `count` bytes of log `id` from `ofs` as LOG_DATA (90 bytes each). */
+  public createLogRequestData(targetSystem: number, targetComponent: number, id: number, ofs: number, count: number): Uint8Array {
+    const payload = new Uint8Array(12);
+    const view = new DataView(payload.buffer);
+    view.setUint32(0, ofs, true);
+    view.setUint32(4, count, true);
+    view.setUint16(8, id, true);
+    payload[10] = targetSystem;
+    payload[11] = targetComponent;
+    return this.packV2(MAVLINK_MSG_ID.LOG_REQUEST_DATA, payload);
+  }
+
+  /** LOG_REQUEST_END: stop sending log data (ArduPilot resumes normal logging). */
+  public createLogRequestEnd(targetSystem = 1, targetComponent = 1): Uint8Array {
+    return this.packV2(MAVLINK_MSG_ID.LOG_REQUEST_END, new Uint8Array([targetSystem, targetComponent]));
+  }
+
+  /** LOG_ERASE: delete every onboard log. */
+  public createLogErase(targetSystem = 1, targetComponent = 1): Uint8Array {
+    return this.packV2(MAVLINK_MSG_ID.LOG_ERASE, new Uint8Array([targetSystem, targetComponent]));
+  }
+
   // Set Parameter Value
   public createParamSet(
     targetSystem = 1,

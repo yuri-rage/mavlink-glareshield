@@ -25,6 +25,7 @@ import {
   Trash2,
   Check,
   Activity,
+  FileText,
 } from 'lucide-react';
 
 function getMavCmdName(cmdId: number): string {
@@ -113,6 +114,15 @@ const BUILT_IN_CATALOG = [
     description: 'Rolling time-series graphs of altitude, groundspeed, and battery current.',
     icon: LineChart,
     defaultSpan: 12,
+  },
+  {
+    id: 'built-in-logs',
+    name: 'Onboard Logs',
+    category: 'telemetry',
+    description:
+      "The vehicle's DataFlash (.bin) logs: list, download to this computer (MAVFTP when possible, otherwise MAVLink) and erase. ArduPilot only sends logs while disarmed.",
+    icon: FileText,
+    defaultSpan: 6,
   },
   {
     id: 'built-in-pid-tuning',
