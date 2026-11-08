@@ -481,9 +481,25 @@ class BridgeServer:
                 except OSError:
                     pass
         elif self.mode == "tcp" and self.transport:
-            cast(Any, self.transport).write(data)
+            writer = cast(Any, self.transport)
+            if writer.is_closing():
+                return  # dropped; setup_tcp reconnects
+            try:
+                writer.write(data)
+            except OSError as e:
+                self.note_write_error("TCP", e)
         elif self.mode == "serial" and self.serial_conn:
-            self.serial_conn.write(data)
+            try:
+                self.serial_conn.write(data)
+            except OSError as e:  # pyserial's SerialException is an OSError
+                self.note_write_error("SERIAL", e)
+
+    def note_write_error(self, kind: str, e: OSError):
+        """A failed write to the vehicle: logged once per kind of error, not once per packet."""
+        key = f"{kind}:{e}"
+        if key != getattr(self, "_last_write_error", None):
+            self._last_write_error = key
+            print(f"[{kind}] Write to vehicle failed ({e}); waiting for the link to come back.")
 
     def relay_status_packet(self) -> bytes:
         """RELAY_STATUS: time_boot_ms, on and present bitmasks (bit n = relay instance n)."""
@@ -827,6 +843,13 @@ class BridgeServer:
                     )
                     await self.broadcast(self.encoder.pack(MSG_PARAM_VALUE, val_bytes))
                     await asyncio.sleep(0.02)
+
+            elif msgid == MSG_MISSION_REQUEST_LIST and len(payload) >= 3 and payload[2] in (1, 2):
+                # Fence (1) or rally (2): the mock has none. Answer with a count of 0 for that mission_type, so the
+                # GCS doesn't wait out its retries for a reply that never matches.
+                await self.broadcast(
+                    self.encoder.pack(MSG_MISSION_COUNT, struct.pack("<HBBB", 0, 255, 0, payload[2]))
+                )
 
             elif msgid == MSG_MISSION_REQUEST_LIST:
                 print(
@@ -1737,15 +1760,19 @@ class BridgeServer:
             try:
                 reader, writer = await asyncio.open_connection(tcp_ip, tcp_port)
                 self.transport = writer
+                self._last_write_error = None
                 print(f"[TCP] Connected to {tcp_ip}:{tcp_port}")
                 while True:
                     data = await reader.read(4096)
                     if not data:
                         break
                     await self.broadcast(data)
+                print("[TCP] Connection closed by the vehicle, reconnecting in 2s...")
             except Exception as e:  # noqa: BLE001
                 print(f"[TCP] Connection failed ({e}), retrying in 2s...")
-                await asyncio.sleep(2)
+            # Don't keep writing into a closed connection while reconnecting.
+            self.transport = None
+            await asyncio.sleep(2)
 
     @staticmethod
     def parse_serial_target(target: str) -> tuple[str, int]:

@@ -26,20 +26,21 @@ export const FTP_OPCODE = {
 } as const;
 
 // MAVFTP Error codes
+// MAVFTP error codes (MAV_FTP_ERR), first byte of a NAK's data. FailErrno carries the errno in the second byte.
 export const FTP_ERR = {
   None: 0,
   Fail: 1,
   FailErrno: 2,
   InvalidDataSize: 3,
   InvalidSession: 4,
-  NoSuchFile: 5,
-  NoFirstList: 6,
-  ByteOffsetInvalid: 7,
+  NoSessionsAvailable: 5,
+  EndOfFile: 6,
+  UnknownCommand: 7,
   FileExists: 8,
   FileProtected: 9,
   FileNotFound: 10,
-  EndOfFile: 6, // ArduPilot uses 6 for EOF
 } as const;
+const ENOENT = 2;
 
 export interface FtpParsedMessage {
   seq: number;
@@ -294,6 +295,8 @@ export class MavFtpClient {
       let isDone = false;
       let session = 0;
       let fileOpened = false;
+      /** Sequence number of the latest OpenFileRO sent (-1 before the first). */
+      let openSeq = -1;
       let fileSize = -1;
       let useBurst = true;
       let highestOffset = 0;
@@ -432,19 +435,32 @@ export class MavFtpClient {
               return;
             }
 
+            // Only the reply to the latest open attempt counts (a late reply to an earlier, timed-out attempt
+            // would otherwise be taken for this one).
+            if (openSeq >= 0 && ftp.seq !== ((openSeq + 1) & 0xffff)) return;
+
             if (ftp.opcode === FTP_OPCODE.Nack) {
               const errCode = ftp.data[0];
+              // No such file (ArduPilot: FailErrno + ENOENT; the spec: FileNotFound): retrying can't help.
+              if (errCode === FTP_ERR.FileNotFound || (errCode === FTP_ERR.FailErrno && ftp.data[1] === ENOENT)) {
+                console.log(`[MAVFTP] ${filePath} not found on the vehicle.`);
+                finish(null);
+                return;
+              }
               if (retryCount < 2) {
                 retryCount++;
+                // A file left open by an earlier transfer (Fail), or no free session: reset all sessions. ArduPilot
+                // runs one session and ResetSessions closes its file whatever the session id; transfers here are
+                // queued one at a time, so nothing else is in flight.
                 console.log(
-                  `[MAVFTP] OpenFileRO Nack (code=${errCode}) for ${filePath}, terminating stale session and retrying (attempt ${retryCount + 1})...`,
+                  `[MAVFTP] OpenFileRO Nack (code=${errCode}) for ${filePath}, resetting sessions and retrying (attempt ${retryCount + 1})...`,
                 );
                 const termMsg = packFtpMessage(
                   sysId,
                   compId,
                   this.nextSeq(),
-                  session,
-                  FTP_OPCODE.TerminateSession,
+                  0,
+                  FTP_OPCODE.ResetSessions,
                   0,
                   0,
                 );
@@ -632,10 +648,11 @@ export class MavFtpClient {
         pathWithNull.set(pathBytes);
         pathWithNull[pathBytes.length] = 0;
 
+        openSeq = this.nextSeq();
         const openMsg = packFtpMessage(
           sysId,
           compId,
-          this.nextSeq(),
+          openSeq,
           0,
           FTP_OPCODE.OpenFileRO,
           pathBytes.length,
