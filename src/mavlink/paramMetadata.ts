@@ -432,15 +432,21 @@ export function parseParamFile(content: string): Record<string, number> {
 }
 
 /**
- * Format parameter value for display and serialization.
- * Uses 7 significant digits, which represents the full precision limit of IEEE-754 32-bit floats
- * (~7.22 decimal digits) without exposing single-precision binary conversion noise (e.g. 0.200000003).
+ * Format a parameter value for display and for .param files: the fewest significant digits (7 to 9) that read
+ * back as the same 32-bit float the vehicle stores. Most values need 7 (0.2, not 0.200000003); some need 8 or 9
+ * (123456.78 is stored as 123456.78125, and "123456.8" would load back as a different float), so files saved
+ * here reload exactly and a value typed back in is the value that was shown.
  */
 export function formatParamValue(val: number): string {
-  if (val === undefined || val === null || isNaN(val)) return '-';
+  if (val === undefined || val === null || Number.isNaN(val)) return '-';
+  if (!Number.isFinite(val)) return String(val);
   if (Number.isInteger(val)) return String(val);
-  const str = Number(val).toPrecision(7);
-  return String(parseFloat(str));
+  const target = Math.fround(val);
+  for (let digits = 7; digits < 9; digits++) {
+    const candidate = parseFloat(val.toPrecision(digits));
+    if (Math.fround(candidate) === target) return String(candidate);
+  }
+  return String(parseFloat(val.toPrecision(9)));
 }
 
 /**

@@ -1,6 +1,6 @@
 // Hooks and small pieces shared by the custom widget panels.
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTelemetryStore, sendTrackedCommand } from '../../../store/telemetryStore';
 import { readBinding, type AlertState, type BindingReading, type UnitSystem } from '../../../lib/widgetValues';
 import type { CustomWidgetDefinition, WidgetDataBinding } from '../../../types/widget';
@@ -39,19 +39,23 @@ export function useVehicleTarget() {
   return { sysId, compId };
 }
 
-/** Content width of an element, tracked as it resizes (`null` before first measurement or in non-DOM tests). */
+/**
+ * Content width of an element, tracked as it resizes (`null` before first measurement or in non-DOM tests).
+ * `ref` is a callback ref, so measuring starts whenever the element mounts, including after a first render
+ * that returned something else (an empty state, say).
+ */
 export function usePanelWidth<T extends HTMLElement>(enabled = true) {
-  const ref = useRef<T>(null);
+  const [el, setEl] = useState<T | null>(null);
   const [width, setWidth] = useState<number | null>(null);
+  const ref = useCallback((node: T | null) => setEl(node), []);
   useEffect(() => {
-    const el = ref.current;
     if (!enabled || !el) return;
     if (el.clientWidth > 0) setWidth(el.clientWidth);
     if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [enabled]);
+  }, [enabled, el]);
   return { ref, width };
 }
 
