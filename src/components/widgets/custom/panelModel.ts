@@ -184,6 +184,29 @@ export interface MultiBarItem {
   critAbove?: number;
 }
 
+/** Whether two bar lists would draw the same (so a panel can skip re-rendering). */
+export function multiBarItemsEqual(a: MultiBarItem[], b: MultiBarItem[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.label !== y.label ||
+      x.value !== y.value ||
+      x.min !== y.min ||
+      x.max !== y.max ||
+      x.unit !== y.unit ||
+      x.displayValue !== y.displayValue ||
+      x.warnAbove !== y.warnAbove ||
+      x.critAbove !== y.critAbove
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function extractMultiBarItems(group: MultiBarGroupType, state: any): MultiBarItem[] {
   switch (group) {
     case 'rc-8': {

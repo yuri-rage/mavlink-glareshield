@@ -167,6 +167,19 @@ export class MavlinkParser {
   }
 }
 
+// Each received packet is decoded by more than one listener (the telemetry store and the binding cache);
+// decodePacket keeps the result per packet so it is decoded once. A WeakMap, so it goes when the packet does.
+// Callers treat the result as read-only. decodePayload itself stays uncached (a buffer can be reused).
+const packetDecodeCache = new WeakMap<object, any>();
+
+/** decodePayload for a received packet, decoded once however many listeners ask. */
+export function decodePacket(packet: { messageId: number; payload: Uint8Array }): any {
+  if (packetDecodeCache.has(packet)) return packetDecodeCache.get(packet);
+  const value = decodePayload(packet.messageId, packet.payload);
+  packetDecodeCache.set(packet, value);
+  return value;
+}
+
 // Payload Decoders
 export function decodePayload(messageId: number, payload: Uint8Array): any {
   // MAVLink 2 zero-byte trimming: trailing zero bytes are omitted on the wire.

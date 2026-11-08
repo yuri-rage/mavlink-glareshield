@@ -99,12 +99,25 @@ interface MapWidgetProps {
   colSpan?: number;
 }
 
+/** The Home marker's popup: source, altitude, position, and the vector from the vehicle when known. */
+function homePopupHtml(home: {
+  source: string;
+  alt: number;
+  lat: number;
+  lon: number;
+  distanceM: number | null;
+  bearingDeg: number | null;
+}): string {
+  return `<b>Home Position (${home.source})</b><br/>Alt: ${home.alt.toFixed(1)}m<br/>Lat: ${home.lat.toFixed(6)}<br/>Lon: ${home.lon.toFixed(6)}${
+    home.distanceM !== null ? `<br/>${useUnitsStore.getState().formatHomeVector(home.bearingDeg, home.distanceM)}` : ''
+  }`;
+}
+
 export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const heartbeat = useTelemetryStore((s) => s.heartbeat);
   const connected = heartbeat.lastHeartbeatTime > 0 && heartbeat.modeName !== 'DISCONNECTED';
   const hasConnectedInSession = useTelemetryStore((s) => s.hasConnectedInSession);
   const position = useTelemetryStore((s) => s.position);
-  const attitude = useTelemetryStore((s) => s.attitude);
   const homePosition = useTelemetryStore((s) => s.homePosition);
   const missionWaypoints = useTelemetryStore((s) => s.missionWaypoints);
   const fencePoints = useTelemetryStore((s) => s.fencePoints);
@@ -154,7 +167,16 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   // GPS fixes buffer for linear interpolation (played back 1 fix-interval late)
   const fixesRef = useRef<GpsFix[]>([]);
   const displayPosRef = useRef<{ lat: number; lon: number; yaw: number } | null>(null);
-  const yawRef = useRef<number>(attitude.yawDeg);
+  // Heading, read by the marker animation. Kept in a ref fed by a store subscription: subscribing to attitude in
+  // render re-rendered the whole map at the attitude rate just to update this number.
+  const yawRef = useRef<number>(useTelemetryStore.getState().attitude.yawDeg);
+  useEffect(
+    () =>
+      useTelemetryStore.subscribe((s) => {
+        yawRef.current = s.attitude.yawDeg;
+      }),
+    []
+  );
   const followVehicleRef = useRef<boolean>(true);
   const isInteractingRef = useRef<boolean>(false);
   const isFlyingToRef = useRef<boolean>(false);
@@ -616,7 +638,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     const vehicleIcon = L.divIcon({
       className: 'vehicle-marker-icon',
       html: `
-        <div class="vehicle-icon-rotator" style="transform: rotate(${attitude.yawDeg}deg); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));">
+        <div class="vehicle-icon-rotator" style="transform: rotate(${yawRef.current}deg); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));">
           ${renderVehicleSvg(heartbeat.type)}
         </div>
       `,
@@ -676,11 +698,6 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     followVehicleRef.current = followVehicle;
   }, [followVehicle]);
 
-  // Sync live vehicle heading without triggering GPS fix buffer pushes
-  useEffect(() => {
-    yawRef.current = attitude.yawDeg;
-  }, [attitude.yawDeg]);
-
   // Buffer incoming GPS fixes for linear interpolation
   useEffect(() => {
     if (position.lat === 0 && position.lon === 0) return;
@@ -691,7 +708,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       timeBootMs: position.timeBootMs,
       lat: position.lat,
       lon: position.lon,
-      yaw: attitude.yawDeg,
+      yaw: yawRef.current,
     };
 
     const fixes = fixesRef.current;
@@ -719,7 +736,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       displayPosRef.current = {
         lat: position.lat,
         lon: position.lon,
-        yaw: attitude.yawDeg,
+        yaw: yawRef.current,
       };
       if (vehicleMarkerRef.current) {
         vehicleMarkerRef.current.setLatLng([position.lat, position.lon]);
@@ -816,7 +833,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     const vehicleIcon = L.divIcon({
       className: 'vehicle-marker-icon',
       html: `
-        <div class="vehicle-icon-rotator" style="transform: rotate(${attitude.yawDeg}deg); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));">
+        <div class="vehicle-icon-rotator" style="transform: rotate(${yawRef.current}deg); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));">
           ${renderVehicleSvg(heartbeat.type)}
         </div>
       `,
@@ -874,19 +891,19 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       pane: 'missionMarkersPane',
       zIndexOffset: 220,
     })
-      .bindPopup(
-        `<b>Home Position (${homePosition.source})</b><br/>Alt: ${homePosition.alt.toFixed(1)}m<br/>Lat: ${homePosition.lat.toFixed(
-          6
-        )}<br/>Lon: ${homePosition.lon.toFixed(6)}${
-          homePosition.distanceM !== null
-            ? `<br/>${formatHomeVector(homePosition.bearingDeg, homePosition.distanceM)}`
-            : ''
-        }`
-      )
+      .bindPopup(homePopupHtml(useTelemetryStore.getState().homePosition))
       .addTo(mapInstanceRef.current);
 
     homeMarkerRef.current = m;
-  }, [homePosition.lat, homePosition.lon, homePosition.source, homePosition.distanceM, missionWaypoints]);
+    // Distance and bearing change with every position update: only the popup text follows them (below), the
+    // marker isn't rebuilt.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homePosition.lat, homePosition.lon, homePosition.source, missionWaypoints]);
+
+  useEffect(() => {
+    homeMarkerRef.current?.setPopupContent(homePopupHtml(homePosition));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homePosition.distanceM, homePosition.bearingDeg, homePosition.alt, formatHomeVector]);
 
   // While a point is picked, track it on screen and mark it on the map.
   useEffect(() => {
