@@ -37,21 +37,32 @@ export function scalePwmToUnitRange(
 
 type ParamTable = Record<string, { value: number } | undefined> | undefined;
 
+const negateIf = (reversed: boolean, v: number) => (reversed && v !== 0 ? -v : v);
+
 /**
  * Servo output `n` (1-based) normalised to [-1, 1] the way ArduPilot does it: SERVOn_MIN / _TRIM / _MAX, and
  * negated when SERVOn_REVERSED is set, so +1 always means the function's positive direction (right, up, more
- * throttle) whichever way the servo is mounted. Older firmware without SERVOn_* uses RCn_* (RCn_REVERSED, or RCn_REV = -1).
+ * throttle) whichever way the servo is mounted. RC input reversal (RCn_REVERSED / RCn_REV) never applies here.
  */
 export function scaleServoOutput(pwm: number, n: number, params: ParamTable): number {
   const p = params ?? {};
   const minP = p[`SERVO${n}_MIN`]?.value ?? p[`RC${n}_MIN`]?.value ?? 1000;
   const maxP = p[`SERVO${n}_MAX`]?.value ?? p[`RC${n}_MAX`]?.value ?? 2000;
   const trimP = p[`SERVO${n}_TRIM`]?.value ?? p[`RC${n}_TRIM`]?.value ?? 1500;
-  const servoRev = p[`SERVO${n}_REVERSED`]?.value;
-  const reversed =
-    servoRev !== undefined ? servoRev === 1 : p[`RC${n}_REVERSED`]?.value === 1 || p[`RC${n}_REV`]?.value === -1;
-  const scaled = scalePwmToUnitRange(pwm, minP, maxP, trimP);
-  return reversed && scaled !== 0 ? -scaled : scaled;
+  return negateIf(p[`SERVO${n}_REVERSED`]?.value === 1, scalePwmToUnitRange(pwm, minP, maxP, trimP));
+}
+
+/**
+ * RC input channel `n` (1-based) normalised to [-1, 1]: RCn_MIN / _TRIM / _MAX, negated when the input is
+ * reversed (RCn_REVERSED = 1, or RCn_REV = -1 on older firmware), as ArduPilot's RC_Channel does.
+ */
+export function scaleRcInput(pwm: number, n: number, params: ParamTable): number {
+  const p = params ?? {};
+  const minP = p[`RC${n}_MIN`]?.value ?? 1000;
+  const maxP = p[`RC${n}_MAX`]?.value ?? 2000;
+  const trimP = p[`RC${n}_TRIM`]?.value ?? 1500;
+  const reversed = p[`RC${n}_REVERSED`]?.value === 1 || p[`RC${n}_REV`]?.value === -1;
+  return negateIf(reversed, scalePwmToUnitRange(pwm, minP, maxP, trimP));
 }
 
 const FIELD_ALIASES: Record<string, string> = {
@@ -166,10 +177,7 @@ function resolveFieldValue(
       if (val === undefined) return undefined;
       if (val === 65535 || (isScaled && val === 0)) return null;
       if (!isScaled) return val;
-      const minP = state.parameters?.[`RC${chNum}_MIN`]?.value ?? 1000;
-      const maxP = state.parameters?.[`RC${chNum}_MAX`]?.value ?? 2000;
-      const trimP = state.parameters?.[`RC${chNum}_TRIM`]?.value ?? 1500;
-      return scalePwmToUnitRange(val, minP, maxP, trimP);
+      return scaleRcInput(val, chNum, state.parameters);
     }
     const v = state.rc?.[targetKey] ?? state.rc?.[fieldName];
     return v ?? getCachedField(msg, fieldName);

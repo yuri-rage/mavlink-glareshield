@@ -9,7 +9,7 @@ import type { CustomWidgetDefinition, MultiBarGroupType, WidgetDataBinding, Widg
 import {
   evaluateAlert,
   getAllBindings,
-  scalePwmToUnitRange,
+  scaleRcInput,
   scaleServoOutput,
   toDisplayUnits,
   type AlertState,
@@ -235,10 +235,7 @@ export function extractMultiBarItems(group: MultiBarGroupType, state: any): Mult
         const val = ch[i];
         const isUnused = val === 65535 || val === undefined || val === 0;
         const chNum = i + 1;
-        const minP = state.parameters?.[`RC${chNum}_MIN`]?.value ?? 1000;
-        const maxP = state.parameters?.[`RC${chNum}_MAX`]?.value ?? 2000;
-        const trimP = state.parameters?.[`RC${chNum}_TRIM`]?.value ?? 1500;
-        const scaled = isUnused ? 0 : scalePwmToUnitRange(val, minP, maxP, trimP);
+        const scaled = isUnused ? 0 : scaleRcInput(val, chNum, state.parameters);
         return {
           label: `CH${chNum}`,
           value: Number(scaled.toFixed(2)),
