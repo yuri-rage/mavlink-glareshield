@@ -138,7 +138,9 @@ export const ParametersWidget: React.FC = () => {
   const handleStartEdit = (paramId: string, currentVal: number, anchor?: HTMLElement) => {
     if (getParamMetadata(paramId)?.readOnly) return;
     setEditingParam(paramId);
-    setEditValue(currentVal.toString());
+    // The shortest text that reads back as the same stored value (as the table shows it), not the raw float32
+    // expansion (0.02727782167494297), which overflows the input.
+    setEditValue(formatParamValue(currentVal));
     setEditCustom(false);
     setEditAnchor(anchor ?? null);
   };
@@ -303,6 +305,21 @@ export const ParametersWidget: React.FC = () => {
 
   const topPadding = startIndex * ROW_HEIGHT;
   const bottomPadding = Math.max(0, (totalCount - endIndex) * ROW_HEIGHT);
+
+  // The table's own width (the panel can be narrow in a wide window): below 440 px it goes compact (12 px text,
+  // tighter cells, a narrower Default column) so names and full values still fit.
+  const [tableWidth, setTableWidth] = useState(0);
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    setTableWidth(el.clientWidth);
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([entry]) => setTableWidth(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const compact = tableWidth > 0 && tableWidth < 440;
+  const cellX = compact ? 'px-2' : 'px-3';
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     setScrollTop(e.currentTarget.scrollTop);
@@ -519,12 +536,19 @@ export const ParametersWidget: React.FC = () => {
               )}
             </div>
           ) : (
-            <table className="w-full text-xs sm:text-[13px] font-mono">
+            // Fixed layout: the columns keep their share of the panel, and long names, descriptions and value labels
+            // truncate inside their own column instead of pushing Default out of view.
+            <table className={`w-full table-fixed font-mono ${compact ? 'text-xs' : 'text-xs sm:text-[13px]'}`}>
+              <colgroup>
+                <col className={hasAnyDefaults ? (compact ? 'w-[46%]' : 'w-[44%]') : 'w-1/2'} />
+                <col />
+                {hasAnyDefaults && <col className={compact ? 'w-[4.75rem]' : 'w-[6.5rem]'} />}
+              </colgroup>
               <thead className="bg-zinc-900/95 sticky top-0 border-b border-zinc-800 text-zinc-400 text-left z-10 backdrop-blur-sm">
                 <tr>
-                  <th className="py-1.5 px-3">Parameter</th>
-                  <th className="py-1.5 px-3">Value</th>
-                  {hasAnyDefaults && <th className="py-1.5 px-3 text-right">Default</th>}
+                  <th className={`py-1.5 ${cellX}`}>Parameter</th>
+                  <th className={`py-1.5 ${cellX}`}>Value</th>
+                  {hasAnyDefaults && <th className={`py-1.5 ${compact ? 'px-2' : 'px-2 sm:px-3'} text-right`}>Default</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-900/80">
@@ -563,7 +587,7 @@ export const ParametersWidget: React.FC = () => {
                   return (
                     <tr key={key} className="h-[38px] hover:bg-zinc-900/40">
                       <td
-                        className="py-1 px-3 max-w-[230px]"
+                        className={`py-1 ${cellX} overflow-hidden`}
                         title={meta ? `${key}${meta.displayName ? ` · ${meta.displayName}` : ''}${meta.description ? `\n${meta.description}` : ''}` : key}
                       >
                         <div className="flex items-center gap-1.5 truncate">
@@ -585,9 +609,9 @@ export const ParametersWidget: React.FC = () => {
                         </div>
                         {subtitle && <div className="text-[11px] text-zinc-500 font-sans truncate leading-tight">{subtitle}</div>}
                       </td>
-                      <td className="py-1 px-3 font-mono">
+                      <td className={`py-1 ${cellX} font-mono overflow-hidden`}>
                         {isEditing && editor === 'enum' ? (
-                          <div className="flex items-center gap-1">
+                          <div className="flex flex-wrap items-center gap-1">
                             <EnumSelect
                               name={key}
                               values={meta!.values!}
@@ -610,7 +634,7 @@ export const ParametersWidget: React.FC = () => {
                           </div>
                         ) : isEditing && editor === 'number' ? (
                           <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-1">
+                            <div className="flex flex-wrap items-center gap-1">
                               <Input
                                 type="number"
                                 step={meta?.increment ?? 'any'}
@@ -627,7 +651,7 @@ export const ParametersWidget: React.FC = () => {
                                     setEditingParam(null);
                                   }
                                 }}
-                                className={`h-6 w-24 text-xs font-mono px-1 py-0 bg-black/90 text-sky-300 ${
+                                className={`h-6 w-[7.5rem] min-w-0 text-xs font-mono px-1 py-0 bg-black/90 text-sky-300 ${
                                   outOfRange ? 'border-amber-500 focus:ring-amber-500' : 'border-sky-500 focus:ring-1 focus:ring-sky-500'
                                 }`}
                                 autoFocus
@@ -654,35 +678,37 @@ export const ParametersWidget: React.FC = () => {
                             )}
                           </div>
                         ) : readOnly ? (
-                          <span className="inline-flex items-center gap-1.5 text-zinc-300 px-1 py-0.5 -mx-1" title={`${key} is read-only`}>
-                            <span>{formatParamValue(item.value)}</span>
-                            {meta?.units && <span className="text-[11px] text-zinc-500 font-sans">{meta.units}</span>}
-                            {enumLabel && <span className="text-[11px] text-zinc-500 font-sans truncate max-w-[130px]">({enumLabel})</span>}
-                            <Lock className="h-2.5 w-2.5 text-zinc-600" aria-label="read-only" />
+                          <span className="flex items-center gap-1.5 text-zinc-300 py-0.5 min-w-0" title={`${key} is read-only`}>
+                            <span className="shrink-0">{formatParamValue(item.value)}</span>
+                            {meta?.units && <span className="text-[11px] text-zinc-500 font-sans truncate min-w-0">{meta.units}</span>}
+                            {enumLabel && <span className="text-[11px] text-zinc-500 font-sans truncate min-w-0">({enumLabel})</span>}
+                            <Lock className="h-2.5 w-2.5 text-zinc-600 shrink-0" aria-label="read-only" />
                           </span>
                         ) : (
                           <button
                             type="button"
                             onClick={(e) => handleStartEdit(key, item.value, e.currentTarget)}
-                            className={`inline-flex items-center gap-1.5 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 px-1 py-0.5 -mx-1 rounded cursor-pointer transition-colors max-w-full text-left ${
+                            className={`flex items-center gap-1.5 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 px-1 py-0.5 -mx-1 rounded cursor-pointer transition-colors max-w-[calc(100%+0.5rem)] min-w-0 text-left ${
                               isEditing ? 'bg-sky-500/10 ring-1 ring-sky-500/60' : ''
                             }`}
                             title={`Click to edit ${key} (raw: ${item.value})`}
                             aria-haspopup={meta?.bitmask ? 'dialog' : undefined}
                           >
-                            <span>{formatParamValue(isEditing && editor === 'bitmask' ? parsedEditNum : item.value)}</span>
-                            {meta?.units && <span className="text-[11px] text-zinc-400 font-sans">{meta.units}</span>}
+                            <span className="shrink-0">{formatParamValue(isEditing && editor === 'bitmask' ? parsedEditNum : item.value)}</span>
+                            {meta?.units && <span className="text-[11px] text-zinc-400 font-sans truncate min-w-0">{meta.units}</span>}
                             {enumLabel && !bitsLabel && (
-                              <span className="text-[11px] text-zinc-400 font-sans truncate max-w-[130px]">({enumLabel})</span>
+                              <span className="text-[11px] text-zinc-400 font-sans truncate min-w-0">({enumLabel})</span>
                             )}
                             {bitsLabel && (
-                              <span className="text-[11px] text-zinc-400 font-sans truncate max-w-[160px] inline-flex items-center gap-0.5">
-                                {isEditing && editor === 'bitmask' ? bitmaskSummary(parsedEditNum, meta!.bitmask!) : bitsLabel}
+                              <span className="text-[11px] text-zinc-400 font-sans min-w-0 flex items-center gap-0.5">
+                                <span className="truncate">
+                                  {isEditing && editor === 'bitmask' ? bitmaskSummary(parsedEditNum, meta!.bitmask!) : bitsLabel}
+                                </span>
                                 <ChevronDown className="h-2.5 w-2.5 shrink-0" />
                               </span>
                             )}
                             {isSaved && (
-                              <span className="text-emerald-400 text-[10px] inline-flex items-center gap-0.5 animate-pulse font-sans">
+                              <span className="text-emerald-400 text-[10px] inline-flex items-center gap-0.5 animate-pulse font-sans shrink-0">
                                 <Check className="h-2.5 w-2.5" /> Saved
                               </span>
                             )}
@@ -713,7 +739,7 @@ export const ParametersWidget: React.FC = () => {
                       </td>
                       {hasAnyDefaults && (
                         <td
-                          className={`py-1 px-3 font-mono text-right truncate max-w-[120px] ${
+                          className={`py-1 ${compact ? 'px-2' : 'px-2 sm:px-3'} font-mono text-right truncate ${
                             isAtDefault ? 'text-zinc-600' : 'text-amber-300 font-medium'
                           }`}
                           title={`Default: ${defVal}`}

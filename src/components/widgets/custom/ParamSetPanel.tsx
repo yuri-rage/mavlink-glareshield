@@ -172,7 +172,7 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
   const startEdit = (name: string, value: number, el: HTMLElement) => {
     if (getParamMetadata(name)?.readOnly) return;
     setEditing(name);
-    setEditValue(String(value));
+    setEditValue(formatParamValue(value)); // exact and short, not the raw float32 expansion
     setEditCustom(false);
     setAnchor(el);
     setConfirming(null);
