@@ -156,6 +156,16 @@ export interface VehicleESC {
   temperature: number[]; // degC (4 ESCs)
 }
 
+/** EXTENDED_SYS_STATE: whether the vehicle is on the ground or flying, and a VTOL's flight state. */
+export interface VehicleExtendedState {
+  /** MAV_LANDED_STATE: 0 unknown, 1 on ground, 2 in air, 3 taking off, 4 landing. */
+  landedState: number;
+  /** MAV_VTOL_STATE: 0 not a VTOL, 1 / 2 transitioning, 3 hover (MC), 4 forward flight (FW). */
+  vtolState: number;
+  /** When it last arrived (ms epoch); 0 = the vehicle hasn't sent it (Rover doesn't). */
+  lastUpdate: number;
+}
+
 export interface VehiclePower {
   vcc: number; // V
   vservo: number; // V
@@ -276,6 +286,7 @@ interface TelemetryState {
   rangefinder: VehicleRangefinder;
   rpm: VehicleRPM;
   esc: VehicleESC;
+  extendedState: VehicleExtendedState;
   power: VehiclePower;
   pressure: VehiclePressure;
   radioStatus: RadioStatusInfo;
@@ -358,6 +369,7 @@ export function isVehicleReacquired(lastHeartbeatTime: number, now: number): boo
 
 const HANDLED_MESSAGE_IDS = new Set<number>([
   MAVLINK_MSG_ID.HEARTBEAT,
+  MAVLINK_MSG_ID.EXTENDED_SYS_STATE,
   MAVLINK_MSG_ID.ATTITUDE,
   MAVLINK_MSG_ID.RAW_IMU,
   MAVLINK_MSG_ID.SCALED_IMU,
@@ -726,6 +738,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     rpm: [0, 0, 0, 0],
     temperature: [0, 0, 0, 0],
   },
+  extendedState: { landedState: 0, vtolState: 0, lastUpdate: 0 },
   power: {
     vcc: 5.0,
     vservo: 5.0,
@@ -1195,6 +1208,9 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
             },
           };
         }
+
+        case MAVLINK_MSG_ID.EXTENDED_SYS_STATE:
+          return { extendedState: { landedState: data.landed_state, vtolState: data.vtol_state, lastUpdate: now } };
 
         case MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4: {
           return {

@@ -225,6 +225,31 @@ dcase("RPM",
       vehicle.rpm_encode(5400.0, 5420.0),
       {"rpm1": 5400.0, "rpm2": 5420.0})
 
+# --- Landed / VTOL state, ESC blocks, gimbal, camera, engine, generator ---------------
+dcase("EXTENDED_SYS_STATE in forward flight, in air", vehicle.extended_sys_state_encode(4, 2),
+      {"vtol_state": 4, "landed_state": 2})
+dcase("ESC_TELEMETRY_5_TO_8 motor numbers", vehicle.esc_telemetry_5_to_8_encode(
+          [41, 42, 43, 44], [1612, 1600, 1588, 1576], [120, 220, 330, 440], [1234, 345, 456, 567], [5500, 5600, 5700, 5800], [7, 8, 9, 10]),
+      {"rpm5": 5500, "rpm8": 5800, "temp6": 42, "curr5": 1.2, "volt7": 15.88})
+dcase("ESC_TELEMETRY_9_TO_12 motor numbers", vehicle.esc_telemetry_9_to_12_encode(
+          [30, 31, 32, 33], [1500, 1500, 1500, 1500], [0, 0, 0, 100], [0, 0, 0, 0], [100, 200, 300, 400], [0, 0, 0, 0]),
+      {"rpm9": 100, "rpm12": 400, "temp12": 33, "curr12": 1.0})
+dcase("MOUNT_STATUS centidegrees to degrees", vehicle.mount_status_encode(1, 154, -4500, 1250, 18000, 3),
+      {"pitch": -45, "roll": 12.5, "yaw": 180, "mount_mode": 3})
+import math
+half = math.radians(30) / 2  # 30 degrees of pitch
+dcase("GIMBAL_DEVICE_ATTITUDE_STATUS quaternion to Euler", vehicle.gimbal_device_attitude_status_encode(
+          1, 154, 123456, 4096, [math.cos(half), 0, math.sin(half), 0], 0.1, 0.2, 0.3, 0, 1.5, 0.25, 7),
+      {"time_boot_ms": 123456, "flags": 4096, "pitch": 30, "roll": 0, "yaw": 0, "delta_yaw": 1.5, "gimbal_device_id": 7})
+dcase("CAMERA_FEEDBACK photo position", vehicle.camera_feedback_encode(
+          1700000000000000, 1, 0, 42, 352134567, -1065678901, 1234.5, 61.25, 1.5, -2.5, 90.0, 35.0, 1, 43),
+      {"img_idx": 42, "lat": 35.2134567, "lng": -106.5678901, "alt_rel": 61.25, "yaw": 90, "completed_captures": 43})
+dcase("EFI_STATUS engine", vehicle.efi_status_encode(
+          1, 0, 6500, 120.5, 2.25, 55, 42, 0, 101.3, 80, 25, 180, 12, 1.5, 600, 0.5, 0, 13.8, 2.5),
+      {"health": 1, "rpm": 6500, "fuel_consumed": 120.5, "cylinder_head_temperature": 180, "ignition_voltage": 13.8, "fuel_pressure": 2.5})
+dcase("GENERATOR_STATUS", vehicle.generator_status_encode(status=4, generator_speed=6000, battery_current=12.5, load_current=30.25, power_generated=1500.0, bus_voltage=50.5, rectifier_temperature=45, bat_current_setpoint=0, generator_temperature=85, runtime=7200, time_until_maintenance=-60),
+      {"status": 4, "generator_speed": 6000, "bus_voltage": 50.5, "runtime": 7200, "time_until_maintenance": -60, "generator_temperature": 85})
+
 # --- PID_TUNING ------------------------------------------------------------
 pid = vehicle.pid_tuning_encode(1, 0.5, 0.375, 0.125, 0.25, -0.0625, 0.03125, 2.5, 0.75)
 dcase("PID_TUNING roll with extensions", pid,

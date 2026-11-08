@@ -160,6 +160,19 @@ Trim maps to 0. When the parameters haven't been downloaded yet, the scaling ass
 
 **PID tuning, one controller at a time.** `PID_TUNING` carries a different controller in each message, so it is bound per axis instead: `PID_TUNING_ROLL`, `PID_TUNING_PITCH`, `PID_TUNING_YAW`, `PID_TUNING_ACCZ`, `PID_TUNING_STEER`, `PID_TUNING_LANDING`, `PID_TUNING_WHEEL_LEFT`, `PID_TUNING_WHEEL_RIGHT` and so on, after MAVLink's `PID_TUNING_AXIS` names. Each one has the fields `desired`, `achieved`, `FF`, `P`, `I`, `D`, `SRate` and `PDmod`, in the units the firmware reports. The vehicle sends an axis only while `GCS_PID_MASK` selects it, and which bit selects which axis depends on the vehicle type. On Rover, for example, the throttle controller arrives as `PID_TUNING_ACCZ`. The built-in **PID Tuning** widget shows the controllers your vehicle has and switches them on and off for you.
 
+**Flight state, more ESCs, payloads and engines.** These are decoded for bindings too:
+
+| Message | Useful fields | Notes |
+|---|---|---|
+| `EXTENDED_SYS_STATE` | `landed_state`, `vtol_state` | Landed: 0 unknown, 1 on ground, 2 in air, 3 taking off, 4 landing. VTOL: 0 not a VTOL, 1 / 2 transitioning, 3 hover, 4 forward flight. Copter and Plane send it; Rover doesn't. |
+| `ESC_TELEMETRY_5_TO_8`, `ESC_TELEMETRY_9_TO_12` | `rpm5` … `rpm12`, `temp5` …, `curr5` …, `volt5` … | Field names carry the motor number. |
+| `GIMBAL_DEVICE_ATTITUDE_STATUS` | `roll`, `pitch`, `yaw` (degrees), `flags` | Angles worked out from the quaternion. Yaw is relative to the vehicle unless `flags` has the earth-frame bit (4096). |
+| `MOUNT_STATUS` | `pitch`, `roll`, `yaw` (degrees), `mount_mode` | Older firmware's gimbal report. |
+| `CAMERA_FEEDBACK` | `img_idx`, `completed_captures`, `lat`, `lng`, `alt_rel` | Sent once per photo, so it is never requested as a stream. |
+| `EFI_STATUS` | `rpm`, `health`, `engine_load`, `fuel_flow`, `cylinder_head_temperature`, … | Engine (EFI) builds. |
+| `GENERATOR_STATUS` | `generator_speed`, `bus_voltage`, `load_current`, `runtime`, … | Hybrid / generator builds. |
+
+
 ### Units
 
 With `unitKind` set, the value is converted into the units chosen in **Link & Display Settings**:
