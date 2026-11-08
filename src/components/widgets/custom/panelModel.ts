@@ -10,6 +10,7 @@ import {
   evaluateAlert,
   getAllBindings,
   scalePwmToUnitRange,
+  scaleServoOutput,
   toDisplayUnits,
   type AlertState,
   type BindingReading,
@@ -269,10 +270,7 @@ export function extractMultiBarItems(group: MultiBarGroupType, state: any): Mult
         const val = sv[i];
         const isUnused = val === 0 || val === 65535 || val === undefined;
         const svNum = i + 1;
-        const minP = state.parameters?.[`SERVO${svNum}_MIN`]?.value ?? state.parameters?.[`RC${svNum}_MIN`]?.value ?? 1000;
-        const maxP = state.parameters?.[`SERVO${svNum}_MAX`]?.value ?? state.parameters?.[`RC${svNum}_MAX`]?.value ?? 2000;
-        const trimP = state.parameters?.[`SERVO${svNum}_TRIM`]?.value ?? state.parameters?.[`RC${svNum}_TRIM`]?.value ?? 1500;
-        const scaled = isUnused ? 0 : scalePwmToUnitRange(val, minP, maxP, trimP);
+        const scaled = isUnused ? 0 : scaleServoOutput(val, svNum, state.parameters);
         return {
           label: `S${svNum}`,
           value: Number(scaled.toFixed(2)),

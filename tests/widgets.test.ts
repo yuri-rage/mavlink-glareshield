@@ -379,5 +379,27 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   check('relay toggle: out-of-range relay numbers get no automatic feedback', pm.relayInstance({ ...relayToggle, action: { ...relayToggle.action, params: [16, 0, 0, 0, 0, 0, 0] } }) === undefined && pm.relayInstance({ ...relayToggle, action: { ...relayToggle.action, params: [1.5, 0, 0, 0, 0, 0, 0] } }) === undefined);
 }
 
+// Servo outputs normalise like ArduPilot: SERVOn_REVERSED flips the sign, so +1 is the function's positive side.
+{
+  const P = (o: Record<string, number>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { value: v }]));
+  const { scaleServoOutput } = values;
+  check('servo scaled: normal output, 1900 µs = +0.8', Math.abs(scaleServoOutput(1900, 1, P({ SERVO1_MIN: 1000, SERVO1_TRIM: 1500, SERVO1_MAX: 2000, SERVO1_REVERSED: 0 })) - 0.8) < 1e-9);
+  check('servo scaled: SERVOn_REVERSED = 1 flips it to -0.8', Math.abs(scaleServoOutput(1900, 1, P({ SERVO1_MIN: 1000, SERVO1_TRIM: 1500, SERVO1_MAX: 2000, SERVO1_REVERSED: 1 })) + 0.8) < 1e-9);
+  check('servo scaled: reversed uses the other side\'s range (asymmetric trim)', Math.abs(scaleServoOutput(1300, 2, P({ SERVO2_MIN: 1100, SERVO2_TRIM: 1400, SERVO2_MAX: 1900, SERVO2_REVERSED: 1 })) - 1 / 3) < 1e-9);
+  check('servo scaled: reversed at trim is 0, not -0', Object.is(scaleServoOutput(1500, 3, P({ SERVO3_REVERSED: 1 })), 0));
+  check('servo scaled: another output\'s reversal does not apply', scaleServoOutput(2000, 4, P({ SERVO3_REVERSED: 1 })) === 1);
+  check('servo scaled: older firmware RCn_REV = -1 reverses', scaleServoOutput(2000, 5, P({ RC5_REV: -1 })) === -1);
+  check('servo scaled: no parameters, defaults and not reversed', scaleServoOutput(1000, 6, undefined) === -1);
+
+  const state: any = { servo: { servos: [1900, 1100] }, parameters: P({ SERVO1_REVERSED: 1 }) };
+  const r = values.readBinding({ messageName: 'SERVO_OUTPUT_RAW (SCALED)', fieldName: 'servo1_scaled', decimals: 2 }, state, 'ms', 3, Date.now());
+  check('servo scaled binding: honours SERVOn_REVERSED', r.text === '-0.80', r.text);
+  const pm = await import('../src/components/widgets/custom/panelModel.ts');
+  const bars = pm.extractMultiBarItems('servo-8-scaled', state);
+  check('servo multi-bar: S1 reversed, S2 not', bars[0].value === -0.8 && bars[1].value === -0.8, JSON.stringify(bars.slice(0, 2).map((b: any) => b.value)));
+  const raw = pm.extractMultiBarItems('servo-8', state);
+  check('servo multi-bar raw µs: unchanged by reversal', raw[0].value === 1900);
+}
+
 console.log(failures.length ? `\n${failures.length} widget check(s) FAILED` : '\nAll widget checks PASSED');
 process.exit(failures.length ? 1 : 0);

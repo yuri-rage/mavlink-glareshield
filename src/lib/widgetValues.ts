@@ -35,6 +35,25 @@ export function scalePwmToUnitRange(
   }
 }
 
+type ParamTable = Record<string, { value: number } | undefined> | undefined;
+
+/**
+ * Servo output `n` (1-based) normalised to [-1, 1] the way ArduPilot does it: SERVOn_MIN / _TRIM / _MAX, and
+ * negated when SERVOn_REVERSED is set, so +1 always means the function's positive direction (right, up, more
+ * throttle) whichever way the servo is mounted. Older firmware without SERVOn_* uses RCn_* (RCn_REVERSED, or RCn_REV = -1).
+ */
+export function scaleServoOutput(pwm: number, n: number, params: ParamTable): number {
+  const p = params ?? {};
+  const minP = p[`SERVO${n}_MIN`]?.value ?? p[`RC${n}_MIN`]?.value ?? 1000;
+  const maxP = p[`SERVO${n}_MAX`]?.value ?? p[`RC${n}_MAX`]?.value ?? 2000;
+  const trimP = p[`SERVO${n}_TRIM`]?.value ?? p[`RC${n}_TRIM`]?.value ?? 1500;
+  const servoRev = p[`SERVO${n}_REVERSED`]?.value;
+  const reversed =
+    servoRev !== undefined ? servoRev === 1 : p[`RC${n}_REVERSED`]?.value === 1 || p[`RC${n}_REV`]?.value === -1;
+  const scaled = scalePwmToUnitRange(pwm, minP, maxP, trimP);
+  return reversed && scaled !== 0 ? -scaled : scaled;
+}
+
 const FIELD_ALIASES: Record<string, string> = {
   voltage_battery: 'voltage',
   current_battery: 'current',
@@ -165,11 +184,7 @@ function resolveFieldValue(
       if (val === undefined) return undefined;
       if (val === 0 || val === 65535) return null;
       if (!isScaled) return val;
-      const p = state.parameters ?? {};
-      const minP = p[`SERVO${svNum}_MIN`]?.value ?? p[`RC${svNum}_MIN`]?.value ?? 1000;
-      const maxP = p[`SERVO${svNum}_MAX`]?.value ?? p[`RC${svNum}_MAX`]?.value ?? 2000;
-      const trimP = p[`SERVO${svNum}_TRIM`]?.value ?? p[`RC${svNum}_TRIM`]?.value ?? 1500;
-      return scalePwmToUnitRange(val, minP, maxP, trimP);
+      return scaleServoOutput(val, svNum, state.parameters);
     }
     const v = state.servo?.[targetKey] ?? state.servo?.[fieldName];
     return v ?? getCachedField(msg, fieldName);
