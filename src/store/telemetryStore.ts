@@ -1510,11 +1510,20 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         case MAVLINK_MSG_ID.COMMAND_ACK: {
           let matchedPending: PendingCommand | undefined;
           const pendingList = pendingCommands.get(data.command);
+          // MAV_RESULT_IN_PROGRESS is not the answer: the command stays pending (with a longer wait) until the
+          // final ACCEPTED / FAILED / … ACK arrives.
+          const inProgress = data.result === 5;
           if (pendingList && pendingList.length > 0) {
-            matchedPending = pendingList.shift()!;
-            clearTimeout(matchedPending.timer);
-            if (pendingList.length === 0) {
-              pendingCommands.delete(data.command);
+            if (inProgress) {
+              matchedPending = pendingList[0];
+              clearTimeout(matchedPending.timer);
+              matchedPending.timer = setTimeout(matchedPending.onTimeout, IN_PROGRESS_TIMEOUT_MS);
+            } else {
+              matchedPending = pendingList.shift()!;
+              clearTimeout(matchedPending.timer);
+              if (pendingList.length === 0) {
+                pendingCommands.delete(data.command);
+              }
             }
           }
           const cmdName = getMavCmdName(data.command);
@@ -1543,7 +1552,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
             time: now,
           };
 
-          if (matchedPending?.resolve) {
+          if (matchedPending?.resolve && !inProgress) {
             matchedPending.resolve(ackInfo);
           }
 
@@ -1564,7 +1573,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
                 cmdName,
                 label: matchedPending?.label ?? cmdName,
                 targetKey: matchedPending?.targetKey,
-                status: isError ? 'denied' : 'accepted',
+                status: isError ? 'denied' : inProgress ? 'pending' : 'accepted',
                 result: data.result,
                 resultText,
                 reason,
@@ -1600,8 +1609,12 @@ interface PendingCommand {
   targetKey?: string;
   sentAt: number;
   timer: any;
+  /** What happens when no final ACK arrives; re-armed (longer) after a MAV_RESULT_IN_PROGRESS ACK. */
+  onTimeout: () => void;
   resolve?: (ack: CommandAckInfo) => void;
 }
+/** After MAV_RESULT_IN_PROGRESS, how long to keep waiting for the final ACK. */
+const IN_PROGRESS_TIMEOUT_MS = 30_000;
 let nextPendingId = 1;
 const pendingCommands = new Map<number, PendingCommand[]>();
 let lastRecentExplanatoryStatus: { text: string; time: number } | null = null;
@@ -1764,7 +1777,7 @@ mavlinkConnection.onSend((data) => {
         });
       }
 
-      const timer = setTimeout(() => {
+      const onTimeout = () => {
         const list = pendingCommands.get(cmdId);
         let timedOutEntry: PendingCommand | undefined;
         if (list) {
@@ -1809,14 +1822,15 @@ mavlinkConnection.onSend((data) => {
                   status: 'timeout',
                   result: -1,
                   resultText: 'TIMEOUT',
-                  reason: 'No COMMAND_ACK received from vehicle within 5s',
+                  reason: 'No COMMAND_ACK received from vehicle in time',
                   time: now,
                 },
               }
             : {}),
           ...(logTimeout ? { statusMessages: appendStatusMessage(s.statusMessages, timeoutMsg, now) } : {}),
         }));
-      }, 5000);
+      };
+      const timer = setTimeout(onTimeout, 5000);
 
       const list = pendingCommands.get(cmdId) ?? [];
       list.push({
@@ -1827,6 +1841,7 @@ mavlinkConnection.onSend((data) => {
         targetKey: meta?.targetKey,
         sentAt: sentNow,
         timer,
+        onTimeout,
         resolve: meta?.resolve,
       });
       pendingCommands.set(cmdId, list);

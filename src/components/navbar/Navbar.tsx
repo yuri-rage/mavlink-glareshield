@@ -1363,7 +1363,7 @@ export const Navbar: React.FC = () => {
                 Connect Now
               </Button>
             )}
-            <Button type="button" variant="ghost" size="sm" onClick={() => setIsConnectModalOpen(false)}>
+            <Button type="button" variant="ghost" size="sm" onClick={handleCloseConnectModal}>
               Close
             </Button>
           </div>
