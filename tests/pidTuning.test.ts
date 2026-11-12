@@ -47,10 +47,22 @@ const published: Record<string, Record<number, string>> = {
   sub: { 0: 'Roll', 1: 'Pitch', 2: 'Yaw' },
   tracker: { 0: 'Pitch', 1: 'Yaw' },
 };
+// Bits newer than the published releases (Rover's Stanley, bit 8) are only offered when the firmware's bitmask has them.
+const unreleased: Record<string, number[]> = { rover: [8] };
 for (const [vehicle, bits] of Object.entries(published)) {
-  const ours = pidControllersFor(vehicle as any).map((c) => c.bit).join(',');
+  const ours = pidControllersFor(vehicle as any)
+    .map((c) => c.bit)
+    .filter((b) => !(unreleased[vehicle] ?? []).includes(b))
+    .join(',');
   check(`${vehicle}: built-in bits match the published bitmask`, ours === Object.keys(bits).join(','), ours);
+  const trimmed = pidControllersFor(vehicle as any, bits).map((c) => c.bit).join(',');
+  check(`${vehicle}: the published bitmask keeps only its own bits`, trimmed === Object.keys(bits).join(','), trimmed);
 }
+const stanley = rover.find((c) => c.label === 'Stanley');
+check('rover: Stanley is bit 8 sent as axis 16 (yaw angle)', stanley?.bit === 8 && stanley?.axis === 16, JSON.stringify(stanley));
+const newerRover = pidControllersFor('rover', { ...published.rover, 8: 'Stanley' });
+check('rover: firmware with the Stanley bit offers it', newerRover.some((c) => c.bit === 8 && c.axis === 16), labels(newerRover));
+check('rover: Stanley is cached as PID_TUNING_YAW_ANGLE', pidAxisMessageName(16) === 'PID_TUNING_YAW_ANGLE');
 
 // The firmware's bitmask (from version-matched metadata) trims the list.
 const olderRover = pidControllersFor('rover', { 0: 'Steering', 1: 'Throttle', 2: 'Pitch', 3: 'Left Wheel', 4: 'Right Wheel' });

@@ -12,7 +12,8 @@
 //   fixed-wing ones.
 // - Rover: bit 0 steering rate (axis 5), bit 1 speed-to-throttle (sent as axis 4), bit 2 balance-bot pitch (axis 2),
 //   bits 3-4 the left and right wheel rate controllers (axes 7-8), bit 5 sailboat heel (axis 9), bits 6-7 the
-//   position controller's north and east velocity (axes 10-11).
+//   position controller's north and east velocity (axes 10-11), bit 8 the Stanley path controller (sent as
+//   axis 16, yaw angle) in firmware that has it.
 // - Antenna Tracker: bit 0 pitch (axis 2), bit 1 yaw (axis 3).
 //
 // When the version-matched parameter metadata is loaded, its GCS_PID_MASK bitmask decides which of these the
@@ -83,6 +84,7 @@ const ROVER: PidController[] = [
   { axis: 9, bit: 5, label: 'Sail heel', description: 'Sailboat heel controller (ATC_SAIL_*)' },
   { axis: 10, bit: 6, label: 'Vel north', description: 'Position controller, north velocity (PSC_VEL_*)' },
   { axis: 11, bit: 7, label: 'Vel east', description: 'Position controller, east velocity (PSC_VEL_*)' },
+  { axis: 16, bit: 8, label: 'Stanley', description: 'Stanley path controller (ATC_STAN_*), sent as the yaw angle axis' },
 ];
 
 const TRACKER: PidController[] = [
