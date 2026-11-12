@@ -10,6 +10,7 @@ import { Button } from "../../ui/button";
 import {
   AlertTriangle,
   Check,
+  ListChecks,
   Play,
   RefreshCw,
   ToggleLeft,
@@ -39,7 +40,7 @@ import {
   getParamMetadata,
 } from "../../../mavlink/paramMetadata";
 import { useParamMetaStore } from "../../../store/paramMetaStore";
-import { DetailsButton, ParamDetails } from "../params/ParamEditors";
+import { BitmaskEditor, DetailsButton, ParamDetails } from "../params/ParamEditors";
 
 export const ActionButtonPanel: React.FC<PanelProps> = ({ def, scheme }) => {
   const { sysId, compId } = useVehicleTarget();
@@ -334,11 +335,18 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
   const control = effectiveParamControl(def.paramControl, meta);
 
   const [input, setInput] = useState<string>("");
+  const [customNumeric, setCustomNumeric] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isConfirmingOutOfBounds, setIsConfirmingOutOfBounds] = useState(false);
   const [status, setStatus] = useState<ParamStatus>(null);
   const [detailsAnchor, setDetailsAnchor] = useState<HTMLElement | null>(null);
+  const [bitmaskAnchor, setBitmaskAnchor] = useState<HTMLElement | null>(null);
   const pendingWriteRef = useRef<{ value: number; time: number } | null>(null);
+
+  useEffect(() => {
+    setCustomNumeric(false);
+    setBitmaskAnchor(null);
+  }, [paramId]);
 
   const requestParam = () => paramManager.requestParam(sysId, compId, paramId);
 
@@ -532,11 +540,17 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
         />
       )}
 
-      {control?.options && control.options.length > 0 ? (
+      {control?.options && control.options.length > 0 && !customNumeric ? (
         <div className="flex items-center gap-2">
           <select
             value={input}
-            onChange={(e) => onInputChange(e.target.value)}
+            onChange={(e) => {
+              if (e.target.value === "__custom__") {
+                setCustomNumeric(true);
+              } else {
+                onInputChange(e.target.value);
+              }
+            }}
             className="h-8 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-xs font-mono text-zinc-100"
           >
             {input !== "" &&
@@ -548,6 +562,7 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
                 {opt.label} ({opt.value})
               </option>
             ))}
+            <option value="__custom__">Other value…</option>
           </select>
           <Button
             size="sm"
@@ -582,8 +597,32 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
                 : "Enter value"
             }
             onChange={(e) => onInputChange(e.target.value)}
-            className="h-8 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 text-xs font-mono text-zinc-100"
+            className="h-8 flex-1 min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 text-xs font-mono text-zinc-100"
           />
+          {meta?.bitmask && !control?.options?.length && (
+            <button
+              type="button"
+              onClick={(e) =>
+                setBitmaskAnchor((cur) => (cur ? null : e.currentTarget))
+              }
+              className="h-8 px-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-300 hover:text-sky-300 hover:border-sky-500/60 text-[10px] font-mono inline-flex items-center gap-1 shrink-0"
+              title="Edit bitmask flags"
+              aria-haspopup="dialog"
+            >
+              <ListChecks className="h-3.5 w-3.5" />
+              Bits
+            </button>
+          )}
+          {control?.options && control.options.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setCustomNumeric(false)}
+              className="h-8 px-2 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-sky-300 text-[10px] font-mono shrink-0"
+              title="Choose from named values list"
+            >
+              List
+            </button>
+          )}
           <Button
             size="sm"
             className={`h-8 text-xs font-bold gap-1 ${scheme.button} text-white`}
@@ -603,6 +642,25 @@ export const ParamPanel: React.FC<PanelProps> = ({ def, scheme }) => {
             </button>
           )}
         </div>
+      )}
+      {bitmaskAnchor && meta?.bitmask && (
+        <BitmaskEditor
+          name={paramId}
+          bitmask={meta.bitmask}
+          value={
+            Number.isFinite(parseFloat(input))
+              ? parseFloat(input)
+              : (paramEntry?.value ?? 0)
+          }
+          original={paramEntry?.value ?? 0}
+          anchor={bitmaskAnchor}
+          onChange={(v) => onInputChange(String(v))}
+          onSave={() => {
+            setBitmaskAnchor(null);
+            initiate();
+          }}
+          onCancel={() => setBitmaskAnchor(null)}
+        />
       )}
 
       {isConfirming && (

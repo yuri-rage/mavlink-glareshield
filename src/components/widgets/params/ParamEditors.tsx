@@ -156,15 +156,54 @@ export const BitmaskEditor: React.FC<BitmaskEditorProps> = ({ name, bitmask, val
   const bits = bitmaskBits(bitmask);
   // Bits set on the vehicle that the definition doesn't name are kept and listed, so saving never drops them.
   const unnamed = setBits(value).filter((b) => bitmask[b] === undefined);
-  const changed = Math.round(value) !== Math.round(original);
+  const rounded = Number.isFinite(value) ? Math.round(value) : 0;
+  const origRounded = Number.isFinite(original) ? Math.round(original) : 0;
+  const changed = rounded !== origRounded;
+
+  const [rawInput, setRawInput] = useState(() => String(rounded));
+  const lastEmittedRef = useRef<number>(rounded);
+
+  useEffect(() => {
+    if (rounded !== lastEmittedRef.current) {
+      lastEmittedRef.current = rounded;
+      setRawInput(String(rounded));
+    }
+  }, [rounded]);
+
+  const handleNumericChange = (nextRaw: string) => {
+    setRawInput(nextRaw);
+    if (nextRaw.trim() === '') return;
+    const parsed = Number(nextRaw);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      const intVal = Math.trunc(parsed);
+      lastEmittedRef.current = intVal;
+      onChange(intVal);
+    }
+  };
+
   return (
     <Popover anchor={anchor} onClose={onCancel} width={300} label={`${name} bits`}>
-      <div className="px-3 pt-2.5 pb-1.5 border-b border-zinc-800 flex items-baseline justify-between gap-2">
+      <div className="px-3 pt-2.5 pb-1.5 border-b border-zinc-800 flex items-center justify-between gap-2">
         <span className="font-bold text-zinc-100 font-mono truncate">{name}</span>
-        <span className="font-mono text-sky-300 shrink-0" aria-live="polite">
-          = {Math.round(value)}
-          {changed && <span className="text-zinc-500"> (was {Math.round(original)})</span>}
-        </span>
+        <div className="flex items-center gap-1 font-mono text-sky-300 shrink-0" aria-live="polite">
+          <span>=</span>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={rawInput}
+            aria-label={`${name} numeric value`}
+            onChange={(e) => handleNumericChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && changed) {
+                e.preventDefault();
+                onSave();
+              }
+            }}
+            className="h-6 w-20 rounded border border-sky-500/70 bg-zinc-900 px-1.5 text-xs font-mono text-sky-300 focus:outline-none focus:ring-1 focus:ring-sky-500"
+          />
+          {changed && <span className="text-[10px] text-zinc-500">(was {origRounded})</span>}
+        </div>
       </div>
       <ul className="overflow-y-auto px-1.5 py-1 flex-1 min-h-0">
         {bits.map((bit) => {
