@@ -17,7 +17,9 @@
 // - Antenna Tracker: bit 0 pitch (axis 2), bit 1 yaw (axis 3).
 //
 // When the version-matched parameter metadata is loaded, its GCS_PID_MASK bitmask decides which of these the
-// connected firmware actually has, so an older version doesn't offer a controller it can't report.
+// connected firmware actually has, so an older version doesn't offer a controller it can't report. Metadata is
+// downloaded from ArduPilot's published releases, so it can lag firmware built from source; a controller with
+// `presentWithParam` is also offered whenever the vehicle reports that parameter, whatever the metadata says.
 
 import type { VehicleCategory } from './messages';
 import { hasBit, withBit } from './paramBits';
@@ -56,6 +58,8 @@ export interface PidController {
   label: string;
   /** What the controller does, for the picker's tooltip. */
   description: string;
+  /** A parameter that only firmware with this controller has; when the vehicle reports it, the controller is offered even if the metadata's bitmask lacks the bit. */
+  presentWithParam?: string;
 }
 
 const COPTER: PidController[] = [
@@ -84,7 +88,13 @@ const ROVER: PidController[] = [
   { axis: 9, bit: 5, label: 'Sail heel', description: 'Sailboat heel controller (ATC_SAIL_*)' },
   { axis: 10, bit: 6, label: 'Vel north', description: 'Position controller, north velocity (PSC_VEL_*)' },
   { axis: 11, bit: 7, label: 'Vel east', description: 'Position controller, east velocity (PSC_VEL_*)' },
-  { axis: 16, bit: 8, label: 'Stanley', description: 'Stanley path controller (ATC_STAN_*), sent as the yaw angle axis' },
+  {
+    axis: 16,
+    bit: 8,
+    label: 'Stanley',
+    description: 'Stanley path controller (ATC_STAN_*), sent as the yaw angle axis',
+    presentWithParam: 'ATC_STAN_USE',
+  },
 ];
 
 const TRACKER: PidController[] = [
@@ -102,13 +112,25 @@ const BY_VEHICLE: Partial<Record<VehicleCategory, PidController[]>> = {
 
 /**
  * The controllers this vehicle type can report, in picker order. With the firmware's GCS_PID_MASK bitmask
- * (from the parameter metadata), only bits the firmware has are kept. Empty when the vehicle has no
- * GCS_PID_MASK (unknown vehicle types).
+ * (from the parameter metadata), only bits the firmware has are kept, except that a controller whose
+ * `presentWithParam` is in `hasParam` is always kept. Empty when the vehicle has no GCS_PID_MASK (unknown
+ * vehicle types).
  */
-export function pidControllersFor(category: VehicleCategory, maskBitmask?: Record<number, string> | null): PidController[] {
+export function pidControllersFor(
+  category: VehicleCategory,
+  maskBitmask?: Record<number, string> | null,
+  hasParam?: (name: string) => boolean
+): PidController[] {
   const all = BY_VEHICLE[category] ?? [];
-  if (!maskBitmask || Object.keys(maskBitmask).length === 0) return all.map((c) => ({ ...c }));
-  return all.filter((c) => maskBitmask[c.bit] !== undefined).map((c) => ({ ...c }));
+  const useMeta = !!maskBitmask && Object.keys(maskBitmask).length > 0;
+  return all
+    .filter((c) => !useMeta || maskBitmask[c.bit] !== undefined || (!!c.presentWithParam && !!hasParam?.(c.presentWithParam)))
+    .map((c) => ({ ...c }));
+}
+
+/** Parameters whose presence on the vehicle reveals a controller newer than the published metadata. */
+export function pidPresenceParams(category: VehicleCategory): string[] {
+  return (BY_VEHICLE[category] ?? []).flatMap((c) => (c.presentWithParam ? [c.presentWithParam] : []));
 }
 
 /**

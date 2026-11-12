@@ -8,7 +8,7 @@
 export {};
 (globalThis as any).localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 
-const { pidControllersFor, pidPickerAxes, maskHasBit, withMaskBit, pidAxisMessageName } = await import('../src/mavlink/pidTuning.ts');
+const { pidControllersFor, pidPickerAxes, maskHasBit, withMaskBit, pidAxisMessageName, pidPresenceParams } = await import('../src/mavlink/pidTuning.ts');
 const { pidTuningRecorder, PID_GAP_MS } = await import('../src/lib/pidTuningRecorder.ts');
 const { recordPacket, getCachedField, getObservedCatalog, resetMessageCache } = await import('../src/lib/messageCache.ts');
 const { MAVLINK_MSG_ID } = await import('../src/mavlink/messages.ts');
@@ -63,6 +63,15 @@ check('rover: Stanley is bit 8 sent as axis 16 (yaw angle)', stanley?.bit === 8 
 const newerRover = pidControllersFor('rover', { ...published.rover, 8: 'Stanley' });
 check('rover: firmware with the Stanley bit offers it', newerRover.some((c) => c.bit === 8 && c.axis === 16), labels(newerRover));
 check('rover: Stanley is cached as PID_TUNING_YAW_ANGLE', pidAxisMessageName(16) === 'PID_TUNING_YAW_ANGLE');
+// Metadata is downloaded from published releases, so firmware built from source can have Stanley before the
+// bitmask lists it: the vehicle reporting ATC_STAN_USE is enough.
+check('rover: Stanley is revealed by ATC_STAN_USE', JSON.stringify(pidPresenceParams('rover')) === '["ATC_STAN_USE"]');
+const fromSource = pidControllersFor('rover', published.rover, (p) => p === 'ATC_STAN_USE');
+check('rover: vehicle with ATC_STAN_USE offers Stanley despite older metadata', fromSource.some((c) => c.bit === 8 && c.axis === 16), labels(fromSource));
+const stock = pidControllersFor('rover', published.rover, () => false);
+check('rover: vehicle without ATC_STAN_USE and older metadata does not', !stock.some((c) => c.bit === 8), labels(stock));
+check('presence does not resurrect other trimmed controllers', !pidControllersFor('rover', { 0: 'Steering' }, () => true).some((c) => c.bit === 1));
+check('vehicles without presence-gated controllers have no presence params', pidPresenceParams('copter').length === 0);
 
 // The firmware's bitmask (from version-matched metadata) trims the list.
 const olderRover = pidControllersFor('rover', { 0: 'Steering', 1: 'Throttle', 2: 'Pitch', 3: 'Left Wheel', 4: 'Right Wheel' });
