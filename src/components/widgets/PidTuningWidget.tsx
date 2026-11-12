@@ -16,6 +16,7 @@ import { getParamMetadata } from '../../mavlink/paramMetadata';
 import {
   maskHasBit,
   pidControllersFor,
+  pidPresenceParams,
   pidPickerAxes,
   withMaskBit,
   type PidController,
@@ -111,7 +112,14 @@ export const PidTuningWidget: React.FC = () => {
     if (linked) ensureMeta(category, firmwareVersion);
   }, [linked, category, firmwareVersion, ensureMeta]);
   const maskBitmask = useMemo(() => (catalog ? getParamMetadata(MASK_PARAM)?.bitmask ?? null : null), [catalog]);
-  const controllers = useMemo(() => pidControllersFor(category, maskBitmask), [category, maskBitmask]);
+  // Metadata comes from published releases, so it can lag firmware built from source: a controller whose own
+  // parameter the vehicle reports (e.g. ATC_STAN_USE) is offered regardless.
+  const presenceParams = useMemo(() => pidPresenceParams(category), [category]);
+  const presentKey = useTelemetryStore((s) => presenceParams.filter((p) => s.parameters[p] !== undefined).join(','));
+  const controllers = useMemo(() => {
+    const present = new Set(presentKey ? presentKey.split(',') : []);
+    return pidControllersFor(category, maskBitmask, (p) => present.has(p));
+  }, [category, maskBitmask, presentKey]);
 
   // Axes that are arriving but aren't in the list still get a button.
   const [seen, setSeen] = useState(() => pidTuningRecorder.seenAxes());
@@ -146,6 +154,13 @@ export const PidTuningWidget: React.FC = () => {
     }, 2500);
     return () => clearInterval(timer);
   }, [linked, maskEntry, axes.length, sysId, compId]);
+
+  // Ask once for each presence parameter the parameter list hasn't brought (firmware without it doesn't answer).
+  useEffect(() => {
+    if (!linked) return;
+    const have = new Set(presentKey ? presentKey.split(',') : []);
+    for (const p of presenceParams) if (!have.has(p)) paramManager.requestParam(sysId, compId, p);
+  }, [linked, presenceParams, sysId, compId]);
 
   // GCS_PID_MASK writes, confirmed when the vehicle echoes the value.
   const [pending, setPending] = useState<{ value: number; since: number } | null>(null);
