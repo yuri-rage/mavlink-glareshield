@@ -307,5 +307,41 @@ for (const loss of [0.1, 0.2]) {
   check('stale open file: sessions reset, then the read succeeds', same(got, file) && sim.requests.some((r) => r.startsWith(`${FTP_OPCODE.ResetSessions}#`)), sim.requests.slice(0, 4).join(' '));
 }
 
+// 9. Planning: upload a draft, read it back from the vehicle and judge it, end to end. The vehicle regenerates
+// mission.dat (seq, current, autocontinue, altitude in cm), which must still count as verified.
+{
+  const { missionManager } = await import('../src/mavlink/missionManager.ts');
+  const d = await import('../src/mavlink/missionDraft.ts');
+  let draft = d.draftFromItems([{ seq: 0, command: 16, frame: 0, x: 37.7749, y: -122.4194, z: 10 }]);
+  draft = d.insertItems(draft, 1, [{ ...d.newWaypoint(draft, 1, 0, 0), command: 22, z: 20.004 }]);
+  for (let i = 0; i < 5; i++) draft = d.appendWaypoint(draft, 37.775 + i * 1e-4, -122.419 + i * 1e-4);
+  draft = d.updateItem(draft, 3, { z: 33.337, param1: 2.5 });
+  draft = d.insertItems(draft, 5, [{ command: 177, frame: 2, param1: 3, param2: 2, param3: 0, param4: 0, x: 0, y: 0, z: 0, autocontinue: 1 }]);
+
+  const sim = new ArduPilotFtpSim();
+  sim.install();
+  const res = await missionManager.uploadMissionAndReadBack(d.draftToItems(draft), 1, 1);
+  await sleep(50);
+  const verdict = d.checkReadBack(draft, res.readBack);
+  check('draft upload over MAVFTP: accepted and read back', res.success && res.method === 'ftp' && res.readBack.length === draft.items.length, `${res.success} ${res.method} ${res.readBack.length}`);
+  check('draft upload: vehicle-regenerated read-back counts as verified', verdict.status === 'verified', JSON.stringify(verdict.comparison));
+
+  // The vehicle keeps all but the last item (e.g. storage full): the route differs and must not pass.
+  const short = new ArduPilotFtpSim();
+  short.install();
+  const res2 = await missionManager.uploadMissionAndReadBack(d.draftToItems(draft), 1, 1);
+  await sleep(50);
+  const stored = short.committed['@MISSION/mission.dat'];
+  const truncated = d.draftToItems(d.removeItems(draft, [draft.items.length - 1]));
+  short.committed['@MISSION/mission.dat'] = packDatFile(truncated, 0);
+  const res3Read = await missionManager.fetchWaypoints(1, 1);
+  const verdict2 = d.checkReadBack(draft, res3Read);
+  check('draft upload: a vehicle copy missing an item is a mismatch', Boolean(stored) && res2.success && verdict2.status === 'mismatch', verdict2.comparison.structural.join('; '));
+
+  check('draft upload: nothing read back is unreadable, not verified', d.checkReadBack(draft, []).status === 'unreadable');
+  const p = d.checkReadBack(draft, res.readBack.map((w: any) => (w.seq === 3 ? { ...w, param4: 45 } : w)));
+  check('draft upload: a param the vehicle stored differently is reported, route still verified', p.status === 'params-differ' && p.comparison.params.length === 1);
+}
+
 console.log(failures.length ? `\n${failures.length} MAVFTP ArduPilot-sim check(s) FAILED` : '\nAll MAVFTP ArduPilot-sim checks PASSED');
 process.exit(failures.length ? 1 : 0);

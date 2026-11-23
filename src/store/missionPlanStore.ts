@@ -16,7 +16,7 @@ import {
 const STORAGE_KEY = 'mavlink_glareshield_mission_draft';
 
 /** What a click on the map does while planning: select pins only, or add a waypoint where clicked. */
-export type PlanTool = 'select' | 'add';
+export type PlanTool = 'select' | 'add'; // 'add' is labelled Place
 
 /** Where the draft came from, shown in the panel. */
 export type DraftSource = { kind: 'vehicle' } | { kind: 'file'; name: string } | { kind: 'empty' };
@@ -31,6 +31,10 @@ interface MissionPlanState {
   /** Index of the selected item, or null. */
   selected: number | null;
   tool: PlanTool;
+  /** The draft is being uploaded: edits, undo and redo wait until it finishes. */
+  uploading: boolean;
+  /** The vehicle's mission changed after the draft started (and the draft has changes of its own). */
+  vehicleChanged: boolean;
 
   /** Turn planning on with `draft`, which is also the base (no changes yet). */
   start: (draft: MissionDraft, source: DraftSource) => void;
@@ -48,6 +52,12 @@ interface MissionPlanState {
   redo: () => void;
   select: (index: number | null) => void;
   setTool: (tool: PlanTool) => void;
+  setUploading: (uploading: boolean) => void;
+  setVehicleChanged: (changed: boolean) => void;
+  /** Keep the draft, comparing it from now on with `base` (the vehicle's current mission). */
+  rebase: (base: MissionDraft) => void;
+  /** After a verified upload: what the vehicle holds becomes the draft and the base, with a fresh history. */
+  uploaded: (readBack: MissionDraft) => void;
 }
 
 /** True when the draft differs from the mission it started from. */
@@ -102,14 +112,26 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   source: restored?.source ?? { kind: 'empty' },
   selected: null,
   tool: 'select',
+  uploading: false,
+  vehicleChanged: false,
 
-  start: (draft, source) => set({ active: true, history: historyInit(draft), base: draft, source, selected: null, tool: 'select' }),
+  start: (draft, source) =>
+    set({ active: true, history: historyInit(draft), base: draft, source, selected: null, tool: 'select', vehicleChanged: false }),
 
-  stop: () => set({ active: false, history: historyInit(EMPTY), base: EMPTY, source: { kind: 'empty' }, selected: null, tool: 'select' }),
+  stop: () =>
+    set({
+      active: false,
+      history: historyInit(EMPTY),
+      base: EMPTY,
+      source: { kind: 'empty' },
+      selected: null,
+      tool: 'select',
+      vehicleChanged: false,
+    }),
 
   edit: (fn, select) => {
-    const { history, active } = get();
-    if (!active) return;
+    const { history, active, uploading } = get();
+    if (!active || uploading) return;
     const next = fn(history.present);
     set({
       history: historyPush(history, next),
@@ -118,15 +140,15 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   },
 
   replace: (draft, source) => {
-    const { history, active } = get();
-    if (!active) return;
+    const { history, active, uploading } = get();
+    if (!active || uploading) return;
     set({ history: historyPush(history, draft), source, selected: null });
   },
 
   resetToVehicle: (draft) => {
-    const { history, active } = get();
-    if (!active) return;
-    set({ history: historyPush(history, draft), base: draft, source: { kind: 'vehicle' }, selected: null });
+    const { history, active, uploading } = get();
+    if (!active || uploading) return;
+    set({ history: historyPush(history, draft), base: draft, source: { kind: 'vehicle' }, selected: null, vehicleChanged: false });
   },
 
   syncFromVehicle: (draft) => {
@@ -137,16 +159,19 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
       base: draft,
       source: { kind: 'vehicle' },
       selected: sel !== null && sel < draft.items.length ? sel : null,
+      vehicleChanged: false,
     });
   },
 
   undo: () => {
+    if (get().uploading) return;
     const h = historyUndo(get().history);
     const sel = get().selected;
     set({ history: h, selected: sel !== null && sel < h.present.items.length ? sel : null });
   },
 
   redo: () => {
+    if (get().uploading) return;
     const h = historyRedo(get().history);
     const sel = get().selected;
     set({ history: h, selected: sel !== null && sel < h.present.items.length ? sel : null });
@@ -155,6 +180,29 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   select: (index) => set({ selected: index }),
 
   setTool: (tool) => set({ tool }),
+
+  setUploading: (uploading) => set({ uploading }),
+
+  setVehicleChanged: (vehicleChanged) => {
+    if (get().vehicleChanged !== vehicleChanged) set({ vehicleChanged });
+  },
+
+  rebase: (base) => {
+    if (!get().active) return;
+    set({ base, vehicleChanged: false });
+  },
+
+  uploaded: (readBack) => {
+    if (!get().active) return;
+    const sel = get().selected;
+    set({
+      history: historyInit(readBack),
+      base: readBack,
+      source: { kind: 'vehicle' },
+      selected: sel !== null && sel < readBack.items.length ? sel : null,
+      vehicleChanged: false,
+    });
+  },
 }));
 
 // Save after every change. A draft is a few kB, and the map commits a drag only when it ends.

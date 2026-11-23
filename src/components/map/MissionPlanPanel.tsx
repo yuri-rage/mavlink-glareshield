@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Trash2,
   Undo2,
+  Upload,
   X,
   XCircle,
 } from 'lucide-react';
@@ -67,6 +68,13 @@ interface MissionPlanPanelProps {
   onResetToVehicle: () => void;
   /** Leave planning mode (the panel has already confirmed discarding changes). */
   onExit: () => void;
+  /** Open the upload confirmation. */
+  onRequestUpload: () => void;
+  /** The vehicle's mission changed: keep the draft and compare it with the vehicle's new mission from now on. */
+  onKeepDraft: () => void;
+  connected: boolean;
+  /** A mission download or upload is running. */
+  transferBusy: boolean;
 }
 
 /** A number input that keeps what is typed until Enter or blur, then commits a finite value. */
@@ -87,7 +95,8 @@ const NumField: React.FC<{
     editing.current = false;
     const v = parseFloat(text);
     if (Number.isFinite(v) && v !== value) onCommit(v);
-    else setText(shown);
+    // Show the draft's value again: the new one once the edit lands, the old one if it was refused.
+    setText(shown);
   };
   return (
     <label className="block min-w-0 space-y-0.5" title={title}>
@@ -285,6 +294,10 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   onOpenFile,
   onResetToVehicle,
   onExit,
+  onRequestUpload,
+  onKeepDraft,
+  connected,
+  transferBusy,
 }) => {
   const draft = useMissionPlanStore((s) => s.history.present);
   const canUndo = useMissionPlanStore((s) => s.history.past.length > 0);
@@ -292,6 +305,8 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   const selected = useMissionPlanStore((s) => s.selected);
   const source = useMissionPlanStore((s) => s.source);
   const dirty = useMissionPlanStore((s) => isDraftDirty(s));
+  const uploading = useMissionPlanStore((s) => s.uploading);
+  const vehicleChanged = useMissionPlanStore((s) => s.vehicleChanged);
   const { edit, undo, redo, select } = useMissionPlanStore.getState();
   const vehicleType = useTelemetryStore((s) => s.heartbeat.type);
   const systemId = useTelemetryStore((s) => s.heartbeat.systemId);
@@ -355,6 +370,16 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   const saveDraft = () => {
     downloadFile(`${missionFileStem(systemId)}-draft.waypoints`, toQgcWpl(draftToItems(draft)), 'text/plain');
   };
+
+  const uploadBlocked = !connected
+    ? 'Connect to a vehicle to upload'
+    : uploading || transferBusy
+      ? 'A mission transfer is in progress'
+      : errors > 0
+        ? 'Fix the errors first'
+        : !dirty
+          ? 'No changes to upload'
+          : null;
 
   const sourceText =
     source.kind === 'vehicle' ? 'from vehicle' : source.kind === 'file' ? source.name : 'new';
@@ -425,10 +450,46 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
         </button>
       </div>
 
+      {vehicleChanged && !uploading && (
+        <div className="space-y-1 border-b border-amber-500/40 bg-amber-950/40 px-2 py-1.5 text-[10px] text-amber-200">
+          <div className="flex gap-1">
+            <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+            The vehicle's mission changed while you were editing (another upload, or a download).
+          </div>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={onResetToVehicle}
+              className="rounded border border-amber-500/50 px-1.5 py-0.5 font-bold hover:bg-amber-500/20"
+              title="Replace the draft with the vehicle's mission (undo brings the draft back)"
+            >
+              Load vehicle's
+            </button>
+            <button
+              type="button"
+              onClick={onKeepDraft}
+              className="rounded border border-zinc-600 px-1.5 py-0.5 font-bold text-zinc-200 hover:bg-zinc-800"
+              title="Keep editing the draft; it will replace the vehicle's mission when uploaded"
+            >
+              Keep draft
+            </button>
+          </div>
+        </div>
+      )}
+      {uploading && (
+        <div className="border-b border-sky-500/40 bg-sky-950/40 px-2 py-1.5 text-[10px] text-sky-200 animate-pulse">
+          Uploading and checking… editing resumes when it finishes.
+        </div>
+      )}
+
       {!collapsed && (
         <>
           {/* Items */}
-          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div
+            ref={listRef}
+            className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${uploading ? 'pointer-events-none opacity-60' : ''}`}
+            aria-busy={uploading}
+          >
             {missionIssues.map((iss, k) => (
               <div key={k} className="flex gap-1 border-b border-zinc-800 px-2 py-1 text-[10px] text-amber-300">
                 <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
@@ -486,6 +547,17 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
 
           {/* Footer */}
           <div className="space-y-1.5 border-t border-zinc-800 px-2 py-1.5">
+            <button
+              type="button"
+              disabled={uploadBlocked !== null}
+              onClick={onRequestUpload}
+              title={uploadBlocked ?? 'Review and upload the draft to the vehicle'}
+              className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-sky-600 text-[11px] font-bold text-white hover:bg-sky-500 disabled:bg-zinc-800 disabled:text-zinc-500"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              {uploading ? 'Uploading…' : 'Upload to vehicle'}
+              {uploadBlocked && !uploading && <span className="truncate font-normal">· {uploadBlocked}</span>}
+            </button>
             <div className="flex items-center gap-1">
               <CommandSelect value={addCommand} onChange={setAddCommand} className={`${INPUT} min-w-0 flex-1`} />
               <button
@@ -493,12 +565,12 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
                 onClick={addItem}
                 title={
                   cmdHasLocation(addCommand)
-                    ? `Add after ${selected !== null && selected >= 1 ? `#${selected}` : 'the last item'}, at the map centre`
-                    : `Add after ${selected !== null && selected >= 1 ? `#${selected}` : 'the last item'}`
+                    ? `Insert after ${selected !== null && selected >= 1 ? `#${selected}` : 'the last item'}, at the map centre (or use Place on the map)`
+                    : `Insert after ${selected !== null && selected >= 1 ? `#${selected}` : 'the last item'}`
                 }
                 className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-amber-500/50 bg-amber-500/15 px-2 text-[11px] font-bold text-amber-200 hover:bg-amber-500/25"
               >
-                <Plus className="h-3.5 w-3.5" /> Add
+                <Plus className="h-3.5 w-3.5" /> Insert
               </button>
             </div>
             <div className="flex items-center gap-1">

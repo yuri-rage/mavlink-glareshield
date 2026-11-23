@@ -470,6 +470,31 @@ export function compareDrafts(a: MissionDraft, b: MissionDraft): DraftComparison
   return { structural, params };
 }
 
+export interface ReadBackCheck {
+  /** verified: the route matches. params-differ: the route matches but the vehicle stored some params
+   *  differently. mismatch: the route differs. unreadable: nothing came back. */
+  status: 'verified' | 'params-differ' | 'mismatch' | 'unreadable';
+  /** What the vehicle holds, as a draft (home from the upload when the read-back has none). */
+  vehicle: MissionDraft;
+  comparison: DraftComparison;
+}
+
+/** Judge an upload by what the vehicle sent back. Only 'verified' and 'params-differ' count as uploaded. */
+export function checkReadBack(uploaded: MissionDraft, readBack: MissionWaypoint[]): ReadBackCheck {
+  const home = uploaded.items[0];
+  const vehicle = draftFromWaypoints(readBack, home ? { lat: home.x, lon: home.y, alt: home.z } : undefined);
+  const comparison = compareDrafts(uploaded, vehicle);
+  const status =
+    readBack.length === 0
+      ? 'unreadable'
+      : comparison.structural.length > 0
+        ? 'mismatch'
+        : comparison.params.length > 0
+          ? 'params-differ'
+          : 'verified';
+  return { status, vehicle, comparison };
+}
+
 /** True when the two drafts would upload the same mission (used for "unsaved changes"). */
 export function draftsEqual(a: MissionDraft, b: MissionDraft): boolean {
   const c = compareDrafts(a, b);

@@ -95,9 +95,10 @@ import { MissionMenu } from './MissionMenu';
 import { MapViewMenu, type MapLayerType } from './MapViewMenu';
 import { FlyToPopover } from './FlyToPopover';
 import { MissionPlanPanel } from './MissionPlanPanel';
+import { DraftUploadModal } from './DraftUploadModal';
 import { useDraftLayer, drawablePosition } from './useDraftLayer';
 import { isDraftDirty, useMissionPlanStore } from '../../store/missionPlanStore';
-import { draftFromItems, draftFromWaypoints, type MissionDraft } from '../../mavlink/missionDraft';
+import { checkReadBack, draftFromItems, draftFromWaypoints, draftToItems, draftsEqual, type MissionDraft } from '../../mavlink/missionDraft';
 
 interface MapWidgetProps {
   colSpan?: number;
@@ -242,6 +243,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const mapAreaRef = useRef<HTMLDivElement | null>(null);
   const [mapAreaWidth, setMapAreaWidth] = useState(0);
   const [planNotice, setPlanNotice] = useState<string | null>(null);
+  /** The vehicle's mission at the moment the upload confirmation opened, for its change list. */
+  const [draftUploadVehicle, setDraftUploadVehicle] = useState<MissionDraft | null>(null);
 
   useEffect(() => {
     flyToModeRef.current = flyToMode;
@@ -801,6 +804,58 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     if (!isDraftDirty(st)) st.syncFromVehicle(vehicleDraft());
   }, [planning, missionWaypoints, vehicleDraft]);
 
+  // With changes of its own, the draft is not replaced when the vehicle's mission changes; say that it did. Not
+  // while a transfer runs (a download arrives item by item; an upload sets the mission to the draft first).
+  useEffect(() => {
+    if (!planning || missionStatus.isFetching || missionStatus.isUploading) return;
+    const st = useMissionPlanStore.getState();
+    if (st.uploading || !isDraftDirty(st)) return;
+    st.setVehicleChanged(!draftsEqual(vehicleDraft(), st.base));
+  }, [planning, missionWaypoints, missionStatus.isFetching, missionStatus.isUploading, vehicleDraft]);
+
+  /**
+   * Upload the draft, read the mission back and compare. Only a read-back that matches the route counts: the draft
+   * then becomes what the vehicle holds. Otherwise the draft is kept to fix or retry, compared from now on with the
+   * mission the vehicle actually has.
+   */
+  const uploadDraft = async () => {
+    setDraftUploadVehicle(null);
+    const st = useMissionPlanStore.getState();
+    if (st.uploading) return;
+    const draft = st.history.present;
+    st.setUploading(true);
+    setPlanNotice(null);
+    try {
+      const res = await missionManager.uploadMissionAndReadBack(draftToItems(draft));
+      if (!res.success) {
+        setPlanNotice(`Upload failed: ${res.error || 'the vehicle did not accept the mission'}. The draft is unchanged.`);
+        return;
+      }
+      const check = checkReadBack(draft, res.readBack);
+      const diff = check.comparison;
+      if (check.status === 'unreadable' || check.status === 'mismatch') {
+        useMissionPlanStore.getState().rebase(check.vehicle);
+        const detail = check.status === 'unreadable' ? 'it could not be read back' : diff.structural.slice(0, 3).join('; ');
+        setPlanNotice(`Uploaded, but the vehicle's mission does not match the draft (${detail}). The draft is kept; check it and upload again.`);
+        missionManager.report('Mission uploaded but NOT verified', 10000);
+        return;
+      }
+      useMissionPlanStore.getState().uploaded(check.vehicle);
+      missionManager.report(`Mission uploaded and verified (${draft.items.length - 1} items)`);
+      if (check.status === 'params-differ') {
+        setPlanNotice(
+          `Uploaded and verified. The vehicle stored some params differently (it doesn't keep every param): ${diff.params
+            .slice(0, 3)
+            .join('; ')}${diff.params.length > 3 ? '…' : ''}`
+        );
+      }
+    } catch (err: any) {
+      setPlanNotice(`Upload failed: ${err?.message || err}. The draft is unchanged.`);
+    } finally {
+      useMissionPlanStore.getState().setUploading(false);
+    }
+  };
+
   // Closing the tab with unsaved changes: the draft is kept in this browser, but say so.
   useEffect(() => {
     if (!planDirty) return;
@@ -812,7 +867,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [planDirty]);
 
-  // Planning keys, ignored while typing in a field: Escape leaves the Add tool, then the maximized view (planning
+  // Planning keys, ignored while typing in a field: Escape leaves the Place tool, then the maximized view (planning
   // stays on); Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or Ctrl+Y redoes.
   useEffect(() => {
     if (!planning) return;
@@ -840,7 +895,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     return () => document.removeEventListener('keydown', onKey);
   }, [planning, maximized]);
 
-  // The Add tool: crosshair cursor, and no double-click zoom (two quick clicks add two waypoints, not zoom too).
+  // The Place tool: crosshair cursor, and no double-click zoom (two quick clicks add two waypoints, not zoom too).
   useEffect(() => {
     const el = mapContainerRef.current;
     const map = mapInstanceRef.current;
@@ -1849,7 +1904,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               {(
                 [
                   { tool: 'select', label: 'Select', icon: <MousePointer2 className="h-3.5 w-3.5" />, title: 'Select and drag waypoints' },
-                  { tool: 'add', label: 'Add', icon: <MapPinPlus className="h-3.5 w-3.5" />, title: 'Click the map to add waypoints (Esc to stop)' },
+                  { tool: 'add', label: 'Place', icon: <MapPinPlus className="h-3.5 w-3.5" />, title: 'Click the map to place waypoints, one per click (Esc to stop)' },
                 ] as const
               ).map((b) => (
                 <button
@@ -1873,7 +1928,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             </div>
             {planTool === 'add' && (
               <div className="rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md">
-                Click the map to add after {planSelected !== null && planSelected >= 1 ? `#${planSelected}` : 'the last item'}
+                Click the map to place waypoints after {planSelected !== null && planSelected >= 1 ? `#${planSelected}` : 'the last item'}
                 <span className="text-zinc-500"> · Esc to stop</span>
               </div>
             )}
@@ -1900,11 +1955,26 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               setPlanNotice(null);
             }}
             onExit={stopPlanning}
+            onRequestUpload={() => setDraftUploadVehicle(vehicleDraft())}
+            onKeepDraft={() => useMissionPlanStore.getState().rebase(vehicleDraft())}
+            connected={connected}
+            transferBusy={missionStatus.isFetching || Boolean(missionStatus.isUploading)}
           />
         )}
       </CardContent>
 
       <MapMissionFooter />
+
+      {planning && draftUploadVehicle && (
+        <DraftUploadModal
+          vehicle={draftUploadVehicle}
+          vehicleType={heartbeat.type}
+          armed={heartbeat.isArmed}
+          modeName={heartbeat.modeName}
+          onConfirm={uploadDraft}
+          onCancel={() => setDraftUploadVehicle(null)}
+        />
+      )}
 
       {/* Confirmation Modal with Armed/Auto Warning and Summary */}
       {pendingUpload && (
