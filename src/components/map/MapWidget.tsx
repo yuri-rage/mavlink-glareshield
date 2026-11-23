@@ -12,7 +12,7 @@ import { Badge } from '../ui/badge';
 import { Modal } from '../ui/modal';
 import { parseDroppedMissionFile, ParsedMissionFile } from '../../mavlink/missionFileParser';
 import { MissionItemIntData } from '../../mavlink/encoder';
-import { RefreshCw, Crosshair, Shield, Flag, Upload, AlertTriangle, Navigation, Home, LocateFixed, Map as MapIcon } from 'lucide-react';
+import { RefreshCw, Crosshair, Shield, Flag, Upload, AlertTriangle, Navigation, Home, LocateFixed, Map as MapIcon, MousePointer2, MapPinPlus } from 'lucide-react';
 import L from 'leaflet';
 
 function renderVehicleSvg(type: number): string {
@@ -232,6 +232,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   // popups are off while it is on, so a map click can only ever mean one thing.
   const planning = useMissionPlanStore((s) => s.active);
   const planDirty = useMissionPlanStore((s) => s.active && isDraftDirty(s));
+  const planTool = useMissionPlanStore((s) => s.tool);
+  const planSelected = useMissionPlanStore((s) => s.selected);
   const planningRef = useRef(planning);
   planningRef.current = planning;
   const [mapReady, setMapReady] = useState(false);
@@ -810,15 +812,45 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [planDirty]);
 
-  // Leaving the maximized view with Escape (planning stays on).
+  // Planning keys, ignored while typing in a field: Escape leaves the Add tool, then the maximized view (planning
+  // stays on); Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or Ctrl+Y redoes.
   useEffect(() => {
-    if (!maximized) return;
+    if (!planning) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)) setMaximized(false);
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      const st = useMissionPlanStore.getState();
+      if (e.key === 'Escape') {
+        if (st.tool === 'add') st.setTool('select');
+        else if (maximized) setMaximized(false);
+        return;
+      }
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        st.undo();
+      } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+        e.preventDefault();
+        st.redo();
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [maximized]);
+  }, [planning, maximized]);
+
+  // The Add tool: crosshair cursor, and no double-click zoom (two quick clicks add two waypoints, not zoom too).
+  useEffect(() => {
+    const el = mapContainerRef.current;
+    const map = mapInstanceRef.current;
+    const adding = planning && planTool === 'add';
+    el?.classList.toggle('gs-plan-add', adding);
+    if (map) {
+      if (adding) map.doubleClickZoom.disable();
+      else map.doubleClickZoom.enable();
+    }
+  }, [planning, planTool, mapReady]);
 
   const getMapCenter = useCallback(() => {
     const c = mapInstanceRef.current?.getCenter();
@@ -1807,12 +1839,52 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           />
         )}
 
-        {planning && planNotice && (
-          <div className="absolute top-2 left-2 z-[460] max-w-[min(420px,calc(100%-1rem))] rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md flex items-start gap-2">
-            <span className="min-w-0">{planNotice}</span>
-            <button type="button" className="text-zinc-500 hover:text-zinc-200" onClick={() => setPlanNotice(null)} aria-label="Dismiss">
-              ×
-            </button>
+        {planning && (
+          <div
+            className={`absolute top-2 left-2 z-[460] flex flex-col items-start gap-1.5 ${
+              planLayout === 'side' ? 'max-w-[calc(100%-288px)]' : 'max-w-[calc(100%-1rem)]'
+            }`}
+          >
+            <div className="flex items-center rounded-lg border border-zinc-700 bg-zinc-950/90 p-0.5 shadow-md" role="group" aria-label="Map tool">
+              {(
+                [
+                  { tool: 'select', label: 'Select', icon: <MousePointer2 className="h-3.5 w-3.5" />, title: 'Select and drag waypoints' },
+                  { tool: 'add', label: 'Add', icon: <MapPinPlus className="h-3.5 w-3.5" />, title: 'Click the map to add waypoints (Esc to stop)' },
+                ] as const
+              ).map((b) => (
+                <button
+                  key={b.tool}
+                  type="button"
+                  aria-pressed={planTool === b.tool}
+                  title={b.title}
+                  onClick={() => useMissionPlanStore.getState().setTool(b.tool)}
+                  className={`inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-bold ${
+                    planTool === b.tool
+                      ? b.tool === 'add'
+                        ? 'bg-amber-500 text-zinc-950'
+                        : 'bg-zinc-700 text-white'
+                      : 'text-zinc-300 hover:bg-zinc-800'
+                  }`}
+                >
+                  {b.icon}
+                  {b.label}
+                </button>
+              ))}
+            </div>
+            {planTool === 'add' && (
+              <div className="rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md">
+                Click the map to add after {planSelected !== null && planSelected >= 1 ? `#${planSelected}` : 'the last item'}
+                <span className="text-zinc-500"> · Esc to stop</span>
+              </div>
+            )}
+            {planNotice && (
+              <div className="rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md flex items-start gap-2">
+                <span className="min-w-0">{planNotice}</span>
+                <button type="button" className="text-zinc-500 hover:text-zinc-200" onClick={() => setPlanNotice(null)} aria-label="Dismiss">
+                  ×
+                </button>
+              </div>
+            )}
           </div>
         )}
         {planning && (

@@ -296,6 +296,36 @@ export function appendWaypoint(draft: MissionDraft, lat: number, lon: number, fa
   return insertItems(draft, at, [newWaypoint(draft, at, lat, lon, fallbackAlt)]);
 }
 
+/**
+ * Add a waypoint after item `after` (the selection), or at the end when nothing editable is selected. Returns the
+ * draft and the new item's index, so repeated adds chain one after another.
+ */
+export function insertWaypointAfter(
+  draft: MissionDraft,
+  after: number | null,
+  lat: number,
+  lon: number,
+  fallbackAlt = DEFAULT_WAYPOINT_ALT
+): { draft: MissionDraft; index: number } {
+  const at = after !== null && after >= 1 && after < draft.items.length ? after + 1 : draft.items.length;
+  return { draft: insertItems(draft, at, [newWaypoint(draft, at, lat, lon, fallbackAlt)]), index: at };
+}
+
+/**
+ * Add a waypoint on the leg that ends at location item `legEnd`: it goes just before that item, after any
+ * commands without a location on the way. Returns the draft and the new item's index.
+ */
+export function insertWaypointBefore(
+  draft: MissionDraft,
+  legEnd: number,
+  lat: number,
+  lon: number,
+  fallbackAlt = DEFAULT_WAYPOINT_ALT
+): { draft: MissionDraft; index: number } {
+  assertEditable(draft, legEnd);
+  return { draft: insertItems(draft, legEnd, [newWaypoint(draft, legEnd, lat, lon, fallbackAlt)]), index: legEnd };
+}
+
 /** Indices of the DO_JUMP items that target `index`, to warn before deleting or moving it. */
 export function jumpsTargeting(draft: MissionDraft, index: number): number[] {
   const out: number[] = [];

@@ -15,6 +15,9 @@ import {
 
 const STORAGE_KEY = 'mavlink_glareshield_mission_draft';
 
+/** What a click on the map does while planning: select pins only, or add a waypoint where clicked. */
+export type PlanTool = 'select' | 'add';
+
 /** Where the draft came from, shown in the panel. */
 export type DraftSource = { kind: 'vehicle' } | { kind: 'file'; name: string } | { kind: 'empty' };
 
@@ -27,6 +30,7 @@ interface MissionPlanState {
   source: DraftSource;
   /** Index of the selected item, or null. */
   selected: number | null;
+  tool: PlanTool;
 
   /** Turn planning on with `draft`, which is also the base (no changes yet). */
   start: (draft: MissionDraft, source: DraftSource) => void;
@@ -43,6 +47,7 @@ interface MissionPlanState {
   undo: () => void;
   redo: () => void;
   select: (index: number | null) => void;
+  setTool: (tool: PlanTool) => void;
 }
 
 /** True when the draft differs from the mission it started from. */
@@ -96,10 +101,11 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   base: restored?.base ?? EMPTY,
   source: restored?.source ?? { kind: 'empty' },
   selected: null,
+  tool: 'select',
 
-  start: (draft, source) => set({ active: true, history: historyInit(draft), base: draft, source, selected: null }),
+  start: (draft, source) => set({ active: true, history: historyInit(draft), base: draft, source, selected: null, tool: 'select' }),
 
-  stop: () => set({ active: false, history: historyInit(EMPTY), base: EMPTY, source: { kind: 'empty' }, selected: null }),
+  stop: () => set({ active: false, history: historyInit(EMPTY), base: EMPTY, source: { kind: 'empty' }, selected: null, tool: 'select' }),
 
   edit: (fn, select) => {
     const { history, active } = get();
@@ -147,6 +153,8 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   },
 
   select: (index) => set({ selected: index }),
+
+  setTool: (tool) => set({ tool }),
 }));
 
 // Save after every change. A draft is a few kB, and the map commits a drag only when it ends.

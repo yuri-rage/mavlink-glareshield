@@ -316,3 +316,11 @@ body.leaflet-dragging .leaflet-container.gs-map.leaflet-grab {
   top: 0;
   bottom: auto;
 }
+
+/* Planning: the Add tool places waypoints where clicked; the selected draft pin can be dragged. */
+.leaflet-container.gs-map.gs-plan-add {
+  cursor: crosshair;
+}
+.leaflet-container.gs-map .gs-draft-draggable {
+  cursor: move;
+}
