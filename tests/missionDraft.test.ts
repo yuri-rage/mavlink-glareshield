@@ -121,6 +121,20 @@ check('empty mission: home alone, at the given home', (() => {
   check('location to location: position and altitude kept, params cleared', wpToLoiter.items[3].x === 35.002 && wpToLoiter.items[3].z === 40 && wpToLoiter.items[3].param1 === 0);
   check('change to the same command returns the same draft', d.changeCommand(base, 3, 16) === base);
 }
+{
+  const r1 = d.insertWaypointAfter(base, 2, 35.0012, -106.0012);
+  check('add after selection: lands after it, jump follows its target', r1.index === 3 && r1.draft.items[3].x === 35.0012 && r1.draft.items[5].param1 === 2);
+  const r2 = d.insertWaypointAfter(r1.draft, r1.index, 35.0013, -106.0013);
+  check('add again: chains after the new one', r2.index === 4 && r2.draft.items[4].x === 35.0013);
+  const r3 = d.insertWaypointAfter(base, null, 35.01, -106.01);
+  check('add with nothing selected: appended', r3.index === 6 && r3.draft.items.length === 7);
+  const r4 = d.insertWaypointAfter(base, 0, 35.01, -106.01);
+  check('add with home selected: appended', r4.index === 6);
+  const m = d.insertWaypointBefore(base, 3, 35.0015, -106.0015);
+  check('midpoint insert: before the leg end, jump target shifts with it', m.index === 3 && m.draft.items[4].x === 35.002 && m.draft.items[5].param1 === 2);
+  check('midpoint insert takes the altitude before it', m.draft.items[3].z === 30);
+  check('midpoint insert at home is refused', throws(() => d.insertWaypointBefore(base, 0, 1, 1)));
+}
 check('jumps targeting: finds the jump', JSON.stringify(d.jumpsTargeting(base, 2)) === '[4]');
 
 // ------------------------------------------------------------------------------------------------
