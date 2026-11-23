@@ -575,6 +575,16 @@ interface NavCache {
   missionWaypoints?: MissionWaypoint[];
   fencePoints?: FencePoint[];
   rallyPoints?: RallyPoint[];
+  /** The last home the vehicle reported (or the mission's), so the map can open there before reconnecting. */
+  home?: { lat: number; lon: number; alt: number; source: HomePositionInfo['source'] };
+}
+
+/** A saved home worth using: finite, in range, not 0,0, and from a real source. */
+function cachedHome(h: NavCache['home']): NavCache['home'] | null {
+  if (!h || h.source === 'none') return null;
+  const ok = [h.lat, h.lon, h.alt].every((v) => typeof v === 'number' && Number.isFinite(v));
+  if (!ok || Math.abs(h.lat) > 90 || Math.abs(h.lon) > 180 || (h.lat === 0 && h.lon === 0)) return null;
+  return h;
 }
 
 function loadInitialNavCache(): NavCache {
@@ -761,6 +771,11 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     fixed: 0,
   },
   homePosition: (() => {
+    // The home saved last session (HOME_POSITION, arming, or wp0), else the cached mission's item 0.
+    const saved = cachedHome(initialNav.home);
+    if (saved) {
+      return { lat: saved.lat, lon: saved.lon, alt: saved.alt, distanceM: null, bearingDeg: null, source: saved.source };
+    }
     const wp0 = initialNav.missionWaypoints?.find(
       (w) => w.seq === 0 && (w.lat !== 0 || w.lon !== 0)
     );
@@ -1856,14 +1871,20 @@ mavlinkConnection.onSend((data) => {
 let lastWps: MissionWaypoint[] | null = null;
 let lastFp: FencePoint[] | null = null;
 let lastRp: RallyPoint[] | null = null;
+/** Home as last saved. Its distance and bearing change with every position update; only a move of home itself
+ *  (or its source) is worth a write. */
+let lastHomeKey = '';
+const homeKey = (h: HomePositionInfo) => `${h.source}:${h.lat}:${h.lon}:${h.alt}`;
 
 useTelemetryStore.subscribe((state) => {
-  if (state.missionWaypoints === lastWps && state.fencePoints === lastFp && state.rallyPoints === lastRp) {
+  const hk = homeKey(state.homePosition);
+  if (state.missionWaypoints === lastWps && state.fencePoints === lastFp && state.rallyPoints === lastRp && hk === lastHomeKey) {
     return;
   }
   lastWps = state.missionWaypoints;
   lastFp = state.fencePoints;
   lastRp = state.rallyPoints;
+  lastHomeKey = hk;
 
   // A mission download changes the list once per item; write the cache once it settles, not per item (each
   // write serializes the whole mission into localStorage).
@@ -1875,10 +1896,12 @@ let navSaveTimer: ReturnType<typeof setTimeout> | null = null;
 function flushNavCache() {
   navSaveTimer = null;
   const state = useTelemetryStore.getState();
+  const h = state.homePosition;
   saveNavCache({
     missionWaypoints: state.missionWaypoints,
     fencePoints: state.fencePoints,
     rallyPoints: state.rallyPoints,
+    home: cachedHome({ lat: h.lat, lon: h.lon, alt: h.alt, source: h.source }) ?? undefined,
   });
 }
 // Don't lose a pending write when the page closes.
