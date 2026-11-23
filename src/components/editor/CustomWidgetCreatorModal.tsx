@@ -24,6 +24,7 @@ import {
   COMMAND_PRESET_GROUPS,
   findCommandPreset,
   presetFitsWidget,
+  presetKindFor,
   presetTitle,
   type PresetWidgetKind,
 } from '../../mavlink/commandPresets';
@@ -327,8 +328,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   const [showMoreParams, setShowMoreParams] = useState(false);
   // Toggles and sliders overwrite a param with their own value, so they are offered only the presets where that
   // value is what the command expects (see CommandPreset.toggle / slider).
-  const presetKind: PresetWidgetKind =
-    displayType === 'toggle-switch' ? 'toggle' : displayType === 'slider-control' ? 'slider' : 'button';
+  const presetKind: PresetWidgetKind = presetKindFor(displayType);
   const offeredPresets = COMMAND_PRESETS.filter((c) => presetFitsWidget(c, presetKind));
   const selectedPreset = customCommand
     ? undefined
@@ -350,6 +350,23 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     }
   };
   const [requireConfirm, setRequireConfirm] = useState(true);
+
+  /**
+   * The user picked another widget type. Switching to a toggle or slider whose command doesn't fit it (a new
+   * widget's default RTL, say) starts it on the first preset that does: set relay, or change speed. A command the
+   * user chose as Custom is never replaced, and loading a saved widget never comes through here.
+   */
+  const changeDisplayType = (next: PanelDisplayType) => {
+    setDisplayType(next);
+    if (next === 'compass-rose' && binding.messageName === 'SYS_STATUS') {
+      setBinding({ ...binding, messageName: 'WIND', fieldName: 'direction', unit: '°', min: 0, max: 360 });
+    }
+    const kind = presetKindFor(next);
+    if (kind === 'button' || customCommand) return;
+    if (findCommandPreset(parseInt(commandId, 10) || 0, cmdParams.map((v) => parseFloat(v) || 0), kind)) return;
+    const first = COMMAND_PRESETS.find((c) => presetFitsWidget(c, kind));
+    if (first) applyPreset(first.key);
+  };
 
   // Field picker: the curated list plus every field the vehicle has actually sent (refreshed on open).
   const [observedCatalog, setObservedCatalog] = useState<Record<string, string[]>>({});
@@ -400,7 +417,9 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     setCommandId(String(a?.commandId || 20));
     const loaded = Array.from({ length: 7 }, (_, i) => String(a?.params?.[i] ?? 0));
     setCmdParams(loaded);
-    setCustomCommand(!findCommandPreset(a?.commandId || 20, a?.params ?? []));
+    // Judged for the widget's own type: a saved toggle whose command isn't a toggle preset is the user's Custom
+    // choice, kept as is.
+    setCustomCommand(!findCommandPreset(a?.commandId || 20, a?.params ?? [], presetKindFor(w?.displayType)));
     setShowMoreParams(loaded.slice(3).some((v) => Number(v) !== 0));
     setRequireConfirm(a?.confirmation ?? true);
   };
@@ -706,10 +725,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                     makeSingle();
                     return;
                   }
-                  setDisplayType(next);
-                  if (next === 'compass-rose' && binding.messageName === 'SYS_STATUS') {
-                    setBinding({ ...binding, messageName: 'WIND', fieldName: 'direction', unit: '°', min: 0, max: 360 });
-                  }
+                  changeDisplayType(next);
                 }}
                 className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
               >
@@ -788,10 +804,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                     value={displayType}
                     onChange={(e) => {
                       const next = e.target.value as PanelDisplayType;
-                      setDisplayType(next);
-                      if (next === 'compass-rose' && binding.messageName === 'SYS_STATUS') {
-                        setBinding({ ...binding, messageName: 'WIND', fieldName: 'direction', unit: '°', min: 0, max: 360 });
-                      }
+                      changeDisplayType(next);
                     }}
                     className={SELECT_CLASS}
                     aria-label="Panel type"
