@@ -96,11 +96,18 @@ import { MapViewMenu, type MapLayerType } from './MapViewMenu';
 import { FlyToPopover } from './FlyToPopover';
 import { MissionPlanPanel } from './MissionPlanPanel';
 import { PLAN_LAYER_SWITCH_WIDTH, PlanLayerSwitch } from './PlanLayerSwitch';
-import { DraftUploadModal } from './DraftUploadModal';
+import { DraftUploadModal, RallyUploadModal } from './DraftUploadModal';
 import { PlanContextMenu, type PlanMenuTarget } from './PlanContextMenu';
 import { useDraftLayer, drawablePosition } from './useDraftLayer';
 import { isAnyDirty, isDraftDirty, isRallyDirty, useMissionPlanStore, vehicleMissionUpdate } from '../../store/missionPlanStore';
-import { rallyDraftFromItems, rallyDraftFromPoints, rallyDraftsEqual, type RallyDraft } from '../../mavlink/rallyDraft';
+import {
+  checkRallyReadBack,
+  rallyDraftFromItems,
+  rallyDraftFromPoints,
+  rallyDraftToItems,
+  rallyDraftsEqual,
+  type RallyDraft,
+} from '../../mavlink/rallyDraft';
 import { checkReadBack, draftFromItems, draftFromWaypoints, draftToItems, draftsEqual, type MissionDraft } from '../../mavlink/missionDraft';
 
 interface MapWidgetProps {
@@ -325,6 +332,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const closePlanMenu = useCallback(() => setPlanMenu(null), []);
   /** The vehicle's mission at the moment the upload confirmation opened, for its change list. */
   const [draftUploadVehicle, setDraftUploadVehicle] = useState<MissionDraft | null>(null);
+  /** The vehicle's rally points when the rally upload confirmation opened. */
+  const [rallyUploadVehicle, setRallyUploadVehicle] = useState<RallyDraft | null>(null);
 
   useEffect(() => {
     flyToModeRef.current = flyToMode;
@@ -1006,6 +1015,48 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
    * then becomes what the vehicle holds. Otherwise the draft is kept to fix or retry, compared from now on with the
    * mission the vehicle actually has.
    */
+  /**
+   * Upload the rally draft, read it back and compare, like the mission: only a matching read-back counts, and the
+   * vehicle's copy then becomes the draft. Otherwise the draft is kept to fix or retry.
+   */
+  const uploadRally = async () => {
+    setRallyUploadVehicle(null);
+    const st = useMissionPlanStore.getState();
+    if (st.uploading) return;
+    const draft = st.rally.history.present;
+    st.setUploading(true);
+    setPlanNotice(null);
+    try {
+      const res = await missionManager.uploadRallyAndReadBack(rallyDraftToItems(draft));
+      if (!res.success) {
+        setPlanNotice(`Rally upload failed: ${res.error || 'the vehicle did not accept the rally points'}. The draft is unchanged.`);
+        return;
+      }
+      const check = checkRallyReadBack(draft, res.readBack);
+      if (check.status === 'unreadable') {
+        // Acknowledged but not read back: most likely the vehicle holds the draft. Compare with what was uploaded.
+        useMissionPlanStore.getState().rallyRebase(draft);
+        setPlanNotice('Rally points uploaded (the vehicle accepted them) but could not be read back to check. Download from the vehicle to verify.');
+        missionManager.report('Rally points uploaded but NOT verified', 10000);
+        return;
+      }
+      if (check.status === 'mismatch') {
+        useMissionPlanStore.getState().rallyRebase(check.vehicle);
+        setPlanNotice(
+          `Rally points uploaded, but the vehicle's do not match the draft (${check.differences.slice(0, 3).join('; ')}). The draft is kept; check it and upload again.`
+        );
+        missionManager.report('Rally points uploaded but NOT verified', 10000);
+        return;
+      }
+      useMissionPlanStore.getState().rallyUploaded(check.vehicle);
+      missionManager.report(`Rally points uploaded and verified (${draft.points.length})`);
+    } catch (err: any) {
+      setPlanNotice(`Rally upload failed: ${err?.message || err}. The draft is unchanged.`);
+    } finally {
+      useMissionPlanStore.getState().setUploading(false);
+    }
+  };
+
   const uploadDraft = async () => {
     setDraftUploadVehicle(null);
     const st = useMissionPlanStore.getState();
@@ -2244,12 +2295,23 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               setPlanNotice(null);
             }}
             onRallyKeepDraft={() => useMissionPlanStore.getState().rallyRebase(vehicleRallyDraft())}
+            onRequestRallyUpload={() => setRallyUploadVehicle(vehicleRallyDraft())}
           />
         )}
       </CardContent>
 
       <MapMissionFooter />
 
+      {planning && rallyUploadVehicle && (
+        <RallyUploadModal
+          vehicle={rallyUploadVehicle}
+          vehicleType={heartbeat.type}
+          armed={heartbeat.isArmed}
+          modeName={heartbeat.modeName}
+          onConfirm={uploadRally}
+          onCancel={() => setRallyUploadVehicle(null)}
+        />
+      )}
       {planning && draftUploadVehicle && (
         <DraftUploadModal
           vehicle={draftUploadVehicle}
