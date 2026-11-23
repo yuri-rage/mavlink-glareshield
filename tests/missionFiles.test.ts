@@ -150,5 +150,27 @@ function sameItems(name: string, got: any[], want: any[]) {
 
 check('file stem names the system and time', missionFileStem(3, new Date(2026, 10, 7, 9, 5)) === 'glareshield-sys3-20261107-0905');
 
+// A .plan with no planned home: home is a placeholder at seq 0, so the first real item keeps seq 1.
+{
+  const plan = {
+    fileType: 'Plan',
+    version: 1,
+    mission: {
+      version: 2,
+      items: [
+        { type: 'SimpleItem', command: 22, frame: 3, params: [0, 0, 0, 0, 0, 0, 25], autoContinue: true },
+        { type: 'SimpleItem', command: 16, frame: 3, params: [0, 0, 0, 0, 35.1, -106.1, 40], autoContinue: true },
+      ],
+    },
+  };
+  const parsed: any = parseDroppedMissionFile('nohome.plan', enc(JSON.stringify(plan)));
+  const items = parsed?.sections?.find((s: any) => s.type === 'mission')?.items ?? parsed?.items ?? [];
+  check(
+    'plan without planned home: placeholder home at seq 0, takeoff stays item 1',
+    items.length === 3 && items[0].seq === 0 && items[0].x === 0 && items[1].command === 22 && items[1].seq === 1 && items[2].seq === 2,
+    JSON.stringify(items.map((it: any) => [it.seq, it.command]))
+  );
+}
+
 console.log(failures.length ? `\n${failures.length} FAILED` : '\nAll mission file checks passed');
 process.exit(failures.length ? 1 : 0);
