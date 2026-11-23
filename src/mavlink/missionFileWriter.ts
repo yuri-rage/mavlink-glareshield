@@ -63,7 +63,7 @@ export function rallyToItems(rallyPoints: RallyPoint[]): MissionItemIntData[] {
     .map((r, i) => ({
       seq: i,
       command: NAV_RALLY_POINT,
-      frame: MAV_FRAME_GLOBAL_RELATIVE_ALT,
+      frame: r.frame ?? MAV_FRAME_GLOBAL_RELATIVE_ALT,
       autocontinue: 1,
       param1: 0,
       param2: 0,

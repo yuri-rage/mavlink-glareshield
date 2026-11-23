@@ -428,7 +428,7 @@ export function validateDraft(draft: MissionDraft, category?: VehicleCategory): 
 // ------------------------------------------------------------------------------------------------
 
 /** ArduPilot reports _INT frames as their plain equivalents, so compare those as the same. */
-function normalFrame(f: number): number {
+export function normalFrame(f: number): number {
   if (f === MAV_FRAME.GLOBAL_INT) return MAV_FRAME.GLOBAL;
   if (f === MAV_FRAME.GLOBAL_RELATIVE_ALT_INT) return MAV_FRAME.GLOBAL_RELATIVE_ALT;
   if (f === MAV_FRAME.GLOBAL_TERRAIN_ALT_INT) return MAV_FRAME.GLOBAL_TERRAIN_ALT;

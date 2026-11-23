@@ -221,6 +221,8 @@ export interface RallyPoint {
   lat: number;
   lon: number;
   alt: number;
+  /** Altitude frame as the vehicle sent it (MAV_FRAME); undefined in older caches, read as relative to home. */
+  frame?: number;
 }
 
 export interface CommandAckInfo {
@@ -1394,6 +1396,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
               lat: data.x,
               lon: data.y,
               alt: data.z,
+              frame: data.frame,
             };
             const existingIdx = state.rallyPoints.findIndex((r) => r.seq === data.seq);
             const updated = [...state.rallyPoints];

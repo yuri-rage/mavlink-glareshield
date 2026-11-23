@@ -118,6 +118,67 @@ check('replace when allowed reports success', S().replace(vehicle, { kind: 'file
   check('number field: not typed commits nothing even when the value moved', typedValue('35.0010000', '35.0020000', false) === null);
 }
 
+// Rally layer: its own draft, history, base and selection; undo/redo follow the active layer.
+{
+  const r = await import('../src/store/missionPlanStore.ts');
+  const rd = await import('../src/mavlink/rallyDraft.ts');
+  const rally = rd.rallyDraftFromPoints([{ seq: 0, lat: 35.01, lon: -106.01, alt: 50, frame: 3 }] as any);
+  S().start(vehicle, { kind: 'vehicle' }, rally);
+  check('rally: starts clean with the vehicle rally points', !r.isRallyDirty(S()) && S().rally.history.present.points.length === 1 && S().layer === 'mission');
+
+  S().rallyEdit((x) => rd.addRallyPoint(x, null, 35.02, -106.02).draft, 1);
+  check('rally edit: dirty, selected, mission untouched', r.isRallyDirty(S()) && S().rally.selected === 1 && !isDraftDirty(S()) && r.isAnyDirty(S()));
+
+  S().edit((x) => d.appendWaypoint(x, 35.002, -106.002));
+  S().undo(); // mission layer active: undoes the mission edit only
+  check('undo on the mission layer leaves the rally draft alone', !isDraftDirty(S()) && S().rally.history.present.points.length === 2);
+  S().setLayer('rally');
+  S().undo();
+  check('undo on the rally layer undoes the rally edit', !r.isRallyDirty(S()) && S().rally.history.present.points.length === 1 && S().rally.selected === null);
+  S().redo();
+  check('redo on the rally layer', S().rally.history.present.points.length === 2);
+
+  S().setUploading(true);
+  const before = S().rally.history.present;
+  S().rallyEdit((x) => rd.removeRallyPoint(x, 0));
+  S().undo();
+  check('rally: edits and undo locked while uploading', S().rally.history.present === before && S().rallyReplace(rally) === false);
+  S().setUploading(false);
+
+  // Saved across a reload, both layers.
+  const saved = JSON.parse(mem.get('mavlink_glareshield_mission_draft') ?? 'null');
+  check('saved: rally draft and base alongside the mission', saved?.rally?.present?.points?.length === 2 && saved?.rally?.base?.points?.length === 1);
+  const fresh = await import('../src/store/missionPlanStore.ts?rally=1' as string);
+  check('reload: rally draft restored, still dirty', fresh.useMissionPlanStore.getState().rally.history.present.points.length === 2 && fresh.isRallyDirty(fresh.useMissionPlanStore.getState()));
+
+  // A draft saved before rally editing (no rally field) still loads, with an empty rally layer.
+  const old = JSON.parse(mem.get('mavlink_glareshield_mission_draft')!);
+  delete old.rally;
+  mem.set('mavlink_glareshield_mission_draft', JSON.stringify(old));
+  const fromOld = await import('../src/store/missionPlanStore.ts?rally=2' as string);
+  check('older saved draft (mission only) loads, rally layer empty and clean',
+    fromOld.useMissionPlanStore.getState().active && fromOld.useMissionPlanStore.getState().rally.history.present.points.length === 0 && !fromOld.isRallyDirty(fromOld.useMissionPlanStore.getState()));
+
+  // Keep / load / sync / uploaded, as for the mission.
+  const moved = rd.moveRallyPoint(rally, 0, 35.5, -106.5);
+  S().setRallyVehicleChanged(true);
+  S().rallyRebase(moved);
+  check('rally keep draft: banner cleared, draft kept', !S().rally.vehicleChanged && S().rally.history.present.points.length === 2);
+  S().rallyResetToVehicle(moved);
+  check('rally load vehicle: clean', !r.isRallyDirty(S()));
+  S().undo();
+  check('rally load vehicle then undo: edits back', S().rally.history.present.points.length === 2);
+  S().rallySyncFromVehicle(rally);
+  check('rally sync: fresh history', S().rally.history.past.length === 0 && S().rally.base === rally);
+  S().rallyEdit((x) => rd.updateRallyPoint(x, 0, { alt: 70 }));
+  S().rallyUploaded(rally);
+  check('rally uploaded: clean, fresh history', !r.isRallyDirty(S()) && S().rally.history.past.length === 0);
+
+  S().stop();
+  check('stop: rally layer cleared, mission layer active', S().rally.history.present.points.length === 0 && S().layer === 'mission');
+  S().start(vehicle, { kind: 'vehicle' });
+}
+
 S().setTool('add');
 S().stop();
 check('stop: inactive, tool back to select, saved draft removed', !S().active && S().tool === 'select' && !mem.has('mavlink_glareshield_mission_draft'));
