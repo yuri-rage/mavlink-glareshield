@@ -61,6 +61,8 @@ check('rallyToItems (vehicle rally points to file): keeps the frame', rallyToIte
   check('move: position changes, altitude kept', m.points[1].lat === 35.5 && m.points[1].alt === 50);
   const u = r.updateRallyPoint(base, 2, { alt: 80 });
   check('update: altitude only', u.points[2].alt === 80 && u.points[2].lat === 35.02);
+  check('altitude kept to whole metres (ArduPilot stores int16 m): 100 ft = 30.48 m becomes 30', r.updateRallyPoint(base, 0, { alt: 30.48 }).points[0].alt === 30);
+  check('file altitudes rounded to whole metres too', r.rallyDraftFromItems([{ seq: 0, command: 5100, frame: 3, x: 35.1, y: -106.1, z: 45.6 }] as any).points[0].alt === 46);
   const d = r.removeRallyPoint(base, 0);
   check('remove: gone, others keep their order', d.points.length === 2 && d.points[0].alt === 50);
   check('edits on a missing point are refused', throws(() => r.removeRallyPoint(base, 3)) && throws(() => r.updateRallyPoint(base, -1, {})));

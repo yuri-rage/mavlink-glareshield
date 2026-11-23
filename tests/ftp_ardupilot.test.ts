@@ -136,7 +136,7 @@ class ArduPilotFtpSim {
         const stored = this.committed[path];
         // AP_Filesystem open() fails with errno set; GCS_FTP replies FailErrno with the errno.
         if (!stored) return this.nak(req, ERR_FAIL_ERRNO, ENOENT);
-        const buf = path.startsWith('@MISSION/') ? regenerateMissionDat(stored) : stored.slice();
+        const buf = path.startsWith('@MISSION/') ? regenerateMissionDat(stored, path.endsWith('rally.dat')) : stored.slice();
         this.fd = { mode: 'r', path, buf, len: buf.length };
         return this.reply(req, ACK, 0, new Uint8Array(new Uint32Array([buf.length]).buffer));
       }
@@ -163,12 +163,14 @@ class ArduPilotFtpSim {
   }
 }
 
-/** What AP_Filesystem_Mission::read() hands back for a stored mission.dat. */
-function regenerateMissionDat(stored: Uint8Array): Uint8Array {
+/** What AP_Filesystem_Mission::read() hands back for a stored mission.dat (or rally.dat: AP_Rally keeps altitude as
+ *  int16 metres, so whole metres). */
+function regenerateMissionDat(stored: Uint8Array, rally = false): Uint8Array {
   const out = stored.slice();
   const v = new DataView(out.buffer);
   for (let i = 0, o = 10; o + 38 <= out.length; i++, o += 38) {
-    v.setFloat32(o + 24, Math.round(v.getFloat32(o + 24, true) * 100) * 0.01, true); // alt via int32 cm
+    const alt = v.getFloat32(o + 24, true);
+    v.setFloat32(o + 24, rally ? Math.round(alt) : Math.round(alt * 100) * 0.01, true); // rally: int16 m; mission: int32 cm
     v.setUint16(o + 28, i, true);   // seq = index
     out[o + 35] = 0;                // current: only the executing nav command
     out[o + 36] = 1;                // autocontinue forced
@@ -413,7 +415,7 @@ for (const loss of [0.1, 0.2]) {
   await sleep(50);
   const verdict = rd.checkRallyReadBack(rally, res.readBack);
   check('rally upload over MAVFTP: accepted and read back', res.success && res.method === 'ftp' && res.readBack.length === 2, `${res.success} ${res.method} ${res.readBack.length}`);
-  check('rally upload: regenerated read-back (alt in cm, frame kept) verifies', verdict.status === 'verified', verdict.differences.join('; '));
+  check('rally upload: regenerated read-back (alt in whole metres, frame kept) verifies', verdict.status === 'verified', verdict.differences.join('; '));
   check('rally upload: the map shows the read-back with its frame', useTelemetryStore.getState().rallyPoints[1]?.frame === 0);
 
   // Clearing all rally points: nothing uploaded, nothing back, verified (unlike a mission, empty is a valid answer).

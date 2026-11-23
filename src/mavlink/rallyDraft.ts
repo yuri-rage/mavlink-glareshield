@@ -14,6 +14,14 @@ export const CMD_NAV_RALLY_POINT = 5100;
 /** Altitude for a new rally point when there is none to copy (m, relative to home). */
 export const DEFAULT_RALLY_ALT = 30;
 
+/**
+ * ArduPilot stores a rally point's altitude as a whole number of metres (AP_Rally's RallyLocation.alt is an int16),
+ * so the draft keeps whole metres too: otherwise 100 ft (30.48 m) would read back as 30 m and never verify.
+ */
+export function rallyAlt(m: number): number {
+  return Number.isFinite(m) ? Math.round(m) : m;
+}
+
 export interface RallyItem {
   lat: number;
   lon: number;
@@ -39,7 +47,7 @@ export function rallyDraftFromPoints(points: RallyPoint[]): RallyDraft {
   return {
     points: [...points]
       .sort((a, b) => a.seq - b.seq)
-      .map((p) => ({ lat: p.lat, lon: p.lon, alt: p.alt, frame: finiteOr(p.frame, MAV_FRAME.GLOBAL_RELATIVE_ALT) })),
+      .map((p) => ({ lat: p.lat, lon: p.lon, alt: rallyAlt(p.alt), frame: finiteOr(p.frame, MAV_FRAME.GLOBAL_RELATIVE_ALT) })),
   };
 }
 
@@ -52,7 +60,7 @@ export function rallyDraftFromItems(items: MissionItemIntData[]): RallyDraft {
       .map((it) => ({
         lat: finiteOr(it.x, 0),
         lon: finiteOr(it.y, 0),
-        alt: finiteOr(it.z, 0),
+        alt: rallyAlt(finiteOr(it.z, 0)),
         frame: finiteOr(it.frame, MAV_FRAME.GLOBAL_RELATIVE_ALT),
       })),
   };
@@ -108,7 +116,7 @@ export function addRallyPoint(
   const point: RallyItem = {
     lat,
     lon,
-    alt: ref ? ref.alt : fallbackAlt,
+    alt: rallyAlt(ref ? ref.alt : fallbackAlt),
     frame: ref ? ref.frame : MAV_FRAME.GLOBAL_RELATIVE_ALT,
   };
   const points = [...draft.points];
@@ -116,10 +124,11 @@ export function addRallyPoint(
   return { draft: { points }, index: at };
 }
 
+/** Change a point's fields. Altitude is kept to whole metres (see rallyAlt). */
 export function updateRallyPoint(draft: RallyDraft, index: number, patch: Partial<RallyItem>): RallyDraft {
   assertIndex(draft, index);
   const points = [...draft.points];
-  points[index] = { ...points[index], ...patch };
+  points[index] = { ...points[index], ...patch, ...(patch.alt !== undefined ? { alt: rallyAlt(patch.alt) } : {}) };
   return { points };
 }
 
