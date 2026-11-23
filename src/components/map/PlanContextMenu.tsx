@@ -7,6 +7,7 @@ import { MapPinPlus, Plus, Trash2 } from 'lucide-react';
 import {
   insertWaypointAfter,
   insertWaypointBefore,
+  isRoutePoint,
   jumpsTargeting,
   removeItems,
   type MissionDraft,
@@ -26,11 +27,13 @@ interface PlanContextMenuProps {
   onClose: () => void;
 }
 
-/** The leg leading to `index`: the nearest earlier item with a position, unless that is home. */
+/** The start of the leg leading to `index`: the nearest earlier route point, unless that is home. */
 function previousRoutePoint(d: MissionDraft, index: number): { lat: number; lon: number } | null {
   for (let i = index - 1; i >= 0; i--) {
     const it = d.items[i];
-    if (drawablePosition(it.command, it.x, it.y)) return i === 0 ? null : { lat: it.x, lon: it.y };
+    if ((i === 0 || isRoutePoint(it.command)) && drawablePosition(it.command, it.x, it.y)) {
+      return i === 0 ? null : { lat: it.x, lon: it.y };
+    }
   }
   return null;
 }
@@ -51,6 +54,12 @@ const ITEM = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left te
 export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, onClose }) => {
   const draft = useMissionPlanStore((s) => s.history.present);
   const ref = useRef<HTMLDivElement | null>(null);
+  // An item menu whose item is gone (or is home) has nothing to show: close it rather than leave an invisible menu
+  // that still swallows the next click.
+  const missing = target.kind === 'item' && (target.index < 1 || !draft.items[target.index]);
+  useEffect(() => {
+    if (missing) onClose();
+  }, [missing, onClose]);
 
   // Any change to the draft (undo, an edit elsewhere) closes the menu: its item number may no longer be right.
   const opened = useRef(draft);
@@ -62,6 +71,7 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
   // must not also drop a waypoint. Clicks just after opening are the end of the long-press that opened it (touch):
   // swallowed, but the menu stays.
   useEffect(() => {
+    if (missing) return;
     const openedAt = performance.now();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -78,7 +88,7 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('click', onClick, true);
     };
-  }, [onClose]);
+  }, [onClose, missing]);
 
   // Open toward the side with room, so the menu stays inside the map.
   const style: React.CSSProperties = {
@@ -109,9 +119,10 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
   } else {
     const i = target.index;
     const it = draft.items[i];
-    if (!it || i < 1) return null;
+    if (missing || !it) return null;
     const prev = previousRoutePoint(draft, i);
-    const here = drawablePosition(it.command, it.x, it.y) ? { lat: it.x, lon: it.y } : null;
+    // Only a route point ends a leg to insert on.
+    const here = isRoutePoint(it.command) && drawablePosition(it.command, it.x, it.y) ? { lat: it.x, lon: it.y } : null;
     const jumps = jumpsTargeting(draft, i);
     body = (
       <>

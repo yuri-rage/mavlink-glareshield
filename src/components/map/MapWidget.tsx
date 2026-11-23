@@ -98,7 +98,7 @@ import { MissionPlanPanel } from './MissionPlanPanel';
 import { DraftUploadModal } from './DraftUploadModal';
 import { PlanContextMenu, type PlanMenuTarget } from './PlanContextMenu';
 import { useDraftLayer, drawablePosition } from './useDraftLayer';
-import { isDraftDirty, useMissionPlanStore } from '../../store/missionPlanStore';
+import { isDraftDirty, useMissionPlanStore, vehicleMissionUpdate } from '../../store/missionPlanStore';
 import { checkReadBack, draftFromItems, draftFromWaypoints, draftToItems, draftsEqual, type MissionDraft } from '../../mavlink/missionDraft';
 
 interface MapWidgetProps {
@@ -809,22 +809,34 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     setPlanNotice(null);
   };
 
-  // While the draft has no changes it follows the vehicle's mission (a download, or another GCS's upload). With
-  // changes it is left alone.
+  // Whether the vehicle's mission is known: a download has finished this session, or a mission is held (cached
+  // from an earlier session, or uploaded). An empty list before any download is "unknown", not "empty mission".
+  const missionFetchedRef = useRef(false);
+  const wasFetchingRef = useRef(false);
+  useEffect(() => {
+    if (wasFetchingRef.current && !missionStatus.isFetching) missionFetchedRef.current = true;
+    wasFetchingRef.current = missionStatus.isFetching;
+  }, [missionStatus.isFetching]);
+
+  // The vehicle's mission changed (a download, an upload elsewhere): a clean draft follows it; a draft with changes
+  // is kept and the banner says the vehicle's mission changed. See vehicleMissionUpdate for when nothing happens.
+  const planUploading = useMissionPlanStore((s) => s.uploading);
   useEffect(() => {
     if (!planning) return;
     const st = useMissionPlanStore.getState();
-    if (!isDraftDirty(st)) st.syncFromVehicle(vehicleDraft());
-  }, [planning, missionWaypoints, vehicleDraft]);
-
-  // With changes of its own, the draft is not replaced when the vehicle's mission changes; say that it did. Not
-  // while a transfer runs (a download arrives item by item; an upload sets the mission to the draft first).
-  useEffect(() => {
-    if (!planning || missionStatus.isFetching || missionStatus.isUploading) return;
-    const st = useMissionPlanStore.getState();
-    if (st.uploading || !isDraftDirty(st)) return;
-    st.setVehicleChanged(!draftsEqual(vehicleDraft(), st.base));
-  }, [planning, missionWaypoints, missionStatus.isFetching, missionStatus.isUploading, vehicleDraft]);
+    const vehicle = vehicleDraft();
+    const action = vehicleMissionUpdate({
+      active: st.active,
+      uploading: st.uploading,
+      transferring: missionStatus.isFetching || Boolean(missionStatus.isUploading),
+      vehicleKnown: missionWaypoints.length > 0 || missionFetchedRef.current,
+      dirty: isDraftDirty(st),
+      vehicleEqualsBase: draftsEqual(vehicle, st.base),
+    });
+    if (action === 'sync') st.syncFromVehicle(vehicle);
+    else if (action === 'changed') st.setVehicleChanged(true);
+    else if (action === 'unchanged') st.setVehicleChanged(false);
+  }, [planning, missionWaypoints, missionStatus.isFetching, missionStatus.isUploading, planUploading, vehicleDraft]);
 
   /**
    * Upload the draft, read the mission back and compare. Only a read-back that matches the route counts: the draft
@@ -846,10 +858,19 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       }
       const check = checkReadBack(draft, res.readBack);
       const diff = check.comparison;
-      if (check.status === 'unreadable' || check.status === 'mismatch') {
+      if (check.status === 'unreadable') {
+        // The vehicle acknowledged every item, so it most likely holds the draft; it just couldn't be checked.
+        // Compare from now on with what was uploaded, not with an empty mission.
+        useMissionPlanStore.getState().rebase(draft);
+        setPlanNotice('Uploaded (the vehicle accepted every item) but the mission could not be read back to check it. Download from the vehicle to verify.');
+        missionManager.report('Mission uploaded but NOT verified', 10000);
+        return;
+      }
+      if (check.status === 'mismatch') {
         useMissionPlanStore.getState().rebase(check.vehicle);
-        const detail = check.status === 'unreadable' ? 'it could not be read back' : diff.structural.slice(0, 3).join('; ');
-        setPlanNotice(`Uploaded, but the vehicle's mission does not match the draft (${detail}). The draft is kept; check it and upload again.`);
+        setPlanNotice(
+          `Uploaded, but the vehicle's mission does not match the draft (${diff.structural.slice(0, 3).join('; ')}). The draft is kept; check it and upload again.`
+        );
         missionManager.report('Mission uploaded but NOT verified', 10000);
         return;
       }
@@ -935,6 +956,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
   /** A file opened while planning goes into the draft, never straight to the vehicle. Home stays the draft's. */
   const loadFileIntoDraft = async (file: File) => {
+    if (useMissionPlanStore.getState().uploading) {
+      setPlanNotice(`${file.name} was not opened: wait for the upload to finish.`);
+      return;
+    }
     try {
       const parsed = parseDroppedMissionFile(file.name, new Uint8Array(await file.arrayBuffer()));
       const section = parsed?.sections?.find((sec) => sec.type === 'mission');
@@ -946,7 +971,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       const fromFile = draftFromItems(items);
       const current = useMissionPlanStore.getState().history.present;
       const draft: MissionDraft = { items: [current.items[0] ?? fromFile.items[0], ...fromFile.items.slice(1)] };
-      useMissionPlanStore.getState().replace(draft, { kind: 'file', name: file.name });
+      if (!useMissionPlanStore.getState().replace(draft, { kind: 'file', name: file.name })) {
+        setPlanNotice(`${file.name} was not opened: the draft can't be changed right now.`);
+        return;
+      }
       const skipped = (parsed?.sections ?? []).filter((sec) => sec.type !== 'mission').map((sec) => sec.type);
       setPlanNotice(skipped.length > 0 ? `Loaded the mission from ${file.name}; its ${skipped.join(' and ')} were not loaded.` : null);
       const pts = draft.items.filter((it) => drawablePosition(it.command, it.x, it.y)).map((it) => [it.x, it.y] as [number, number]);

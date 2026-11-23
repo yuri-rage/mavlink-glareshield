@@ -30,6 +30,14 @@ export const CMD_DO_JUMP = 177;
 /** MAV_CMD values below this are navigation commands (MAV_CMD_NAV_LAST). */
 const NAV_LAST = 95;
 
+/**
+ * A navigation command with a position: a point the vehicle flies to, so part of the route. DO_SET_ROI,
+ * DO_LAND_START and the like have a position too, but the vehicle doesn't go there.
+ */
+export function isRoutePoint(command: number): boolean {
+  return command < NAV_LAST && cmdHasLocation(command);
+}
+
 /** Altitude for a new waypoint when nothing earlier in the mission has one (m, relative to home). */
 export const DEFAULT_WAYPOINT_ALT = 30;
 
@@ -159,7 +167,7 @@ function assertEditable(draft: MissionDraft, index: number, allowEnd = false) {
 /**
  * Rebuild the item list in a new order, keeping DO_JUMP targets on the items they pointed at.
  * `order` lists old indices in their new order (home first); an old index left out is deleted, and a jump that
- * targeted it moves to the next surviving item after it. Jump targets that were already invalid stay as written.
+ * targeted it moves to the next surviving item after it. Jump targets that were already invalid stay invalid.
  */
 function reorder(items: DraftItem[], order: (number | DraftItem)[]): DraftItem[] {
   const oldToNew = new Map<number, number>();
@@ -167,7 +175,9 @@ function reorder(items: DraftItem[], order: (number | DraftItem)[]): DraftItem[]
     if (typeof o === 'number') oldToNew.set(o, i);
   });
   const remapTarget = (t: number): number => {
-    if (!Number.isInteger(t) || t < 1 || t >= items.length) return t;
+    // Already past the end: keep it past the new end, so inserting items can't turn it into a target nobody chose.
+    if (Number.isInteger(t) && t >= items.length) return order.length + (t - items.length);
+    if (!Number.isInteger(t) || t < 1) return t;
     for (let old = t; old < items.length; old++) {
       const n = oldToNew.get(old);
       if (n !== undefined) return n;
@@ -262,11 +272,12 @@ export function changeCommand(
   return { items };
 }
 
-/** Altitude and frame for a new item at `index`: the nearest earlier location item's, skipping home. */
+/** Altitude and frame for a new item at `index`: the nearest earlier route point's (not a land, and not an ROI or
+ *  other non-navigation item, whose altitude is often 0), skipping home. */
 function altitudeReference(draft: MissionDraft, index: number, fallbackAlt = DEFAULT_WAYPOINT_ALT): { alt: number; frame: number } {
   for (let i = Math.min(index, draft.items.length) - 1; i >= 1; i--) {
     const it = draft.items[i];
-    if (cmdHasLocation(it.command) && LOCATION_FRAMES.has(it.frame) && it.command !== CMD_NAV_LAND && it.command !== CMD_NAV_VTOL_LAND) {
+    if (isRoutePoint(it.command) && LOCATION_FRAMES.has(it.frame) && it.command !== CMD_NAV_LAND && it.command !== CMD_NAV_VTOL_LAND) {
       return { alt: it.z, frame: it.frame };
     }
   }

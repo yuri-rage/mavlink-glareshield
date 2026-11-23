@@ -9,7 +9,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { cmdHasLocation } from '../../mavlink/messages';
-import { insertWaypointAfter, insertWaypointBefore, setItemPosition, type MissionDraft } from '../../mavlink/missionDraft';
+import { insertWaypointAfter, insertWaypointBefore, isRoutePoint, setItemPosition, type MissionDraft } from '../../mavlink/missionDraft';
 import { useMissionPlanStore } from '../../store/missionPlanStore';
 
 const DRAFT_LINES_PANE = 'draftLinesPane';
@@ -99,10 +99,13 @@ export function useDraftLayer(
     const map = mapRef.current;
     if (!map || !ready || !active) return;
 
-    /** Drawable items in mission order: the route's vertices. */
-    const route = draft.items
+    /** Items with a position, in mission order: each gets a pin. */
+    const points = draft.items
       .map((it, index) => ({ index, lat: it.x, lon: it.y, command: it.command }))
       .filter((r) => drawablePosition(r.command, r.lat, r.lon));
+    /** The points the vehicle flies to (home first): the route line and its "+" handles. An ROI or landing-start
+     *  point gets a pin but is not a leg. */
+    const route = points.filter((r) => r.index === 0 || isRoutePoint(r.command));
     const latLngs = route.map((r) => [r.lat, r.lon] as [number, number]);
 
     const line =
@@ -128,7 +131,8 @@ export function useDraftLayer(
       }
     };
 
-    route.forEach((r, k) => {
+    points.forEach((r) => {
+      const k = route.indexOf(r); // position in the route line, -1 for points off the route
       const isHome = r.index === 0;
       const isSel = selected === r.index;
       const draggable = isSel && !isHome;
@@ -153,12 +157,18 @@ export function useDraftLayer(
       if (draggable) {
         marker.on('dragstart', clearHandles);
         marker.on('drag', () => {
+          if (k < 0) return;
           const p = marker.getLatLng();
           latLngs[k] = [p.lat, p.lng];
           line?.setLatLngs(latLngs);
         });
         marker.on('dragend', () => {
           const p = marker.getLatLng();
+          // Pressed and released without moving: nothing to record.
+          if (p.lat === r.lat && p.lng === r.lon) {
+            drawHandles();
+            return;
+          }
           commit((d) => ({ draft: setItemPosition(d, r.index, p.lat, p.lng), index: r.index }));
         });
       }

@@ -42,8 +42,9 @@ interface MissionPlanState {
   stop: () => void;
   /** Apply an edit to the draft as one undo step. Edits throw on invalid input; the draft is then unchanged. */
   edit: (fn: (d: MissionDraft) => MissionDraft, select?: number | null) => void;
-  /** Replace the draft (e.g. a file) as one undo step, keeping the base. */
-  replace: (draft: MissionDraft, source: DraftSource) => void;
+  /** Replace the draft (e.g. a file) as one undo step, keeping the base. False when refused (not planning, or
+   *  uploading). */
+  replace: (draft: MissionDraft, source: DraftSource) => boolean;
   /** Replace the draft with the vehicle's mission, which also becomes the base; undo brings the edits back. */
   resetToVehicle: (draft: MissionDraft) => void;
   /** Take the vehicle's mission as both draft and base, with a fresh history (nothing to undo into). */
@@ -58,6 +59,27 @@ interface MissionPlanState {
   rebase: (base: MissionDraft) => void;
   /** After a verified upload: what the vehicle holds becomes the draft and the base, with a fresh history. */
   uploaded: (readBack: MissionDraft) => void;
+}
+
+/**
+ * What to do when the vehicle's mission (as the app knows it) may have changed while planning:
+ * - 'none': nothing. Not planning; a transfer is running (a download arrives item by item, an upload sets the
+ *   mission to the draft first); the vehicle's mission isn't known yet (after a reload, before any download, it
+ *   looks empty); or a clean draft already matches it (syncing would only throw away redo).
+ * - 'sync': the draft has no changes of its own, so it follows the vehicle's mission.
+ * - 'changed' / 'unchanged': the draft has changes; show or clear the "vehicle's mission changed" banner.
+ */
+export function vehicleMissionUpdate(input: {
+  active: boolean;
+  uploading: boolean;
+  transferring: boolean;
+  vehicleKnown: boolean;
+  dirty: boolean;
+  vehicleEqualsBase: boolean;
+}): 'none' | 'sync' | 'changed' | 'unchanged' {
+  if (!input.active || input.uploading || input.transferring || !input.vehicleKnown) return 'none';
+  if (!input.dirty) return input.vehicleEqualsBase ? 'none' : 'sync';
+  return input.vehicleEqualsBase ? 'unchanged' : 'changed';
 }
 
 /** True when the draft differs from the mission it started from. */
@@ -141,8 +163,9 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
 
   replace: (draft, source) => {
     const { history, active, uploading } = get();
-    if (!active || uploading) return;
+    if (!active || uploading) return false;
     set({ history: historyPush(history, draft), source, selected: null });
+    return true;
   },
 
   resetToVehicle: (draft) => {

@@ -339,6 +339,38 @@ for (const loss of [0.1, 0.2]) {
   check('draft upload: a vehicle copy missing an item is a mismatch', Boolean(stored) && res2.success && verdict2.status === 'mismatch', verdict2.comparison.structural.join('; '));
 
   check('draft upload: nothing read back is unreadable, not verified', d.checkReadBack(draft, []).status === 'unreadable');
+
+  // Review fixes: a failed read keeps the uploaded mission on the map; a throw never leaves a transfer stuck.
+  const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
+  let last: any = null;
+  const unsub = missionManager.onStatusChange((st: any) => (last = st));
+  const realFetch = missionManager.fetchWaypoints.bind(missionManager);
+  (missionManager as any).fetchWaypoints = async () => {
+    useTelemetryStore.setState({ missionWaypoints: [] }); // what a failed stream leaves behind
+    return [];
+  };
+  new ArduPilotFtpSim().install();
+  const unreadable = await missionManager.uploadMissionAndReadBack(d.draftToItems(draft), 1, 1);
+  await sleep(50);
+  check('failed read-back: upload still reported, map keeps the uploaded mission',
+    unreadable.success && unreadable.readBack.length === 0 && useTelemetryStore.getState().missionWaypoints.length === draft.items.length,
+    String(useTelemetryStore.getState().missionWaypoints.length));
+  check('failed read-back: transfer not left in progress', last && !last.isFetching && !last.isUploading);
+
+  (missionManager as any).fetchWaypoints = async () => {
+    throw new Error('link lost');
+  };
+  new ArduPilotFtpSim().install();
+  const thrown = await missionManager.uploadMissionAndReadBack(d.draftToItems(draft), 1, 1);
+  await sleep(50);
+  check('throw during read-back: reported as failed with the reason', !thrown.success && /link lost/.test(thrown.error ?? ''), thrown.error);
+  check('throw during read-back: transfer not left in progress', last && !last.isFetching && !last.isUploading && last.method === 'idle');
+  (missionManager as any).fetchWaypoints = realFetch;
+  new ArduPilotFtpSim().install();
+  const after = await missionManager.uploadMissionAndReadBack(d.draftToItems(draft), 1, 1);
+  await sleep(50);
+  check('after a throw: the next upload goes ahead', after.success && d.checkReadBack(draft, after.readBack).status === 'verified', after.error);
+  unsub();
   const p = d.checkReadBack(draft, res.readBack.map((w: any) => (w.seq === 3 ? { ...w, param4: 45 } : w)));
   check('draft upload: a param the vehicle stored differently is reported, route still verified', p.status === 'params-differ' && p.comparison.params.length === 1);
 }
