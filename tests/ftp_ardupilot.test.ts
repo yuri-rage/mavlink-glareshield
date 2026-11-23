@@ -419,7 +419,7 @@ for (const loss of [0.1, 0.2]) {
   check('draft upload: a param the vehicle stored differently is reported, route still verified', p.status === 'params-differ' && p.comparison.params.length === 1);
 }
 
-// 10. Rally points: upload a rally draft, read it back (the vehicle regenerates rally.dat: seq, alt in cm) and judge.
+// 10. Rally points: upload a rally draft, read it back (the vehicle regenerates rally.dat: seq, alt in whole metres) and judge.
 {
   const { missionManager } = await import('../src/mavlink/missionManager.ts');
   const rd = await import('../src/mavlink/rallyDraft.ts');
@@ -536,6 +536,66 @@ for (const loss of [0.1, 0.2]) {
   await sleep(50);
   check('disarmed: mission over MAVFTP as before', disarmed.success && disarmed.method === 'ftp');
   (missionManager as any).uploadLegacyItems = realLegacy;
+}
+
+// 13. A file left open by an earlier transfer makes CreateFile fail: reset sessions and create again (as reads do).
+// Seen against SITL after a read whose TerminateSession didn't land.
+{
+  const sim = new ArduPilotFtpSim();
+  sim.install();
+  sim.fd = { mode: 'r', path: '@PARAM/param.pck', buf: new Uint8Array(10), len: 10 }; // left open
+  const ok = await mavFtpClient.writeFile(1, 1, PATH, DATA, 239, TIMEOUT_MS);
+  await sleep(50);
+  check('CreateFile refused by a file left open: sessions reset, written on retry', ok && same(sim.committed[PATH], DATA),
+    sim.requests.filter((r) => r.startsWith(`${FTP_OPCODE.ResetSessions}#`) || r.startsWith(`${FTP_OPCODE.CreateFile}#`)).join(' '));
+}
+
+// 14. Item-by-item upload where the vehicle requests an item twice (as ArduPilot does, e.g. armed in AUTO): it
+// refuses the duplicate with MAV_MISSION_INVALID_SEQUENCE but carries on. The upload must not stop there.
+{
+  const { missionManager } = await import('../src/mavlink/missionManager.ts');
+  const parser = new MavlinkParser();
+  const emit = (messageId: number, payload: Uint8Array) => {
+    const pkt = { version: 2, sequence: 0, systemId: 1, componentId: 1, messageId, payload, crc: 0, raw: payload };
+    setTimeout(() => { for (const l of (mavlinkConnection as any).packetListeners) l(pkt); }, 2);
+  };
+  const request = (seq: number) => emit(51, Uint8Array.of(seq & 0xff, seq >> 8, 255, 190, 0));
+  const ack = (type: number) => emit(47, Uint8Array.of(255, 190, type, 0));
+  // ArduPilot's MissionItemProtocol, reduced: request_i, and INVALID_SEQUENCE for an item it didn't ask for.
+  let count = 0;
+  let requestI = 0;
+  const stored: number[] = [];
+  const refused: number[] = [];
+  (mavlinkConnection as any).status = 'connected';
+  (mavlinkConnection as any).send = (bytes: Uint8Array) => {
+    for (const f of parser.parse(bytes)) {
+      const p = new Uint8Array(40);
+      p.set(f.payload.subarray(0, 40));
+      const v = new DataView(p.buffer);
+      if (f.messageId === 44) {
+        count = v.getUint16(0, true);
+        requestI = 0;
+        request(0);
+        request(0); // asks twice
+      } else if (f.messageId === 73) {
+        const seq = v.getUint16(28, true);
+        if (seq !== requestI) {
+          refused.push(seq);
+          ack(13);
+          continue;
+        }
+        stored[seq] = seq;
+        requestI++;
+        if (requestI === count) ack(0);
+        else request(requestI);
+      }
+    }
+    return true;
+  };
+  const items = [0, 1, 2].map((seq) => ({ seq, command: 16, frame: 3, x: 37.77 + seq * 1e-4, y: -122.41, z: 30 }));
+  const ok = await missionManager.uploadLegacyItems(0, items as any, 1, 1, 300);
+  check('item-by-item: a duplicate refused as out-of-sequence does not stop the upload', ok && refused.length >= 1 && stored.length === 3,
+    `ok=${ok} refused=${refused.join(',')} stored=${stored.length}`);
 }
 
 console.log(failures.length ? `\n${failures.length} MAVFTP ArduPilot-sim check(s) FAILED` : '\nAll MAVFTP ArduPilot-sim checks PASSED');
