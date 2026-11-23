@@ -3,7 +3,7 @@
 // - the selected pin (never home) can be dragged; the route follows live and the move is committed on release,
 //   as one undo step. Only the selected pin drags, so a finger panning the map from a pin can't move it;
 // - a "+" handle in the middle of each leg inserts a waypoint there (shown when the leg is long enough to tap);
-// - with the Add tool, a map click adds a waypoint after the selected item; with Select, it clears the selection.
+// - with the Place tool, a map click adds a waypoint after the selected item; with Select, it clears the selection.
 // Every edit goes through the draft model (missionDraft.ts), so home and DO_JUMP targets are kept.
 
 import { useEffect, useRef } from 'react';
@@ -157,7 +157,7 @@ export function useDraftLayer(mapRef: React.MutableRefObject<L.Map | null>, read
     };
   }, [mapRef, ready, active, draft, selected]);
 
-  // Map clicks while planning: add with the Add tool, otherwise clear the selection.
+  // Map clicks while planning: add with the Place tool, otherwise clear the selection.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || !active) return;

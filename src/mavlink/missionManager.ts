@@ -357,6 +357,48 @@ export class MissionManager {
     return { success: false, method: 'legacy', error: errMsg };
   }
 
+  /** Show a message in the map's status line, cleared after `clearMs`. */
+  public report(message: string, clearMs = 6000) {
+    this.setStatus({ message });
+    this.scheduleMessageClear(clearMs);
+  }
+
+  /**
+   * Upload a mission (seq 0 = home first) and then download it again, so the caller can check what the vehicle
+   * actually holds. `readBack` is what the vehicle sent; it is empty when the read failed.
+   */
+  public async uploadMissionAndReadBack(
+    items: MissionItemIntData[],
+    targetSys?: number,
+    targetComp?: number
+  ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: MissionWaypoint[]; error?: string }> {
+    if (this.status.isFetching || this.status.isUploading) {
+      return { success: false, method: 'legacy', readBack: [], error: 'A mission transfer is already in progress.' };
+    }
+    const hb = useTelemetryStore.getState().heartbeat;
+    const sysId = targetSys ?? (hb.systemId > 0 ? hb.systemId : 1);
+    const compId = targetComp ?? (hb.componentId > 0 ? hb.componentId : 1);
+    this.isCancelled = false;
+
+    const res = await this.uploadSection('mission', 0, items, undefined, sysId, compId);
+    if (!res.success) {
+      this.setStatus({ isUploading: false, method: 'idle', message: res.error || 'Mission upload failed.', uploadProgress: undefined });
+      this.scheduleMessageClear(8000);
+      return { success: false, method: res.method, readBack: [], error: res.error };
+    }
+
+    this.setStatus({
+      isUploading: false,
+      isFetching: true,
+      method: 'ftp',
+      uploadProgress: undefined,
+      message: 'Reading the mission back from the vehicle...',
+    });
+    const readBack = await this.fetchWaypoints(sysId, compId);
+    this.setStatus({ isFetching: false, method: 'idle', waypointCount: readBack.length });
+    return { success: true, method: res.method, readBack };
+  }
+
   /**
    * Uploads dropped file (mission, fence, rally, or full multi-section plan) via MAVFTP with item-by-item fallback.
    */
