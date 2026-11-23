@@ -102,8 +102,11 @@ const NumField: React.FC<{
   const [text, setText] = useState(shown);
   /** The user has typed since focusing. Until then the field follows the draft, even while focused. */
   const typed = useRef(false);
+  // The draft's value changed (a pin dragged, undo, a commit landing): it wins over anything half-typed here, since
+  // it is the newer action. Show it and forget the typing, so leaving the field can't write the old text back.
   useEffect(() => {
-    if (!typed.current) setText(shown);
+    typed.current = false;
+    setText(shown);
   }, [shown]);
   const commit = () => {
     const v = typedValue(text, shown, typed.current);
