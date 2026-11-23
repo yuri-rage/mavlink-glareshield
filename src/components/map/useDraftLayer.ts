@@ -61,8 +61,17 @@ function commit(make: (d: MissionDraft) => { draft: MissionDraft; index: number 
   }
 }
 
-/** `ready` must become true once the map exists. */
-export function useDraftLayer(mapRef: React.MutableRefObject<L.Map | null>, ready: boolean) {
+/**
+ * `ready` must become true once the map exists. `onItemMenu` is called on right-click / long-press of a draft pin
+ * (not home), with the item and where to open the menu in the map container.
+ */
+export function useDraftLayer(
+  mapRef: React.MutableRefObject<L.Map | null>,
+  ready: boolean,
+  onItemMenu?: (index: number, x: number, y: number) => void
+) {
+  const onItemMenuRef = useRef(onItemMenu);
+  onItemMenuRef.current = onItemMenu;
   const active = useMissionPlanStore((s) => s.active);
   const draft = useMissionPlanStore((s) => s.history.present);
   const selected = useMissionPlanStore((s) => s.selected);
@@ -131,9 +140,16 @@ export function useDraftLayer(mapRef: React.MutableRefObject<L.Map | null>, read
         draggable,
         autoPan: draggable,
         title: draggable ? `#${r.index}: drag to move` : isHome ? 'Home' : `#${r.index}`,
-      }).on('click', () => {
-        if (!isHome) useMissionPlanStore.getState().select(r.index);
-      });
+      })
+        .on('click', () => {
+          if (!isHome) useMissionPlanStore.getState().select(r.index);
+        })
+        .on('contextmenu', (e: L.LeafletMouseEvent) => {
+          L.DomEvent.preventDefault(e.originalEvent);
+          if (isHome || useMissionPlanStore.getState().uploading) return;
+          useMissionPlanStore.getState().select(r.index);
+          onItemMenuRef.current?.(r.index, e.containerPoint.x, e.containerPoint.y);
+        });
       if (draggable) {
         marker.on('dragstart', clearHandles);
         marker.on('drag', () => {

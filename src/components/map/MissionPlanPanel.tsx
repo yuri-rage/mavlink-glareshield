@@ -336,11 +336,17 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
     }
   };
 
-  // Keep the selected row in view.
+  // Selecting an item (a pin, its menu, or a new waypoint) opens a collapsed sheet, so its editor is never hidden.
+  // Only on a change of selection: collapsing with an item selected stays collapsed.
   useEffect(() => {
-    if (selected === null) return;
-    listRef.current?.querySelector(`[data-item="${selected}"]`)?.scrollIntoView({ block: 'nearest' });
+    if (selected !== null) setCollapsed(false);
   }, [selected]);
+
+  // Keep the selected row in view, including once the sheet has opened.
+  useEffect(() => {
+    if (selected === null || collapsed) return;
+    listRef.current?.querySelector(`[data-item="${selected}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [selected, collapsed]);
 
   const addItem = () => {
     const at = selected !== null && selected >= 1 ? selected + 1 : draft.items.length;

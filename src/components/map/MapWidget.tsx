@@ -96,6 +96,7 @@ import { MapViewMenu, type MapLayerType } from './MapViewMenu';
 import { FlyToPopover } from './FlyToPopover';
 import { MissionPlanPanel } from './MissionPlanPanel';
 import { DraftUploadModal } from './DraftUploadModal';
+import { PlanContextMenu, type PlanMenuTarget } from './PlanContextMenu';
 import { useDraftLayer, drawablePosition } from './useDraftLayer';
 import { isDraftDirty, useMissionPlanStore } from '../../store/missionPlanStore';
 import { checkReadBack, draftFromItems, draftFromWaypoints, draftToItems, draftsEqual, type MissionDraft } from '../../mavlink/missionDraft';
@@ -243,6 +244,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const mapAreaRef = useRef<HTMLDivElement | null>(null);
   const [mapAreaWidth, setMapAreaWidth] = useState(0);
   const [planNotice, setPlanNotice] = useState<string | null>(null);
+  /** The planning right-click menu, when open. */
+  const [planMenu, setPlanMenu] = useState<PlanMenuTarget | null>(null);
+  const closePlanMenu = useCallback(() => setPlanMenu(null), []);
   /** The vehicle's mission at the moment the upload confirmation opened, for its change list. */
   const [draftUploadVehicle, setDraftUploadVehicle] = useState<MissionDraft | null>(null);
 
@@ -688,9 +692,17 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     // Right-click (or long-press on mobile) opens Guided Fly-To-Here prompt
     map.on('contextmenu', (e: L.LeafletMouseEvent) => {
-      if (planningRef.current) return;
+      if (planningRef.current) {
+        // Planning: the map's menu offers placing a waypoint here, never fly-to.
+        if (!useMissionPlanStore.getState().uploading) {
+          setPlanMenu({ kind: 'map', lat: e.latlng.lat, lon: e.latlng.lng, x: e.containerPoint.x, y: e.containerPoint.y });
+        }
+        return;
+      }
       openFlyToPrompt(e.latlng.lat, e.latlng.lng);
     });
+    // The menu is anchored to a point on the screen: moving the map would leave it pointing at the wrong place.
+    map.on('movestart zoomstart', () => setPlanMenu(null));
 
     // Left-click picks the point while the Fly To button is armed
     map.on('click', (e: L.LeafletMouseEvent) => {
@@ -748,7 +760,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     };
   }, []);
 
-  useDraftLayer(mapInstanceRef, mapReady);
+  useDraftLayer(mapInstanceRef, mapReady, (index, x, y) => setPlanMenu({ kind: 'item', index, x, y }));
 
   const planLayout = mapAreaWidth >= 560 ? 'side' : 'sheet';
   // Keep the tile attribution clear of the editor. Set on the element directly: Leaflet owns its className.
@@ -791,6 +803,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   };
 
   const stopPlanning = () => {
+    setPlanMenu(null);
     useMissionPlanStore.getState().stop();
     setMaximized(false);
     setPlanNotice(null);
@@ -1941,6 +1954,13 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               </div>
             )}
           </div>
+        )}
+        {planning && planMenu && (
+          <PlanContextMenu
+            target={planMenu}
+            area={{ width: mapAreaWidth, height: mapAreaRef.current?.clientHeight ?? 0 }}
+            onClose={closePlanMenu}
+          />
         )}
         {planning && (
           <MissionPlanPanel
