@@ -426,6 +426,42 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   check('command presets: edited params fall back to the command', findCommandPreset(181, [3, 0, 0, 0, 0, 0, 0])?.key === 'relay');
   check('command presets: camera trigger shoots via param5', findCommandPreset(203, [0, 0, 0, 0, 1, 0, 0])?.params[4] === 1);
   check('command presets: unknown command has no preset', findCommandPreset(31000, []) === undefined);
+
+  // Review fixes: takeoff altitude, and only presets whose meaning survives a toggle or slider.
+  const cp = await import('../src/mavlink/commandPresets.ts');
+  const pm2 = await import('../src/components/widgets/custom/panelModel.ts');
+  const takeoff = COMMAND_PRESETS.find((c: any) => c.key === 'takeoff');
+  check('takeoff preset: default altitude in P7, so params 4-7 open with it', takeoff?.params[6] === 10);
+  const toggles = COMMAND_PRESETS.filter((c: any) => cp.presetFitsWidget(c, 'toggle'));
+  const sliders = COMMAND_PRESETS.filter((c: any) => cp.presetFitsWidget(c, 'slider'));
+  check('toggle presets: relay, servo, arm, engine, high latency only',
+    toggles.map((c: any) => c.key).sort().join(',') === 'arm,engine-start,high-latency-on,relay,servo', toggles.map((c: any) => c.key).join(','));
+  check('toggle presets: switched on, every one sends its own meaning',
+    toggles.every((c: any) => {
+      const on = pm2.toggleParams(c.commandId, c.params, true);
+      return c.commandId === 181 || c.commandId === 183 ? on[0] === c.params[0] : on[0] === c.params[0] && c.params[0] === 1;
+    }));
+  check('slider presets: only commands that take the value in param 2', sliders.every((c: any) => c.commandId === 178 || c.commandId === 183) && sliders.length === 2);
+  check('button gets every preset', COMMAND_PRESETS.every((c: any) => cp.presetFitsWidget(c, 'button')));
+  check('reboot to mass storage on a toggle: no preset (shown as custom)', findCommandPreset(246, [5, 0, 0, 0, 0, 0, 0], 'toggle') === undefined);
+  check('engine on a toggle shows the toggle title', cp.presetTitle(toggles.find((c: any) => c.key === 'engine-start')!, 'toggle') === 'Engine start / stop');
+}
+
+// Review fix: imported widgets with an unknown top-level scheme or malformed param options are cleaned, not crashed.
+{
+  const bad = sanitizeWidgetDefinition({
+    id: 'x', name: 'X', category: 'control', displayType: 'param-control', colorScheme: 'purple',
+    paramControl: { paramId: 'WPNAV_SPEED', options: 'fast', min: 'abc', step: 5 },
+  } as any);
+  check('import: unknown top-level colour scheme dropped', bad.colorScheme === undefined);
+  check('import: non-list param options dropped, bad min dropped, good step kept',
+    bad.paramControl?.options === undefined && bad.paramControl?.min === undefined && bad.paramControl?.step === 5, JSON.stringify(bad.paramControl));
+  const mixed = sanitizeWidgetDefinition({
+    id: 'y', name: 'Y', category: 'control', displayType: 'param-control', colorScheme: 'green',
+    paramControl: { paramId: 'X', options: [{ label: 'Slow', value: 1 }, null, { label: 'Bad', value: 'q' }, { label: 7, value: 2 }] },
+  } as any);
+  check('import: valid scheme kept', mixed.colorScheme === 'green');
+  check('import: only well-formed options kept', JSON.stringify(mixed.paramControl?.options) === JSON.stringify([{ label: 'Slow', value: 1 }, { label: '7', value: 2 }]), JSON.stringify(mixed.paramControl?.options));
 }
 
 console.log(failures.length ? `\n${failures.length} widget check(s) FAILED` : '\nAll widget checks PASSED');

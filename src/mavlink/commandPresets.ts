@@ -15,6 +15,27 @@ export interface CommandPreset {
   params: Params7;
   /** What the params mean, shown under the picker. */
   hint?: string;
+  /**
+   * Offered on toggle switches, which send on/off in param 1 (param 2 for relay and servo) and overwrite what the
+   * preset has there. Only commands where that on/off is the meaning are offered; a string is the title to show on
+   * a toggle. Commands like reboot-to-mass-storage (P1 = 5) or parachute release (P1 = 2) would turn into something
+   * else, so they stay button-only.
+   */
+  toggle?: true | string;
+  /** Offered on sliders, which send the slider value in param 2 (speed, servo): the only presets where that fits. */
+  slider?: true;
+}
+
+export type PresetWidgetKind = 'button' | 'toggle' | 'slider';
+
+/** Whether a preset is offered on a widget of this kind. Buttons send the params as written, so they get all. */
+export function presetFitsWidget(preset: CommandPreset, kind: PresetWidgetKind): boolean {
+  return kind === 'button' || (kind === 'toggle' ? Boolean(preset.toggle) : Boolean(preset.slider));
+}
+
+/** The picker title for a preset on a widget of this kind. */
+export function presetTitle(preset: CommandPreset, kind: PresetWidgetKind): string {
+  return kind === 'toggle' && typeof preset.toggle === 'string' ? preset.toggle : preset.title;
 }
 
 const p = (...v: number[]): Params7 => [0, 0, 0, 0, 0, 0, 0].map((d, i) => v[i] ?? d) as Params7;
@@ -24,7 +45,8 @@ export const COMMAND_PRESETS: CommandPreset[] = [
   { key: 'rtl', group: 'Navigation', title: 'Return to Launch', label: 'RTL', commandId: 20, params: p() },
   { key: 'land', group: 'Navigation', title: 'Land', label: 'Land', commandId: 21, params: p() },
   {
-    key: 'takeoff', group: 'Navigation', title: 'Takeoff', label: 'Takeoff', commandId: 22, params: p(),
+    // A default altitude, so P4–P7 open with it and the button never sends a 0 m takeoff unnoticed.
+    key: 'takeoff', group: 'Navigation', title: 'Takeoff', label: 'Takeoff', commandId: 22, params: p(0, 0, 0, 0, 0, 0, 10),
     hint: 'P7 = altitude (m). Vehicle must be armed and in GUIDED.',
   },
   {
@@ -37,17 +59,17 @@ export const COMMAND_PRESETS: CommandPreset[] = [
     hint: 'P1 = 1 (custom mode), P2 = mode number.',
   },
   {
-    key: 'change-speed', group: 'Navigation', title: 'Change speed', label: 'Set Speed', commandId: 178, params: p(1, 0, -1),
+    key: 'change-speed', group: 'Navigation', title: 'Change speed', label: 'Set Speed', commandId: 178, params: p(1, 0, -1), slider: true,
     hint: 'P1 = speed type (0 air, 1 ground), P2 = speed (m/s), P3 = throttle (% or -1).',
   },
 
   // Outputs
   {
-    key: 'relay', group: 'Outputs', title: 'Set relay', label: 'Relay', commandId: 181, params: p(0, 1),
+    key: 'relay', group: 'Outputs', title: 'Set relay', label: 'Relay', commandId: 181, params: p(0, 1), toggle: true,
     hint: 'P1 = relay instance (0 = RELAY1), P2 = 1 on / 0 off.',
   },
   {
-    key: 'servo', group: 'Outputs', title: 'Set servo', label: 'Servo', commandId: 183, params: p(9, 1900, 1100),
+    key: 'servo', group: 'Outputs', title: 'Set servo', label: 'Servo', commandId: 183, params: p(9, 1900, 1100), toggle: true, slider: true,
     hint: 'P1 = servo output #, P2 = PWM (toggles: on PWM), P3 = off PWM for toggles.',
   },
   {
@@ -57,7 +79,7 @@ export const COMMAND_PRESETS: CommandPreset[] = [
 
   // Vehicle actions (Mission Planner)
   {
-    key: 'arm', group: 'Vehicle actions', title: 'Arm / disarm', label: 'Arm', commandId: 400, params: p(1),
+    key: 'arm', group: 'Vehicle actions', title: 'Arm / disarm', label: 'Arm', commandId: 400, params: p(1), toggle: true,
     hint: 'P1 = 1 arm / 0 disarm, P2 = 21196 to force.',
   },
   {
@@ -73,7 +95,7 @@ export const COMMAND_PRESETS: CommandPreset[] = [
     hint: 'P1 = battery bitmask (255 = all), P2 = remaining %.',
   },
   {
-    key: 'engine-start', group: 'Vehicle actions', title: 'Engine start', label: 'Start Engine', commandId: 223, params: p(1),
+    key: 'engine-start', group: 'Vehicle actions', title: 'Engine start', label: 'Start Engine', commandId: 223, params: p(1), toggle: 'Engine start / stop',
     hint: 'ICE engines. P1 = 1 start.',
   },
   { key: 'engine-stop', group: 'Vehicle actions', title: 'Engine stop', label: 'Stop Engine', commandId: 223, params: p(0) },
@@ -90,7 +112,7 @@ export const COMMAND_PRESETS: CommandPreset[] = [
   },
   { key: 'scripting-stop', group: 'Vehicle actions', title: 'Scripting: stop', label: 'Stop Scripts', commandId: 42701, params: p(2) },
   {
-    key: 'high-latency-on', group: 'Vehicle actions', title: 'High latency: enable', label: 'High Latency On', commandId: 2600, params: p(1),
+    key: 'high-latency-on', group: 'Vehicle actions', title: 'High latency: enable', label: 'High Latency On', commandId: 2600, params: p(1), toggle: 'High latency on / off',
   },
   {
     key: 'high-latency-off', group: 'Vehicle actions', title: 'High latency: disable', label: 'High Latency Off', commandId: 2600, params: p(0),
@@ -115,9 +137,14 @@ export const COMMAND_PRESET_GROUPS = [...new Set(COMMAND_PRESETS.map((c) => c.gr
 
 /**
  * The preset a saved command matches: exact command and params first, else the first preset for that command ID
- * (e.g. a relay button for relay 3 is still "Set relay"). Undefined for commands without a preset.
+ * (e.g. a relay button for relay 3 is still "Set relay"), among the presets offered on `kind`. Undefined for
+ * commands without one.
  */
-export function findCommandPreset(commandId: number, params: readonly number[]): CommandPreset | undefined {
-  const same = COMMAND_PRESETS.filter((c) => c.commandId === commandId);
+export function findCommandPreset(
+  commandId: number,
+  params: readonly number[],
+  kind: PresetWidgetKind = 'button'
+): CommandPreset | undefined {
+  const same = COMMAND_PRESETS.filter((c) => c.commandId === commandId && presetFitsWidget(c, kind));
   return same.find((c) => c.params.every((v, i) => (params[i] ?? 0) === v)) ?? same[0];
 }
