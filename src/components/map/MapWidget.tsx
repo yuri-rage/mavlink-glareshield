@@ -95,6 +95,7 @@ import { MissionMenu } from './MissionMenu';
 import { MapViewMenu, type MapLayerType } from './MapViewMenu';
 import { FlyToPopover } from './FlyToPopover';
 import { MissionPlanPanel } from './MissionPlanPanel';
+import { PLAN_LAYER_SWITCH_WIDTH, PlanLayerSwitch } from './PlanLayerSwitch';
 import { DraftUploadModal } from './DraftUploadModal';
 import { PlanContextMenu, type PlanMenuTarget } from './PlanContextMenu';
 import { useDraftLayer, drawablePosition } from './useDraftLayer';
@@ -2075,7 +2076,13 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         <div
           className={`absolute top-2 left-2 flex flex-col items-start gap-1.5 pointer-events-none ${
             planning && planLayout === 'sheet' ? 'z-[440]' : 'z-[460]'
-          } ${planning && planLayout === 'side' ? 'max-w-[calc(100%-288px)]' : 'max-w-[calc(100%-1rem)]'}`}
+          }`}
+          // Stops short of the side panel and of the layer switch at the top right.
+          style={{
+            maxWidth: planning
+              ? `calc(100% - ${(planLayout === 'side' ? 288 : 16) + PLAN_LAYER_SWITCH_WIDTH + 8}px)`
+              : 'calc(100% - 1rem)',
+          }}
         >
           <div
             className={`bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs font-mono text-zinc-300 flex items-center gap-2.5 pointer-events-none shadow-md ${
@@ -2194,6 +2201,14 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           />
         )}
 
+        {/* Which draft the map and panel edit: the map's top right, opposite the GPS readout; left of the side
+            panel when it is docked. */}
+        {planning && (
+          <PlanLayerSwitch
+            className="absolute top-2 z-[460]"
+            style={{ right: planLayout === 'side' ? 280 : 8 }}
+          />
+        )}
         {planning && planMenu && (
           <PlanContextMenu
             target={planMenu}

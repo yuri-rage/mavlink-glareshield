@@ -40,7 +40,7 @@ import {
 } from '../../mavlink/missionDraft';
 import { ALTITUDE_FRAMES, MISSION_COMMANDS, missionCommandInfo } from '../../mavlink/missionCommands';
 import { missionFileStem, toQgcWpl } from '../../mavlink/missionFileWriter';
-import { isAnyDirty, isDraftDirty, isRallyDirty, useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
+import { isAnyDirty, isDraftDirty, isRallyDirty, useMissionPlanStore } from '../../store/missionPlanStore';
 import { validateRallyDraft } from '../../mavlink/rallyDraft';
 import { RallyPlanBody } from './RallyPlanBody';
 import { useTelemetryStore } from '../../store/telemetryStore';
@@ -280,7 +280,7 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   const dirty = useMissionPlanStore((s) => isDraftDirty(s));
   const uploading = useMissionPlanStore((s) => s.uploading);
   const vehicleChanged = useMissionPlanStore((s) => s.vehicleChanged);
-  const { edit, undo, redo, select, setLayer, rallySelect } = useMissionPlanStore.getState();
+  const { edit, undo, redo, select, rallySelect } = useMissionPlanStore.getState();
   const vehicleType = useTelemetryStore((s) => s.heartbeat.type);
   const systemId = useTelemetryStore((s) => s.heartbeat.systemId);
   const hasVehicleMission = useTelemetryStore((s) => s.missionWaypoints.length > 0);
@@ -299,7 +299,6 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   const activeIssues: { index: number; severity: string }[] = layer === 'rally' ? rallyIssues : issues;
   const errors = activeIssues.filter((i) => i.severity === 'error').length;
   const warnings = activeIssues.length - errors;
-  const missionErrors = issues.some((i) => i.severity === 'error');
   const rallyErrors = rallyIssues.some((i) => i.severity === 'error');
   const issuesAt = (i: number) => issues.filter((x) => x.index === i);
   const missionIssues = issuesAt(-1);
@@ -389,35 +388,13 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
           </button>
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <div className="flex shrink-0 rounded-md border border-zinc-700 p-0.5" role="tablist" aria-label="Draft being edited">
-              {(
-                [
-                  { id: 'mission', label: 'Mission', dirty, err: missionErrors, active: 'bg-amber-500 text-zinc-950' },
-                  { id: 'rally', label: 'Rally', dirty: rallyDirty, err: rallyErrors, active: 'bg-fuchsia-500 text-zinc-950' },
-                ] as { id: PlanLayer; label: string; dirty: boolean; err: boolean; active: string }[]
-              ).map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={layer === t.id}
-                  onClick={() => setLayer(t.id)}
-                  title={`Edit the ${t.id === 'mission' ? 'mission' : 'rally points'}${t.dirty ? ' (unsaved changes)' : ''}`}
-                  className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                    layer === t.id ? t.active : 'text-zinc-400 hover:text-zinc-100'
-                  }`}
-                >
-                  {t.label}
-                  {t.err ? (
-                    <XCircle className="h-2.5 w-2.5" />
-                  ) : t.dirty ? (
-                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                  ) : null}
-                </button>
-              ))}
-            </div>
-            <span className="truncate font-mono text-[10px] text-zinc-500">
+          {/* Which draft is being edited is switched over the map (PlanLayerSwitch); here, just its name. */}
+          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider">
+            <span className={layer === 'rally' ? 'text-fuchsia-300' : 'text-amber-300'}>{layer === 'rally' ? 'Rally points' : 'Mission'}</span>
+            {(layer === 'rally' ? rallyDirty : dirty) && (
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current text-amber-400" title="Unsaved changes" />
+            )}
+            <span className="truncate font-mono text-[10px] font-normal normal-case tracking-normal text-zinc-500">
               {layer === 'rally'
                 ? `${rallyDraft.points.length} point${rallyDraft.points.length === 1 ? '' : 's'}`
                 : `${draft.items.length - 1} items · ${sourceText}`}
