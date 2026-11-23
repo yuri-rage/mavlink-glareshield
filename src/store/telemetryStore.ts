@@ -200,6 +200,8 @@ export interface MissionWaypoint {
   param2?: number;
   param3?: number;
   param4?: number;
+  /** As the vehicle sent it; undefined when the source doesn't carry it (mission.dat). ArduPilot ignores it. */
+  autocontinue?: number;
 }
 
 export interface FencePoint {
@@ -1395,6 +1397,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
             param2: data.param2,
             param3: data.param3,
             param4: data.param4,
+            autocontinue: data.autocontinue,
           };
           const updatedWps = [...state.missionWaypoints];
           if (existingIdx >= 0) {

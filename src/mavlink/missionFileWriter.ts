@@ -25,7 +25,7 @@ export function waypointsToItems(waypoints: MissionWaypoint[]): MissionItemIntDa
       command: w.command,
       frame: w.frame ?? MAV_FRAME_GLOBAL_RELATIVE_ALT,
       current: w.seq === 0 ? 1 : 0,
-      autocontinue: 1,
+      autocontinue: w.autocontinue ?? 1,
       param1: w.param1 ?? 0,
       param2: w.param2 ?? 0,
       param3: w.param3 ?? 0,

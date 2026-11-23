@@ -223,6 +223,7 @@ export class MissionManager {
         param2: it.param2,
         param3: it.param3,
         param4: it.param4,
+        autocontinue: typeof it.autocontinue === 'boolean' ? (it.autocontinue ? 1 : 0) : it.autocontinue,
       }));
       useTelemetryStore.setState({ missionWaypoints: wps });
     } else if (type === 'fence') {
@@ -652,6 +653,7 @@ export class MissionManager {
       param2: data.param2,
       param3: data.param3,
       param4: data.param4,
+      autocontinue: data.autocontinue,
     }));
 
     waypoints.sort((a, b) => a.seq - b.seq);
