@@ -1934,6 +1934,32 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * Take home from a downloaded mission's item 0, as the MISSION_ITEM_INT handler does for a streamed download: a
+ * MAVFTP download (mission.dat, whose item 0 ArduPilot fills with its current home) never passes through that
+ * handler. Never overrides a home from HOME_POSITION.
+ */
+export function applyHomeFromMissionItem0(waypoints: MissionWaypoint[]): void {
+  const wp0 = waypoints.find((w) => w.seq === 0);
+  if (!wp0 || !validHome({ lat: wp0.lat, lon: wp0.lon })) return;
+  useTelemetryStore.setState((state) => {
+    if (state.homePosition.source === 'home_msg') return {};
+    const hasPos = state.position.lat !== 0 || state.position.lon !== 0;
+    const distBrg = hasPos ? computeDistanceAndBearing(state.position.lat, state.position.lon, wp0.lat, wp0.lon) : null;
+    return {
+      homePosition: {
+        lat: wp0.lat,
+        lon: wp0.lon,
+        alt: wp0.alt,
+        distanceM: distBrg ? distBrg.distanceM : null,
+        bearingDeg: distBrg ? distBrg.bearingDeg : null,
+        source: 'wp0',
+      },
+      homeFromVehicle: true,
+    };
+  });
+}
+
+/**
  * Commands the autopilot to navigate immediately to a specified waypoint sequence.
  * Sends MAVLink MISSION_SET_CURRENT (Msg 41) and tracked MAV_CMD_DO_SET_MISSION_CURRENT (324).
  */

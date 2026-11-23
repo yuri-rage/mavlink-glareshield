@@ -4,7 +4,7 @@ import { decodePayload, MavlinkPacket } from './parser';
 import { mavFtpClient } from './ftp';
 import { MissionItemIntData } from './encoder';
 import { parseDroppedMissionFile, packDatFile, readDat, MissionFileType } from './missionFileParser';
-import { useTelemetryStore, MissionWaypoint, FencePoint, RallyPoint } from '../store/telemetryStore';
+import { useTelemetryStore, applyHomeFromMissionItem0, MissionWaypoint, FencePoint, RallyPoint } from '../store/telemetryStore';
 
 export interface MissionManagerStatus {
   isFetching: boolean;
@@ -682,6 +682,7 @@ export class MissionManager {
         if (unpacked !== null) {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} waypoints via MAVFTP!`);
           useTelemetryStore.setState({ missionWaypoints: unpacked });
+          applyHomeFromMissionItem0(unpacked);
           this.setStatus({ waypointCount: unpacked.length });
           return unpacked;
         }

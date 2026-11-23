@@ -326,6 +326,21 @@ for (const loss of [0.1, 0.2]) {
   check('draft upload over MAVFTP: accepted and read back', res.success && res.method === 'ftp' && res.readBack.length === draft.items.length, `${res.success} ${res.method} ${res.readBack.length}`);
   check('draft upload: vehicle-regenerated read-back counts as verified', verdict.status === 'verified', JSON.stringify(verdict.comparison));
 
+  // A MAVFTP download (here the read-back) takes home from mission.dat's item 0, as a streamed download does, and
+  // marks it as from the vehicle; it never overrides a HOME_POSITION home.
+  {
+    const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
+    const st = useTelemetryStore.getState();
+    check('MAVFTP download: home from item 0, marked as from the vehicle',
+      st.homePosition.source === 'wp0' && Math.abs(st.homePosition.lat - 37.7749) < 1e-6 && st.homeFromVehicle === true,
+      `${st.homePosition.source} ${st.homePosition.lat} ${st.homeFromVehicle}`);
+    useTelemetryStore.setState({ homePosition: { lat: 10, lon: 20, alt: 0, distanceM: null, bearingDeg: null, source: 'home_msg' } });
+    new ArduPilotFtpSim({ files: { '@MISSION/mission.dat': packDatFile(d.draftToItems(draft), 0) } }).install();
+    await missionManager.fetchWaypoints(1, 1);
+    await sleep(50);
+    check('MAVFTP download: a HOME_POSITION home is not overridden', useTelemetryStore.getState().homePosition.lat === 10);
+  }
+
   // The vehicle keeps all but the last item (e.g. storage full): the route differs and must not pass.
   const short = new ArduPilotFtpSim();
   short.install();
