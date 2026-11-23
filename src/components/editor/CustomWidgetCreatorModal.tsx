@@ -19,7 +19,14 @@ import { BUILTIN_PANELS } from '../../lib/builtinWidgets';
 import { MAX_COMPOSITE_BINDINGS, MAX_PANELS, sanitizeParamSetEntries } from '../../lib/widgetValidation';
 import { expandParamPatterns } from '../../mavlink/paramMatch';
 import { getVehicleCategory } from '../../mavlink/messages';
-import { COMMAND_PRESETS, COMMAND_PRESET_GROUPS, findCommandPreset } from '../../mavlink/commandPresets';
+import {
+  COMMAND_PRESETS,
+  COMMAND_PRESET_GROUPS,
+  findCommandPreset,
+  presetFitsWidget,
+  presetTitle,
+  type PresetWidgetKind,
+} from '../../mavlink/commandPresets';
 import { getParamMetadata } from '../../mavlink/paramMetadata';
 import { useParamMetaStore } from '../../store/paramMetaStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
@@ -318,9 +325,14 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   // "Custom" stays selected while the user types an ID, even one that happens to match a preset.
   const [customCommand, setCustomCommand] = useState(false);
   const [showMoreParams, setShowMoreParams] = useState(false);
+  // Toggles and sliders overwrite a param with their own value, so they are offered only the presets where that
+  // value is what the command expects (see CommandPreset.toggle / slider).
+  const presetKind: PresetWidgetKind =
+    displayType === 'toggle-switch' ? 'toggle' : displayType === 'slider-control' ? 'slider' : 'button';
+  const offeredPresets = COMMAND_PRESETS.filter((c) => presetFitsWidget(c, presetKind));
   const selectedPreset = customCommand
     ? undefined
-    : findCommandPreset(parseInt(commandId, 10) || 0, cmdParams.map((v) => parseFloat(v) || 0));
+    : findCommandPreset(parseInt(commandId, 10) || 0, cmdParams.map((v) => parseFloat(v) || 0), presetKind);
   const applyPreset = (key: string) => {
     const preset = COMMAND_PRESETS.find((c) => c.key === key);
     if (!preset) {
@@ -1382,13 +1394,15 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                   onChange={(e) => applyPreset(e.target.value)}
                   className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs text-zinc-200"
                 >
-                  {COMMAND_PRESET_GROUPS.map((group) => (
+                  {COMMAND_PRESET_GROUPS.filter((group) => offeredPresets.some((c) => c.group === group)).map((group) => (
                     <optgroup key={group} label={group}>
-                      {COMMAND_PRESETS.filter((c) => c.group === group).map((c) => (
-                        <option key={c.key} value={c.key}>
-                          {c.title} ({c.commandId})
-                        </option>
-                      ))}
+                      {offeredPresets
+                        .filter((c) => c.group === group)
+                        .map((c) => (
+                          <option key={c.key} value={c.key}>
+                            {presetTitle(c, presetKind)} ({c.commandId})
+                          </option>
+                        ))}
                     </optgroup>
                   ))}
                   <option value="custom">Custom command ID…</option>
@@ -1412,6 +1426,13 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
               </div>
             )}
             {selectedPreset?.hint && <p className="text-[10px] text-zinc-500 -mt-1">{selectedPreset.hint}</p>}
+            {presetKind !== 'button' && (
+              <p className="text-[10px] text-amber-300/90 -mt-1">
+                {presetKind === 'toggle'
+                  ? 'A toggle sends on/off in param 1 (param 2 for relay and servo), replacing what is written there, so only commands that take on/off are listed.'
+                  : 'A slider sends its value in param 2 for speed, relay and servo, and in param 1 for any other command, so only speed and servo are listed.'}
+              </p>
+            )}
 
             <div className="grid grid-cols-3 gap-2">
               {['Param 1', 'Param 2', 'Param 3'].map((label, i) => (

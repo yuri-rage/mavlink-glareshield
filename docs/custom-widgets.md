@@ -436,6 +436,13 @@ The editor's **Command** list fills in the command and all seven params for comm
 
 Choose **Custom command ID…** to send any other `MAV_CMD`.
 
+Toggles and sliders put their own value into a param, so they are offered only the presets where that value is what the command expects:
+
+- **Toggle switch:** set relay, set servo, arm / disarm, engine start / stop, high latency on / off.
+- **Slider:** change speed, set servo.
+
+Other commands are still available on toggles and sliders as **Custom command ID…**. See `toggle-switch` and `slider-control` below for which param each one writes.
+
 ```json
 {
   "id": "custom-rtl",

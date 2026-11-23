@@ -13,6 +13,7 @@ import type {
   WidgetDataBinding,
   WidgetDisplayType,
   WidgetGaugeConfig,
+  WidgetParamControl,
 } from '../types/widget';
 
 export const VALID_DISPLAY_TYPES = new Set<WidgetDisplayType>([
@@ -201,10 +202,38 @@ export interface SanitizeOptions {
 }
 
 /** Normalise an untrusted widget definition in place-safe fashion (returns a cleaned copy). */
+/** A param control's optional fields as the editor and panel expect them: numbers finite, options a list of
+ *  { label, value } (anything else in an imported file would throw when drawn). */
+function sanitizeParamControlFields(pc: WidgetParamControl): WidgetParamControl {
+  const out: WidgetParamControl = { ...pc };
+  for (const key of ['min', 'max', 'step'] as const) {
+    if (out[key] !== undefined) {
+      const v = finite(out[key]);
+      if (v === undefined) delete out[key];
+      else out[key] = v;
+    }
+  }
+  if (out.unit !== undefined && typeof out.unit !== 'string') delete out.unit;
+  if (out.options !== undefined) {
+    const raw: unknown = out.options;
+    const opts = Array.isArray(raw)
+      ? (raw as unknown[])
+          .filter((o): o is { label: unknown; value: unknown } => Boolean(o) && typeof o === 'object')
+          .map((o) => ({ label: typeof o.label === 'string' ? o.label : String(o.label ?? ''), value: finite(o.value) }))
+          .filter((o): o is { label: string; value: number } => o.value !== undefined)
+      : [];
+    if (opts.length > 0) out.options = opts;
+    else delete out.options;
+  }
+  return out;
+}
+
 export function sanitizeWidgetDefinition(raw: CustomWidgetDefinition, opts: SanitizeOptions = {}): CustomWidgetDefinition {
   const force = opts.forceConfirmation !== false;
   const w: CustomWidgetDefinition = { ...raw };
   if (!VALID_DISPLAY_TYPES.has(w.displayType)) w.displayType = 'stat-card';
+  // An unknown scheme has no styles: the card would fail to render.
+  if (w.colorScheme !== undefined && !(typeof w.colorScheme === 'string' && COLOR_SCHEMES.has(w.colorScheme))) delete w.colorScheme;
   if (w.displayType === 'multi-bar' && (!w.multiBarConfig || !VALID_MULTI_BAR_GROUPS.has(w.multiBarConfig.group))) {
     w.multiBarConfig = { group: 'rc-8' };
   }
@@ -236,7 +265,7 @@ export function sanitizeWidgetDefinition(raw: CustomWidgetDefinition, opts: Sani
   if (w.paramControl) {
     w.paramControl =
       typeof w.paramControl === 'object' && typeof w.paramControl.paramId === 'string'
-        ? { ...w.paramControl, confirmation: force ? true : w.paramControl.confirmation !== false }
+        ? sanitizeParamControlFields({ ...w.paramControl, confirmation: force ? true : w.paramControl.confirmation !== false })
         : undefined;
   }
   if (raw.paramSet !== undefined) {
