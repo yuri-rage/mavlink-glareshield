@@ -141,6 +141,13 @@ function readFlag(key: string, fallback: boolean): boolean {
     return fallback;
   }
 }
+function hasFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) !== null;
+  } catch {
+    return false;
+  }
+}
 function writeFlag(key: string, value: boolean | null) {
   try {
     if (value === null) localStorage.removeItem(key);
@@ -276,6 +283,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
    * that size forced (that says nothing about how they plan on a bigger map).
    */
   const setMaximizedByUser = (v: boolean) => {
+    // The user decided: no later size check may override (or mislabel) it.
+    resumeCheckRef.current = false;
     setMaximized(v);
     const forced = forcedMaxRef.current;
     forcedMaxRef.current = false;
@@ -663,10 +672,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     const hasFix = position.lat !== 0 || position.lon !== 0;
     // Following: centre on the vehicle. Otherwise back where the user left the map. With neither (a fresh load
-    // before a fix): home (the live one, else where it was last session), and only failing that the middle of the US.
+    // before a fix), home: one the vehicle gave this session, else where it was last session, else the cached
+    // mission's item 0; and only failing all of those, the middle of the US.
     const st = useTelemetryStore.getState();
-    const liveHome = st.homePosition.source !== 'none' && (st.homePosition.lat !== 0 || st.homePosition.lon !== 0) ? st.homePosition : null;
-    const home = liveHome ?? st.lastKnownHome;
+    const knownHome = st.homePosition.source !== 'none' && (st.homePosition.lat !== 0 || st.homePosition.lon !== 0) ? st.homePosition : null;
+    const home = (st.homeFromVehicle ? knownHome : null) ?? st.lastKnownHome ?? knownHome;
     const [initialLat, initialLon]: [number, number] =
       savedMapView && !(savedMapView.follow && hasFix)
         ? savedMapView.center
@@ -865,7 +875,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   // Planning resumed after a reload in place: if the map turns out too small to edit in place (a phone, a narrow
   // window), maximize it. Judged once the map's size has held for a moment, not on the first measurement: while the
   // dashboard lays out, a brief narrow width would maximize for nothing. Only ever maximizes.
-  const resumeCheckRef = useRef(useMissionPlanStore.getState().active && !maximized);
+  // Only when no state was saved (storage blocked, or a session from before it was kept): a restore the user made
+  // before reloading is respected.
+  const resumeCheckRef = useRef(useMissionPlanStore.getState().active && !maximized && !hasFlag(PLAN_MAXIMIZED_NOW_KEY));
   useEffect(() => {
     if (!resumeCheckRef.current) return;
     if (!planning) {
@@ -874,6 +886,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     }
     if (mapAreaWidth === 0) return;
     const timer = setTimeout(() => {
+      if (!resumeCheckRef.current) return; // the user maximized or restored meanwhile
       resumeCheckRef.current = false;
       const el = mapAreaRef.current;
       if (el && el.clientWidth > 0 && mapTooSmall(el.clientWidth, el.clientHeight)) {

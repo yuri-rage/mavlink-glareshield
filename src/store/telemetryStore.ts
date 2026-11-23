@@ -298,6 +298,9 @@ interface TelemetryState {
    * home could be another site or vehicle, so it must not stand in for what the vehicle reports.
    */
   lastKnownHome: { lat: number; lon: number } | null;
+  /** homePosition came from the vehicle this session (HOME_POSITION, arming, a downloaded item 0), not from the
+   *  cached mission. Only such a home replaces the saved last known home. */
+  homeFromVehicle: boolean;
   statusMessages: StatusMessage[];
   firmwareVersion: string | null;
   firmwareRaw?: string;
@@ -800,6 +803,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     };
   })(),
   lastKnownHome: validHome(initialNav.home),
+  homeFromVehicle: false,
   statusMessages: [],
   firmwareVersion: null,
   firmwareRaw: undefined,
@@ -922,7 +926,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           hasConnectedInSession: true,
           armedStartedAt,
           accumulatedArmedMs,
-          ...(updatedHome !== state.homePosition ? { homePosition: updatedHome } : {}),
+          ...(updatedHome !== state.homePosition ? { homePosition: updatedHome, homeFromVehicle: true } : {}),
           heartbeat: {
             type: data.type,
             autopilot: data.autopilot,
@@ -1447,7 +1451,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           return {
             missionWaypoints: updatedWps,
             ...(isCurrent ? { currentWaypointSeq: data.seq } : {}),
-            ...(updatedHome !== state.homePosition ? { homePosition: updatedHome } : {}),
+            ...(updatedHome !== state.homePosition ? { homePosition: updatedHome, homeFromVehicle: true } : {}),
           };
         }
 
@@ -1524,6 +1528,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
               bearingDeg: distBrg ? distBrg.bearingDeg : null,
               source: 'home_msg',
             },
+            homeFromVehicle: true,
           };
         }
 
@@ -1878,10 +1883,13 @@ let lastRp: RallyPoint[] | null = null;
 let lastHomeLat = NaN;
 let lastHomeLon = NaN;
 let lastHomeSource = '';
+let lastHomeFromVehicle = false;
+/** The home to save when the vehicle hasn't given one this session: the latest saved, starting with last session's. */
+let savedHome: { lat: number; lon: number } | null = validHome(initialNav.home);
 
 useTelemetryStore.subscribe((state) => {
   const h = state.homePosition;
-  const homeSame = h.lat === lastHomeLat && h.lon === lastHomeLon && h.source === lastHomeSource;
+  const homeSame = h.lat === lastHomeLat && h.lon === lastHomeLon && h.source === lastHomeSource && state.homeFromVehicle === lastHomeFromVehicle;
   if (state.missionWaypoints === lastWps && state.fencePoints === lastFp && state.rallyPoints === lastRp && homeSame) {
     return;
   }
@@ -1891,6 +1899,7 @@ useTelemetryStore.subscribe((state) => {
   lastHomeLat = h.lat;
   lastHomeLon = h.lon;
   lastHomeSource = h.source;
+  lastHomeFromVehicle = state.homeFromVehicle;
 
   // A mission download changes the list once per item; write the cache once it settles, not per item (each
   // write serializes the whole mission into localStorage).
@@ -1902,10 +1911,11 @@ let navSaveTimer: ReturnType<typeof setTimeout> | null = null;
 function flushNavCache() {
   navSaveTimer = null;
   const state = useTelemetryStore.getState();
-  const h = state.homePosition;
-  // The live home when there is one; otherwise keep the one from before (a session with no vehicle must not
-  // forget where home was).
-  const home = (h.source !== 'none' ? validHome(h) : null) ?? state.lastKnownHome ?? undefined;
+  // A home the vehicle gave this session; otherwise keep the latest saved one. A home that only came from the cached
+  // mission's item 0 never replaces it (it may be an old mission), and a session with no vehicle keeps it.
+  const live = state.homeFromVehicle && state.homePosition.source !== 'none' ? validHome(state.homePosition) : null;
+  if (live) savedHome = live;
+  const home = savedHome ?? undefined;
   saveNavCache({
     missionWaypoints: state.missionWaypoints,
     fencePoints: state.fencePoints,

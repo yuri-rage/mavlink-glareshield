@@ -38,6 +38,21 @@ mem.set(KEY, JSON.stringify({ home: { lat: 35.1, lon: -106.6 }, missionWaypoints
   const st = (await load()).getState();
   check('cached mission item 0 still gives the live home', st.homePosition.source === 'wp0' && st.homePosition.lat === 1);
   check('…and the last known home is kept apart', st.lastKnownHome?.lat === 35.1);
+  check('…and it is not counted as from the vehicle', st.homeFromVehicle === false);
+}
+
+// 2b. Review fix: a cached mission's item 0 never overwrites the saved home (it may be an old mission elsewhere).
+{
+  const store = await load(); // same cache as 2: saved home 35.1, cached item 0 at 1,2
+  store.setState({ fencePoints: [] }); // any change that triggers a save
+  await sleep(500);
+  check('cached item 0 does not replace the saved home', JSON.parse(mem.get(KEY) ?? '{}').home?.lat === 35.1, JSON.stringify(JSON.parse(mem.get(KEY) ?? '{}').home));
+  // A home the vehicle reports does replace it, and a later save keeps the newest, not the startup one.
+  store.setState({ homePosition: { lat: 36, lon: -105, alt: 0, distanceM: null, bearingDeg: null, source: 'home_msg' }, homeFromVehicle: true });
+  await sleep(500);
+  store.setState({ homePosition: { lat: 1, lon: 999, alt: 0, distanceM: null, bearingDeg: null, source: 'wp0' } }); // malformed
+  await sleep(500);
+  check('a malformed later home keeps the newest saved home, not the startup one', JSON.parse(mem.get(KEY) ?? '{}').home?.lat === 36);
 }
 
 // 3. Bad saved values (0,0, out of range, junk, old format with a source) don't crash and aren't used wrongly.
@@ -61,7 +76,7 @@ mem.set(KEY, JSON.stringify({ home: { lat: 30, lon: -100 } }));
   await sleep(500);
   check('no live home this session: the earlier home is kept', JSON.parse(mem.get(KEY) ?? '{}').home?.lat === 30);
 
-  store.setState({ homePosition: { lat: 36.2, lon: -105.1, alt: 2000, distanceM: null, bearingDeg: null, source: 'home_msg' } });
+  store.setState({ homePosition: { lat: 36.2, lon: -105.1, alt: 2000, distanceM: null, bearingDeg: null, source: 'home_msg' }, homeFromVehicle: true });
   await sleep(500);
   check('home from the vehicle is saved', JSON.parse(mem.get(KEY) ?? '{}').home?.lat === 36.2);
 
