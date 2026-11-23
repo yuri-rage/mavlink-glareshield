@@ -12,9 +12,6 @@
  * It uploads and reads back over MAVFTP and item-by-item, uploads rally points (whole metres, an MSL frame) and
  * clears them, then arms in AUTO to show why an armed mission upload must go item-by-item. It changes the SITL
  * vehicle's mission, rally points, mode and arming state: use a throwaway SITL instance.
- *
- * The armed step (4) checks the app's armed upload path: it needs the armed-upload change (item-by-item while
- * armed, out-of-sequence ACKs not fatal), which merges separately; without it, step 4's last check fails.
  */
 export {};
 const mem = new Map<string, string>();
