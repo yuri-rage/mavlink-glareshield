@@ -216,6 +216,11 @@ export interface FencePoint {
   inclusion?: boolean;
 }
 
+export type RallySupport = 'unknown' | 'supported' | 'unsupported';
+
+/** MAV_PROTOCOL_CAPABILITY_MISSION_RALLY in AUTOPILOT_VERSION.capabilities. */
+export const CAPABILITY_MISSION_RALLY = 32768;
+
 export interface RallyPoint {
   seq: number;
   lat: number;
@@ -303,6 +308,12 @@ interface TelemetryState {
   /** homePosition came from the vehicle this session (HOME_POSITION, arming, a downloaded item 0), not from the
    *  cached mission. Only such a home replaces the saved last known home. */
   homeFromVehicle: boolean;
+  /**
+   * Whether the vehicle takes rally points: 'supported' once it says so (AUTOPILOT_VERSION capability, or it
+   * accepts them), 'unsupported' once it answers a rally transfer with MAV_MISSION_UNSUPPORTED, else 'unknown'.
+   * A missing capability bit alone never means unsupported: not every firmware sets it.
+   */
+  rallySupport: RallySupport;
   statusMessages: StatusMessage[];
   firmwareVersion: string | null;
   firmwareRaw?: string;
@@ -806,6 +817,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   })(),
   lastKnownHome: validHome(initialNav.home),
   homeFromVehicle: false,
+  rallySupport: 'unknown',
   statusMessages: [],
   firmwareVersion: null,
   firmwareRaw: undefined,
@@ -928,6 +940,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           hasConnectedInSession: true,
           armedStartedAt,
           accumulatedArmedMs,
+          // Another vehicle: what we learned about rally support was about the previous one.
+          ...(packet.systemId !== state.heartbeat.systemId ? { rallySupport: 'unknown' as const } : {}),
           ...(updatedHome !== state.homePosition ? { homePosition: updatedHome, homeFromVehicle: true } : {}),
           heartbeat: {
             type: data.type,
@@ -1280,9 +1294,13 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         }
 
         case MAVLINK_MSG_ID.AUTOPILOT_VERSION: {
+          // The capability bit confirms rally support; its absence proves nothing, and an explicit "unsupported"
+          // answer from the vehicle stands.
+          const rallyCap = typeof data.capabilities === 'number' && (data.capabilities & CAPABILITY_MISSION_RALLY) !== 0;
           return {
             firmwareVersion: data.versionStr || state.firmwareVersion,
             firmwareRaw: data.versionStr ? `v${data.versionStr}` : state.firmwareRaw,
+            ...(rallyCap && state.rallySupport === 'unknown' ? { rallySupport: 'supported' as const } : {}),
           };
         }
 
@@ -1680,6 +1698,8 @@ mavlinkConnection.onStatus((status) => {
     useTelemetryStore.setState((state) => ({
       firmwareVersion: null,
       firmwareRaw: undefined,
+      // The next connection may be another vehicle.
+      rallySupport: 'unknown',
       armedStartedAt: null,
       ...(isManual ? { hasConnectedInSession: false } : {}),
       commandFeedback:

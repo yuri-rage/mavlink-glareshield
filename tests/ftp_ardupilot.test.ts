@@ -44,6 +44,8 @@ interface SimOptions {
   delayReply?: (req: Req) => number;                   // extra latency for a reply, ms
   nakWrite?: (req: Req) => boolean;                    // vehicle rejects this WriteFile
   files?: Record<string, Uint8Array>;                  // pre-existing readable files
+  noRally?: boolean;                                   // a vehicle without rally points: rally.dat refused, rally
+                                                       // MISSION_REQUEST_LIST / MISSION_COUNT answered MAV_MISSION_UNSUPPORTED
 }
 interface Req { seq: number; session: number; opcode: number; size: number; offset: number; data: Uint8Array }
 
@@ -95,9 +97,25 @@ class ArduPilotFtpSim {
 
   private nak(req: Req, code: number, errno?: number) { this.reply(req, NAK, 0, errno === undefined ? Uint8Array.of(code) : Uint8Array.of(code, errno)); }
 
+  requestsSeen: number[] = [];
+
+  /** Answer a mission-protocol message the way ArduPilot does for a mission type it doesn't have. */
+  private missionProtocol(frame: { messageId: number; payload: Uint8Array }) {
+    this.requestsSeen.push(frame.messageId);
+    // MISSION_REQUEST_LIST (43): mission_type at byte 2. MISSION_COUNT (44): at byte 4.
+    const p = new Uint8Array(8);
+    p.set(frame.payload.subarray(0, 8));
+    const missionType = frame.messageId === 43 ? p[2] : p[4];
+    if (!this.o.noRally || missionType !== 2) return;
+    const ack = Uint8Array.of(255, 190, 3 /* MAV_MISSION_UNSUPPORTED */, 2);
+    const pkt = { version: 2, sequence: 0, systemId: 1, componentId: 1, messageId: 47, payload: ack, crc: 0, raw: ack };
+    setTimeout(() => { for (const l of (mavlinkConnection as any).packetListeners) l(pkt); }, 2);
+  }
+
   private onRequest(bytes: Uint8Array) {
     if (this.lost()) return;
     const frames = this.parser.parse(bytes);
+    if (frames.length === 1 && (frames[0].messageId === 43 || frames[0].messageId === 44)) return this.missionProtocol(frames[0]);
     if (frames.length !== 1 || frames[0].messageId !== 110) return;
     const full = new Uint8Array(254);
     full.set(frames[0].payload.subarray(0, 254));         // undo MAVLink 2 zero-trimming
@@ -115,6 +133,7 @@ class ArduPilotFtpSim {
     switch (req.opcode) {
       case FTP_OPCODE.CreateFile: {
         if (this.fd) return this.nak(req, ERR_FAIL);
+        if (this.o.noRally && name().endsWith('rally.dat')) return this.nak(req, ERR_FAIL_ERRNO, ENOENT);
         this.fd = { mode: 'w', path: name(), buf: new Uint8Array(65536), len: 0 };
         return this.reply(req, ACK, 0, new Uint8Array(0));
       }
@@ -133,7 +152,7 @@ class ArduPilotFtpSim {
       case FTP_OPCODE.OpenFileRO: {
         if (this.fd) return this.nak(req, ERR_FAIL);
         const path = name();
-        const stored = this.committed[path];
+        const stored = this.o.noRally && path.endsWith('rally.dat') ? undefined : this.committed[path];
         // AP_Filesystem open() fails with errno set; GCS_FTP replies FailErrno with the errno.
         if (!stored) return this.nak(req, ERR_FAIL_ERRNO, ENOENT);
         const buf = path.startsWith('@MISSION/') ? regenerateMissionDat(stored, path.endsWith('rally.dat')) : stored.slice();
@@ -443,6 +462,36 @@ for (const loss of [0.1, 0.2]) {
     clearUnread.success && rd.checkRallyReadBack({ points: [] }, clearUnread.readBack, clearUnread.readOk).status === 'unreadable');
 
   check('clearing rally points verifies', cleared.success && cleared.readOk && rd.checkRallyReadBack({ points: [] }, cleared.readBack, cleared.readOk).status === 'verified', `${cleared.success} ${cleared.readBack.length} ${cleared.error ?? ''}`);
+}
+
+// 11. A vehicle without rally points: its "unsupported" answer ends the download at once, is remembered for the
+// vehicle (no more asking), and an upload says why it failed.
+{
+  const { missionManager } = await import('../src/mavlink/missionManager.ts');
+  const rd = await import('../src/mavlink/rallyDraft.ts');
+  const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
+  useTelemetryStore.setState({ rallySupport: 'unknown', rallyPoints: [] });
+
+  const sim = new ArduPilotFtpSim({ noRally: true });
+  sim.install();
+  const t0 = Date.now();
+  const got = await missionManager.fetchRally(1, 1);
+  const took = Date.now() - t0;
+  check('no rally: download stops at the vehicle\'s answer, not after the retries', got.length === 0 && took < 1500, `${took} ms`);
+  check('no rally: remembered as unsupported, read not counted as complete', useTelemetryStore.getState().rallySupport === 'unsupported' && !missionManager.lastRallyReadOk);
+
+  const asked = sim.requestsSeen.length;
+  await missionManager.fetchRally(1, 1);
+  check('no rally: not asked again once known', sim.requestsSeen.length === asked);
+
+  useTelemetryStore.setState({ rallySupport: 'unknown' });
+  const sim2 = new ArduPilotFtpSim({ noRally: true });
+  sim2.install();
+  const rally = rd.addRallyPoint({ points: [] }, null, 37.78, -122.41).draft;
+  const up = await missionManager.uploadRallyAndReadBack(rd.rallyDraftToItems(rally), 1, 1);
+  await sleep(50);
+  check('no rally: upload fails, saying rally points are not supported', !up.success && /not supported/.test(up.error ?? ''), up.error);
+  check('no rally: upload refusal also remembered', useTelemetryStore.getState().rallySupport === 'unsupported');
 }
 
 console.log(failures.length ? `\n${failures.length} MAVFTP ArduPilot-sim check(s) FAILED` : '\nAll MAVFTP ArduPilot-sim checks PASSED');

@@ -123,6 +123,7 @@ export const RallyPlanBody: React.FC<RallyPlanBodyProps> = ({
   const { rallyEdit, rallySelect } = useMissionPlanStore.getState();
   const systemId = useTelemetryStore((s) => s.heartbeat.systemId);
   const hasVehicleRally = useTelemetryStore((s) => s.rallyPoints.length > 0);
+  const unsupported = useTelemetryStore((s) => s.rallySupport === 'unsupported');
   const formatAltitude = useUnitsStore((s) => s.formatAltitude);
   const resetConfirm = useConfirmStep();
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -145,6 +146,12 @@ export const RallyPlanBody: React.FC<RallyPlanBodyProps> = ({
 
   return (
     <>
+      {unsupported && (
+        <div className="flex gap-1 border-b border-zinc-700 bg-zinc-900/80 px-2 py-1.5 text-[10px] leading-snug text-zinc-300">
+          <AlertTriangle className="mt-px h-3 w-3 shrink-0 text-amber-400" />
+          This vehicle doesn't support rally points, so these can't be uploaded. You can still save them to a file.
+        </div>
+      )}
       {vehicleChanged && !uploading && (
         <div className="space-y-1 border-b border-amber-500/40 bg-amber-950/40 px-2 py-1.5 text-[10px] text-amber-200">
           <div className="flex gap-1">

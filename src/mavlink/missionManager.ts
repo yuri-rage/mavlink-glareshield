@@ -22,6 +22,32 @@ export interface MissionManagerStatus {
   };
 }
 
+/** MAV_MISSION_RESULT, as words for messages. */
+const MISSION_RESULT_TEXT: Record<number, string> = {
+  1: 'an error',
+  2: 'an unsupported coordinate frame',
+  3: 'not supported by the vehicle',
+  4: 'not enough space on the vehicle',
+  5: 'invalid',
+  6: 'an invalid param 1',
+  7: 'an invalid param 2',
+  8: 'an invalid param 3',
+  9: 'an invalid param 4',
+  10: 'an invalid param 5 / latitude',
+  11: 'an invalid param 6 / longitude',
+  12: 'an invalid param 7 / altitude',
+  13: 'an item out of sequence',
+  14: 'denied',
+  15: 'cancelled',
+};
+export const MAV_MISSION_UNSUPPORTED = 3;
+const RALLY_TYPE = 2;
+
+/** The vehicle said it doesn't take rally points: remember it for this vehicle (cleared on vehicle change). */
+function markRallyUnsupported() {
+  if (useTelemetryStore.getState().rallySupport !== 'unsupported') useTelemetryStore.setState({ rallySupport: 'unsupported' });
+}
+
 export class MissionManager {
   private status: MissionManagerStatus = {
     isFetching: false,
@@ -38,6 +64,8 @@ export class MissionManager {
   private lastLegacyComplete = false;
   /** The last fetchRally read the vehicle's rally points completely. An empty list is only "none" when true. */
   public lastRallyReadOk = false;
+  /** MAV_MISSION_RESULT the vehicle rejected the last streamed upload with, or null (accepted, or no answer). */
+  private lastUploadRejection: number | null = null;
   private legacyAbort: (() => void) | null = null;
   private messageClearTimer: any = null;
   private listeners: Set<(isFetching: boolean, count?: number, method?: string, status?: MissionManagerStatus) => void> = new Set();
@@ -111,6 +139,7 @@ export class MissionManager {
     timeoutMs = 2000,
     onProgress?: (sent: number, total: number) => void
   ): Promise<boolean> {
+    this.lastUploadRejection = null;
     if (this.isCancelled) return Promise.resolve(false);
 
     return new Promise((resolve) => {
@@ -202,9 +231,12 @@ export class MissionManager {
           retryCount = 0;
           if (data.type === 0) {
             console.log(`[MissionManager] Vehicle accepted all ${items.length} items for mission_type=${missionType}!`);
+            if (missionType === RALLY_TYPE) useTelemetryStore.setState({ rallySupport: 'supported' });
             finish(true);
           } else {
             console.warn(`[MissionManager] Vehicle rejected mission upload for type=${missionType} with ACK code ${data.type}`);
+            this.lastUploadRejection = data.type;
+            if (missionType === RALLY_TYPE && data.type === MAV_MISSION_UNSUPPORTED) markRallyUnsupported();
             finish(false);
           }
         }
@@ -359,7 +391,14 @@ export class MissionManager {
       return { success: true, method: 'legacy' };
     }
 
-    const errMsg = `Failed to upload ${typeName} to vehicle. Vehicle did not acknowledge transfer.`;
+    // Say why: a refusal names the vehicle's reason; only silence is "did not acknowledge".
+    const code = this.lastUploadRejection;
+    const errMsg =
+      code !== null
+        ? code === MAV_MISSION_UNSUPPORTED
+          ? `${type === 'mission' ? 'Missions' : type === 'fence' ? 'Geofences' : 'Rally points'} are not supported by this vehicle.`
+          : `The vehicle rejected the ${typeName.toLowerCase()}: ${MISSION_RESULT_TEXT[code] ?? `result ${code}`}.`
+        : `Failed to upload ${typeName} to vehicle. Vehicle did not acknowledge transfer.`;
     return { success: false, method: 'legacy', error: errMsg };
   }
 
@@ -637,6 +676,17 @@ export class MissionManager {
       const unsubscribe = mavlinkConnection.onPacket((packet: MavlinkPacket) => {
         if (isDone) return;
 
+        // A refusal (e.g. MAV_MISSION_UNSUPPORTED for rally points on a vehicle without them) is the vehicle's
+        // answer: stop now instead of waiting out every retry. Still not a complete read.
+        if (packet.messageId === MAVLINK_MSG_ID.MISSION_ACK) {
+          const data = decodePayload(packet.messageId, packet.payload);
+          if ((data.mission_type ?? 0) !== missionType || data.type === 0) return;
+          console.warn(`[MissionManager] Vehicle refused the download for mission_type=${missionType} with ACK code ${data.type}`);
+          if (missionType === RALLY_TYPE && data.type === MAV_MISSION_UNSUPPORTED) markRallyUnsupported();
+          finish(items);
+          return;
+        }
+
         if (packet.messageId === MAVLINK_MSG_ID.MISSION_COUNT) {
           const data = decodePayload(packet.messageId, packet.payload);
           const packetType = data.mission_type ?? 0;
@@ -854,6 +904,10 @@ export class MissionManager {
   public async fetchRally(sysId: number, compId: number): Promise<RallyPoint[]> {
     this.lastRallyReadOk = false;
     if (this.isCancelled) return [];
+    if (useTelemetryStore.getState().rallySupport === 'unsupported') {
+      // The vehicle has told us it has none to give; asking again would only wait out the timeouts.
+      return [];
+    }
     this.setStatus({ message: 'Checking rally points via MAVFTP (@MISSION/rally.dat)...' });
 
     const onProgress = (received: number, total: number) => {
@@ -877,7 +931,7 @@ export class MissionManager {
         const unpacked = this.unpackRallyDat(rallyData);
         if (unpacked !== null) {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} rally points via MAVFTP!`);
-          useTelemetryStore.setState({ rallyPoints: unpacked });
+          useTelemetryStore.setState({ rallyPoints: unpacked, ...(unpacked.length > 0 ? { rallySupport: 'supported' as const } : {}) });
           this.setStatus({ rallyCount: unpacked.length });
           this.lastRallyReadOk = true;
           return unpacked;
@@ -910,7 +964,7 @@ export class MissionManager {
       console.warn('[MissionManager] Rally point stream incomplete; keeping the rally points already known.');
       return rallyPoints;
     }
-    useTelemetryStore.setState({ rallyPoints });
+    useTelemetryStore.setState({ rallyPoints, ...(rallyPoints.length > 0 ? { rallySupport: 'supported' as const } : {}) });
     this.setStatus({ rallyCount: rallyPoints.length });
     this.lastRallyReadOk = true;
     return rallyPoints;
