@@ -940,8 +940,11 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           hasConnectedInSession: true,
           armedStartedAt,
           accumulatedArmedMs,
-          // Another vehicle: what we learned about rally support was about the previous one.
-          ...(packet.systemId !== state.heartbeat.systemId ? { rallySupport: 'unknown' as const } : {}),
+          // Another vehicle, or the same one back after a silence (rebooted, reflashed, another SITL binary): what we
+          // learned about rally support may no longer hold.
+          ...(packet.systemId !== state.heartbeat.systemId || isVehicleReacquired(state.heartbeat.lastHeartbeatTime, now)
+            ? { rallySupport: 'unknown' as const }
+            : {}),
           ...(updatedHome !== state.homePosition ? { homePosition: updatedHome, homeFromVehicle: true } : {}),
           heartbeat: {
             type: data.type,

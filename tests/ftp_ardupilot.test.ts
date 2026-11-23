@@ -470,14 +470,18 @@ for (const loss of [0.1, 0.2]) {
   const { missionManager } = await import('../src/mavlink/missionManager.ts');
   const rd = await import('../src/mavlink/rallyDraft.ts');
   const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
-  useTelemetryStore.setState({ rallySupport: 'unknown', rallyPoints: [] });
+  // One rally point already on the map (from before): an incomplete download must keep it, and report it.
+  const known = [{ seq: 0, lat: 37.78, lon: -122.41, alt: 30, frame: 3 }];
+  useTelemetryStore.setState({ rallySupport: 'unknown', rallyPoints: known });
 
   const sim = new ArduPilotFtpSim({ noRally: true });
   sim.install();
   const t0 = Date.now();
   const got = await missionManager.fetchRally(1, 1);
   const took = Date.now() - t0;
-  check('no rally: download stops at the vehicle\'s answer, not after the retries', got.length === 0 && took < 1500, `${took} ms`);
+  check('no rally: download stops at the vehicle\'s answer, not after the retries', took < 1500, `${took} ms`);
+  check('incomplete rally download: map keeps its points, and they are what is returned (counts agree)',
+    useTelemetryStore.getState().rallyPoints === known && got === known, `${got.length}`);
   check('no rally: remembered as unsupported, read not counted as complete', useTelemetryStore.getState().rallySupport === 'unsupported' && !missionManager.lastRallyReadOk);
 
   const asked = sim.requestsSeen.length;

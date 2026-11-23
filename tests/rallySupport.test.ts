@@ -68,5 +68,17 @@ check('an explicit "unsupported" answer stands over the bit', useTelemetryStore.
     `${useTelemetryStore.getState().heartbeat.systemId} ${useTelemetryStore.getState().rallySupport}`);
 }
 
+// The same vehicle back after a silence (rebooted, reflashed, another SITL binary): start over too.
+{
+  useTelemetryStore.setState({ rallySupport: 'unsupported' });
+  feed(heartbeat(2)); // still talking: kept
+  check('same vehicle, still talking: kept', useTelemetryStore.getState().rallySupport === 'unsupported');
+  const realNow = Date.now;
+  Date.now = () => realNow() + 60000;
+  feed(heartbeat(2));
+  Date.now = realNow;
+  check('same vehicle back after a silence: back to unknown', useTelemetryStore.getState().rallySupport === 'unknown');
+}
+
 console.log(failures.length ? `\n${failures.length} rally support check(s) FAILED` : '\nAll rally support checks PASSED');
 process.exit(failures.length ? 1 : 0);
