@@ -62,7 +62,7 @@ const mk = (seq: number, command: number, lat: number, lon: number, z: number, f
   seq, command, frame, current: seq === 0 ? 1 : 0, autocontinue: 1, param1: 0, param2: 0, param3: 0, param4: 0, x: lat, y: lon, z, mission_type: 0,
 });
 const items = [
-  mk(0, 16, H.lat, H.lon, 0, 0),
+  mk(0, 16, H.lat, H.lon, 1600, 0), // home as the vehicle reports it: MSL (SITL's --home altitude)
   mk(1, 22, 0, 0, 20),
   mk(2, 16, H.lat + N(80), H.lon, 20),
   mk(3, 82, H.lat + N(80), H.lon + E(80), 20),
