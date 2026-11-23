@@ -122,6 +122,11 @@ function homePopupHtml(home: {
 // The map's view, kept across unmounts (switching dashboard tabs) so it comes back as it was left. Zoom is also
 // kept across reloads.
 const ZOOM_KEY = 'mavlink_glareshield_map_zoom';
+/**
+ * How far the map zooms in. Imagery only goes to zoom 19 (maxNativeZoom) and is enlarged beyond it, so it softens,
+ * but pins and routes stay sharp: the extra levels are for placing and checking waypoints to within a metre.
+ */
+const MAP_MAX_ZOOM = 24;
 /** Planning opens maximized unless the user last chose to plan in place ('0'). */
 const PLAN_MAXIMIZE_PREF_KEY = 'mavlink_glareshield_plan_maximize';
 /** Whether the map is maximized right now while planning, so a reload restores it as it was. */
@@ -167,7 +172,7 @@ function initialZoom(): number {
   if (savedMapView) return savedMapView.zoom;
   try {
     const z = Number(localStorage.getItem(ZOOM_KEY));
-    if (Number.isFinite(z) && z >= 1 && z <= 22) return z;
+    if (Number.isFinite(z) && z >= 1 && z <= MAP_MAX_ZOOM) return z;
   } catch {}
   return 17;
 }
@@ -621,7 +626,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
           maxNativeZoom: 19,
-          maxZoom: 22,
+          maxZoom: MAP_MAX_ZOOM,
           crossOrigin: true,
         });
       case 'satellite':
@@ -629,7 +634,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
           attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA',
           maxNativeZoom: 19,
-          maxZoom: 22,
+          maxZoom: MAP_MAX_ZOOM,
           crossOrigin: true,
         });
     }
@@ -708,7 +713,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     const map = L.map(mapContainerRef.current, {
       center: [initialLat, initialLon],
       zoom: initialZoom(),
-      maxZoom: 22,
+      maxZoom: MAP_MAX_ZOOM,
       zoomControl: false,
       scrollWheelZoom: following ? 'center' : true,
       touchZoom: following ? 'center' : true,
