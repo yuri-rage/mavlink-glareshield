@@ -1,0 +1,123 @@
+// Ready-made COMMAND_LONG payloads for custom command buttons. Picking one fills the command ID and all seven
+// params; the params stay editable afterwards. The "Vehicle actions" group mirrors Mission Planner's Actions tab,
+// with the params Mission Planner (or ArduPilot) uses for each.
+
+export type Params7 = [number, number, number, number, number, number, number];
+
+export interface CommandPreset {
+  key: string;
+  group: string;
+  /** Option text in the picker. */
+  title: string;
+  /** Default button label when the widget is still on the default label. */
+  label: string;
+  commandId: number;
+  params: Params7;
+  /** What the params mean, shown under the picker. */
+  hint?: string;
+}
+
+const p = (...v: number[]): Params7 => [0, 0, 0, 0, 0, 0, 0].map((d, i) => v[i] ?? d) as Params7;
+
+export const COMMAND_PRESETS: CommandPreset[] = [
+  // Navigation
+  { key: 'rtl', group: 'Navigation', title: 'Return to Launch', label: 'RTL', commandId: 20, params: p() },
+  { key: 'land', group: 'Navigation', title: 'Land', label: 'Land', commandId: 21, params: p() },
+  {
+    key: 'takeoff', group: 'Navigation', title: 'Takeoff', label: 'Takeoff', commandId: 22, params: p(),
+    hint: 'P7 = altitude (m). Vehicle must be armed and in GUIDED.',
+  },
+  {
+    key: 'loiter-unlim', group: 'Navigation', title: 'Loiter unlimited', label: 'Loiter', commandId: 17, params: p(),
+    hint: 'P3 = radius (m, plane).',
+  },
+  { key: 'mission-start', group: 'Navigation', title: 'Mission start', label: 'Start Mission', commandId: 300, params: p() },
+  {
+    key: 'set-mode', group: 'Navigation', title: 'Set mode (DO_SET_MODE)', label: 'Set Mode', commandId: 176, params: p(1),
+    hint: 'P1 = 1 (custom mode), P2 = mode number.',
+  },
+  {
+    key: 'change-speed', group: 'Navigation', title: 'Change speed', label: 'Set Speed', commandId: 178, params: p(1, 0, -1),
+    hint: 'P1 = speed type (0 air, 1 ground), P2 = speed (m/s), P3 = throttle (% or -1).',
+  },
+
+  // Outputs
+  {
+    key: 'relay', group: 'Outputs', title: 'Set relay', label: 'Relay', commandId: 181, params: p(0, 1),
+    hint: 'P1 = relay instance (0 = RELAY1), P2 = 1 on / 0 off.',
+  },
+  {
+    key: 'servo', group: 'Outputs', title: 'Set servo', label: 'Servo', commandId: 183, params: p(9, 1900, 1100),
+    hint: 'P1 = servo output #, P2 = PWM (toggles: on PWM), P3 = off PWM for toggles.',
+  },
+  {
+    key: 'camera', group: 'Outputs', title: 'Trigger camera', label: 'Trigger Camera', commandId: 203, params: p(0, 0, 0, 0, 1),
+    hint: 'DO_DIGICAM_CONTROL: P5 = 1 takes a picture.',
+  },
+
+  // Vehicle actions (Mission Planner)
+  {
+    key: 'arm', group: 'Vehicle actions', title: 'Arm / disarm', label: 'Arm', commandId: 400, params: p(1),
+    hint: 'P1 = 1 arm / 0 disarm, P2 = 21196 to force.',
+  },
+  {
+    key: 'cal-gyro', group: 'Vehicle actions', title: 'Preflight calibration: gyro', label: 'Calibrate Gyro', commandId: 241, params: p(1),
+    hint: 'Disarmed and still. P1 = gyro.',
+  },
+  {
+    key: 'cal-baro', group: 'Vehicle actions', title: 'Preflight calibration: baro / airspeed', label: 'Calibrate Baro', commandId: 241, params: p(0, 0, 1),
+    hint: 'Disarmed. P3 = baro (and airspeed on plane).',
+  },
+  {
+    key: 'battery-reset', group: 'Vehicle actions', title: 'Battery reset', label: 'Reset Battery', commandId: 42651, params: p(255, 100),
+    hint: 'P1 = battery bitmask (255 = all), P2 = remaining %.',
+  },
+  {
+    key: 'engine-start', group: 'Vehicle actions', title: 'Engine start', label: 'Start Engine', commandId: 223, params: p(1),
+    hint: 'ICE engines. P1 = 1 start.',
+  },
+  { key: 'engine-stop', group: 'Vehicle actions', title: 'Engine stop', label: 'Stop Engine', commandId: 223, params: p(0) },
+  {
+    key: 'parachute', group: 'Vehicle actions', title: 'Parachute release', label: 'Release Parachute', commandId: 208, params: p(2),
+    hint: 'P1 = 0 disable, 1 enable, 2 release.',
+  },
+  {
+    key: 'terminate', group: 'Vehicle actions', title: 'Terminate flight', label: 'Terminate', commandId: 185, params: p(1),
+    hint: 'Irreversible in flight: the vehicle stops flying (AFS/termination behaviour).',
+  },
+  {
+    key: 'scripting-restart', group: 'Vehicle actions', title: 'Scripting: stop and restart', label: 'Restart Scripts', commandId: 42701, params: p(3),
+  },
+  { key: 'scripting-stop', group: 'Vehicle actions', title: 'Scripting: stop', label: 'Stop Scripts', commandId: 42701, params: p(2) },
+  {
+    key: 'high-latency-on', group: 'Vehicle actions', title: 'High latency: enable', label: 'High Latency On', commandId: 2600, params: p(1),
+  },
+  {
+    key: 'high-latency-off', group: 'Vehicle actions', title: 'High latency: disable', label: 'High Latency Off', commandId: 2600, params: p(0),
+  },
+
+  // System
+  {
+    key: 'reboot', group: 'System', title: 'Reboot autopilot', label: 'Reboot', commandId: 246, params: p(1),
+    hint: 'Disarmed only.',
+  },
+  {
+    key: 'reboot-mass-storage', group: 'System', title: 'Reboot to mass storage', label: 'Mass Storage', commandId: 246, params: p(5),
+    hint: 'Disarmed only. The SD card appears as a USB drive.',
+  },
+  {
+    key: 'format-sd', group: 'System', title: 'Format SD card', label: 'Format SD', commandId: 526, params: p(1, 1),
+    hint: 'Erases the SD card, logs included. P1 and P2 must both be 1.',
+  },
+];
+
+export const COMMAND_PRESET_GROUPS = [...new Set(COMMAND_PRESETS.map((c) => c.group))];
+
+/**
+ * The preset a saved command matches: exact command and params first, else the first preset for that command ID
+ * (e.g. a relay button for relay 3 is still "Set relay"). Undefined for commands without a preset.
+ */
+export function findCommandPreset(commandId: number, params: readonly number[]): CommandPreset | undefined {
+  const same = COMMAND_PRESETS.filter((c) => c.commandId === commandId);
+  return same.find((c) => c.params.every((v, i) => (params[i] ?? 0) === v)) ?? same[0];
+}
