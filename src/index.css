@@ -212,6 +212,16 @@ html.daylight-theme .text-amber-400 {
   color: #b45309 !important;
 }
 
+/* Rally points (fuchsia): the pale night shades are unreadable on light surfaces. */
+html.daylight-theme .text-fuchsia-300,
+html.daylight-theme .text-fuchsia-400,
+html.daylight-theme .text-\[\#f0abfc\] {
+  color: #a21caf !important;
+}
+html.daylight-theme .bg-fuchsia-950\/30 {
+  background-color: rgba(250, 232, 255, 0.7) !important;
+}
+
 html.daylight-theme .text-rose-100,
 html.daylight-theme .text-rose-200,
 html.daylight-theme .text-rose-300,

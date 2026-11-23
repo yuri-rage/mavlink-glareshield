@@ -291,6 +291,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const planLayer = useMissionPlanStore((s) => s.layer);
   const planTool = useMissionPlanStore((s) => s.tool);
   const planSelected = useMissionPlanStore((s) => s.selected);
+  const planRallySelected = useMissionPlanStore((s) => s.rally.selected);
   const planningRef = useRef(planning);
   planningRef.current = planning;
   const [mapReady, setMapReady] = useState(false);
@@ -1032,7 +1033,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         setPlanNotice(`Rally upload failed: ${res.error || 'the vehicle did not accept the rally points'}. The draft is unchanged.`);
         return;
       }
-      const check = checkRallyReadBack(draft, res.readBack);
+      const check = checkRallyReadBack(draft, res.readBack, res.readOk);
       if (check.status === 'unreadable') {
         // Acknowledged but not read back: most likely the vehicle holds the draft. Compare with what was uploaded.
         useMissionPlanStore.getState().rallyRebase(draft);
@@ -1238,8 +1239,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         );
         return;
       }
-      // Show the layer that was loaded (the mission when both were).
-      useMissionPlanStore.getState().setLayer(loaded.includes('mission') ? 'mission' : 'rally');
+      // Stay on the active layer if the file had something for it (a .plan usually carries both); otherwise show
+      // the layer that was loaded.
+      const now = useMissionPlanStore.getState().layer;
+      const activeLoaded = now === 'rally' ? loaded.includes('rally points') : loaded.includes('mission');
+      if (!activeLoaded) useMissionPlanStore.getState().setLayer(loaded.includes('mission') ? 'mission' : 'rally');
       const skipped = sections.filter((sec) => sec.type !== 'mission' && sec.type !== 'rally').map((sec) => sec.type);
       setPlanNotice(
         `Loaded the ${loaded.join(' and ')} from ${file.name}${skipped.length > 0 ? `; its ${skipped.join(' and ')} were not loaded` : ''}.`
@@ -2214,7 +2218,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               {planTool === 'add' && (
                 <div className="rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md">
                   {planLayer === 'rally'
-                    ? 'Click the map to place rally points'
+                    ? `Click the map to place rally points${planRallySelected !== null ? ` after R${planRallySelected + 1}` : ''}`
                     : `Click the map to place waypoints after ${planSelected !== null && planSelected >= 1 ? `#${planSelected}` : 'the last item'}`}
                   <span className="text-zinc-500"> · Esc to stop</span>
                 </div>
@@ -2278,8 +2282,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             panel when it is docked. */}
         {planning && (
           <PlanLayerSwitch
-            className="absolute top-2 z-[460]"
-            style={{ right: planLayout === 'side' ? 280 : 8 }}
+            className="absolute z-[460]"
+            // With the sheet, the tile attribution moves to the top right (index.css): sit just below it.
+            style={{ right: planLayout === 'side' ? 280 : 8, top: planLayout === 'sheet' ? 28 : 8 }}
           />
         )}
         {planning && planMenu && (

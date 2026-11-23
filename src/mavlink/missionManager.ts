@@ -33,6 +33,11 @@ export class MissionManager {
   };
 
   private isCancelled = false;
+  /** The last streamed (MISSION_REQUEST_LIST) read got everything the vehicle reported: its count was reached, or
+   *  it reported none. False after a timeout or cancel, whose (possibly empty) result is partial. */
+  private lastLegacyComplete = false;
+  /** The last fetchRally read the vehicle's rally points completely. An empty list is only "none" when true. */
+  public lastRallyReadOk = false;
   private legacyAbort: (() => void) | null = null;
   private messageClearTimer: any = null;
   private listeners: Set<(isFetching: boolean, count?: number, method?: string, status?: MissionManagerStatus) => void> = new Set();
@@ -372,8 +377,19 @@ export class MissionManager {
     items: MissionItemIntData[],
     targetSys?: number,
     targetComp?: number
-  ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: MissionWaypoint[]; error?: string }> {
-    return this.uploadAndReadBack('mission', 0, items, (sys, comp) => this.fetchWaypoints(sys, comp), targetSys, targetComp);
+  ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: MissionWaypoint[]; readOk: boolean; error?: string }> {
+    // A mission always reads back at least home, so an empty read-back already means the read failed.
+    return this.uploadAndReadBack(
+      'mission',
+      0,
+      items,
+      async (sys, comp) => {
+        const wps = await this.fetchWaypoints(sys, comp);
+        return { items: wps, ok: wps.length > 0 };
+      },
+      targetSys,
+      targetComp
+    );
   }
 
   /**
@@ -384,21 +400,31 @@ export class MissionManager {
     items: MissionItemIntData[],
     targetSys?: number,
     targetComp?: number
-  ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: RallyPoint[]; error?: string }> {
-    return this.uploadAndReadBack('rally', 2, items, (sys, comp) => this.fetchRally(sys, comp), targetSys, targetComp);
+  ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: RallyPoint[]; readOk: boolean; error?: string }> {
+    return this.uploadAndReadBack(
+      'rally',
+      2,
+      items,
+      async (sys, comp) => {
+        const points = await this.fetchRally(sys, comp);
+        return { items: points, ok: this.lastRallyReadOk };
+      },
+      targetSys,
+      targetComp
+    );
   }
 
   private async uploadAndReadBack<T>(
     type: 'mission' | 'rally',
     missionType: number,
     items: MissionItemIntData[],
-    read: (sysId: number, compId: number) => Promise<T[]>,
+    read: (sysId: number, compId: number) => Promise<{ items: T[]; ok: boolean }>,
     targetSys?: number,
     targetComp?: number
-  ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: T[]; error?: string }> {
+  ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: T[]; readOk: boolean; error?: string }> {
     const name = type === 'mission' ? 'Mission' : 'Rally points';
     if (this.status.isFetching || this.status.isUploading) {
-      return { success: false, method: 'legacy', readBack: [], error: 'A mission transfer is already in progress.' };
+      return { success: false, method: 'legacy', readBack: [], readOk: false, error: 'A mission transfer is already in progress.' };
     }
     const hb = useTelemetryStore.getState().heartbeat;
     const sysId = targetSys ?? (hb.systemId > 0 ? hb.systemId : 1);
@@ -410,7 +436,7 @@ export class MissionManager {
       if (!res.success) {
         this.setStatus({ message: res.error || `${name} upload failed.` });
         this.scheduleMessageClear(8000);
-        return { success: false, method: res.method, readBack: [], error: res.error };
+        return { success: false, method: res.method, readBack: [], readOk: false, error: res.error };
       }
 
       this.setStatus({
@@ -420,20 +446,20 @@ export class MissionManager {
         uploadProgress: undefined,
         message: `Reading the ${type === 'mission' ? 'mission' : 'rally points'} back from the vehicle...`,
       });
-      const readBack = await read(sysId, compId);
-      if (readBack.length === 0 && items.length > 0) {
-        // The read failed (a failed stream leaves the list empty). The vehicle acknowledged the upload, so keep
-        // showing what was uploaded rather than nothing.
+      const { items: readBack, ok: readOk } = await read(sysId, compId);
+      if (!readOk) {
+        // The read failed. The vehicle acknowledged the upload, so keep showing what was uploaded rather than a
+        // partial list or nothing.
         this.updateStoreItems(type, items);
       }
       if (type === 'mission') this.setStatus({ waypointCount: readBack.length });
       else this.setStatus({ rallyCount: readBack.length });
-      return { success: true, method: res.method, readBack };
+      return { success: true, method: res.method, readBack, readOk };
     } catch (err: any) {
       const error = `${name} upload failed: ${err?.message || err}`;
       this.setStatus({ message: error });
       this.scheduleMessageClear(8000);
-      return { success: false, method: 'legacy', readBack: [], error };
+      return { success: false, method: 'legacy', readBack: [], readOk: false, error };
     } finally {
       // Whatever happened, the transfer is over: never leave the map stuck "in progress".
       this.setStatus({ isUploading: false, isFetching: false, method: 'idle', uploadProgress: undefined });
@@ -551,6 +577,7 @@ export class MissionManager {
   public fetchLegacyItems(missionType: number, targetSys: number, targetComp: number, timeoutMs = 2000): Promise<any[]> {
     if (this.isCancelled) return Promise.resolve([]);
 
+    this.lastLegacyComplete = false;
     return new Promise((resolve) => {
       let isDone = false;
       let expectedCount = 0;
@@ -622,6 +649,7 @@ export class MissionManager {
           if (expectedCount === 0) {
             const ack = encoder.createMissionAck(targetSys, targetComp, 0, missionType);
             mavlinkConnection.send(ack);
+            this.lastLegacyComplete = true;
             finish([]);
             return;
           }
@@ -658,6 +686,7 @@ export class MissionManager {
             console.log(`[MissionManager] Successfully streamed all ${items.length} items for mission_type=${missionType}`);
             const ack = encoder.createMissionAck(targetSys, targetComp, 0, missionType);
             mavlinkConnection.send(ack);
+            this.lastLegacyComplete = true;
             finish(items);
           } else {
             // Find next missing sequence number
@@ -823,6 +852,7 @@ export class MissionManager {
    * Fetches rally points (MAVFTP -> fallback sequential stream)
    */
   public async fetchRally(sysId: number, compId: number): Promise<RallyPoint[]> {
+    this.lastRallyReadOk = false;
     if (this.isCancelled) return [];
     this.setStatus({ message: 'Checking rally points via MAVFTP (@MISSION/rally.dat)...' });
 
@@ -849,6 +879,7 @@ export class MissionManager {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} rally points via MAVFTP!`);
           useTelemetryStore.setState({ rallyPoints: unpacked });
           this.setStatus({ rallyCount: unpacked.length });
+          this.lastRallyReadOk = true;
           return unpacked;
         }
       }
@@ -873,8 +904,15 @@ export class MissionManager {
     }));
 
     rallyPoints.sort((a, b) => a.seq - b.seq);
+    if (!this.lastLegacyComplete) {
+      // Timed out or cancelled: what arrived (maybe nothing) is not the vehicle's list. Keep the rally points the map
+      // already shows rather than replacing them with a partial or empty one.
+      console.warn('[MissionManager] Rally point stream incomplete; keeping the rally points already known.');
+      return rallyPoints;
+    }
     useTelemetryStore.setState({ rallyPoints });
     this.setStatus({ rallyCount: rallyPoints.length });
+    this.lastRallyReadOk = true;
     return rallyPoints;
   }
 

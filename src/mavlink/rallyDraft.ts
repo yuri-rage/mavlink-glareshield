@@ -241,12 +241,17 @@ export interface RallyReadBackCheck {
 
 /**
  * Judge a rally upload by what the vehicle sent back. Unlike a mission (which always reads back home), no rally
- * points is a valid answer, but only when none were uploaded.
+ * points is a valid answer, but only when none were uploaded and the read completed (`readOk`).
  */
-export function checkRallyReadBack(uploaded: RallyDraft, readBack: RallyPoint[]): RallyReadBackCheck {
+export function checkRallyReadBack(uploaded: RallyDraft, readBack: RallyPoint[], readOk = true): RallyReadBackCheck {
   const vehicle = rallyDraftFromPoints(readBack);
   const differences = compareRallyDrafts(uploaded, vehicle);
+  // A failed read can't verify anything, even an upload of no points (its empty result proves nothing).
   const status =
-    readBack.length === 0 && uploaded.points.length > 0 ? 'unreadable' : differences.length > 0 ? 'mismatch' : 'verified';
+    !readOk || (readBack.length === 0 && uploaded.points.length > 0)
+      ? 'unreadable'
+      : differences.length > 0
+        ? 'mismatch'
+        : 'verified';
   return { status, vehicle, differences };
 }

@@ -135,6 +135,7 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
       >
         <MapPinPlus className="h-3.5 w-3.5 text-fuchsia-400" />
         Place rally point here
+        <span className="ml-auto pl-2 text-[10px] text-zinc-500">after {sel !== null ? `R${sel + 1}` : 'last'}</span>
       </button>
     );
   } else if (target.kind === 'item' && target.layer === 'rally') {
