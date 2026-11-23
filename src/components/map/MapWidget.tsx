@@ -1,5 +1,5 @@
 import 'leaflet/dist/leaflet.css';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTelemetryStore, sendTrackedCommand, computeDistanceAndBearing } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { messageRateManager } from '../../mavlink/rateManager';
@@ -276,22 +276,21 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   /** The map card fills the window (planning on a small map). */
   // Planning resumed after a reload comes back maximized or not, as it was left.
   const [maximized, setMaximized] = useState(() => useMissionPlanStore.getState().active && readFlag(PLAN_MAXIMIZED_NOW_KEY, false));
-  // The maximized map starts below the navbar, which stays in view with its telemetry. Measured, since the navbar
-  // wraps to more rows on a narrow screen, and kept up to date while maximized.
-  const [navBottom, setNavBottom] = useState(0);
-  useEffect(() => {
+  // The maximized map starts below the navbar, which stays in view with its telemetry. The navbar is sticky at the
+  // top, so its height is the offset: unlike its on-screen position, that doesn't move with scrolling, pinch-zoom or
+  // a mobile address bar. Measured before paint (no frame drawn under the navbar), and again when the navbar
+  // changes height (it wraps to more rows on a narrow screen).
+  const navHeight = () => document.getElementById('app-navbar')?.offsetHeight ?? 0;
+  const [navBottom, setNavBottom] = useState(navHeight);
+  useLayoutEffect(() => {
     if (!maximized) return;
     const nav = document.getElementById('app-navbar');
     if (!nav) return;
-    const update = () => setNavBottom(Math.max(0, Math.round(nav.getBoundingClientRect().bottom)));
+    const update = () => setNavBottom(nav.offsetHeight);
     update();
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
     ro?.observe(nav);
-    window.addEventListener('resize', update);
-    return () => {
-      ro?.disconnect();
-      window.removeEventListener('resize', update);
-    };
+    return () => ro?.disconnect();
   }, [maximized]);
 
   /** The map is maximized only because it is too small to edit in place, not by preference. */
@@ -1992,12 +1991,19 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
         {/* Top-left column: the GPS readout (decoupled from the bottom Leaflet attribution), and while planning the map
             tools, hint and notices stacked below it, so neither covers the other. Kept clear of the side panel. */}
+        {/* With the bottom sheet, the column sits under the sheet (z-450) so the editor always wins if they meet,
+            and the readout keeps to one line so the column stays short: clipped at the column's width, lat/lon/alt
+            first, so only the home vector at the end gives way on the narrowest maps. */}
         <div
-          className={`absolute top-2 left-2 z-[460] flex flex-col items-start gap-1.5 pointer-events-none ${
-            planning && planLayout === 'side' ? 'max-w-[calc(100%-288px)]' : 'max-w-[calc(100%-1rem)]'
-          }`}
+          className={`absolute top-2 left-2 flex flex-col items-start gap-1.5 pointer-events-none ${
+            planning && planLayout === 'sheet' ? 'z-[440]' : 'z-[460]'
+          } ${planning && planLayout === 'side' ? 'max-w-[calc(100%-288px)]' : 'max-w-[calc(100%-1rem)]'}`}
         >
-          <div className="bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs font-mono text-zinc-300 flex flex-wrap items-center gap-2.5 pointer-events-none shadow-md">
+          <div
+            className={`bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs font-mono text-zinc-300 flex items-center gap-2.5 pointer-events-none shadow-md ${
+              planning && planLayout === 'sheet' ? 'max-w-full flex-nowrap overflow-hidden whitespace-nowrap' : 'flex-wrap'
+            }`}
+          >
             <span>
               Lat: <b className="text-sky-400">{hasValidPosition ? position.lat.toFixed(6) : '--'}</b>
             </span>
