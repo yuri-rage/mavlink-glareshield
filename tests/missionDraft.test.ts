@@ -44,6 +44,13 @@ const base = d.draftFromWaypoints(waypoints as any);
 // ------------------------------------------------------------------------------------------------
 check('from waypoints: sorted by seq, home first', cmds(base) === '16,22,16,16,177,21', cmds(base));
 check('from waypoints: missing params become 0, autocontinue 1', base.items[2].param2 === 0 && base.items[2].autocontinue === 1);
+check('file numbered from 1: a home is added, so the first item is kept', (() => {
+  const f = d.draftFromItems([
+    { seq: 1, command: 22, frame: 3, x: 0, y: 0, z: 20 },
+    { seq: 2, command: 16, frame: 3, x: 35.1, y: -106.1, z: 40 },
+  ] as any);
+  return f.items.length === 3 && f.items[1].command === 22 && f.items[2].x === 35.1;
+})());
 check('empty mission: home alone, at the given home', (() => {
   const e = d.draftFromWaypoints([], { lat: 1, lon: 2, alt: 3 });
   return e.items.length === 1 && e.items[0].x === 1 && e.items[0].y === 2 && e.items[0].z === 3;

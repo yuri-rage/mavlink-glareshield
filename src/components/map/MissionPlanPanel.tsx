@@ -78,12 +78,14 @@ interface MissionPlanPanelProps {
 }
 
 /**
- * The value to commit when a number field loses focus, or null for none. Only a change to the text counts: the
- * text shown is rounded (altitude to 0.1 m or whole feet, positions to 7 digits), so comparing it with the exact
- * value would commit the rounding when a field is merely tabbed through.
+ * The value to commit when a number field loses focus, or null for none. Only something the user typed counts:
+ * - not typed at all: nothing, even if the value changed meanwhile (a pin dragged while the field had focus must
+ *   not be overwritten by the old text);
+ * - typed back to what is shown: nothing (the text is rounded, so comparing with the exact value would commit the
+ *   rounding).
  */
-export function typedValue(text: string, shown: string): number | null {
-  if (text.trim() === shown) return null;
+export function typedValue(text: string, shown: string, typed: boolean): number | null {
+  if (!typed || text.trim() === shown) return null;
   const v = parseFloat(text);
   return Number.isFinite(v) ? v : null;
 }
@@ -98,13 +100,14 @@ const NumField: React.FC<{
 }> = ({ label, value, onCommit, digits, title }) => {
   const shown = digits !== undefined ? Number(value.toFixed(digits)).toString() : String(Number(value.toPrecision(7)));
   const [text, setText] = useState(shown);
-  const editing = useRef(false);
+  /** The user has typed since focusing. Until then the field follows the draft, even while focused. */
+  const typed = useRef(false);
   useEffect(() => {
-    if (!editing.current) setText(shown);
+    if (!typed.current) setText(shown);
   }, [shown]);
   const commit = () => {
-    editing.current = false;
-    const v = typedValue(text, shown);
+    const v = typedValue(text, shown, typed.current);
+    typed.current = false;
     if (v !== null) onCommit(v);
     // Show the draft's value again: the new one once the edit lands, the old one if it was refused.
     setText(shown);
@@ -116,13 +119,21 @@ const NumField: React.FC<{
         type="text"
         inputMode="decimal"
         value={text}
-        onFocus={() => (editing.current = true)}
-        onChange={(e) => setText(e.target.value)}
+        onFocus={() => (typed.current = false)}
+        onChange={(e) => {
+          typed.current = true;
+          setText(e.target.value);
+        }}
         onBlur={commit}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Enter') {
+            e.stopPropagation();
+            (e.target as HTMLInputElement).blur();
+          }
           if (e.key === 'Escape') {
-            editing.current = false;
+            // Cancel the typing only; don't also leave the Place tool or the maximized map.
+            e.stopPropagation();
+            typed.current = false;
             setText(shown);
             (e.target as HTMLInputElement).blur();
           }

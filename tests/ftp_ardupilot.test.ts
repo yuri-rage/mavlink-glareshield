@@ -340,6 +340,14 @@ for (const loss of [0.1, 0.2]) {
 
   check('draft upload: nothing read back is unreadable, not verified', d.checkReadBack(draft, []).status === 'unreadable');
 
+  // Clearing the mission: ArduPilot keeps home as item 0, so a home-only upload reads back as one item and verifies.
+  const homeOnly = d.draftFromItems([{ seq: 0, command: 16, frame: 0, x: 37.7749, y: -122.4194, z: 10 }]);
+  new ArduPilotFtpSim().install();
+  const cleared = await missionManager.uploadMissionAndReadBack(d.draftToItems(homeOnly), 1, 1);
+  await sleep(50);
+  check('clearing the mission (home only) reads back home and verifies', cleared.success && cleared.readBack.length === 1 && d.checkReadBack(homeOnly, cleared.readBack).status === 'verified',
+    `${cleared.readBack.length} ${d.checkReadBack(homeOnly, cleared.readBack).status}`);
+
   // Review fixes: a failed read keeps the uploaded mission on the map; a throw never leaves a transfer stuck.
   const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
   let last: any = null;

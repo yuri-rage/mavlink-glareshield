@@ -702,7 +702,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       openFlyToPrompt(e.latlng.lat, e.latlng.lng);
     });
     // The menu is anchored to a point on the screen: moving the map would leave it pointing at the wrong place.
-    map.on('movestart zoomstart', () => setPlanMenu(null));
+    map.on('movestart zoomstart resize', () => setPlanMenu(null));
 
     // Left-click picks the point while the Fly To button is armed
     map.on('click', (e: L.LeafletMouseEvent) => {
@@ -791,16 +791,27 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const startPlanning = () => {
     setFlyToMode(false);
     setPendingFlyTo(null);
-    setFollowVehicle(false);
-    followVehicleRef.current = false;
-    // Too small to edit in place (narrow, or a sheet with no room for the list): plan in the maximized map.
-    const area = mapAreaRef.current;
-    const w = area?.clientWidth ?? 0;
-    const h = area?.clientHeight ?? 0;
-    if (w < 360 || (w < 560 && h < 520)) setMaximized(true);
     const s = useTelemetryStore.getState();
     useMissionPlanStore.getState().start(vehicleDraft(), s.missionWaypoints.length > 0 ? { kind: 'vehicle' } : { kind: 'empty' });
   };
+
+  // Entering planning, from the menu or resumed after a reload: stop following the vehicle (it would pan the map away
+  // from the draft) and, on a map too small to edit in place (narrow, or a sheet with no room for the list), plan in
+  // the maximized map. Once per entry, after the map area has a size; following can be turned back on by hand.
+  const planEnteredRef = useRef(false);
+  useEffect(() => {
+    if (!planning) {
+      planEnteredRef.current = false;
+      return;
+    }
+    if (planEnteredRef.current || mapAreaWidth === 0) return;
+    planEnteredRef.current = true;
+    setFlyToMode(false);
+    setFollowVehicle(false);
+    followVehicleRef.current = false;
+    const h = mapAreaRef.current?.clientHeight ?? 0;
+    if (mapAreaWidth < 360 || (mapAreaWidth < 560 && h < 520)) setMaximized(true);
+  }, [planning, mapAreaWidth]);
 
   const stopPlanning = () => {
     setPlanMenu(null);
@@ -1692,7 +1703,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             {planning && (
               <Badge variant="warning" className="text-[10px] font-bold px-1.5 py-0.5 shrink-0 gap-1 tracking-wider" title={planDirty ? 'Planning: unsaved changes' : 'Planning'}>
                 PLANNING
-                {planDirty && <span className="h-1.5 w-1.5 rounded-full bg-amber-200" />}
+                {/* The badge's own text colour: visible on its dark (night) and light amber (daylight) background. */}
+                {planDirty && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
               </Badge>
             )}
             {!hideBadges && !planning && (

@@ -98,8 +98,12 @@ function homeItem(home?: { lat: number; lon: number; alt: number }): DraftItem {
 export function draftFromItems(items: MissionItemIntData[], home?: { lat: number; lon: number; alt: number }): MissionDraft {
   if (items.length === 0) return { items: [homeItem(home)] };
   const sorted = [...items].sort((a, b) => a.seq - b.seq);
+  // A file numbered from 1 has no home line: give it one, so its first item isn't taken for home.
+  const head = sorted[0].seq === 0 ? [] : [homeItem(home)];
   return {
-    items: sorted.map((it) => ({
+    items: [
+      ...head,
+      ...sorted.map((it) => ({
       command: it.command,
       frame: finiteOr(it.frame, cmdHasLocation(it.command) ? MAV_FRAME.GLOBAL_RELATIVE_ALT : MAV_FRAME.MISSION),
       param1: finiteOr(it.param1, 0),
@@ -110,7 +114,8 @@ export function draftFromItems(items: MissionItemIntData[], home?: { lat: number
       y: finiteOr(it.y, 0),
       z: finiteOr(it.z, 0),
       autocontinue: typeof it.autocontinue === 'boolean' ? (it.autocontinue ? 1 : 0) : finiteOr(it.autocontinue, 1),
-    })),
+      })),
+    ],
   };
 }
 

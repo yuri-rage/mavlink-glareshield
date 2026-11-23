@@ -68,24 +68,30 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
   }, [draft, onClose]);
 
   // A click outside closes the menu and goes no further: with the Place tool on, the click that dismisses the menu
-  // must not also drop a waypoint. Clicks just after opening are the end of the long-press that opened it (touch):
-  // swallowed, but the menu stays.
+  // must not also drop a waypoint. The one exception is the click that ends the long-press that opened the menu
+  // (touch): its press began before the menu existed, so it is swallowed and the menu stays. Any click whose press
+  // starts after the menu opened closes it, however quickly.
   useEffect(() => {
     if (missing) return;
-    const openedAt = performance.now();
+    let pressedSinceOpen = false;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
+    };
+    const onDown = () => {
+      pressedSinceOpen = true;
     };
     const onClick = (e: MouseEvent) => {
       if (ref.current?.contains(e.target as Node)) return;
       e.preventDefault();
       e.stopPropagation();
-      if (performance.now() - openedAt > 500) onClose();
+      if (pressedSinceOpen) onClose();
     };
     document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onDown, true);
     document.addEventListener('click', onClick, true);
     return () => {
       document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onDown, true);
       document.removeEventListener('click', onClick, true);
     };
   }, [onClose, missing]);
