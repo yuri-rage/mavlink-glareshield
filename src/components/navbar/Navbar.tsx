@@ -404,7 +404,7 @@ export const Navbar: React.FC = () => {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md">
+      <header id="app-navbar" className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md">
         {/* Top Row: Brand, Arm/Mode Flyouts, Link Rate, Settings Gear & Connection Pill */}
         {/* Wraps rather than overlapping if a long mode name or label ever outgrows the row. */}
         <div className="px-2.5 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-y-2 gap-x-2 sm:gap-x-3 max-w-full">
