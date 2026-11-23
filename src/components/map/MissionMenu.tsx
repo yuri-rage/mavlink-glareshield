@@ -2,7 +2,7 @@
 // upload, and save what the map shows to files.
 
 import React, { useRef } from 'react';
-import { Download, FileJson, Flag, FolderOpen, RefreshCw, Route, Shield, X } from 'lucide-react';
+import { Download, FileJson, Flag, FolderOpen, PencilRuler, RefreshCw, Route, Shield, X } from 'lucide-react';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { missionFileStem, toQgcPlan, toQgcWpl, waypointsToItems, fenceToItems, rallyToItems } from '../../mavlink/missionFileWriter';
 import { HeaderMenu, MenuItem, MenuSection } from './HeaderMenu';
@@ -16,6 +16,9 @@ interface MissionMenuProps {
   onCancelFetch: () => void;
   /** A file the person picked to upload; it goes through the same preview as a dropped file. */
   onOpenFile: (file: File) => void;
+  /** Planning mode is on: opened files go into the draft instead of being uploaded. */
+  planning: boolean;
+  onTogglePlanning: () => void;
 }
 
 /** File types the upload preview understands. */
@@ -23,7 +26,16 @@ const OPEN_ACCEPT = '.plan,.waypoints,.txt,.fence,.rally,.dat,.json';
 
 const saveText = (filename: string, text: string, type: string) => downloadFile(filename, text, type);
 
-export const MissionMenu: React.FC<MissionMenuProps> = ({ connected, isFetching, isUploading, onFetch, onCancelFetch, onOpenFile }) => {
+export const MissionMenu: React.FC<MissionMenuProps> = ({
+  connected,
+  isFetching,
+  isUploading,
+  onFetch,
+  onCancelFetch,
+  onOpenFile,
+  planning,
+  onTogglePlanning,
+}) => {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const waypoints = useTelemetryStore((s) => s.missionWaypoints);
@@ -87,12 +99,27 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({ connected, isFetching,
                 onClick={run(onFetch)}
               />
             )}
+            {planning ? (
+              <MenuItem
+                icon={<FolderOpen className="h-3.5 w-3.5 text-sky-400" />}
+                label="Open file into draft…"
+                onClick={run(() => fileRef.current?.click())}
+              />
+            ) : (
+              <MenuItem
+                icon={<FolderOpen className="h-3.5 w-3.5 text-sky-400" />}
+                label="Upload from file…"
+                detail={connected ? undefined : 'offline'}
+                disabled={!connected || busy}
+                onClick={run(() => fileRef.current?.click())}
+              />
+            )}
+
+            <MenuSection label="Plan" />
             <MenuItem
-              icon={<FolderOpen className="h-3.5 w-3.5 text-sky-400" />}
-              label="Upload from file…"
-              detail={connected ? undefined : 'offline'}
-              disabled={!connected || busy}
-              onClick={run(() => fileRef.current?.click())}
+              icon={<PencilRuler className="h-3.5 w-3.5 text-amber-400" />}
+              label={planning ? 'Stop editing' : 'Edit mission on map'}
+              onClick={run(onTogglePlanning)}
             />
 
             <MenuSection label="Save to file" />

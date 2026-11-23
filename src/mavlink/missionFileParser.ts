@@ -186,27 +186,26 @@ export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; item
     if (obj.mission && Array.isArray(obj.mission.items) && obj.mission.items.length > 0) {
       const missionItems: MissionItemIntData[] = [];
 
-      // If planned home position exists, add as seq 0
-      if (obj.mission.plannedHomePosition && Array.isArray(obj.mission.plannedHomePosition)) {
-        const [hLat, hLon, hAlt] = obj.mission.plannedHomePosition;
-        if (hLat !== 0 || hLon !== 0) {
-          missionItems.push({
-            seq: 0,
-            command: 16,
-            current: 1,
-            frame: 0,
-            param1: 0,
-            param2: 0,
-            param3: 0,
-            param4: 0,
-            x: hLat,
-            y: hLon,
-            z: hAlt ?? 0,
-            autocontinue: 1,
-            mission_type: 0,
-          });
-        }
-      }
+      // Seq 0 is always home: the planned home position, or a placeholder the vehicle replaces with its own.
+      // Without it the first real item would be numbered 0 and taken for home.
+      const planned = Array.isArray(obj.mission.plannedHomePosition) ? obj.mission.plannedHomePosition : [];
+      const [hLat, hLon, hAlt] = planned;
+      const hasHome = Number.isFinite(hLat) && Number.isFinite(hLon) && (hLat !== 0 || hLon !== 0);
+      missionItems.push({
+        seq: 0,
+        command: 16,
+        current: 1,
+        frame: 0,
+        param1: 0,
+        param2: 0,
+        param3: 0,
+        param4: 0,
+        x: hasHome ? hLat : 0,
+        y: hasHome ? hLon : 0,
+        z: hasHome && Number.isFinite(hAlt) ? hAlt : 0,
+        autocontinue: 1,
+        mission_type: 0,
+      });
 
       for (let i = 0; i < obj.mission.items.length; i++) {
         const rawItem = obj.mission.items[i];

@@ -94,6 +94,10 @@ import { MapMissionFooter } from './MapMissionFooter';
 import { MissionMenu } from './MissionMenu';
 import { MapViewMenu, type MapLayerType } from './MapViewMenu';
 import { FlyToPopover } from './FlyToPopover';
+import { MissionPlanPanel } from './MissionPlanPanel';
+import { useDraftLayer, drawablePosition } from './useDraftLayer';
+import { isDraftDirty, useMissionPlanStore } from '../../store/missionPlanStore';
+import { draftFromItems, draftFromWaypoints, type MissionDraft } from '../../mavlink/missionDraft';
 
 interface MapWidgetProps {
   colSpan?: number;
@@ -224,6 +228,19 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   // Where the picked point sits in the map container, so the fly-to card stays beside it as the map moves.
   const [flyToAnchor, setFlyToAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
 
+  // Planning mode: a mission draft edited over the map (see MissionPlanPanel). Fly-to and the vehicle mission's
+  // popups are off while it is on, so a map click can only ever mean one thing.
+  const planning = useMissionPlanStore((s) => s.active);
+  const planDirty = useMissionPlanStore((s) => s.active && isDraftDirty(s));
+  const planningRef = useRef(planning);
+  planningRef.current = planning;
+  const [mapReady, setMapReady] = useState(false);
+  /** The map card fills the window (planning on a small map). */
+  const [maximized, setMaximized] = useState(false);
+  const mapAreaRef = useRef<HTMLDivElement | null>(null);
+  const [mapAreaWidth, setMapAreaWidth] = useState(0);
+  const [planNotice, setPlanNotice] = useState<string | null>(null);
+
   useEffect(() => {
     flyToModeRef.current = flyToMode;
     if (!flyToMode) return;
@@ -299,7 +316,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     const files = e.dataTransfer.files;
     if (!files || files.length === 0) return;
-    await loadMissionFile(files[0]);
+    if (planningRef.current) await loadFileIntoDraft(files[0]);
+    else await loadMissionFile(files[0]);
   };
 
   /** Parses a dropped or picked flight plan file and shows its preview, ready to upload. */
@@ -499,6 +517,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       // Commands without a location carry plain parameters in lat/lon (gimbal flags, shot numbers): skip them.
       if (cmdHasLocation(w.command) && (w.lat !== 0 || w.lon !== 0)) points.push([w.lat, w.lon]);
     });
+    if (planningRef.current) {
+      useMissionPlanStore.getState().history.present.items.forEach((it) => {
+        if (drawablePosition(it.command, it.x, it.y)) points.push([it.x, it.y]);
+      });
+    }
     fencePoints.forEach((f) => {
       if (f.lat !== 0 || f.lon !== 0) points.push([f.lat, f.lon]);
     });
@@ -660,12 +683,13 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     // Right-click (or long-press on mobile) opens Guided Fly-To-Here prompt
     map.on('contextmenu', (e: L.LeafletMouseEvent) => {
+      if (planningRef.current) return;
       openFlyToPrompt(e.latlng.lat, e.latlng.lng);
     });
 
     // Left-click picks the point while the Fly To button is armed
     map.on('click', (e: L.LeafletMouseEvent) => {
-      if (flyToModeRef.current) {
+      if (flyToModeRef.current && !planningRef.current) {
         openFlyToPrompt(e.latlng.lat, e.latlng.lng);
       }
     });
@@ -709,13 +733,128 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     missionPolylineRef.current = missionPoly;
 
     mapInstanceRef.current = map;
+    setMapReady(true);
 
     return () => {
       saveView();
       map.remove();
       mapInstanceRef.current = null;
+      setMapReady(false);
     };
   }, []);
+
+  useDraftLayer(mapInstanceRef, mapReady);
+
+  const planLayout = mapAreaWidth >= 560 ? 'side' : 'sheet';
+  // Keep the tile attribution clear of the editor. Set on the element directly: Leaflet owns its className.
+  useEffect(() => {
+    const el = mapContainerRef.current;
+    if (!el) return;
+    el.classList.toggle('gs-plan-side', planning && planLayout === 'side');
+    el.classList.toggle('gs-plan-sheet', planning && planLayout === 'sheet');
+  }, [planning, planLayout]);
+
+  // The map area's width picks the editor layout: docked at the side when there's room, a bottom sheet otherwise.
+  useEffect(() => {
+    const el = mapAreaRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setMapAreaWidth(el.clientWidth));
+    ro.observe(el);
+    setMapAreaWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
+  /** The vehicle's mission as a draft, with the known home when the mission has none. */
+  const vehicleDraft = useCallback((): MissionDraft => {
+    const s = useTelemetryStore.getState();
+    const home = s.homePosition.source !== 'none' ? { lat: s.homePosition.lat, lon: s.homePosition.lon, alt: s.homePosition.alt } : undefined;
+    return draftFromWaypoints(s.missionWaypoints, home);
+  }, []);
+
+  const startPlanning = () => {
+    setFlyToMode(false);
+    setPendingFlyTo(null);
+    setFollowVehicle(false);
+    followVehicleRef.current = false;
+    // Too small to edit in place (narrow, or a sheet with no room for the list): plan in the maximized map.
+    const area = mapAreaRef.current;
+    const w = area?.clientWidth ?? 0;
+    const h = area?.clientHeight ?? 0;
+    if (w < 360 || (w < 560 && h < 520)) setMaximized(true);
+    const s = useTelemetryStore.getState();
+    useMissionPlanStore.getState().start(vehicleDraft(), s.missionWaypoints.length > 0 ? { kind: 'vehicle' } : { kind: 'empty' });
+  };
+
+  const stopPlanning = () => {
+    useMissionPlanStore.getState().stop();
+    setMaximized(false);
+    setPlanNotice(null);
+  };
+
+  // While the draft has no changes it follows the vehicle's mission (a download, or another GCS's upload). With
+  // changes it is left alone.
+  useEffect(() => {
+    if (!planning) return;
+    const st = useMissionPlanStore.getState();
+    if (!isDraftDirty(st)) st.syncFromVehicle(vehicleDraft());
+  }, [planning, missionWaypoints, vehicleDraft]);
+
+  // Closing the tab with unsaved changes: the draft is kept in this browser, but say so.
+  useEffect(() => {
+    if (!planDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [planDirty]);
+
+  // Leaving the maximized view with Escape (planning stays on).
+  useEffect(() => {
+    if (!maximized) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)) setMaximized(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [maximized]);
+
+  const getMapCenter = useCallback(() => {
+    const c = mapInstanceRef.current?.getCenter();
+    return c ? { lat: c.lat, lon: c.lng } : null;
+  }, []);
+
+  /** Pan to a draft item when it is out of view. */
+  const focusDraftItem = useCallback((index: number) => {
+    const map = mapInstanceRef.current;
+    const it = useMissionPlanStore.getState().history.present.items[index];
+    if (!map || !it || !drawablePosition(it.command, it.x, it.y)) return;
+    if (!map.getBounds().pad(-0.15).contains([it.x, it.y])) map.panTo([it.x, it.y], { animate: true, duration: 0.3 });
+  }, []);
+
+  /** A file opened while planning goes into the draft, never straight to the vehicle. Home stays the draft's. */
+  const loadFileIntoDraft = async (file: File) => {
+    try {
+      const parsed = parseDroppedMissionFile(file.name, new Uint8Array(await file.arrayBuffer()));
+      const section = parsed?.sections?.find((sec) => sec.type === 'mission');
+      const items = section?.items ?? (parsed && (parsed.type === 'mission' || parsed.type === 'plan') ? parsed.items : []);
+      if (!items || items.length === 0) {
+        setPlanNotice(`${file.name} has no mission items to edit.`);
+        return;
+      }
+      const fromFile = draftFromItems(items);
+      const current = useMissionPlanStore.getState().history.present;
+      const draft: MissionDraft = { items: [current.items[0] ?? fromFile.items[0], ...fromFile.items.slice(1)] };
+      useMissionPlanStore.getState().replace(draft, { kind: 'file', name: file.name });
+      const skipped = (parsed?.sections ?? []).filter((sec) => sec.type !== 'mission').map((sec) => sec.type);
+      setPlanNotice(skipped.length > 0 ? `Loaded the mission from ${file.name}; its ${skipped.join(' and ')} were not loaded.` : null);
+      const pts = draft.items.filter((it) => drawablePosition(it.command, it.x, it.y)).map((it) => [it.x, it.y] as [number, number]);
+      if (pts.length > 0) mapInstanceRef.current?.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 19 });
+    } catch (err: any) {
+      setPlanNotice(err?.message || `Could not read ${file.name}.`);
+    }
+  };
 
   // Update Tile Layer when layerType changes
   useEffect(() => {
@@ -1146,6 +1285,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     const validWps = missionWaypoints.filter((w) => cmdHasLocation(w.command) && (w.lat !== 0 || w.lon !== 0) && Math.abs(w.lat) <= 90 && Math.abs(w.lon) <= 180);
     const lineCoords: [number, number][] = validWps.map((w) => [w.lat, w.lon]);
     missionPolylineRef.current.setLatLngs(lineCoords);
+    // While planning the vehicle's mission stays visible for comparison, dimmed and not clickable.
+    missionPolylineRef.current.setStyle({ opacity: planning ? 0.35 : 1 });
 
     // Add numbered waypoint markers - Mission Planner vibrant green sharply tapered pin icons
     validWps.forEach((wp) => {
@@ -1177,12 +1318,16 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         icon: wpIcon,
         pane: 'missionMarkersPane',
         zIndexOffset: isHome ? 200 : 100,
-      })
-        .bindPopup(`<b>${isHome ? 'Home Location (WP #0)' : `Waypoint #${wp.seq}`}</b><br/>Cmd: ${wp.command}<br/>Alt: ${wp.alt}m<br/>Lat: ${wp.lat.toFixed(6)}<br/>Lon: ${wp.lon.toFixed(6)}`)
-        .addTo(mapInstanceRef.current!);
+        opacity: planning ? 0.35 : 1,
+        interactive: !planning,
+      });
+      if (!planning) {
+        m.bindPopup(`<b>${isHome ? 'Home Location (WP #0)' : `Waypoint #${wp.seq}`}</b><br/>Cmd: ${wp.command}<br/>Alt: ${wp.alt}m<br/>Lat: ${wp.lat.toFixed(6)}<br/>Lon: ${wp.lon.toFixed(6)}`);
+      }
+      m.addTo(mapInstanceRef.current!);
       missionMarkersRef.current.push(m);
     });
-  }, [missionWaypoints]);
+  }, [missionWaypoints, planning]);
 
   // Update geofence rendering - Mission Planner solid red lines with transparent/dimmed interiors
   useEffect(() => {
@@ -1394,7 +1539,12 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     : 'h-full min-h-[350px] lg:min-h-[480px]';
 
   return (
-    <Card className={`border-zinc-800 bg-zinc-950/90 shadow-lg overflow-hidden flex flex-col w-full ${aspectClass}`}>
+    <Card
+      className={`border-zinc-800 bg-zinc-950/90 shadow-lg overflow-hidden flex flex-col w-full ${
+        // Above the navbar (z-40), below dialogs (z-50) so they still open on top.
+        maximized ? 'fixed inset-0 z-[45] rounded-none h-[100dvh]' : aspectClass
+      }`}
+    >
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <div ref={headerRef} className="flex items-center justify-between gap-1.5 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
@@ -1411,7 +1561,13 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                 {missionStatus.method === 'ftp' ? 'MAVFTP' : 'STREAM'}
               </Badge>
             )}
-            {!hideBadges && (
+            {planning && (
+              <Badge variant="warning" className="text-[10px] font-bold px-1.5 py-0.5 shrink-0 gap-1 tracking-wider" title={planDirty ? 'Planning: unsaved changes' : 'Planning'}>
+                PLANNING
+                {planDirty && <span className="h-1.5 w-1.5 rounded-full bg-amber-200" />}
+              </Badge>
+            )}
+            {!hideBadges && !planning && (
               <div className="flex items-center gap-1.5 min-w-0">
                 {userWpCount > 0 && (
                   <Badge variant="warning" className="text-[10px] font-mono px-1.5 py-0.5 shrink-0">
@@ -1436,12 +1592,14 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             <Button
               variant={flyToMode ? 'default' : 'outline'}
               size="sm"
-              disabled={!connected}
+              disabled={!connected || planning}
               onClick={() => setFlyToMode((v) => !v)}
               aria-pressed={flyToMode}
               className={`h-7 w-7 p-0 ${flyToMode ? 'bg-sky-500 text-white ring-2 ring-sky-300' : 'text-zinc-300 hover:text-white disabled:opacity-40'}`}
               title={
-                connected
+                planning
+                  ? 'Fly To is off while planning'
+                  : connected
                   ? flyToMode
                     ? 'Pick a point on the map (Esc to cancel)'
                     : 'Fly to a point: click here, then the map. Right-click or long-press the map works too.'
@@ -1498,7 +1656,15 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               isUploading={Boolean(missionStatus.isUploading)}
               onFetch={handleFetchMission}
               onCancelFetch={() => missionManager.cancelFetch()}
-              onOpenFile={loadMissionFile}
+              onOpenFile={planning ? loadFileIntoDraft : loadMissionFile}
+              planning={planning}
+              onTogglePlanning={
+                planning
+                  ? () => {
+                      if (!planDirty || window.confirm('Discard the unsaved mission draft?')) stopPlanning();
+                    }
+                  : startPlanning
+              }
             />
           </div>
         </div>
@@ -1529,6 +1695,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       )}
 
       <CardContent
+        ref={mapAreaRef}
         className="p-0 flex-1 relative min-h-[300px] h-full overflow-hidden"
         onDragEnter={(e) => {
           e.preventDefault();
@@ -1557,20 +1724,24 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               <Upload className="h-8 w-8" />
             </div>
             <div className="text-base font-bold text-white mb-1">
-              Drop Mission, Geofence, or Rally Point File
+              {planning ? 'Drop a Mission File into the Draft' : 'Drop Mission, Geofence, or Rally Point File'}
             </div>
             <div className="text-xs text-zinc-400 max-w-sm">
               Supports <span className="text-sky-300 font-mono">.waypoints</span>,{' '}
               <span className="text-sky-300 font-mono">.fence</span>,{' '}
               <span className="text-sky-300 font-mono">.rally</span>,{' '}
               <span className="text-sky-300 font-mono">.plan</span>, or binary{' '}
-              <span className="text-sky-300 font-mono">.dat</span>. Automatically uploads via high-speed MAVFTP with item-by-item fallback.
+              <span className="text-sky-300 font-mono">.dat</span>.{' '}
+              {planning
+                ? 'Its mission replaces the draft (undo brings the draft back). Nothing is sent to the vehicle.'
+                : 'Automatically uploads via high-speed MAVFTP with item-by-item fallback.'}
             </div>
           </div>
         )}
 
-        {/* GPS Coordinate readout HUD overlay in top-left (decoupled from bottom Leaflet attribution) */}
-        <div className="absolute top-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs font-mono text-zinc-300 flex flex-wrap items-center gap-2.5 pointer-events-none shadow-md">
+        {/* GPS Coordinate readout HUD overlay in top-left (decoupled from bottom Leaflet attribution); the planning
+            editor needs the room. */}
+        <div hidden={planning} className="absolute top-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs font-mono text-zinc-300 flex flex-wrap items-center gap-2.5 pointer-events-none shadow-md">
           <span>
             Lat: <b className="text-sky-400">{hasValidPosition ? position.lat.toFixed(6) : '--'}</b>
           </span>
@@ -1633,6 +1804,30 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             accuracyM={pendingFlyTo.accuracyM}
             onSend={handleConfirmFlyTo}
             onCancel={cancelFlyTo}
+          />
+        )}
+
+        {planning && planNotice && (
+          <div className="absolute top-2 left-2 z-[460] max-w-[min(420px,calc(100%-1rem))] rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md flex items-start gap-2">
+            <span className="min-w-0">{planNotice}</span>
+            <button type="button" className="text-zinc-500 hover:text-zinc-200" onClick={() => setPlanNotice(null)} aria-label="Dismiss">
+              ×
+            </button>
+          </div>
+        )}
+        {planning && (
+          <MissionPlanPanel
+            layout={planLayout}
+            maximized={maximized}
+            onToggleMaximize={() => setMaximized((v) => !v)}
+            getMapCenter={getMapCenter}
+            onFocusItem={focusDraftItem}
+            onOpenFile={loadFileIntoDraft}
+            onResetToVehicle={() => {
+              useMissionPlanStore.getState().resetToVehicle(vehicleDraft());
+              setPlanNotice(null);
+            }}
+            onExit={stopPlanning}
           />
         )}
       </CardContent>

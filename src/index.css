@@ -307,3 +307,12 @@ html.daylight-theme .leaflet-popup-tip {
 body.leaflet-dragging .leaflet-container.gs-map.leaflet-grab {
   cursor: grabbing;
 }
+
+/* Planning mode: keep the map attribution visible beside the side panel, or above the bottom sheet. */
+.leaflet-container.gs-map.gs-plan-side .leaflet-control-attribution {
+  margin-right: 272px;
+}
+.leaflet-container.gs-map.gs-plan-sheet .leaflet-bottom.leaflet-right {
+  top: 0;
+  bottom: auto;
+}
