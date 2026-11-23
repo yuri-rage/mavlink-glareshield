@@ -465,6 +465,8 @@ export class MavFtpClient {
                   0,
                 );
                 mavlinkConnection.send(termMsg);
+                // Cancel the open's own timeout first: firing during the 80 ms pause it would send a duplicate open.
+                if (stepTimer) clearTimeout(stepTimer);
                 setTimeout(() => {
                   if (!isDone) openFile();
                 }, 80);
@@ -870,6 +872,8 @@ export class MavFtpClient {
                   `[MAVFTP] CreateFile Nack (code=${errCode}) for ${filePath}, resetting sessions and retrying (attempt ${createResets + 1})...`,
                 );
                 mavlinkConnection.send(packFtpMessage(sysId, compId, this.nextSeq(), 0, FTP_OPCODE.ResetSessions, 0, 0));
+                // Cancel the create's own timeout first: firing during the 80 ms pause it would send a duplicate create.
+                if (stepTimer) clearTimeout(stepTimer);
                 setTimeout(() => {
                   if (!isDone) createFile();
                 }, 80);
