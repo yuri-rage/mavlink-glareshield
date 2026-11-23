@@ -57,8 +57,9 @@ const PointEditor: React.FC<{
       <div className="grid grid-cols-2 gap-1.5">
         <NumField
           label={`Altitude (${imperial ? 'ft' : 'm'})`}
+          title="ArduPilot keeps rally altitudes in whole metres"
           value={imperial ? p.alt * FT_PER_M : p.alt}
-          digits={imperial ? 0 : 1}
+          digits={0}
           onCommit={(v) => set({ alt: imperial ? v / FT_PER_M : v })}
         />
         <label className="block min-w-0 space-y-0.5">

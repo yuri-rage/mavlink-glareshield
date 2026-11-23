@@ -9,7 +9,7 @@ import { HeaderMenu, MenuItem, MenuSection } from './HeaderMenu';
 import { downloadFile } from '../../lib/download';
 import { useMissionPlanStore } from '../../store/missionPlanStore';
 import type { MissionWaypoint } from '../../store/telemetryStore';
-import type { MissionDraft } from '../../mavlink/missionDraft';
+import { normalFrame, type MissionDraft } from '../../mavlink/missionDraft';
 import { rallyDraftToPoints } from '../../mavlink/rallyDraft';
 
 /** The draft as mission waypoints, for the file writers. */
@@ -77,6 +77,19 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
   const stem = () => `${missionFileStem(useTelemetryStore.getState().heartbeat.systemId)}${draft ? '-draft' : ''}`;
 
   const savePlan = () => {
+    // A QGC .plan stores rally points as [lat, lon, alt] with no frame: loaded back, every one is relative to home.
+    // Say so before saving one that isn't; the .waypoints export keeps the frame.
+    const notRelative = rallyPoints.filter((r) => normalFrame(r.frame ?? 3) !== 3).map((r) => `R${r.seq + 1}`);
+    if (
+      notRelative.length > 0 &&
+      !window.confirm(
+        `A .plan file stores rally altitudes relative to home only. ${notRelative.join(', ')} ${
+          notRelative.length === 1 ? 'uses' : 'use'
+        } another altitude frame and would come back relative to home. Save the .plan anyway? (Rally points (.waypoints) keeps the frame.)`
+      )
+    ) {
+      return;
+    }
     const s = useTelemetryStore.getState();
     const home = s.homePosition.source !== 'none' ? s.homePosition : null;
     const text = toQgcPlan({ waypoints, fencePoints, rallyPoints, home, vehicleType: s.heartbeat.type });

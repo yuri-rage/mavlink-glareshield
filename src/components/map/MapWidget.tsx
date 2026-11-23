@@ -137,6 +137,11 @@ const PLAN_MAXIMIZE_PREF_KEY = 'mavlink_glareshield_plan_maximize';
 const PLAN_MAXIMIZED_NOW_KEY = 'mavlink_glareshield_plan_maximized_now';
 /** That maximize was forced by the map's size (so restoring it isn't a preference), kept across a reload. */
 const PLAN_MAXIMIZE_FORCED_KEY = 'mavlink_glareshield_plan_maximize_forced';
+/** A position worth putting on the map or fitting the view to: finite, in range, not 0,0. */
+function validMapPosition(lat: number, lon: number): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && (lat !== 0 || lon !== 0);
+}
+
 /** Too small to edit in place: narrow, or a bottom sheet with no room for the list. */
 function mapTooSmall(w: number, h: number): boolean {
   return w < 360 || (w < 560 && h < 520);
@@ -612,7 +617,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         if (drawablePosition(it.command, it.x, it.y)) points.push([it.x, it.y]);
       });
       st.rally.history.present.points.forEach((p) => {
-        if (p.lat !== 0 || p.lon !== 0) points.push([p.lat, p.lon]);
+        if (validMapPosition(p.lat, p.lon)) points.push([p.lat, p.lon]);
       });
     }
     fencePoints.forEach((f) => {
@@ -1006,11 +1011,6 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   }, [planning, rallyPoints, missionStatus.isFetching, missionStatus.isUploading, planUploading, vehicleRallyDraft]);
 
   /**
-   * Upload the draft, read the mission back and compare. Only a read-back that matches the route counts: the draft
-   * then becomes what the vehicle holds. Otherwise the draft is kept to fix or retry, compared from now on with the
-   * mission the vehicle actually has.
-   */
-  /**
    * Upload the rally draft, read it back and compare, like the mission: only a matching read-back counts, and the
    * vehicle's copy then becomes the draft. Otherwise the draft is kept to fix or retry.
    */
@@ -1052,6 +1052,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     }
   };
 
+  /**
+   * Upload the draft, read the mission back and compare. Only a read-back that matches the route counts: the draft
+   * then becomes what the vehicle holds. Otherwise the draft is kept to fix or retry, compared from now on with the
+   * mission the vehicle actually has.
+   */
   const uploadDraft = async () => {
     setDraftUploadVehicle(null);
     const st = useMissionPlanStore.getState();
@@ -1194,6 +1199,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       const rallyItems = sections.find((sec) => sec.type === 'rally')?.items ?? [];
       const st = useMissionPlanStore.getState();
       const loaded: string[] = [];
+      const refused: string[] = [];
       const pts: [number, number][] = [];
 
       if (missionItems.length > 0) {
@@ -1203,17 +1209,28 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         if (st.replace(draft, { kind: 'file', name: file.name })) {
           loaded.push('mission');
           draft.items.forEach((it) => drawablePosition(it.command, it.x, it.y) && pts.push([it.x, it.y]));
+        } else {
+          refused.push('mission');
         }
       }
       if (rallyItems.length > 0) {
         const rally = rallyDraftFromItems(rallyItems);
-        if (rally.points.length > 0 && st.rallyReplace(rally)) {
-          loaded.push('rally points');
-          rally.points.forEach((p) => pts.push([p.lat, p.lon]));
+        if (rally.points.length > 0) {
+          if (st.rallyReplace(rally)) {
+            loaded.push('rally points');
+            // Only real positions: a point at 0,0 or out of range would zoom the map out to the whole world.
+            rally.points.forEach((p) => validMapPosition(p.lat, p.lon) && pts.push([p.lat, p.lon]));
+          } else {
+            refused.push('rally points');
+          }
         }
       }
       if (loaded.length === 0) {
-        setPlanNotice(`${file.name} has no mission or rally points to edit.`);
+        setPlanNotice(
+          refused.length > 0
+            ? `${file.name} was not opened: the drafts can't be changed right now.`
+            : `${file.name} has no mission or rally points to edit.`
+        );
         return;
       }
       // Show the layer that was loaded (the mission when both were).
