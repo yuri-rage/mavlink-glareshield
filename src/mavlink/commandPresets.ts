@@ -28,6 +28,11 @@ export interface CommandPreset {
 
 export type PresetWidgetKind = 'button' | 'toggle' | 'slider';
 
+/** The preset kind for a widget display type: toggles and sliders have their own; everything else is a button. */
+export function presetKindFor(displayType: string | undefined): PresetWidgetKind {
+  return displayType === 'toggle-switch' ? 'toggle' : displayType === 'slider-control' ? 'slider' : 'button';
+}
+
 /** Whether a preset is offered on a widget of this kind. Buttons send the params as written, so they get all. */
 export function presetFitsWidget(preset: CommandPreset, kind: PresetWidgetKind): boolean {
   return kind === 'button' || (kind === 'toggle' ? Boolean(preset.toggle) : Boolean(preset.slider));

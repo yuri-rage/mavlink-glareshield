@@ -443,6 +443,9 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
     }));
   check('slider presets: only commands that take the value in param 2', sliders.every((c: any) => c.commandId === 178 || c.commandId === 183) && sliders.length === 2);
   check('button gets every preset', COMMAND_PRESETS.every((c: any) => cp.presetFitsWidget(c, 'button')));
+  check('preset kind per widget type', cp.presetKindFor('toggle-switch') === 'toggle' && cp.presetKindFor('slider-control') === 'slider' && cp.presetKindFor('action-button') === 'button' && cp.presetKindFor(undefined) === 'button');
+  check('first fitting preset: relay for a new toggle, change speed for a new slider',
+    COMMAND_PRESETS.find((c: any) => cp.presetFitsWidget(c, 'toggle'))?.key === 'relay' && COMMAND_PRESETS.find((c: any) => cp.presetFitsWidget(c, 'slider'))?.key === 'change-speed');
   check('reboot to mass storage on a toggle: no preset (shown as custom)', findCommandPreset(246, [5, 0, 0, 0, 0, 0, 0], 'toggle') === undefined);
   check('engine on a toggle shows the toggle title', cp.presetTitle(toggles.find((c: any) => c.key === 'engine-start')!, 'toggle') === 'Engine start / stop');
 }
