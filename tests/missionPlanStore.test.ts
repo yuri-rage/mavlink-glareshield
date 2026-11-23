@@ -111,9 +111,11 @@ check('replace when allowed reports success', S().replace(vehicle, { kind: 'file
 // Number fields commit only typed changes (tabbing through a rounded field changes nothing).
 {
   const { typedValue } = await import('../src/components/map/MissionPlanPanel.tsx');
-  check('number field: unchanged rounded text commits nothing', typedValue('98', '98') === null && typedValue(' 98 ', '98') === null);
-  check('number field: typed value commits', typedValue('120', '98') === 120);
-  check('number field: junk commits nothing', typedValue('abc', '98') === null && typedValue('', '98') === null);
+  check('number field: unchanged rounded text commits nothing', typedValue('98', '98', true) === null && typedValue(' 98 ', '98', true) === null);
+  check('number field: typed value commits', typedValue('120', '98', true) === 120);
+  check('number field: junk commits nothing', typedValue('abc', '98', true) === null && typedValue('', '98', true) === null);
+  // Focused, not typed, and the pin was dragged meanwhile: the old text must not be written back over the drag.
+  check('number field: not typed commits nothing even when the value moved', typedValue('35.0010000', '35.0020000', false) === null);
 }
 
 S().setTool('add');

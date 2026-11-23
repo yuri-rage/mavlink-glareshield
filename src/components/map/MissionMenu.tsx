@@ -7,6 +7,27 @@ import { useTelemetryStore } from '../../store/telemetryStore';
 import { missionFileStem, toQgcPlan, toQgcWpl, waypointsToItems, fenceToItems, rallyToItems } from '../../mavlink/missionFileWriter';
 import { HeaderMenu, MenuItem, MenuSection } from './HeaderMenu';
 import { downloadFile } from '../../lib/download';
+import { useMissionPlanStore } from '../../store/missionPlanStore';
+import type { MissionWaypoint } from '../../store/telemetryStore';
+import type { MissionDraft } from '../../mavlink/missionDraft';
+
+/** The draft as mission waypoints, for the file writers. */
+function draftWaypoints(draft: MissionDraft): MissionWaypoint[] {
+  return draft.items.map((it, seq) => ({
+    seq,
+    command: it.command,
+    lat: it.x,
+    lon: it.y,
+    alt: it.z,
+    current: false,
+    frame: it.frame,
+    param1: it.param1,
+    param2: it.param2,
+    param3: it.param3,
+    param4: it.param4,
+    autocontinue: it.autocontinue,
+  }));
+}
 
 interface MissionMenuProps {
   connected: boolean;
@@ -38,7 +59,10 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
 }) => {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  const waypoints = useTelemetryStore((s) => s.missionWaypoints);
+  // While planning, saving writes the draft (what the map is editing), not the vehicle's mission.
+  const vehicleWaypoints = useTelemetryStore((s) => s.missionWaypoints);
+  const draft = useMissionPlanStore((s) => (s.active ? s.history.present : null));
+  const waypoints = draft ? draftWaypoints(draft) : vehicleWaypoints;
   const fencePoints = useTelemetryStore((s) => s.fencePoints);
   const rallyPoints = useTelemetryStore((s) => s.rallyPoints);
 
@@ -47,7 +71,7 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
   const busy = isFetching || isUploading;
 
 
-  const stem = () => missionFileStem(useTelemetryStore.getState().heartbeat.systemId);
+  const stem = () => `${missionFileStem(useTelemetryStore.getState().heartbeat.systemId)}${draft ? '-draft' : ''}`;
 
   const savePlan = () => {
     const s = useTelemetryStore.getState();
@@ -132,7 +156,7 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
             />
             <MenuItem
               icon={<Download className="h-3.5 w-3.5 text-amber-400" />}
-              label="Waypoints (.waypoints)"
+              label={planning ? 'Draft waypoints (.waypoints)' : 'Waypoints (.waypoints)'}
               detail={String(wpCount)}
               disabled={waypoints.length === 0}
               onClick={run(saveWaypoints)}
@@ -152,7 +176,10 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
               onClick={run(saveRally)}
             />
             <div className="px-2.5 pt-1 pb-1 text-[10px] text-zinc-500 leading-snug">
-              Saves what the map shows. Files open in QGroundControl and Mission Planner, and can be dropped back on the map.
+              {planning
+                ? 'Saves the draft with the vehicle\u2019s fence and rally points. '
+                : 'Saves what the map shows. '}
+              Files open in QGroundControl and Mission Planner, and can be dropped back on the map.
             </div>
           </>
         );
