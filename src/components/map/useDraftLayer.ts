@@ -8,8 +8,10 @@
 
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
-import { cmdHasLocation } from '../../mavlink/messages';
-import { insertWaypointAfter, insertWaypointBefore, isRoutePoint, setItemPosition, type MissionDraft } from '../../mavlink/missionDraft';
+import { cmdHasLocation, getVehicleCategory } from '../../mavlink/messages';
+import { insertWaypointAfter, insertWaypointBefore, setItemPosition, type MissionDraft } from '../../mavlink/missionDraft';
+import { fliesSplines, joinLegs, legMidpoint, missionPathLegs, routeIndices, type PathItem } from '../../mavlink/missionPath';
+import { useTelemetryStore } from '../../store/telemetryStore';
 import { useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
 import { addRallyPoint, moveRallyPoint, type RallyDraft } from '../../mavlink/rallyDraft';
 
@@ -109,6 +111,8 @@ export function useDraftLayer(
   const onItemMenuRef = useRef(onItemMenu);
   onItemMenuRef.current = onItemMenu;
   const active = useMissionPlanStore((s) => s.active);
+  // Spline legs are drawn as the curve only for a vehicle that flies them (Copter); others skip spline waypoints.
+  const splines = useTelemetryStore((s) => fliesSplines(getVehicleCategory(s.heartbeat.type)));
   const layer = useMissionPlanStore((s) => s.layer);
   const draft = useMissionPlanStore((s) => s.history.present);
   const selected = useMissionPlanStore((s) => s.selected);
@@ -144,37 +148,38 @@ export function useDraftLayer(
     const points = draft.items
       .map((it, index) => ({ index, lat: it.x, lon: it.y, command: it.command }))
       .filter((r) => drawablePosition(r.command, r.lat, r.lon));
-    /** The points the vehicle flies to (home first): the route line and its "+" handles. An ROI or landing-start
-     *  point gets a pin but is not a leg. */
-    const route = points.filter((r) => r.index === 0 || isRoutePoint(r.command));
-    const latLngs = route.map((r) => [r.lat, r.lon] as [number, number]);
+    /** The route as the vehicle flies it (missionPath): home first, then each navigation item with a position, an
+     *  ROI or landing-start point getting a pin but no leg; spline legs curved when the vehicle flies splines. */
+    const pathItems: PathItem[] = draft.items.map((it) => ({ command: it.command, lat: it.x, lon: it.y, alt: it.z, frame: it.frame, param1: it.param1 }));
+    const route = routeIndices(pathItems, splines);
+    const legs = missionPathLegs(pathItems, route, splines);
 
     const line =
-      route.length > 1
-        ? L.polyline(latLngs, { pane: DRAFT_LINES_PANE, color: '#f59e0b', weight: 3, opacity: editing ? 0.95 : 0.4, interactive: false }).addTo(map)
+      legs.length > 0
+        ? L.polyline(joinLegs(legs), { pane: DRAFT_LINES_PANE, color: '#f59e0b', weight: 3, opacity: editing ? 0.95 : 0.4, interactive: false }).addTo(map)
         : null;
     if (line) layersRef.current.push(line);
 
     const drawHandles = () => {
       clearHandles();
       if (!editing) return;
-      for (let k = 1; k < route.length; k++) {
-        const a = route[k - 1];
-        const b = route[k];
-        if (a.index === 0) continue; // never insert before the first item from the home leg
+      for (const leg of legs) {
+        if (leg.from === 0) continue; // never insert before the first item from the home leg
+        const a = pathItems[leg.from];
+        const b = pathItems[leg.to];
         const pa = map.latLngToContainerPoint([a.lat, a.lon]);
         const pb = map.latLngToContainerPoint([b.lat, b.lon]);
         if (pa.distanceTo(pb) < MIN_HANDLE_LEG_PX) continue;
-        const mid = map.containerPointToLatLng(pa.add(pb).divideBy(2));
-        const h = L.marker(mid, { icon: handleIcon, pane: DRAFT_MARKERS_PANE, zIndexOffset: 50, keyboard: false, title: `Insert a waypoint before #${b.index}` })
-          .on('click', () => commit((d) => insertWaypointBefore(d, b.index, mid.lat, mid.lng)))
+        // Halfway along the leg as drawn: on the curve for a spline leg.
+        const [midLat, midLon] = legMidpoint(leg);
+        const h = L.marker([midLat, midLon], { icon: handleIcon, pane: DRAFT_MARKERS_PANE, zIndexOffset: 50, keyboard: false, title: `Insert a waypoint before #${leg.to}` })
+          .on('click', () => commit((d) => insertWaypointBefore(d, leg.to, midLat, midLon)))
           .addTo(map);
         handlesRef.current.push(h);
       }
     };
 
     points.forEach((r) => {
-      const k = route.indexOf(r); // position in the route line, -1 for points off the route
       const isHome = r.index === 0;
       const isSel = editing && selected === r.index;
       const draggable = isSel && !isHome;
@@ -201,10 +206,11 @@ export function useDraftLayer(
       if (draggable) {
         marker.on('dragstart', clearHandles);
         marker.on('drag', () => {
-          if (k < 0) return;
+          // Redraw the whole path: moving one waypoint reshapes the spline legs around it too.
           const p = marker.getLatLng();
-          latLngs[k] = [p.lat, p.lng];
-          line?.setLatLngs(latLngs);
+          const moved = pathItems.slice();
+          moved[r.index] = { ...moved[r.index], lat: p.lat, lon: p.lng };
+          line?.setLatLngs(joinLegs(missionPathLegs(moved, route, splines)));
         });
         marker.on('dragend', () => {
           const p = marker.getLatLng();
@@ -225,7 +231,7 @@ export function useDraftLayer(
     return () => {
       map.off('zoomend', drawHandles);
     };
-  }, [mapRef, ready, active, draft, selected, layer]);
+  }, [mapRef, ready, active, draft, selected, layer, splines]);
 
   // Rally flags: the selected one (on the rally layer) can be dragged; clicking selects; right-click opens the menu.
   useEffect(() => {

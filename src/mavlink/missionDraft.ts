@@ -410,6 +410,15 @@ export function validateDraft(draft: MissionDraft, category?: VehicleCategory): 
     }
   }
 
+  // Only Copter flies spline waypoints; the others skip them (ArduPilot's start_command doesn't handle them).
+  if (category === 'plane' || category === 'rover' || category === 'sub') {
+    draft.items.forEach((it, i) => {
+      if (i >= 1 && it.command === 82) {
+        warn(i, 'This vehicle skips spline waypoints: it goes straight on to the next waypoint. Use a waypoint.');
+      }
+    });
+  }
+
   if (category === 'copter' || category === 'plane') {
     const firstNav = draft.items.findIndex((it, i) => i > 0 && it.command < NAV_LAST);
     if (firstNav > 0) {

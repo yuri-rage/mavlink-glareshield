@@ -188,6 +188,13 @@ check('land below home is fine', !issues(d.updateItem(base, 5, { z: -5 })).some(
   check('plane without takeoff first: warning', has(issues(noTakeoff, 'plane'), 1, 'warning', /takeoff/));
   check('rover without takeoff: no warning', !issues(noTakeoff, 'rover').some((i: any) => /takeoff/.test(i.message)));
 }
+{
+  const withSpline = d.changeCommand(base, 3, 82);
+  check('spline waypoint on rover / plane / sub: warned it is skipped',
+    ['rover', 'plane', 'sub'].every((c) => has(issues(withSpline, c), 3, 'warning', /skips spline/)));
+  check('spline waypoint on copter (or unknown vehicle): no warning',
+    !issues(withSpline, 'copter').some((i: any) => /spline/.test(i.message)) && !issues(withSpline).some((i: any) => /spline/.test(i.message)));
+}
 check('home is not validated', !issues(d.draftFromWaypoints([{ ...HOME, lat: 0, lon: 0 }, ...waypoints.filter((w) => w.seq > 0)] as any)).some((i: any) => i.index === 0));
 
 // ------------------------------------------------------------------------------------------------
