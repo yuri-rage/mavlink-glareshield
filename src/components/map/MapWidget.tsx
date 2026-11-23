@@ -122,6 +122,26 @@ function homePopupHtml(home: {
 // The map's view, kept across unmounts (switching dashboard tabs) so it comes back as it was left. Zoom is also
 // kept across reloads.
 const ZOOM_KEY = 'mavlink_glareshield_map_zoom';
+/** Planning opens maximized unless the user last chose to plan in place ('0'). */
+const PLAN_MAXIMIZE_PREF_KEY = 'mavlink_glareshield_plan_maximize';
+/** Whether the map is maximized right now while planning, so a reload restores it as it was. */
+const PLAN_MAXIMIZED_NOW_KEY = 'mavlink_glareshield_plan_maximized_now';
+function readFlag(key: string, fallback: boolean): boolean {
+  try {
+    const v = localStorage.getItem(key);
+    return v === '1' ? true : v === '0' ? false : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writeFlag(key: string, value: boolean | null) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value ? '1' : '0');
+  } catch {
+    // Storage blocked: the choice lasts for this session only.
+  }
+}
 interface SavedMapView {
   zoom: number;
   center: [number, number];
@@ -240,7 +260,13 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   planningRef.current = planning;
   const [mapReady, setMapReady] = useState(false);
   /** The map card fills the window (planning on a small map). */
-  const [maximized, setMaximized] = useState(false);
+  // Planning resumed after a reload comes back maximized or not, as it was left.
+  const [maximized, setMaximized] = useState(() => useMissionPlanStore.getState().active && readFlag(PLAN_MAXIMIZED_NOW_KEY, false));
+  /** Maximize or restore by the user's own hand: remembered as how they like to plan. */
+  const setMaximizedByUser = (v: boolean) => {
+    setMaximized(v);
+    writeFlag(PLAN_MAXIMIZE_PREF_KEY, v);
+  };
   const mapAreaRef = useRef<HTMLDivElement | null>(null);
   const [mapAreaWidth, setMapAreaWidth] = useState(0);
   const [planNotice, setPlanNotice] = useState<string | null>(null);
@@ -621,11 +647,18 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
     const hasFix = position.lat !== 0 || position.lon !== 0;
-    // Following: centre on the vehicle. Otherwise back where the user left the map.
-    const [initialLat, initialLon] =
+    // Following: centre on the vehicle. Otherwise back where the user left the map. With neither (a fresh load
+    // before a fix), the last known home, and only failing that the middle of the US.
+    const home = useTelemetryStore.getState().homePosition;
+    const hasHome = home.source !== 'none' && (home.lat !== 0 || home.lon !== 0);
+    const [initialLat, initialLon]: [number, number] =
       savedMapView && !(savedMapView.follow && hasFix)
         ? savedMapView.center
-        : [hasFix ? position.lat : 39.8283457, hasFix ? position.lon : -98.5794797];
+        : hasFix
+          ? [position.lat, position.lon]
+          : hasHome
+            ? [home.lat, home.lon]
+            : [39.8283457, -98.5794797];
     const following = savedMapView?.follow ?? true;
 
     mapContainerRef.current.classList.add('gs-map');
@@ -791,27 +824,30 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const startPlanning = () => {
     setFlyToMode(false);
     setPendingFlyTo(null);
+    // Maximized unless the user last chose to plan in place; always on a map too small to edit in place (narrow, or
+    // a sheet with no room for the list). Measured now, with the dashboard laid out.
+    const area = mapAreaRef.current;
+    const w = area?.clientWidth ?? 0;
+    const h = area?.clientHeight ?? 0;
+    const tooSmall = w < 360 || (w < 560 && h < 520);
+    setMaximized(readFlag(PLAN_MAXIMIZE_PREF_KEY, true) || tooSmall);
     const s = useTelemetryStore.getState();
     useMissionPlanStore.getState().start(vehicleDraft(), s.missionWaypoints.length > 0 ? { kind: 'vehicle' } : { kind: 'empty' });
   };
 
   // Entering planning, from the menu or resumed after a reload: stop following the vehicle (it would pan the map away
-  // from the draft) and, on a map too small to edit in place (narrow, or a sheet with no room for the list), plan in
-  // the maximized map. Once per entry, after the map area has a size; following can be turned back on by hand.
-  const planEnteredRef = useRef(false);
+  // from the draft). Once per entry; following can be turned back on by hand.
   useEffect(() => {
-    if (!planning) {
-      planEnteredRef.current = false;
-      return;
-    }
-    if (planEnteredRef.current || mapAreaWidth === 0) return;
-    planEnteredRef.current = true;
+    if (!planning) return;
     setFlyToMode(false);
     setFollowVehicle(false);
     followVehicleRef.current = false;
-    const h = mapAreaRef.current?.clientHeight ?? 0;
-    if (mapAreaWidth < 360 || (mapAreaWidth < 560 && h < 520)) setMaximized(true);
-  }, [planning, mapAreaWidth]);
+  }, [planning]);
+
+  // Keep the current maximized state while planning, for a reload; forget it when planning ends.
+  useEffect(() => {
+    writeFlag(PLAN_MAXIMIZED_NOW_KEY, planning ? maximized : null);
+  }, [planning, maximized]);
 
   const stopPlanning = () => {
     setPlanMenu(null);
@@ -922,7 +958,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       const st = useMissionPlanStore.getState();
       if (e.key === 'Escape') {
         if (st.tool === 'add') st.setTool('select');
-        else if (maximized) setMaximized(false);
+        else if (maximized) setMaximizedByUser(false);
         return;
       }
       const mod = e.ctrlKey || e.metaKey;
@@ -2006,7 +2042,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           <MissionPlanPanel
             layout={planLayout}
             maximized={maximized}
-            onToggleMaximize={() => setMaximized((v) => !v)}
+            onToggleMaximize={() => setMaximizedByUser(!maximized)}
             getMapCenter={getMapCenter}
             onFocusItem={focusDraftItem}
             onOpenFile={loadFileIntoDraft}
