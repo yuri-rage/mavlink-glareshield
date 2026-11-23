@@ -126,6 +126,13 @@ const ZOOM_KEY = 'mavlink_glareshield_map_zoom';
 const PLAN_MAXIMIZE_PREF_KEY = 'mavlink_glareshield_plan_maximize';
 /** Whether the map is maximized right now while planning, so a reload restores it as it was. */
 const PLAN_MAXIMIZED_NOW_KEY = 'mavlink_glareshield_plan_maximized_now';
+/** That maximize was forced by the map's size (so restoring it isn't a preference), kept across a reload. */
+const PLAN_MAXIMIZE_FORCED_KEY = 'mavlink_glareshield_plan_maximize_forced';
+/** Too small to edit in place: narrow, or a bottom sheet with no room for the list. */
+function mapTooSmall(w: number, h: number): boolean {
+  return w < 360 || (w < 560 && h < 520);
+}
+
 function readFlag(key: string, fallback: boolean): boolean {
   try {
     const v = localStorage.getItem(key);
@@ -262,9 +269,17 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   /** The map card fills the window (planning on a small map). */
   // Planning resumed after a reload comes back maximized or not, as it was left.
   const [maximized, setMaximized] = useState(() => useMissionPlanStore.getState().active && readFlag(PLAN_MAXIMIZED_NOW_KEY, false));
-  /** Maximize or restore by the user's own hand: remembered as how they like to plan. */
+  /** The map is maximized only because it is too small to edit in place, not by preference. */
+  const forcedMaxRef = useRef(maximized && readFlag(PLAN_MAXIMIZE_FORCED_KEY, false));
+  /**
+   * Maximize or restore by the user's own hand: remembered as how they like to plan, except restoring a maximize
+   * that size forced (that says nothing about how they plan on a bigger map).
+   */
   const setMaximizedByUser = (v: boolean) => {
     setMaximized(v);
+    const forced = forcedMaxRef.current;
+    forcedMaxRef.current = false;
+    if (!v && forced) return;
     writeFlag(PLAN_MAXIMIZE_PREF_KEY, v);
   };
   const mapAreaRef = useRef<HTMLDivElement | null>(null);
@@ -648,15 +663,16 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     const hasFix = position.lat !== 0 || position.lon !== 0;
     // Following: centre on the vehicle. Otherwise back where the user left the map. With neither (a fresh load
-    // before a fix), the last known home, and only failing that the middle of the US.
-    const home = useTelemetryStore.getState().homePosition;
-    const hasHome = home.source !== 'none' && (home.lat !== 0 || home.lon !== 0);
+    // before a fix): home (the live one, else where it was last session), and only failing that the middle of the US.
+    const st = useTelemetryStore.getState();
+    const liveHome = st.homePosition.source !== 'none' && (st.homePosition.lat !== 0 || st.homePosition.lon !== 0) ? st.homePosition : null;
+    const home = liveHome ?? st.lastKnownHome;
     const [initialLat, initialLon]: [number, number] =
       savedMapView && !(savedMapView.follow && hasFix)
         ? savedMapView.center
         : hasFix
           ? [position.lat, position.lon]
-          : hasHome
+          : home
             ? [home.lat, home.lon]
             : [39.8283457, -98.5794797];
     const following = savedMapView?.follow ?? true;
@@ -829,8 +845,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     const area = mapAreaRef.current;
     const w = area?.clientWidth ?? 0;
     const h = area?.clientHeight ?? 0;
-    const tooSmall = w < 360 || (w < 560 && h < 520);
-    setMaximized(readFlag(PLAN_MAXIMIZE_PREF_KEY, true) || tooSmall);
+    const tooSmall = mapTooSmall(w, h);
+    const prefer = readFlag(PLAN_MAXIMIZE_PREF_KEY, true);
+    setMaximized(prefer || tooSmall);
+    forcedMaxRef.current = tooSmall && !prefer;
     const s = useTelemetryStore.getState();
     useMissionPlanStore.getState().start(vehicleDraft(), s.missionWaypoints.length > 0 ? { kind: 'vehicle' } : { kind: 'empty' });
   };
@@ -844,13 +862,37 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     followVehicleRef.current = false;
   }, [planning]);
 
+  // Planning resumed after a reload in place: if the map turns out too small to edit in place (a phone, a narrow
+  // window), maximize it. Judged once the map's size has held for a moment, not on the first measurement: while the
+  // dashboard lays out, a brief narrow width would maximize for nothing. Only ever maximizes.
+  const resumeCheckRef = useRef(useMissionPlanStore.getState().active && !maximized);
+  useEffect(() => {
+    if (!resumeCheckRef.current) return;
+    if (!planning) {
+      resumeCheckRef.current = false;
+      return;
+    }
+    if (mapAreaWidth === 0) return;
+    const timer = setTimeout(() => {
+      resumeCheckRef.current = false;
+      const el = mapAreaRef.current;
+      if (el && el.clientWidth > 0 && mapTooSmall(el.clientWidth, el.clientHeight)) {
+        forcedMaxRef.current = true;
+        setMaximized(true);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [planning, mapAreaWidth]);
+
   // Keep the current maximized state while planning, for a reload; forget it when planning ends.
   useEffect(() => {
     writeFlag(PLAN_MAXIMIZED_NOW_KEY, planning ? maximized : null);
+    writeFlag(PLAN_MAXIMIZE_FORCED_KEY, planning && maximized ? forcedMaxRef.current : null);
   }, [planning, maximized]);
 
   const stopPlanning = () => {
     setPlanMenu(null);
+    forcedMaxRef.current = false;
     useMissionPlanStore.getState().stop();
     setMaximized(false);
     setPlanNotice(null);
