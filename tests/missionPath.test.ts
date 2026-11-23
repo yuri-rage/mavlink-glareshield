@@ -113,5 +113,32 @@ const HOME = item(16, 35, -106, { frame: 0, alt: 1600 });
   check('route for a vehicle that skips splines: the spline waypoint is bypassed', p.routeIndices(items, false).join(',') === '0,1,4');
 }
 
+{
+  // Altitudes in one frame (height above home), as ArduPilot computes the velocities in one NED frame. With raw
+  // altitudes, a home at 1600 m MSL and waypoints 30 m above home gave the first leg a 1570 m drop, which the
+  // overshoot limit turned into a ~4.5x flatter curve.
+  const mission = (homeAlt: number, wp1: { alt: number; frame: number } = { alt: 30, frame: 3 }) => [
+    item(16, 35, -106, { frame: 0, alt: homeAlt }),
+    item(22, 0, 0, { alt: 30 }),
+    item(16, 35.001, -106, wp1),
+    item(82, 35.001, -105.999, { alt: 30 }),
+    item(16, 35.001, -105.998, { alt: 30 }),
+  ];
+  const curve = (items: any[]) => p.missionPathLegs(items, p.routeIndices(items, true), true).find((l) => l.spline)!.latLngs;
+  const atSea = curve(mission(0));
+  const high = curve(mission(1600));
+  check('home elevation does not change the curve (1600 m MSL vs sea level)', high.every((q, i) => nearV(q, atSea[i], 1e-12)),
+    `mid ${high[16]} vs ${atSea[16]}`);
+  const bulge = (c: [number, number][]) => Math.max(...c.map((q) => q[0] - 35.001));
+  check('the curve keeps its full bulge at a high site', bulge(high) > 0.5 * bulge(atSea) && bulge(high) > 1e-5, `${bulge(high)}`);
+  const mslWp = curve(mission(1600, { alt: 1630, frame: 0 }));
+  check('an MSL waypoint at home + 30 m draws the same curve as relative 30 m', mslWp.every((q, i) => nearV(q, high[i], 1e-12)));
+  // Home's MSL altitude unknown (no position): an MSL waypoint's height is unknown; ignore its vertical part, no NaN.
+  const unknown = mission(1600, { alt: 1630, frame: 0 });
+  unknown[0] = item(16, 0, 0, { frame: 0, alt: 0 });
+  const legs = p.missionPathLegs(unknown, p.routeIndices(unknown, true), true); // home has no position: not in the route
+  check('home MSL unknown: no NaN in the curve', legs.every((l) => l.latLngs.every((q) => Number.isFinite(q[0]) && Number.isFinite(q[1]))));
+}
+
 console.log(failures.length ? `\n${failures.length} mission path check(s) FAILED` : '\nAll mission path checks PASSED');
 process.exit(failures.length ? 1 : 0);

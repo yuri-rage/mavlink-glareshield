@@ -12,7 +12,10 @@
 //   full arc"), from the destination if not. Otherwise zero.
 // - Both are scaled down together when |v0| + |v1| > 4 × |d - o| (SPLINE_FACTOR), to limit overshoot.
 // - Velocities are zero across a change between terrain and non-terrain altitude.
-// Velocities are vectors in metres, not unit vectors: their length shapes the curve.
+// Velocities are vectors in metres, not unit vectors: their length shapes the curve. ArduPilot computes them with
+// every point in one frame (NED from the EKF origin), so altitudes are put into one frame here too: height above
+// home (relative items as they are, MSL items less home's MSL altitude). Mixing raw MSL and relative altitudes
+// would add the site elevation to the vertical component and, through the overshoot limit, flatten the curve.
 
 import { cmdHasLocation, type VehicleCategory } from './messages';
 
@@ -35,6 +38,9 @@ const SPLINE_FACTOR = 4;
 const SPLINE_SAMPLES = 32;
 
 const isNav = (c: number) => c < NAV_LAST;
+const isMsl = (frame: number) => frame === 0 || frame === 5;
+const CMD_NAV_TAKEOFF = 22;
+const CMD_NAV_VTOL_TAKEOFF = 84;
 const isTerrain = (frame: number) => frame === 10 || frame === 11;
 const drawable = (it: PathItem) =>
   cmdHasLocation(it.command) && (it.lat !== 0 || it.lon !== 0) && Math.abs(it.lat) <= 90 && Math.abs(it.lon) <= 180;
@@ -46,15 +52,22 @@ const mul = (a: V3, k: number): V3 => [a[0] * k, a[1] * k, a[2] * k];
 const len = (a: V3) => Math.hypot(a[0], a[1], a[2]);
 const ZERO: V3 = [0, 0, 0];
 
-/** Local metres (east, north, up) around a reference point; fine over the size of a mission. */
+/** Local metres (east, north, up) around a reference point; fine over the size of a mission. `up` is passed in:
+ *  height above home, or NaN when it can't be known (an MSL item without home's MSL altitude). */
 function makeFrame(lat0: number, lon0: number) {
   const mPerDegLat = 111320;
   const mPerDegLon = 111320 * Math.cos((lat0 * Math.PI) / 180);
   return {
-    toLocal: (it: { lat: number; lon: number; alt: number }): V3 => [(it.lon - lon0) * mPerDegLon, (it.lat - lat0) * mPerDegLat, it.alt],
+    toLocal: (it: { lat: number; lon: number }, up: number): V3 => [(it.lon - lon0) * mPerDegLon, (it.lat - lat0) * mPerDegLat, up],
     toLatLng: (p: V3): [number, number] => [lat0 + p[1] / mPerDegLat, lon0 + p[0] / mPerDegLon],
   };
 }
+
+/** b − a, without the vertical part when either height is unknown (never subtract an MSL altitude from a relative one). */
+const vec = (a: V3, b: V3): V3 => (Number.isNaN(a[2]) || Number.isNaN(b[2]) ? [b[0] - a[0], b[1] - a[1], 0] : sub(b, a));
+/** The pair with unknown heights levelled, for the curve itself (only its horizontal shape is drawn). */
+const level = (a: V3, b: V3): [V3, V3] =>
+  Number.isNaN(a[2]) || Number.isNaN(b[2]) ? [[a[0], a[1], 0], [b[0], b[1], 0]] : [a, b];
 
 /** The Hermite curve ArduPilot flies from o to d, sampled (o included, d included). */
 export function splineLeg(o: V3, d: V3, v0: V3, v1: V3, samples = SPLINE_SAMPLES): V3[] {
@@ -94,6 +107,26 @@ export function missionPathLegs(items: PathItem[], route: number[], splines: boo
   const ref = items[route[0]];
   const frame = makeFrame(ref.lat, ref.lon);
   const legs: PathLeg[] = [];
+
+  // Heights above home. Item 0 is home: its altitude is MSL when its frame says so and it has a position.
+  const home = items[0];
+  const homeMsl = home && isMsl(home.frame) && (home.lat !== 0 || home.lon !== 0) ? home.alt : null;
+  const height = (i: number): number => {
+    if (i === 0) return 0;
+    const it = items[i];
+    if (isMsl(it.frame)) return homeMsl === null ? NaN : it.alt - homeMsl;
+    return it.alt; // relative to home, or above terrain (terrain legs get no velocities across a frame change)
+  };
+  const at = (i: number): V3 => frame.toLocal(items[i], height(i));
+  /** Where a leg from home really starts: the takeoff point, at the takeoff's height (the last takeoff before
+   *  `beforeI`), else level with `levelWith` (a vehicle already flying starts from its own height, unknown here). */
+  const homeLegStart = (beforeI: number, levelWith: number): V3 => {
+    for (let j = beforeI - 1; j > 0; j--) {
+      const c = items[j].command;
+      if (c === CMD_NAV_TAKEOFF || c === CMD_NAV_VTOL_TAKEOFF) return frame.toLocal(home, height(j));
+    }
+    return frame.toLocal(home, levelWith);
+  };
   /** The destination velocity of the previous spline leg, for the next leg's origin; null when it wasn't one. */
   let prevSplineDestVel: V3 | null = null;
 
@@ -118,8 +151,8 @@ export function missionPathLegs(items: PathItem[], route: number[], splines: boo
       continue;
     }
 
-    const o = frame.toLocal(from);
-    const d = frame.toLocal(to);
+    const o = at(fromI);
+    const d = at(toI);
     const terrain = isTerrain(to.frame);
 
     // Origin velocity: the vehicle passes through `from` without stopping only if it was told where to go next
@@ -128,18 +161,22 @@ export function missionPathLegs(items: PathItem[], route: number[], splines: boo
     const passesThrough = k >= 2 && (from.param1 ?? 0) === 0 && isTerrain(from.frame) === terrain;
     if (passesThrough) {
       if (prevSplineDestVel) v0 = prevSplineDestVel;
-      else v0 = sub(o, frame.toLocal(items[route[k - 2]]));
+      else {
+        const prevI = route[k - 2];
+        v0 = vec(prevI === 0 ? homeLegStart(fromI, o[2]) : at(prevI), o);
+      }
     }
 
     // Destination velocity: towards the next navigation point, if the spline doesn't hold and there is one.
     let v1: V3 = ZERO;
     const nextI = (to.param1 ?? 0) === 0 ? nextNavPoint(toI) : null;
     if (nextI !== null && isTerrain(items[nextI].frame) === terrain) {
-      const n = frame.toLocal(items[nextI]);
-      v1 = items[nextI].command === CMD_NAV_SPLINE_WAYPOINT ? sub(n, o) : sub(n, d);
+      const n = at(nextI);
+      v1 = items[nextI].command === CMD_NAV_SPLINE_WAYPOINT ? vec(o, n) : vec(d, n);
     }
 
-    legs.push({ from: fromI, to: toI, spline: true, latLngs: splineLeg(o, d, v0, v1).map(frame.toLatLng) });
+    const [lo, ld] = level(o, d);
+    legs.push({ from: fromI, to: toI, spline: true, latLngs: splineLeg(lo, ld, v0, v1).map(frame.toLatLng) });
     prevSplineDestVel = v1;
   }
   return legs;
