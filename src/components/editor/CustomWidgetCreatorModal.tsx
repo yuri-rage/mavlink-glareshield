@@ -19,6 +19,7 @@ import { BUILTIN_PANELS } from '../../lib/builtinWidgets';
 import { MAX_COMPOSITE_BINDINGS, MAX_PANELS, sanitizeParamSetEntries } from '../../lib/widgetValidation';
 import { expandParamPatterns } from '../../mavlink/paramMatch';
 import { getVehicleCategory } from '../../mavlink/messages';
+import { COMMAND_PRESETS, COMMAND_PRESET_GROUPS, findCommandPreset } from '../../mavlink/commandPresets';
 import { getParamMetadata } from '../../mavlink/paramMetadata';
 import { useParamMetaStore } from '../../store/paramMetaStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
@@ -311,9 +312,31 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   // Action Binding
   const [actionLabel, setActionLabel] = useState('Trigger Command');
   const [commandId, setCommandId] = useState('20'); // MAV_CMD_NAV_RETURN_TO_LAUNCH
-  const [param1, setParam1] = useState('0');
-  const [param2, setParam2] = useState('0');
-  const [param3, setParam3] = useState('0');
+  const [cmdParams, setCmdParams] = useState<string[]>(['0', '0', '0', '0', '0', '0', '0']);
+  const param1 = cmdParams[0];
+  const setCmdParam = (i: number, v: string) => setCmdParams((prev) => prev.map((x, j) => (j === i ? v : x)));
+  // "Custom" stays selected while the user types an ID, even one that happens to match a preset.
+  const [customCommand, setCustomCommand] = useState(false);
+  const [showMoreParams, setShowMoreParams] = useState(false);
+  const selectedPreset = customCommand
+    ? undefined
+    : findCommandPreset(parseInt(commandId, 10) || 0, cmdParams.map((v) => parseFloat(v) || 0));
+  const applyPreset = (key: string) => {
+    const preset = COMMAND_PRESETS.find((c) => c.key === key);
+    if (!preset) {
+      setCustomCommand(true);
+      return;
+    }
+    setCustomCommand(false);
+    setCommandId(String(preset.commandId));
+    setCmdParams(preset.params.map(String));
+    setShowMoreParams(preset.params.slice(3).some((v) => v !== 0));
+    // Follow the preset's label unless the user has written their own.
+    const trimmed = actionLabel.trim();
+    if (!trimmed || trimmed === 'Trigger Command' || COMMAND_PRESETS.some((c) => c.label === trimmed)) {
+      setActionLabel(preset.label);
+    }
+  };
   const [requireConfirm, setRequireConfirm] = useState(true);
 
   // Field picker: the curated list plus every field the vehicle has actually sent (refreshed on open).
@@ -363,9 +386,10 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     const a = w?.action;
     setActionLabel(a?.label || 'Trigger Command');
     setCommandId(String(a?.commandId || 20));
-    setParam1(String(a?.params?.[0] ?? 0));
-    setParam2(String(a?.params?.[1] ?? 0));
-    setParam3(String(a?.params?.[2] ?? 0));
+    const loaded = Array.from({ length: 7 }, (_, i) => String(a?.params?.[i] ?? 0));
+    setCmdParams(loaded);
+    setCustomCommand(!findCommandPreset(a?.commandId || 20, a?.params ?? []));
+    setShowMoreParams(loaded.slice(3).some((v) => Number(v) !== 0));
     setRequireConfirm(a?.confirmation ?? true);
   };
 
@@ -483,7 +507,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
       def.action = {
         label: actionLabel,
         commandId: parseInt(commandId, 10) || 0,
-        params: [parseFloat(param1) || 0, parseFloat(param2) || 0, parseFloat(param3) || 0, 0, 0, 0, 0],
+        params: cmdParams.map((v) => parseFloat(v) || 0) as [number, number, number, number, number, number, number],
         confirmation: requireConfirm,
       };
     }
@@ -1352,58 +1376,80 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
               </div>
 
               <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Command ID (MAV_CMD)</label>
+                <label className="text-[11px] font-medium text-zinc-400">Command</label>
                 <select
-                  value={commandId}
-                  onChange={(e) => setCommandId(e.target.value)}
-                  className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs font-mono text-zinc-200"
+                  value={selectedPreset?.key ?? 'custom'}
+                  onChange={(e) => applyPreset(e.target.value)}
+                  className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs text-zinc-200"
                 >
-                  <option value="20">20 - RTL (Return to Launch)</option>
-                  <option value="21">21 - LAND</option>
-                  <option value="22">22 - TAKEOFF</option>
-                  <option value="176">176 - DO_SET_MODE</option>
-                  <option value="178">178 - DO_CHANGE_SPEED</option>
-                  <option value="181">181 - DO_SET_RELAY (P1=Relay#, P2=On/Off)</option>
-                  <option value="183">183 - DO_SET_SERVO (P1=Servo#, P2=PWM)</option>
-                  <option value="400">400 - ARM / DISARM</option>
+                  {COMMAND_PRESET_GROUPS.map((group) => (
+                    <optgroup key={group} label={group}>
+                      {COMMAND_PRESETS.filter((c) => c.group === group).map((c) => (
+                        <option key={c.key} value={c.key}>
+                          {c.title} ({c.commandId})
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                  <option value="custom">Custom command ID…</option>
                 </select>
               </div>
             </div>
 
+            {(customCommand || !selectedPreset) && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Command ID (MAV_CMD)</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={65535}
+                    value={commandId}
+                    onChange={(e) => setCommandId(e.target.value)}
+                    className="h-8 text-xs font-mono"
+                  />
+                </div>
+              </div>
+            )}
+            {selectedPreset?.hint && <p className="text-[10px] text-zinc-500 -mt-1">{selectedPreset.hint}</p>}
+
             <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Param 1 (Instance/ID)</label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={param1}
-                  onChange={(e) => setParam1(e.target.value)}
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Param 2 (Value/ON PWM)</label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={param2}
-                  onChange={(e) => setParam2(e.target.value)}
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Param 3 (OFF PWM/Opt)</label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={param3}
-                  onChange={(e) => setParam3(e.target.value)}
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
+              {['Param 1', 'Param 2', 'Param 3'].map((label, i) => (
+                <div key={label} className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">{label}</label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={cmdParams[i]}
+                    onChange={(e) => setCmdParam(i, e.target.value)}
+                    className="h-8 text-xs font-mono"
+                  />
+                </div>
+              ))}
             </div>
+            <button
+              type="button"
+              onClick={() => setShowMoreParams((v) => !v)}
+              className="text-[11px] text-zinc-400 hover:text-zinc-200"
+            >
+              {showMoreParams ? '− Hide params 4–7' : '+ Params 4–7'}
+            </button>
+            {showMoreParams && (
+              <div className="grid grid-cols-4 gap-2">
+                {[3, 4, 5, 6].map((i) => (
+                  <div key={i} className="space-y-1">
+                    <label className="text-[11px] font-medium text-zinc-400">Param {i + 1}</label>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={cmdParams[i]}
+                      onChange={(e) => setCmdParam(i, e.target.value)}
+                      className="h-8 text-xs font-mono"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

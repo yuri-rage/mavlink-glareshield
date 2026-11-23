@@ -414,5 +414,19 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   check('servo multi-bar raw µs: unchanged by reversal', raw[0].value === 1900);
 }
 
+// Command presets: unique keys, a name for every command, and saved commands map back to their preset.
+{
+  const { COMMAND_PRESETS, findCommandPreset } = await import('../src/mavlink/commandPresets.ts');
+  const { getMavCmdName } = await import('../src/mavlink/messages.ts');
+  const keys = new Set(COMMAND_PRESETS.map((c: any) => c.key));
+  check('command presets: keys are unique', keys.size === COMMAND_PRESETS.length);
+  const unnamed = COMMAND_PRESETS.filter((c: any) => getMavCmdName(c.commandId).startsWith('CMD_')).map((c: any) => c.commandId);
+  check('command presets: every command has a MAV_CMD name', unnamed.length === 0, unnamed.join(','));
+  check('command presets: params distinguish shared IDs', findCommandPreset(246, [5, 0, 0, 0, 0, 0, 0])?.key === 'reboot-mass-storage' && findCommandPreset(42701, [2])?.key === 'scripting-stop');
+  check('command presets: edited params fall back to the command', findCommandPreset(181, [3, 0, 0, 0, 0, 0, 0])?.key === 'relay');
+  check('command presets: camera trigger shoots via param5', findCommandPreset(203, [0, 0, 0, 0, 1, 0, 0])?.params[4] === 1);
+  check('command presets: unknown command has no preset', findCommandPreset(31000, []) === undefined);
+}
+
 console.log(failures.length ? `\n${failures.length} widget check(s) FAILED` : '\nAll widget checks PASSED');
 process.exit(failures.length ? 1 : 0);

@@ -417,6 +417,25 @@ The `action` object, used by `action-button`, `toggle-switch` and `slider-contro
 
 Sends `commandId` with `params` exactly as written.
 
+The editor's **Command** list fills in the command and all seven params for common actions. Its **Vehicle actions** and **System** groups cover the commands in Mission Planner's Actions tab:
+
+| Preset | `commandId` | `params` |
+|---|---|---|
+| Loiter unlimited | `17` `NAV_LOITER_UNLIM` | all 0 |
+| Mission start | `300` `MISSION_START` | all 0 |
+| Trigger camera | `203` `DO_DIGICAM_CONTROL` | `param5` = 1 |
+| Preflight calibration: gyro / baro | `241` `PREFLIGHT_CALIBRATION` | `param1` = 1 (gyro) or `param3` = 1 (baro/airspeed) |
+| Battery reset | `42651` `BATTERY_RESET` | `param1` = 255 (all batteries), `param2` = 100 (%) |
+| Engine start / stop | `223` `DO_ENGINE_CONTROL` | `param1` = 1 / 0 |
+| Parachute release | `208` `DO_PARACHUTE` | `param1` = 2 |
+| Terminate flight | `185` `DO_FLIGHTTERMINATION` | `param1` = 1 |
+| Scripting: stop and restart / stop | `42701` `SCRIPTING` | `param1` = 3 / 2 |
+| High latency: enable / disable | `2600` `CONTROL_HIGH_LATENCY` | `param1` = 1 / 0 |
+| Reboot autopilot / to mass storage | `246` `PREFLIGHT_REBOOT_SHUTDOWN` | `param1` = 1 / 5 |
+| Format SD card | `526` `STORAGE_FORMAT` | `param1` = 1, `param2` = 1 |
+
+Choose **Custom command ID…** to send any other `MAV_CMD`.
+
 ```json
 {
   "id": "custom-rtl",
