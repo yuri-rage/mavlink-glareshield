@@ -293,6 +293,11 @@ interface TelemetryState {
   pressure: VehiclePressure;
   radioStatus: RadioStatusInfo;
   homePosition: HomePositionInfo;
+  /**
+   * Where home was when the app was last open, for centring the map before a fix. Never the live home: a saved
+   * home could be another site or vehicle, so it must not stand in for what the vehicle reports.
+   */
+  lastKnownHome: { lat: number; lon: number } | null;
   statusMessages: StatusMessage[];
   firmwareVersion: string | null;
   firmwareRaw?: string;
@@ -575,16 +580,17 @@ interface NavCache {
   missionWaypoints?: MissionWaypoint[];
   fencePoints?: FencePoint[];
   rallyPoints?: RallyPoint[];
-  /** The last home the vehicle reported (or the mission's), so the map can open there before reconnecting. */
-  home?: { lat: number; lon: number; alt: number; source: HomePositionInfo['source'] };
+  /** The last known home, so the map can open there before reconnecting (see lastKnownHome). */
+  home?: { lat: number; lon: number };
 }
 
-/** A saved home worth using: finite, in range, not 0,0, and from a real source. */
-function cachedHome(h: NavCache['home']): NavCache['home'] | null {
-  if (!h || h.source === 'none') return null;
-  const ok = [h.lat, h.lon, h.alt].every((v) => typeof v === 'number' && Number.isFinite(v));
-  if (!ok || Math.abs(h.lat) > 90 || Math.abs(h.lon) > 180 || (h.lat === 0 && h.lon === 0)) return null;
-  return h;
+/** A position worth using: finite numbers, in range, not 0,0. */
+function validHome(h: unknown): { lat: number; lon: number } | null {
+  if (!h || typeof h !== 'object') return null;
+  const { lat, lon } = h as { lat?: unknown; lon?: unknown };
+  if (typeof lat !== 'number' || typeof lon !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180 || (lat === 0 && lon === 0)) return null;
+  return { lat, lon };
 }
 
 function loadInitialNavCache(): NavCache {
@@ -771,11 +777,6 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     fixed: 0,
   },
   homePosition: (() => {
-    // The home saved last session (HOME_POSITION, arming, or wp0), else the cached mission's item 0.
-    const saved = cachedHome(initialNav.home);
-    if (saved) {
-      return { lat: saved.lat, lon: saved.lon, alt: saved.alt, distanceM: null, bearingDeg: null, source: saved.source };
-    }
     const wp0 = initialNav.missionWaypoints?.find(
       (w) => w.seq === 0 && (w.lat !== 0 || w.lon !== 0)
     );
@@ -798,6 +799,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       source: 'none' as const,
     };
   })(),
+  lastKnownHome: validHome(initialNav.home),
   statusMessages: [],
   firmwareVersion: null,
   firmwareRaw: undefined,
@@ -1871,20 +1873,24 @@ mavlinkConnection.onSend((data) => {
 let lastWps: MissionWaypoint[] | null = null;
 let lastFp: FencePoint[] | null = null;
 let lastRp: RallyPoint[] | null = null;
-/** Home as last saved. Its distance and bearing change with every position update; only a move of home itself
- *  (or its source) is worth a write. */
-let lastHomeKey = '';
-const homeKey = (h: HomePositionInfo) => `${h.source}:${h.lat}:${h.lon}:${h.alt}`;
+/** Home as last seen here. Its distance and bearing change with every position update; only a move of home itself is
+ *  worth a write. Plain fields, compared directly: this runs on every telemetry update. */
+let lastHomeLat = NaN;
+let lastHomeLon = NaN;
+let lastHomeSource = '';
 
 useTelemetryStore.subscribe((state) => {
-  const hk = homeKey(state.homePosition);
-  if (state.missionWaypoints === lastWps && state.fencePoints === lastFp && state.rallyPoints === lastRp && hk === lastHomeKey) {
+  const h = state.homePosition;
+  const homeSame = h.lat === lastHomeLat && h.lon === lastHomeLon && h.source === lastHomeSource;
+  if (state.missionWaypoints === lastWps && state.fencePoints === lastFp && state.rallyPoints === lastRp && homeSame) {
     return;
   }
   lastWps = state.missionWaypoints;
   lastFp = state.fencePoints;
   lastRp = state.rallyPoints;
-  lastHomeKey = hk;
+  lastHomeLat = h.lat;
+  lastHomeLon = h.lon;
+  lastHomeSource = h.source;
 
   // A mission download changes the list once per item; write the cache once it settles, not per item (each
   // write serializes the whole mission into localStorage).
@@ -1897,11 +1903,14 @@ function flushNavCache() {
   navSaveTimer = null;
   const state = useTelemetryStore.getState();
   const h = state.homePosition;
+  // The live home when there is one; otherwise keep the one from before (a session with no vehicle must not
+  // forget where home was).
+  const home = (h.source !== 'none' ? validHome(h) : null) ?? state.lastKnownHome ?? undefined;
   saveNavCache({
     missionWaypoints: state.missionWaypoints,
     fencePoints: state.fencePoints,
     rallyPoints: state.rallyPoints,
-    home: cachedHome({ lat: h.lat, lon: h.lon, alt: h.alt, source: h.source }) ?? undefined,
+    home,
   });
 }
 // Don't lose a pending write when the page closes.
