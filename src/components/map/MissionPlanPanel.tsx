@@ -40,17 +40,17 @@ import {
 } from '../../mavlink/missionDraft';
 import { ALTITUDE_FRAMES, MISSION_COMMANDS, missionCommandInfo } from '../../mavlink/missionCommands';
 import { missionFileStem, toQgcWpl } from '../../mavlink/missionFileWriter';
-import { isDraftDirty, useMissionPlanStore } from '../../store/missionPlanStore';
+import { isAnyDirty, isDraftDirty, isRallyDirty, useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
+import { validateRallyDraft } from '../../mavlink/rallyDraft';
+import { RallyPlanBody } from './RallyPlanBody';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { downloadFile } from '../../lib/download';
+import { FT_PER_M, ICON_BTN, INPUT, NumField, frameTag } from './planUi';
 
-const FT_PER_M = 3.28084;
-const INPUT =
-  'h-7 w-full rounded-md border border-zinc-700 bg-zinc-900 px-1.5 text-[11px] font-mono text-zinc-100 focus:outline-none focus:border-sky-500';
-const ICON_BTN =
-  'inline-flex h-7 w-7 items-center justify-center rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white disabled:opacity-35 disabled:pointer-events-none';
+export { typedValue } from './planUi';
+
 
 export type PlanPanelLayout = 'side' | 'sheet';
 
@@ -75,82 +75,12 @@ interface MissionPlanPanelProps {
   connected: boolean;
   /** A mission download or upload is running. */
   transferBusy: boolean;
-}
-
-/**
- * The value to commit when a number field loses focus, or null for none. Only something the user typed counts:
- * - not typed at all: nothing, even if the value changed meanwhile (a pin dragged while the field had focus must
- *   not be overwritten by the old text);
- * - typed back to what is shown: nothing (the text is rounded, so comparing with the exact value would commit the
- *   rounding).
- */
-export function typedValue(text: string, shown: string, typed: boolean): number | null {
-  if (!typed || text.trim() === shown) return null;
-  const v = parseFloat(text);
-  return Number.isFinite(v) ? v : null;
-}
-
-/** A number input that keeps what is typed until Enter or blur, then commits a finite value. */
-const NumField: React.FC<{
-  label: string;
-  value: number;
-  onCommit: (v: number) => void;
-  digits?: number;
-  title?: string;
-}> = ({ label, value, onCommit, digits, title }) => {
-  const shown = digits !== undefined ? Number(value.toFixed(digits)).toString() : String(Number(value.toPrecision(7)));
-  const [text, setText] = useState(shown);
-  /** The user has typed since focusing. Until then the field follows the draft, even while focused. */
-  const typed = useRef(false);
-  // The draft's value changed (a pin dragged, undo, a commit landing): it wins over anything half-typed here, since
-  // it is the newer action. Show it and forget the typing, so leaving the field can't write the old text back.
-  useEffect(() => {
-    typed.current = false;
-    setText(shown);
-  }, [shown]);
-  const commit = () => {
-    const v = typedValue(text, shown, typed.current);
-    typed.current = false;
-    if (v !== null) onCommit(v);
-    // Show the draft's value again: the new one once the edit lands, the old one if it was refused.
-    setText(shown);
-  };
-  return (
-    <label className="block min-w-0 space-y-0.5" title={title}>
-      <span className="block truncate text-[10px] text-zinc-500">{label}</span>
-      <input
-        type="text"
-        inputMode="decimal"
-        value={text}
-        onFocus={() => (typed.current = false)}
-        onChange={(e) => {
-          typed.current = true;
-          setText(e.target.value);
-        }}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.stopPropagation();
-            (e.target as HTMLInputElement).blur();
-          }
-          if (e.key === 'Escape') {
-            // Cancel the typing only; don't also leave the Place tool or the maximized map.
-            e.stopPropagation();
-            typed.current = false;
-            setText(shown);
-            (e.target as HTMLInputElement).blur();
-          }
-        }}
-        className={INPUT}
-      />
-    </label>
-  );
-};
-
-function frameTag(frame: number): string {
-  if (frame === MAV_FRAME.GLOBAL || frame === MAV_FRAME.GLOBAL_INT) return 'MSL';
-  if (frame === MAV_FRAME.GLOBAL_TERRAIN_ALT || frame === MAV_FRAME.GLOBAL_TERRAIN_ALT_INT) return 'TER';
-  return 'REL';
+  /** Rally layer: bring a point into view, replace the draft with the vehicle's, keep the draft after a change. */
+  onFocusRallyPoint: (index: number) => void;
+  onRallyResetToVehicle: () => void;
+  onRallyKeepDraft: () => void;
+  /** Open the rally upload confirmation; omitted until available. */
+  onRequestRallyUpload?: () => void;
 }
 
 /** One line describing an item, for the list. */
@@ -323,16 +253,34 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   onKeepDraft,
   connected,
   transferBusy,
+  onFocusRallyPoint,
+  onRallyResetToVehicle,
+  onRallyKeepDraft,
+  onRequestRallyUpload,
 }) => {
+  const layer = useMissionPlanStore((s) => s.layer);
+  const rallyDraft = useMissionPlanStore((s) => s.rally.history.present);
+  const rallySelected = useMissionPlanStore((s) => s.rally.selected);
+  const rallyDirty = useMissionPlanStore((s) => isRallyDirty(s));
+  const anyDirty = useMissionPlanStore((s) => isAnyDirty(s));
+  const canUndoActive = useMissionPlanStore((s) => (s.layer === 'rally' ? s.rally.history : s.history).past.length > 0);
+  const canRedoActive = useMissionPlanStore((s) => (s.layer === 'rally' ? s.rally.history : s.history).future.length > 0);
+  // Rally checks need home (primitives, so position updates don't re-render) and the vehicle's RALLY_LIMIT_KM.
+  const homeLat = useTelemetryStore((s) => s.homePosition.lat);
+  const homeLon = useTelemetryStore((s) => s.homePosition.lon);
+  const homeKnown = useTelemetryStore((s) => s.homePosition.source !== 'none');
+  const rallyLimitKm = useTelemetryStore((s) => s.parameters['RALLY_LIMIT_KM']?.value);
+  const rallyIssues = useMemo(
+    () => validateRallyDraft(rallyDraft, { home: homeKnown ? { lat: homeLat, lon: homeLon } : null, limitKm: rallyLimitKm }),
+    [rallyDraft, homeKnown, homeLat, homeLon, rallyLimitKm]
+  );
   const draft = useMissionPlanStore((s) => s.history.present);
-  const canUndo = useMissionPlanStore((s) => s.history.past.length > 0);
-  const canRedo = useMissionPlanStore((s) => s.history.future.length > 0);
   const selected = useMissionPlanStore((s) => s.selected);
   const source = useMissionPlanStore((s) => s.source);
   const dirty = useMissionPlanStore((s) => isDraftDirty(s));
   const uploading = useMissionPlanStore((s) => s.uploading);
   const vehicleChanged = useMissionPlanStore((s) => s.vehicleChanged);
-  const { edit, undo, redo, select } = useMissionPlanStore.getState();
+  const { edit, undo, redo, select, setLayer, rallySelect } = useMissionPlanStore.getState();
   const vehicleType = useTelemetryStore((s) => s.heartbeat.type);
   const systemId = useTelemetryStore((s) => s.heartbeat.systemId);
   const hasVehicleMission = useTelemetryStore((s) => s.missionWaypoints.length > 0);
@@ -347,8 +295,12 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const issues = useMemo(() => validateDraft(draft, getVehicleCategory(vehicleType)), [draft, vehicleType]);
-  const errors = issues.filter((i) => i.severity === 'error').length;
-  const warnings = issues.length - errors;
+  // The header's counts are for the layer being edited.
+  const activeIssues: { index: number; severity: string }[] = layer === 'rally' ? rallyIssues : issues;
+  const errors = activeIssues.filter((i) => i.severity === 'error').length;
+  const warnings = activeIssues.length - errors;
+  const missionErrors = issues.some((i) => i.severity === 'error');
+  const rallyErrors = rallyIssues.some((i) => i.severity === 'error');
   const issuesAt = (i: number) => issues.filter((x) => x.index === i);
   const missionIssues = issuesAt(-1);
 
@@ -366,6 +318,9 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   useEffect(() => {
     if (selected !== null) setCollapsed(false);
   }, [selected]);
+  useEffect(() => {
+    if (rallySelected !== null) setCollapsed(false);
+  }, [rallySelected]);
 
   // Keep the selected row in view, including once the sheet has opened.
   useEffect(() => {
@@ -434,11 +389,38 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
           </button>
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-300">
-            Draft
-            {dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" title="Unsaved changes" />}
-            <span className="truncate font-mono text-[10px] font-normal normal-case tracking-normal text-zinc-500">
-              {draft.items.length - 1} items · {sourceText}
+          <div className="flex items-center gap-1.5">
+            <div className="flex shrink-0 rounded-md border border-zinc-700 p-0.5" role="tablist" aria-label="Draft being edited">
+              {(
+                [
+                  { id: 'mission', label: 'Mission', dirty, err: missionErrors, active: 'bg-amber-500 text-zinc-950' },
+                  { id: 'rally', label: 'Rally', dirty: rallyDirty, err: rallyErrors, active: 'bg-fuchsia-500 text-zinc-950' },
+                ] as { id: PlanLayer; label: string; dirty: boolean; err: boolean; active: string }[]
+              ).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={layer === t.id}
+                  onClick={() => setLayer(t.id)}
+                  title={`Edit the ${t.id === 'mission' ? 'mission' : 'rally points'}${t.dirty ? ' (unsaved changes)' : ''}`}
+                  className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                    layer === t.id ? t.active : 'text-zinc-400 hover:text-zinc-100'
+                  }`}
+                >
+                  {t.label}
+                  {t.err ? (
+                    <XCircle className="h-2.5 w-2.5" />
+                  ) : t.dirty ? (
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  ) : null}
+                </button>
+              ))}
+            </div>
+            <span className="truncate font-mono text-[10px] text-zinc-500">
+              {layer === 'rally'
+                ? `${rallyDraft.points.length} point${rallyDraft.points.length === 1 ? '' : 's'}`
+                : `${draft.items.length - 1} items · ${sourceText}`}
             </span>
           </div>
           {(errors > 0 || warnings > 0) && (
@@ -446,6 +428,14 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
               type="button"
               className="flex items-center gap-1.5 text-[10px]"
               onClick={() => {
+                if (layer === 'rally') {
+                  const first = rallyIssues.find((i) => i.index >= 0);
+                  if (first) {
+                    rallySelect(first.index);
+                    onFocusRallyPoint(first.index);
+                  }
+                  return;
+                }
                 const first = issues.find((i) => i.index >= 1);
                 if (first) {
                   select(first.index);
@@ -458,10 +448,10 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
             </button>
           )}
         </div>
-        <button type="button" className={ICON_BTN} disabled={!canUndo} title="Undo" onClick={undo}>
+        <button type="button" className={ICON_BTN} disabled={!canUndoActive} title="Undo" onClick={undo}>
           <Undo2 className="h-3.5 w-3.5" />
         </button>
-        <button type="button" className={ICON_BTN} disabled={!canRedo} title="Redo" onClick={redo}>
+        <button type="button" className={ICON_BTN} disabled={!canRedoActive} title="Redo" onClick={redo}>
           <Redo2 className="h-3.5 w-3.5" />
         </button>
         <button type="button" className={ICON_BTN} title={maximized ? 'Restore map size' : 'Maximize map for planning'} onClick={onToggleMaximize}>
@@ -472,7 +462,7 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
           className={`${ICON_BTN} ${exitConfirm.armed ? 'w-auto border-red-500 bg-red-600 px-1.5 text-[10px] font-bold text-white' : ''}`}
           title="Stop planning"
           onClick={() => {
-            if (dirty && !exitConfirm.armed) return exitConfirm.arm();
+            if (anyDirty && !exitConfirm.armed) return exitConfirm.arm();
             exitConfirm.cancel();
             onExit();
           }}
@@ -481,7 +471,7 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
         </button>
       </div>
 
-      {vehicleChanged && !uploading && (
+      {layer === 'mission' && vehicleChanged && !uploading && (
         <div className="space-y-1 border-b border-amber-500/40 bg-amber-950/40 px-2 py-1.5 text-[10px] text-amber-200">
           <div className="flex gap-1">
             <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
@@ -513,7 +503,28 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
         </div>
       )}
 
-      {!collapsed && (
+      {!collapsed && layer === 'rally' && (
+        <RallyPlanBody
+          issues={rallyIssues}
+          onFocusPoint={onFocusRallyPoint}
+          onOpenFile={onOpenFile}
+          onResetToVehicle={onRallyResetToVehicle}
+          onKeepDraft={onRallyKeepDraft}
+          onRequestUpload={onRequestRallyUpload}
+          uploadBlocked={
+            !connected
+              ? 'Connect to a vehicle to upload'
+              : uploading || transferBusy
+                ? 'A mission transfer is in progress'
+                : rallyErrors
+                  ? 'Fix the errors first'
+                  : !rallyDirty
+                    ? 'No changes to upload'
+                    : null
+          }
+        />
+      )}
+      {!collapsed && layer === 'mission' && (
         <>
           {/* Items */}
           <div

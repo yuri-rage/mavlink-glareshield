@@ -1,6 +1,7 @@
-// Right-click (long-press on touch) menu while planning: on a draft pin (which also selects it, opening it in the
-// panel), insert a waypoint before it or delete it; on the map, place a waypoint there. Closes on Escape, an outside
-// click, and any change to the draft, so it can't act on a renumbered item.
+// Right-click (long-press on touch) menu while planning, on the active layer: on a mission pin (which also selects
+// it, opening it in the panel), insert a waypoint before it or delete it; on a rally flag, delete it; on the map,
+// place a waypoint or rally point there. Closes on Escape, an outside click, and any change to either draft, so it
+// can't act on a renumbered item.
 
 import React, { useEffect, useRef } from 'react';
 import { MapPinPlus, Plus, Trash2 } from 'lucide-react';
@@ -13,12 +14,24 @@ import {
   type MissionDraft,
 } from '../../mavlink/missionDraft';
 import { missionCommandInfo } from '../../mavlink/missionCommands';
-import { useMissionPlanStore } from '../../store/missionPlanStore';
+import { useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
+import { addRallyPoint, removeRallyPoint, type RallyDraft } from '../../mavlink/rallyDraft';
 import { drawablePosition } from './useDraftLayer';
 
 export type PlanMenuTarget =
-  | { kind: 'item'; index: number; x: number; y: number }
-  | { kind: 'map'; lat: number; lon: number; x: number; y: number };
+  | { kind: 'item'; layer: PlanLayer; index: number; x: number; y: number }
+  | { kind: 'map'; layer: PlanLayer; lat: number; lon: number; x: number; y: number };
+
+/** Apply a rally edit that also picks the point to select. */
+function commitRally(make: (d: RallyDraft) => { draft: RallyDraft; index: number | null }) {
+  const st = useMissionPlanStore.getState();
+  try {
+    const r = make(st.rally.history.present);
+    st.rallyEdit(() => r.draft, r.index);
+  } catch (err) {
+    console.warn('[planning] rally edit refused:', err);
+  }
+}
 
 interface PlanContextMenuProps {
   target: PlanMenuTarget;
@@ -53,19 +66,22 @@ const ITEM = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left te
 
 export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, onClose }) => {
   const draft = useMissionPlanStore((s) => s.history.present);
+  const rally = useMissionPlanStore((s) => s.rally.history.present);
   const ref = useRef<HTMLDivElement | null>(null);
   // An item menu whose item is gone (or is home) has nothing to show: close it rather than leave an invisible menu
   // that still swallows the next click.
-  const missing = target.kind === 'item' && (target.index < 1 || !draft.items[target.index]);
+  const missing =
+    target.kind === 'item' &&
+    (target.layer === 'rally' ? !rally.points[target.index] : target.index < 1 || !draft.items[target.index]);
   useEffect(() => {
     if (missing) onClose();
   }, [missing, onClose]);
 
   // Any change to the draft (undo, an edit elsewhere) closes the menu: its item number may no longer be right.
-  const opened = useRef(draft);
+  const opened = useRef({ draft, rally });
   useEffect(() => {
-    if (draft !== opened.current) onClose();
-  }, [draft, onClose]);
+    if (draft !== opened.current.draft || rally !== opened.current.rally) onClose();
+  }, [draft, rally, onClose]);
 
   // A click outside closes the menu and goes no further: with the Place tool on, the click that dismisses the menu
   // must not also drop a waypoint. The one exception is the click that ends the long-press that opened the menu
@@ -109,7 +125,40 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
   };
 
   let body: React.ReactNode;
-  if (target.kind === 'map') {
+  if (target.kind === 'map' && target.layer === 'rally') {
+    const sel = useMissionPlanStore.getState().rally.selected;
+    body = (
+      <button
+        type="button"
+        className={ITEM}
+        onClick={run(() => commitRally((d) => addRallyPoint(d, sel, target.lat, target.lon)))}
+      >
+        <MapPinPlus className="h-3.5 w-3.5 text-fuchsia-400" />
+        Place rally point here
+      </button>
+    );
+  } else if (target.kind === 'item' && target.layer === 'rally') {
+    const i = target.index;
+    if (missing) return null;
+    body = (
+      <>
+        <div className="px-2 pb-1 pt-0.5 font-mono text-[10px] font-bold text-fuchsia-300">R{i + 1} rally point</div>
+        <button
+          type="button"
+          className={`${ITEM} text-red-300 hover:bg-red-950/60`}
+          onClick={run(() =>
+            commitRally((d) => {
+              const next = removeRallyPoint(d, i);
+              return { draft: next, index: next.points.length > 0 ? Math.min(i, next.points.length - 1) : null };
+            })
+          )}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Delete
+        </button>
+      </>
+    );
+  } else if (target.kind === 'map') {
     const selected = useMissionPlanStore.getState().selected;
     body = (
       <button

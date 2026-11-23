@@ -98,7 +98,8 @@ import { MissionPlanPanel } from './MissionPlanPanel';
 import { DraftUploadModal } from './DraftUploadModal';
 import { PlanContextMenu, type PlanMenuTarget } from './PlanContextMenu';
 import { useDraftLayer, drawablePosition } from './useDraftLayer';
-import { isDraftDirty, useMissionPlanStore, vehicleMissionUpdate } from '../../store/missionPlanStore';
+import { isAnyDirty, isDraftDirty, isRallyDirty, useMissionPlanStore, vehicleMissionUpdate } from '../../store/missionPlanStore';
+import { rallyDraftFromItems, rallyDraftFromPoints, rallyDraftsEqual, type RallyDraft } from '../../mavlink/rallyDraft';
 import { checkReadBack, draftFromItems, draftFromWaypoints, draftToItems, draftsEqual, type MissionDraft } from '../../mavlink/missionDraft';
 
 interface MapWidgetProps {
@@ -272,7 +273,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   // Planning mode: a mission draft edited over the map (see MissionPlanPanel). Fly-to and the vehicle mission's
   // popups are off while it is on, so a map click can only ever mean one thing.
   const planning = useMissionPlanStore((s) => s.active);
-  const planDirty = useMissionPlanStore((s) => s.active && isDraftDirty(s));
+  // Either draft (mission or rally) with unsaved changes.
+  const planDirty = useMissionPlanStore((s) => s.active && isAnyDirty(s));
+  const planLayer = useMissionPlanStore((s) => s.layer);
   const planTool = useMissionPlanStore((s) => s.tool);
   const planSelected = useMissionPlanStore((s) => s.selected);
   const planningRef = useRef(planning);
@@ -599,8 +602,12 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       if (cmdHasLocation(w.command) && (w.lat !== 0 || w.lon !== 0)) points.push([w.lat, w.lon]);
     });
     if (planningRef.current) {
-      useMissionPlanStore.getState().history.present.items.forEach((it) => {
+      const st = useMissionPlanStore.getState();
+      st.history.present.items.forEach((it) => {
         if (drawablePosition(it.command, it.x, it.y)) points.push([it.x, it.y]);
+      });
+      st.rally.history.present.points.forEach((p) => {
+        if (p.lat !== 0 || p.lon !== 0) points.push([p.lat, p.lon]);
       });
     }
     fencePoints.forEach((f) => {
@@ -776,7 +783,14 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       if (planningRef.current) {
         // Planning: the map's menu offers placing a waypoint here, never fly-to.
         if (!useMissionPlanStore.getState().uploading) {
-          setPlanMenu({ kind: 'map', lat: e.latlng.lat, lon: e.latlng.lng, x: e.containerPoint.x, y: e.containerPoint.y });
+          setPlanMenu({
+            kind: 'map',
+            layer: useMissionPlanStore.getState().layer,
+            lat: e.latlng.lat,
+            lon: e.latlng.lng,
+            x: e.containerPoint.x,
+            y: e.containerPoint.y,
+          });
         }
         return;
       }
@@ -841,7 +855,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     };
   }, []);
 
-  useDraftLayer(mapInstanceRef, mapReady, (index, x, y) => setPlanMenu({ kind: 'item', index, x, y }));
+  useDraftLayer(mapInstanceRef, mapReady, (layer, index, x, y) => setPlanMenu({ kind: 'item', layer, index, x, y }));
 
   const planLayout = mapAreaWidth >= 560 ? 'side' : 'sheet';
   // Keep the tile attribution clear of the editor. Set on the element directly: Leaflet owns its className.
@@ -869,6 +883,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     return draftFromWaypoints(s.missionWaypoints, home);
   }, []);
 
+  /** The vehicle's rally points as a draft. */
+  const vehicleRallyDraft = useCallback((): RallyDraft => rallyDraftFromPoints(useTelemetryStore.getState().rallyPoints), []);
+
   const startPlanning = () => {
     setFlyToMode(false);
     setPendingFlyTo(null);
@@ -882,7 +899,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     setMaximized(prefer || tooSmall);
     forcedMaxRef.current = tooSmall && !prefer;
     const s = useTelemetryStore.getState();
-    useMissionPlanStore.getState().start(vehicleDraft(), s.missionWaypoints.length > 0 ? { kind: 'vehicle' } : { kind: 'empty' });
+    useMissionPlanStore
+      .getState()
+      .start(vehicleDraft(), s.missionWaypoints.length > 0 ? { kind: 'vehicle' } : { kind: 'empty' }, vehicleRallyDraft());
   };
 
   // Entering planning, from the menu or resumed after a reload: stop following the vehicle (it would pan the map away
@@ -961,6 +980,25 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     else if (action === 'changed') st.setVehicleChanged(true);
     else if (action === 'unchanged') st.setVehicleChanged(false);
   }, [planning, missionWaypoints, missionStatus.isFetching, missionStatus.isUploading, planUploading, vehicleDraft]);
+
+  // The same for the rally layer: a clean rally draft follows the vehicle's rally points; one with changes is kept.
+  // Known once the vehicle has some, or a download (which fetches rally points too) has finished.
+  useEffect(() => {
+    if (!planning) return;
+    const st = useMissionPlanStore.getState();
+    const vehicle = vehicleRallyDraft();
+    const action = vehicleMissionUpdate({
+      active: st.active,
+      uploading: st.uploading,
+      transferring: missionStatus.isFetching || Boolean(missionStatus.isUploading),
+      vehicleKnown: rallyPoints.length > 0 || missionFetchedRef.current,
+      dirty: isRallyDirty(st),
+      vehicleEqualsBase: rallyDraftsEqual(vehicle, st.rally.base),
+    });
+    if (action === 'sync') st.rallySyncFromVehicle(vehicle);
+    else if (action === 'changed') st.setRallyVehicleChanged(true);
+    else if (action === 'unchanged') st.setRallyVehicleChanged(false);
+  }, [planning, rallyPoints, missionStatus.isFetching, missionStatus.isUploading, planUploading, vehicleRallyDraft]);
 
   /**
    * Upload the draft, read the mission back and compare. Only a read-back that matches the route counts: the draft
@@ -1078,7 +1116,19 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     if (!map.getBounds().pad(-0.15).contains([it.x, it.y])) map.panTo([it.x, it.y], { animate: true, duration: 0.3 });
   }, []);
 
-  /** A file opened while planning goes into the draft, never straight to the vehicle. Home stays the draft's. */
+  /** Pan to a draft rally point when it is out of view. */
+  const focusRallyPoint = useCallback((index: number) => {
+    const map = mapInstanceRef.current;
+    const p = useMissionPlanStore.getState().rally.history.present.points[index];
+    if (!map || !p || (p.lat === 0 && p.lon === 0)) return;
+    if (!map.getBounds().pad(-0.15).contains([p.lat, p.lon])) map.panTo([p.lat, p.lon], { animate: true, duration: 0.3 });
+  }, []);
+
+  /**
+   * A file opened while planning goes into the drafts, never straight to the vehicle: its mission into the mission
+   * draft (home stays the draft's), its rally points into the rally draft. Each is one undo step on its layer.
+   * Fence sections aren't editable here and are reported as not loaded.
+   */
   const loadFileIntoDraft = async (file: File) => {
     if (useMissionPlanStore.getState().uploading) {
       setPlanNotice(`${file.name} was not opened: wait for the upload to finish.`);
@@ -1086,22 +1136,45 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     }
     try {
       const parsed = parseDroppedMissionFile(file.name, new Uint8Array(await file.arrayBuffer()));
-      const section = parsed?.sections?.find((sec) => sec.type === 'mission');
-      const items = section?.items ?? (parsed && (parsed.type === 'mission' || parsed.type === 'plan') ? parsed.items : []);
-      if (!items || items.length === 0) {
-        setPlanNotice(`${file.name} has no mission items to edit.`);
+      if (!parsed) {
+        setPlanNotice(`${file.name} is not a mission, rally or plan file.`);
         return;
       }
-      const fromFile = draftFromItems(items);
-      const current = useMissionPlanStore.getState().history.present;
-      const draft: MissionDraft = { items: [current.items[0] ?? fromFile.items[0], ...fromFile.items.slice(1)] };
-      if (!useMissionPlanStore.getState().replace(draft, { kind: 'file', name: file.name })) {
-        setPlanNotice(`${file.name} was not opened: the draft can't be changed right now.`);
+      const sections = parsed.sections?.length
+        ? parsed.sections
+        : [{ type: parsed.type === 'plan' ? 'mission' : parsed.type, items: parsed.items }];
+      const missionItems = sections.find((sec) => sec.type === 'mission')?.items ?? [];
+      const rallyItems = sections.find((sec) => sec.type === 'rally')?.items ?? [];
+      const st = useMissionPlanStore.getState();
+      const loaded: string[] = [];
+      const pts: [number, number][] = [];
+
+      if (missionItems.length > 0) {
+        const fromFile = draftFromItems(missionItems);
+        const current = st.history.present;
+        const draft: MissionDraft = { items: [current.items[0] ?? fromFile.items[0], ...fromFile.items.slice(1)] };
+        if (st.replace(draft, { kind: 'file', name: file.name })) {
+          loaded.push('mission');
+          draft.items.forEach((it) => drawablePosition(it.command, it.x, it.y) && pts.push([it.x, it.y]));
+        }
+      }
+      if (rallyItems.length > 0) {
+        const rally = rallyDraftFromItems(rallyItems);
+        if (rally.points.length > 0 && st.rallyReplace(rally)) {
+          loaded.push('rally points');
+          rally.points.forEach((p) => pts.push([p.lat, p.lon]));
+        }
+      }
+      if (loaded.length === 0) {
+        setPlanNotice(`${file.name} has no mission or rally points to edit.`);
         return;
       }
-      const skipped = (parsed?.sections ?? []).filter((sec) => sec.type !== 'mission').map((sec) => sec.type);
-      setPlanNotice(skipped.length > 0 ? `Loaded the mission from ${file.name}; its ${skipped.join(' and ')} were not loaded.` : null);
-      const pts = draft.items.filter((it) => drawablePosition(it.command, it.x, it.y)).map((it) => [it.x, it.y] as [number, number]);
+      // Show the layer that was loaded (the mission when both were).
+      useMissionPlanStore.getState().setLayer(loaded.includes('mission') ? 'mission' : 'rally');
+      const skipped = sections.filter((sec) => sec.type !== 'mission' && sec.type !== 'rally').map((sec) => sec.type);
+      setPlanNotice(
+        `Loaded the ${loaded.join(' and ')} from ${file.name}${skipped.length > 0 ? `; its ${skipped.join(' and ')} were not loaded` : ''}.`
+      );
       if (pts.length > 0) mapInstanceRef.current?.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 19 });
     } catch (err: any) {
       setPlanNotice(err?.message || `Could not read ${file.name}.`);
@@ -1708,7 +1781,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             <svg width="26" height="36" viewBox="0 0 26 36" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M 13 35 L 4.2 14.5 A 9.5 9.5 0 1 1 21.8 14.5 Z" fill="#9a337d" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
               <circle cx="13" cy="11.5" r="7.5" fill="#ffffff" />
-              <text x="13" y="15" font-size="8.5" font-weight="900" font-family="ui-monospace, monospace, sans-serif" text-anchor="middle" fill="#9a337d">R${rp.seq}</text>
+              <text x="13" y="15" font-size="8.5" font-weight="900" font-family="ui-monospace, monospace, sans-serif" text-anchor="middle" fill="#9a337d">R${rp.seq + 1}</text>
             </svg>
           </div>
         `,
@@ -1717,16 +1790,21 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         popupAnchor: [0, -33],
       });
 
+      // While planning the vehicle's rally points stay visible for comparison, dimmed and not clickable.
       const m = L.marker([rp.lat, rp.lon], {
         icon: rallyIcon,
         pane: 'rallyMarkersPane',
         zIndexOffset: 90,
-      })
-        .bindPopup(`<b>Rally Point #${rp.seq}</b><br/>Alt: ${rp.alt}m<br/>Lat: ${rp.lat.toFixed(6)}<br/>Lon: ${rp.lon.toFixed(6)}`)
-        .addTo(mapInstanceRef.current!);
+        opacity: planning ? 0.35 : 1,
+        interactive: !planning,
+      });
+      if (!planning) {
+        m.bindPopup(`<b>Rally Point R${rp.seq + 1}</b><br/>Alt: ${rp.alt}m<br/>Lat: ${rp.lat.toFixed(6)}<br/>Lon: ${rp.lon.toFixed(6)}`);
+      }
+      m.addTo(mapInstanceRef.current!);
       rallyMarkersRef.current.push(m);
     });
-  }, [rallyPoints]);
+  }, [rallyPoints, planning]);
 
   // Update RTK base station marker rendering - blue needle pin with bold "B"
   useEffect(() => {
@@ -1916,7 +1994,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               onTogglePlanning={
                 planning
                   ? () => {
-                      if (!planDirty || window.confirm('Discard the unsaved mission draft?')) stopPlanning();
+                      if (!planDirty || window.confirm('Discard the unsaved drafts?')) stopPlanning();
                     }
                   : startPlanning
               }
@@ -2060,7 +2138,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               </div>
               {planTool === 'add' && (
                 <div className="rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md">
-                  Click the map to place waypoints after {planSelected !== null && planSelected >= 1 ? `#${planSelected}` : 'the last item'}
+                  {planLayer === 'rally'
+                    ? 'Click the map to place rally points'
+                    : `Click the map to place waypoints after ${planSelected !== null && planSelected >= 1 ? `#${planSelected}` : 'the last item'}`}
                   <span className="text-zinc-500"> · Esc to stop</span>
                 </div>
               )}
@@ -2143,6 +2223,12 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             onKeepDraft={() => useMissionPlanStore.getState().rebase(vehicleDraft())}
             connected={connected}
             transferBusy={missionStatus.isFetching || Boolean(missionStatus.isUploading)}
+            onFocusRallyPoint={focusRallyPoint}
+            onRallyResetToVehicle={() => {
+              useMissionPlanStore.getState().rallyResetToVehicle(vehicleRallyDraft());
+              setPlanNotice(null);
+            }}
+            onRallyKeepDraft={() => useMissionPlanStore.getState().rallyRebase(vehicleRallyDraft())}
           />
         )}
       </CardContent>
