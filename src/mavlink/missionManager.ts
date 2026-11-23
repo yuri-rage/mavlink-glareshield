@@ -41,6 +41,8 @@ const MISSION_RESULT_TEXT: Record<number, string> = {
   15: 'cancelled',
 };
 export const MAV_MISSION_UNSUPPORTED = 3;
+/** MAV_MISSION_RESULT for an item the vehicle didn't request next. */
+const MAV_MISSION_INVALID_SEQUENCE = 13;
 const RALLY_TYPE = 2;
 
 /** The vehicle said it doesn't take rally points: remember it for this vehicle (cleared on vehicle change). */
@@ -227,6 +229,16 @@ export class MissionManager {
           const data = decodePayload(packet.messageId, packet.payload);
           const packetType = data.mission_type ?? 0;
           if (packetType !== missionType) return;
+
+          // MAV_MISSION_INVALID_SEQUENCE is not the end of the upload. ArduPilot sends it for an item it didn't ask
+          // for next, typically a duplicate: it may request an item twice, and a slow answer to MISSION_COUNT makes
+          // us resend the count; the extra copies of the item it just took are refused while it carries on
+          // requesting the next one (seen against SITL while armed in AUTO). Ignore it; a real stall still ends in
+          // the retry timeouts.
+          if (data.type === MAV_MISSION_INVALID_SEQUENCE) {
+            console.warn(`[MissionManager] Vehicle refused an out-of-sequence item for type=${missionType} (a duplicate); continuing.`);
+            return;
+          }
 
           retryCount = 0;
           if (data.type === 0) {

@@ -741,6 +741,8 @@ export class MavFtpClient {
       let retryCount = 0;
       let activeExpectedSeq = -1;
       let phase: "create" | "write" | "terminate" = "create";
+      /** ResetSessions-and-retry rounds after a refused CreateFile. */
+      let createResets = 0;
 
       this.currentAbort = () => {
         if (isDone) return;
@@ -858,6 +860,21 @@ export class MavFtpClient {
 
             if (ftp.opcode === FTP_OPCODE.Nack) {
               const errCode = ftp.data[0];
+              // A file left open by an earlier transfer (Fail): ArduPilot runs one session, so the next CreateFile
+              // is refused until it is closed. Seen against SITL after a read whose TerminateSession didn't land.
+              // Reset all sessions and try again, as reads do; transfers here are queued one at a time, so nothing
+              // else is in flight. A file that really can't be created is refused again and falls back.
+              if (createResets < 2) {
+                createResets++;
+                console.log(
+                  `[MAVFTP] CreateFile Nack (code=${errCode}) for ${filePath}, resetting sessions and retrying (attempt ${createResets + 1})...`,
+                );
+                mavlinkConnection.send(packFtpMessage(sysId, compId, this.nextSeq(), 0, FTP_OPCODE.ResetSessions, 0, 0));
+                setTimeout(() => {
+                  if (!isDone) createFile();
+                }, 80);
+                return;
+              }
               console.warn(
                 `[MAVFTP] CreateFile Nack for ${filePath} (code=${errCode}), falling back...`,
               );
