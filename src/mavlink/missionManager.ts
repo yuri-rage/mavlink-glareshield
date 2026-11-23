@@ -309,15 +309,23 @@ export class MissionManager {
     const typeName = type === 'mission' ? 'Mission' : type === 'fence' ? 'Geofence' : 'Rally points';
     const ftpPath = type === 'mission' ? '@MISSION/mission.dat' : type === 'fence' ? '@MISSION/fence.dat' : '@MISSION/rally.dat';
 
+    // Not a mission over MAVFTP while armed. ArduPilot's mission.dat upload clears the mission first, but
+    // AP_Mission::clear() refuses while armed with the mission running, and the items are then written by index: a
+    // shorter mission leaves the old mission's last items behind (AP_Filesystem_Mission::finish_upload_mission). The
+    // item-by-item protocol truncates to the new count whatever the state (MissionItemProtocol_Waypoints::truncate).
+    const useFtp = !(type === 'mission' && hb.isArmed);
+
     this.setStatus({
       isUploading: true,
-      method: 'ftp',
-      message: `Uploading ${typeName} (${items.length} items) via MAVFTP...`,
+      method: useFtp ? 'ftp' : 'legacy',
+      message: useFtp
+        ? `Uploading ${typeName} (${items.length} items) via MAVFTP...`
+        : `Uploading ${typeName} item-by-item (the vehicle is armed)...`,
       uploadProgress: {
         type,
         current: 0,
         total: items.length,
-        method: 'ftp',
+        method: useFtp ? 'ftp' : 'legacy',
       },
     });
 
@@ -325,25 +333,27 @@ export class MissionManager {
     let ftpSuccess = false;
     const datBuffer = rawDat || packDatFile(items, missionType);
 
-    try {
-      console.log(`[MissionManager] Attempting MAVFTP upload to ${ftpPath} (${datBuffer.length} bytes)...`);
-      ftpSuccess = await mavFtpClient.writeFile(
-        sysId,
-        compId,
-        ftpPath,
-        datBuffer,
-        239,
-        1500,
-        (written, total) => {
-          const pct = total > 0 ? Math.round((written / total) * 100) : 0;
-          this.setStatus({
-            message: `MAVFTP Upload: ${(written / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} KB (${pct}%)`,
-          });
-        }
-      );
-    } catch (err) {
-      console.warn(`[MissionManager] MAVFTP upload failed with exception:`, err);
-      ftpSuccess = false;
+    if (useFtp) {
+      try {
+        console.log(`[MissionManager] Attempting MAVFTP upload to ${ftpPath} (${datBuffer.length} bytes)...`);
+        ftpSuccess = await mavFtpClient.writeFile(
+          sysId,
+          compId,
+          ftpPath,
+          datBuffer,
+          239,
+          1500,
+          (written, total) => {
+            const pct = total > 0 ? Math.round((written / total) * 100) : 0;
+            this.setStatus({
+              message: `MAVFTP Upload: ${(written / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} KB (${pct}%)`,
+            });
+          }
+        );
+      } catch (err) {
+        console.warn(`[MissionManager] MAVFTP upload failed with exception:`, err);
+        ftpSuccess = false;
+      }
     }
 
     if (ftpSuccess) {
@@ -353,7 +363,11 @@ export class MissionManager {
     }
 
     // 2. Fall back to MAVLink item-by-item protocol
-    console.warn(`[MissionManager] MAVFTP upload unavailable or rejected for ${typeName}, falling back to legacy item-by-item stream...`);
+    if (useFtp) {
+      console.warn(`[MissionManager] MAVFTP upload unavailable or rejected for ${typeName}, falling back to legacy item-by-item stream...`);
+    } else {
+      console.log(`[MissionManager] Vehicle armed: uploading the ${typeName.toLowerCase()} item-by-item, not via MAVFTP.`);
+    }
     this.setStatus({
       isUploading: true,
       method: 'legacy',
