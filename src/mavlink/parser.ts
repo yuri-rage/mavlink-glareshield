@@ -397,6 +397,8 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         versionStr = `${major}.${minor}.${patch}${typeStr}`;
       }
       return {
+        // Low 32 bits of the uint64 capabilities bitmask (every MAV_PROTOCOL_CAPABILITY defined so far fits).
+        capabilities: getUint32(0),
         flight_sw_version,
         versionStr,
       };

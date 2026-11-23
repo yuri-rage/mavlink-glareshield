@@ -270,6 +270,7 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   const homeLon = useTelemetryStore((s) => s.homePosition.lon);
   const homeKnown = useTelemetryStore((s) => s.homePosition.source !== 'none');
   const rallyLimitKm = useTelemetryStore((s) => s.parameters['RALLY_LIMIT_KM']?.value);
+  const rallyUnsupported = useTelemetryStore((s) => s.rallySupport === 'unsupported');
   const rallyIssues = useMemo(
     () => validateRallyDraft(rallyDraft, { home: homeKnown ? { lat: homeLat, lon: homeLon } : null, limitKm: rallyLimitKm }),
     [rallyDraft, homeKnown, homeLat, homeLon, rallyLimitKm]
@@ -489,7 +490,9 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
           onKeepDraft={onRallyKeepDraft}
           onRequestUpload={onRequestRallyUpload}
           uploadBlocked={
-            !connected
+            rallyUnsupported
+              ? "This vehicle doesn't support rally points"
+              : !connected
               ? 'Connect to a vehicle to upload'
               : uploading || transferBusy
                 ? 'A mission transfer is in progress'

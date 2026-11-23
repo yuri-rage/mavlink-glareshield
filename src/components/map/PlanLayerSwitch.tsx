@@ -19,6 +19,7 @@ export const PlanLayerSwitch: React.FC<{ className?: string; style?: React.CSSPr
   const missionDirty = useMissionPlanStore((s) => isDraftDirty(s));
   const rallyDirty = useMissionPlanStore((s) => isRallyDirty(s));
   const vehicleType = useTelemetryStore((s) => s.heartbeat.type);
+  const rallyUnsupported = useTelemetryStore((s) => s.rallySupport === 'unsupported');
   // Only errors are shown here, and rally errors don't depend on home or RALLY_LIMIT_KM (those are warnings).
   const missionErr = useMemo(
     () => validateDraft(draft, getVehicleCategory(vehicleType)).some((i) => i.severity === 'error'),
@@ -38,22 +39,31 @@ export const PlanLayerSwitch: React.FC<{ className?: string; style?: React.CSSPr
       style={style}
       className={`flex rounded-lg border border-zinc-700 bg-zinc-950/90 p-0.5 shadow-md backdrop-blur-md ${className ?? ''}`}
     >
-      {tabs.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          role="tab"
-          aria-selected={layer === t.id}
-          onClick={() => useMissionPlanStore.getState().setLayer(t.id)}
-          title={`Edit the ${t.id === 'mission' ? 'mission' : 'rally points'}${t.err ? ' (has errors)' : t.dirty ? ' (unsaved changes)' : ''}`}
-          className={`inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-bold ${
-            layer === t.id ? t.on : 'text-zinc-300 hover:bg-zinc-800'
-          }`}
-        >
-          {t.label}
-          {t.err ? <XCircle className="h-3 w-3" /> : t.dirty ? <span className="h-1.5 w-1.5 rounded-full bg-current" /> : null}
-        </button>
-      ))}
+      {tabs.map((t) => {
+        // A vehicle that answered "unsupported" can't take rally points; the tab stays reachable only while open.
+        const unavailable = t.id === 'rally' && rallyUnsupported && layer !== 'rally';
+        return (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={layer === t.id}
+            disabled={unavailable}
+            onClick={() => useMissionPlanStore.getState().setLayer(t.id)}
+            title={
+              unavailable
+                ? "This vehicle doesn't support rally points"
+                : `Edit the ${t.id === 'mission' ? 'mission' : 'rally points'}${t.err ? ' (has errors)' : t.dirty ? ' (unsaved changes)' : ''}`
+            }
+            className={`inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-bold disabled:cursor-not-allowed disabled:opacity-40 disabled:line-through ${
+              layer === t.id ? t.on : 'text-zinc-300 hover:bg-zinc-800'
+            }`}
+          >
+            {t.label}
+            {t.err ? <XCircle className="h-3 w-3" /> : t.dirty ? <span className="h-1.5 w-1.5 rounded-full bg-current" /> : null}
+          </button>
+        );
+      })}
     </div>
   );
 };
