@@ -276,6 +276,24 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   /** The map card fills the window (planning on a small map). */
   // Planning resumed after a reload comes back maximized or not, as it was left.
   const [maximized, setMaximized] = useState(() => useMissionPlanStore.getState().active && readFlag(PLAN_MAXIMIZED_NOW_KEY, false));
+  // The maximized map starts below the navbar, which stays in view with its telemetry. Measured, since the navbar
+  // wraps to more rows on a narrow screen, and kept up to date while maximized.
+  const [navBottom, setNavBottom] = useState(0);
+  useEffect(() => {
+    if (!maximized) return;
+    const nav = document.getElementById('app-navbar');
+    if (!nav) return;
+    const update = () => setNavBottom(Math.max(0, Math.round(nav.getBoundingClientRect().bottom)));
+    update();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    ro?.observe(nav);
+    window.addEventListener('resize', update);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [maximized]);
+
   /** The map is maximized only because it is too small to edit in place, not by preference. */
   const forcedMaxRef = useRef(maximized && readFlag(PLAN_MAXIMIZE_FORCED_KEY, false));
   /**
@@ -1771,9 +1789,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   return (
     <Card
       className={`border-zinc-800 bg-zinc-950/90 shadow-lg overflow-hidden flex flex-col w-full ${
-        // Above the navbar (z-40), below dialogs (z-50) so they still open on top.
-        maximized ? 'fixed inset-0 z-[45] rounded-none h-[100dvh]' : aspectClass
+        // Maximized: fills the window below the navbar, under it (z-40) so its menus open over the map, and above
+        // the dashboard. Dialogs (z-50) stay on top.
+        maximized ? 'fixed inset-x-0 bottom-0 z-[39] rounded-none' : aspectClass
       }`}
+      style={maximized ? { top: navBottom } : undefined}
     >
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <div ref={headerRef} className="flex items-center justify-between gap-1.5 min-w-0">
@@ -1970,28 +1990,78 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           </div>
         )}
 
-        {/* GPS Coordinate readout HUD overlay in top-left (decoupled from bottom Leaflet attribution); the planning
-            editor needs the room. */}
-        <div hidden={planning} className="absolute top-2 left-2 z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs font-mono text-zinc-300 flex flex-wrap items-center gap-2.5 pointer-events-none shadow-md">
-          <span>
-            Lat: <b className="text-sky-400">{hasValidPosition ? position.lat.toFixed(6) : '--'}</b>
-          </span>
-          <span>
-            Lon: <b className="text-sky-400">{hasValidPosition ? position.lon.toFixed(6) : '--'}</b>
-          </span>
-          <span>
-            Alt:{' '}
-            <b className="text-emerald-400">
-              {hasValidPosition
-                ? `${formatAltitude(altitudeMode === 'msl' ? (position.alt || position.relativeAlt) : position.relativeAlt).full} ${altitudeMode.toUpperCase()}`
-                : '--'}
-            </b>
-          </span>
-          {hasValidPosition && homePosition.distanceM !== null && (
-            <span className="text-emerald-300 flex items-center gap-1 border-l border-zinc-800 pl-2">
-              <Home className="h-3 w-3 text-emerald-400 inline" />
-              <b>{formatHomeVector(homePosition.bearingDeg, homePosition.distanceM)}</b>
+        {/* Top-left column: the GPS readout (decoupled from the bottom Leaflet attribution), and while planning the map
+            tools, hint and notices stacked below it, so neither covers the other. Kept clear of the side panel. */}
+        <div
+          className={`absolute top-2 left-2 z-[460] flex flex-col items-start gap-1.5 pointer-events-none ${
+            planning && planLayout === 'side' ? 'max-w-[calc(100%-288px)]' : 'max-w-[calc(100%-1rem)]'
+          }`}
+        >
+          <div className="bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs font-mono text-zinc-300 flex flex-wrap items-center gap-2.5 pointer-events-none shadow-md">
+            <span>
+              Lat: <b className="text-sky-400">{hasValidPosition ? position.lat.toFixed(6) : '--'}</b>
             </span>
+            <span>
+              Lon: <b className="text-sky-400">{hasValidPosition ? position.lon.toFixed(6) : '--'}</b>
+            </span>
+            <span>
+              Alt:{' '}
+              <b className="text-emerald-400">
+                {hasValidPosition
+                  ? `${formatAltitude(altitudeMode === 'msl' ? (position.alt || position.relativeAlt) : position.relativeAlt).full} ${altitudeMode.toUpperCase()}`
+                  : '--'}
+              </b>
+            </span>
+            {hasValidPosition && homePosition.distanceM !== null && (
+              <span className="text-emerald-300 flex items-center gap-1 border-l border-zinc-800 pl-2">
+                <Home className="h-3 w-3 text-emerald-400 inline" />
+                <b>{formatHomeVector(homePosition.bearingDeg, homePosition.distanceM)}</b>
+              </span>
+            )}
+          </div>
+          {planning && (
+            <div className="pointer-events-auto flex flex-col items-start gap-1.5">
+              <div className="flex items-center rounded-lg border border-zinc-700 bg-zinc-950/90 p-0.5 shadow-md" role="group" aria-label="Map tool">
+                {(
+                  [
+                    { tool: 'select', label: 'Select', icon: <MousePointer2 className="h-3.5 w-3.5" />, title: 'Select and drag waypoints' },
+                    { tool: 'add', label: 'Place', icon: <MapPinPlus className="h-3.5 w-3.5" />, title: 'Click the map to place waypoints, one per click (Esc to stop)' },
+                  ] as const
+                ).map((b) => (
+                  <button
+                    key={b.tool}
+                    type="button"
+                    aria-pressed={planTool === b.tool}
+                    title={b.title}
+                    onClick={() => useMissionPlanStore.getState().setTool(b.tool)}
+                    className={`inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-bold ${
+                      planTool === b.tool
+                        ? b.tool === 'add'
+                          ? 'bg-amber-500 text-zinc-950'
+                          : 'bg-zinc-700 text-white'
+                        : 'text-zinc-300 hover:bg-zinc-800'
+                    }`}
+                  >
+                    {b.icon}
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+              {planTool === 'add' && (
+                <div className="rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md">
+                  Click the map to place waypoints after {planSelected !== null && planSelected >= 1 ? `#${planSelected}` : 'the last item'}
+                  <span className="text-zinc-500"> · Esc to stop</span>
+                </div>
+              )}
+              {planNotice && (
+                <div className="rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md flex items-start gap-2">
+                  <span className="min-w-0">{planNotice}</span>
+                  <button type="button" className="text-zinc-500 hover:text-zinc-200" onClick={() => setPlanNotice(null)} aria-label="Dismiss">
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -2038,54 +2108,6 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           />
         )}
 
-        {planning && (
-          <div
-            className={`absolute top-2 left-2 z-[460] flex flex-col items-start gap-1.5 ${
-              planLayout === 'side' ? 'max-w-[calc(100%-288px)]' : 'max-w-[calc(100%-1rem)]'
-            }`}
-          >
-            <div className="flex items-center rounded-lg border border-zinc-700 bg-zinc-950/90 p-0.5 shadow-md" role="group" aria-label="Map tool">
-              {(
-                [
-                  { tool: 'select', label: 'Select', icon: <MousePointer2 className="h-3.5 w-3.5" />, title: 'Select and drag waypoints' },
-                  { tool: 'add', label: 'Place', icon: <MapPinPlus className="h-3.5 w-3.5" />, title: 'Click the map to place waypoints, one per click (Esc to stop)' },
-                ] as const
-              ).map((b) => (
-                <button
-                  key={b.tool}
-                  type="button"
-                  aria-pressed={planTool === b.tool}
-                  title={b.title}
-                  onClick={() => useMissionPlanStore.getState().setTool(b.tool)}
-                  className={`inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-bold ${
-                    planTool === b.tool
-                      ? b.tool === 'add'
-                        ? 'bg-amber-500 text-zinc-950'
-                        : 'bg-zinc-700 text-white'
-                      : 'text-zinc-300 hover:bg-zinc-800'
-                  }`}
-                >
-                  {b.icon}
-                  {b.label}
-                </button>
-              ))}
-            </div>
-            {planTool === 'add' && (
-              <div className="rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md">
-                Click the map to place waypoints after {planSelected !== null && planSelected >= 1 ? `#${planSelected}` : 'the last item'}
-                <span className="text-zinc-500"> · Esc to stop</span>
-              </div>
-            )}
-            {planNotice && (
-              <div className="rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md flex items-start gap-2">
-                <span className="min-w-0">{planNotice}</span>
-                <button type="button" className="text-zinc-500 hover:text-zinc-200" onClick={() => setPlanNotice(null)} aria-label="Dismiss">
-                  ×
-                </button>
-              </div>
-            )}
-          </div>
-        )}
         {planning && planMenu && (
           <PlanContextMenu
             target={planMenu}
