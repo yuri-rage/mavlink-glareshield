@@ -960,9 +960,10 @@ export class MissionManager {
     rallyPoints.sort((a, b) => a.seq - b.seq);
     if (!this.lastLegacyComplete) {
       // Timed out or cancelled: what arrived (maybe nothing) is not the vehicle's list. Keep the rally points the map
-      // already shows rather than replacing them with a partial or empty one.
+      // already shows rather than replacing them with a partial or empty one, and return those, so a caller's count
+      // (the download summary) agrees with the map. lastRallyReadOk stays false: callers that check it know.
       console.warn('[MissionManager] Rally point stream incomplete; keeping the rally points already known.');
-      return rallyPoints;
+      return useTelemetryStore.getState().rallyPoints;
     }
     useTelemetryStore.setState({ rallyPoints, ...(rallyPoints.length > 0 ? { rallySupport: 'supported' as const } : {}) });
     this.setStatus({ rallyCount: rallyPoints.length });
