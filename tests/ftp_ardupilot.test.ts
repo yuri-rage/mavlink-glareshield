@@ -498,8 +498,9 @@ for (const loss of [0.1, 0.2]) {
   check('no rally: upload refusal also remembered', useTelemetryStore.getState().rallySupport === 'unsupported');
 }
 
-// 12. Armed: a mission goes item-by-item, never over MAVFTP. ArduPilot can't clear a running mission, so a shorter
-// mission.dat would leave the old tail behind; the item protocol truncates to the new count.
+// 12. Armed in AUTO / AUTO_RTL: a mission goes item-by-item, never over MAVFTP. ArduPilot can't clear a running
+// mission, so a shorter mission.dat would leave the old tail behind; the item protocol truncates to the new count.
+// Armed in other modes (LOITER, HOLD, GUIDED, ...) still uses MAVFTP.
 {
   const { missionManager } = await import('../src/mavlink/missionManager.ts');
   const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
@@ -515,26 +516,53 @@ for (const loss of [0.1, 0.2]) {
   ];
   const hb = useTelemetryStore.getState().heartbeat;
 
-  useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: true } });
+  useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: true, modeName: 'AUTO' } });
   const armedSim = new ArduPilotFtpSim();
   armedSim.install();
   const armed = await missionManager.uploadSection('mission', 0, items as any, undefined, 1, 1);
   await sleep(50);
-  check('armed: mission uploaded item-by-item, no MAVFTP write attempted',
+  check('armed in AUTO: mission uploaded item-by-item, no MAVFTP write attempted',
     armed.success && armed.method === 'legacy' && legacyCalls === 1 && !armedSim.requests.some((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)),
     `${armed.method} ${legacyCalls} ${armedSim.requests.join(' ')}`);
 
+  useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: true, modeName: 'AUTO_RTL' } });
+  const autoRtlSim = new ArduPilotFtpSim();
+  autoRtlSim.install();
+  const autoRtl = await missionManager.uploadSection('mission', 0, items as any, undefined, 1, 1);
+  await sleep(50);
+  check('armed in AUTO_RTL: mission uploaded item-by-item, no MAVFTP write attempted',
+    autoRtl.success && autoRtl.method === 'legacy' && legacyCalls === 2 && !autoRtlSim.requests.some((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)),
+    `${autoRtl.method} ${legacyCalls}`);
+
+  // A mode the app doesn't recognise (named by number) might run the mission: item-by-item to be safe.
+  useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: true, modeName: 'COPTER_31' } });
+  const unknownSim = new ArduPilotFtpSim();
+  unknownSim.install();
+  const unknownMode = await missionManager.uploadSection('mission', 0, items as any, undefined, 1, 1);
+  await sleep(50);
+  check('armed in an unrecognised mode: mission item-by-item (it might be running the mission)',
+    unknownMode.success && unknownMode.method === 'legacy' && !unknownSim.requests.some((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)),
+    unknownMode.method);
+
+  useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: true, modeName: 'LOITER' } });
+  new ArduPilotFtpSim().install();
+  const armedLoiter = await missionManager.uploadSection('mission', 0, items as any, undefined, 1, 1);
+  await sleep(50);
+  check('armed in LOITER: mission still goes over MAVFTP', armedLoiter.success && armedLoiter.method === 'ftp');
+
+  useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: true, modeName: 'AUTO' } });
   const rallySim = new ArduPilotFtpSim();
   rallySim.install();
   const rally = await missionManager.uploadSection('rally', 2, [{ seq: 0, command: 5100, frame: 3, x: 37.78, y: -122.41, z: 30 }] as any, undefined, 1, 1);
   await sleep(50);
-  check('armed: rally points still go over MAVFTP (ArduPilot clears them whatever the state)', rally.success && rally.method === 'ftp');
+  check('armed in AUTO: rally points still go over MAVFTP (ArduPilot clears them whatever the state)', rally.success && rally.method === 'ftp');
 
-  useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: false } });
+  useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: false, modeName: 'AUTO' } });
   new ArduPilotFtpSim().install();
   const disarmed = await missionManager.uploadSection('mission', 0, items as any, undefined, 1, 1);
   await sleep(50);
-  check('disarmed: mission over MAVFTP as before', disarmed.success && disarmed.method === 'ftp');
+  check('disarmed in AUTO: mission over MAVFTP as before', disarmed.success && disarmed.method === 'ftp');
+  useTelemetryStore.setState({ heartbeat: hb });
   (missionManager as any).uploadLegacyItems = realLegacy;
 }
 
