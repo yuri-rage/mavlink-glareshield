@@ -1,6 +1,7 @@
-// Planning mode: the mission draft being edited on the map, its undo history, and the mission it started from.
-// The draft is saved in this browser so switching dashboard tabs or reloading doesn't lose work. Nothing here talks
-// to the vehicle: the draft only replaces the vehicle's mission through an upload.
+// Planning mode: the drafts being edited on the map (the mission, and the rally points as a second layer), each with
+// its undo history and the vehicle's version it started from. Drafts are saved in this browser so switching
+// dashboard tabs or reloading doesn't lose work. Nothing here talks to the vehicle: a draft only replaces the
+// vehicle's mission or rally points through an upload.
 
 import { create } from 'zustand';
 import {
@@ -12,11 +13,25 @@ import {
   type History,
   type MissionDraft,
 } from '../mavlink/missionDraft';
+import { rallyDraftsEqual, type RallyDraft } from '../mavlink/rallyDraft';
 
 const STORAGE_KEY = 'mavlink_glareshield_mission_draft';
 
 /** What a click on the map does while planning: select pins only, or add a waypoint where clicked. */
 export type PlanTool = 'select' | 'add'; // 'add' is labelled Place
+
+/** Which draft the map and panel edit. */
+export type PlanLayer = 'mission' | 'rally';
+
+/** The rally point draft: the same shape of state as the mission's, kept apart. */
+export interface RallyLayerState {
+  history: History<RallyDraft>;
+  /** The vehicle's rally points when planning started or last synced. */
+  base: RallyDraft;
+  selected: number | null;
+  /** The vehicle's rally points changed after the draft started (and the draft has changes of its own). */
+  vehicleChanged: boolean;
+}
 
 /** Where the draft came from, shown in the panel. */
 export type DraftSource = { kind: 'vehicle' } | { kind: 'file'; name: string } | { kind: 'empty' };
@@ -35,9 +50,11 @@ interface MissionPlanState {
   uploading: boolean;
   /** The vehicle's mission changed after the draft started (and the draft has changes of its own). */
   vehicleChanged: boolean;
+  layer: PlanLayer;
+  rally: RallyLayerState;
 
-  /** Turn planning on with `draft`, which is also the base (no changes yet). */
-  start: (draft: MissionDraft, source: DraftSource) => void;
+  /** Turn planning on with `draft` (and `rally`), each also its base (no changes yet). */
+  start: (draft: MissionDraft, source: DraftSource, rally?: RallyDraft) => void;
   /** Turn planning off and drop the draft. */
   stop: () => void;
   /** Apply an edit to the draft as one undo step. Edits throw on invalid input; the draft is then unchanged. */
@@ -49,9 +66,11 @@ interface MissionPlanState {
   resetToVehicle: (draft: MissionDraft) => void;
   /** Take the vehicle's mission as both draft and base, with a fresh history (nothing to undo into). */
   syncFromVehicle: (draft: MissionDraft) => void;
+  /** Undo / redo on the active layer. */
   undo: () => void;
   redo: () => void;
   select: (index: number | null) => void;
+  setLayer: (layer: PlanLayer) => void;
   setTool: (tool: PlanTool) => void;
   setUploading: (uploading: boolean) => void;
   setVehicleChanged: (changed: boolean) => void;
@@ -59,6 +78,16 @@ interface MissionPlanState {
   rebase: (base: MissionDraft) => void;
   /** After a verified upload: what the vehicle holds becomes the draft and the base, with a fresh history. */
   uploaded: (readBack: MissionDraft) => void;
+
+  // The rally layer: the same operations, on the rally draft.
+  rallyEdit: (fn: (d: RallyDraft) => RallyDraft, select?: number | null) => void;
+  rallyReplace: (draft: RallyDraft) => boolean;
+  rallyResetToVehicle: (draft: RallyDraft) => void;
+  rallySyncFromVehicle: (draft: RallyDraft) => void;
+  rallySelect: (index: number | null) => void;
+  setRallyVehicleChanged: (changed: boolean) => void;
+  rallyRebase: (base: RallyDraft) => void;
+  rallyUploaded: (readBack: RallyDraft) => void;
 }
 
 /**
@@ -82,22 +111,50 @@ export function vehicleMissionUpdate(input: {
   return input.vehicleEqualsBase ? 'unchanged' : 'changed';
 }
 
-/** True when the draft differs from the mission it started from. */
+/** True when the mission draft differs from the mission it started from. */
 export function isDraftDirty(s: Pick<MissionPlanState, 'history' | 'base'>): boolean {
   return !draftsEqual(s.history.present, s.base);
 }
 
+/** True when the rally draft differs from the rally points it started from. */
+export function isRallyDirty(s: Pick<MissionPlanState, 'rally'>): boolean {
+  return !rallyDraftsEqual(s.rally.history.present, s.rally.base);
+}
+
+/** Either draft has unsaved changes (for leaving planning, closing the tab, the header dot). */
+export function isAnyDirty(s: Pick<MissionPlanState, 'history' | 'base' | 'rally'>): boolean {
+  return isDraftDirty(s) || isRallyDirty(s);
+}
+
 const EMPTY: MissionDraft = { items: [] };
+const EMPTY_RALLY: RallyDraft = { points: [] };
+const rallyInit = (draft: RallyDraft = EMPTY_RALLY): RallyLayerState => ({
+  history: historyInit(draft),
+  base: draft,
+  selected: null,
+  vehicleChanged: false,
+});
+const fitSelection = (sel: number | null, length: number) => (sel !== null && sel < length ? sel : null);
 
 interface Saved {
   active: boolean;
   present: MissionDraft;
   base: MissionDraft;
   source: DraftSource;
+  /** Absent in drafts saved before rally editing. */
+  rally?: { present: RallyDraft; base: RallyDraft };
 }
 
 function isDraft(v: any): v is MissionDraft {
   return Boolean(v) && Array.isArray(v.items) && v.items.every((it: any) => it && typeof it.command === 'number');
+}
+
+function isRallyDraft(v: any): v is RallyDraft {
+  return (
+    Boolean(v) &&
+    Array.isArray(v.points) &&
+    v.points.every((p: any) => p && ['lat', 'lon', 'alt', 'frame'].every((k) => typeof p[k] === 'number'))
+  );
 }
 
 function load(): Saved | null {
@@ -106,7 +163,8 @@ function load(): Saved | null {
     if (!raw) return null;
     const s = JSON.parse(raw);
     if (!s?.active || !isDraft(s.present) || !isDraft(s.base) || s.present.items.length === 0) return null;
-    return { active: true, present: s.present, base: s.base, source: s.source ?? { kind: 'empty' } };
+    const rally = s.rally && isRallyDraft(s.rally.present) && isRallyDraft(s.rally.base) ? s.rally : undefined;
+    return { active: true, present: s.present, base: s.base, source: s.source ?? { kind: 'empty' }, rally };
   } catch {
     return null;
   }
@@ -118,7 +176,13 @@ function save(s: MissionPlanState) {
       localStorage.removeItem(STORAGE_KEY);
       return;
     }
-    const saved: Saved = { active: true, present: s.history.present, base: s.base, source: s.source };
+    const saved: Saved = {
+      active: true,
+      present: s.history.present,
+      base: s.base,
+      source: s.source,
+      rally: { present: s.rally.history.present, base: s.rally.base },
+    };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
   } catch {
     // Storage full or blocked: the draft still works for this session.
@@ -136,9 +200,23 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   tool: 'select',
   uploading: false,
   vehicleChanged: false,
+  layer: 'mission',
+  rally: restored?.rally
+    ? { history: historyInit(restored.rally.present), base: restored.rally.base, selected: null, vehicleChanged: false }
+    : rallyInit(),
 
-  start: (draft, source) =>
-    set({ active: true, history: historyInit(draft), base: draft, source, selected: null, tool: 'select', vehicleChanged: false }),
+  start: (draft, source, rally) =>
+    set({
+      active: true,
+      history: historyInit(draft),
+      base: draft,
+      source,
+      selected: null,
+      tool: 'select',
+      vehicleChanged: false,
+      layer: 'mission',
+      rally: rallyInit(rally),
+    }),
 
   stop: () =>
     set({
@@ -149,6 +227,8 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
       selected: null,
       tool: 'select',
       vehicleChanged: false,
+      layer: 'mission',
+      rally: rallyInit(),
     }),
 
   edit: (fn, select) => {
@@ -187,20 +267,32 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   },
 
   undo: () => {
-    if (get().uploading) return;
+    const { uploading, layer, rally } = get();
+    if (uploading) return;
+    if (layer === 'rally') {
+      const h = historyUndo(rally.history);
+      set({ rally: { ...rally, history: h, selected: fitSelection(rally.selected, h.present.points.length) } });
+      return;
+    }
     const h = historyUndo(get().history);
-    const sel = get().selected;
-    set({ history: h, selected: sel !== null && sel < h.present.items.length ? sel : null });
+    set({ history: h, selected: fitSelection(get().selected, h.present.items.length) });
   },
 
   redo: () => {
-    if (get().uploading) return;
+    const { uploading, layer, rally } = get();
+    if (uploading) return;
+    if (layer === 'rally') {
+      const h = historyRedo(rally.history);
+      set({ rally: { ...rally, history: h, selected: fitSelection(rally.selected, h.present.points.length) } });
+      return;
+    }
     const h = historyRedo(get().history);
-    const sel = get().selected;
-    set({ history: h, selected: sel !== null && sel < h.present.items.length ? sel : null });
+    set({ history: h, selected: fitSelection(get().selected, h.present.items.length) });
   },
 
   select: (index) => set({ selected: index }),
+
+  setLayer: (layer) => set({ layer }),
 
   setTool: (tool) => set({ tool }),
 
@@ -226,20 +318,87 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
       vehicleChanged: false,
     });
   },
+
+  rallyEdit: (fn, select) => {
+    const { rally, active, uploading } = get();
+    if (!active || uploading) return;
+    const next = fn(rally.history.present);
+    set({
+      rally: {
+        ...rally,
+        history: historyPush(rally.history, next),
+        ...(select !== undefined ? { selected: select } : {}),
+      },
+    });
+  },
+
+  rallyReplace: (draft) => {
+    const { rally, active, uploading } = get();
+    if (!active || uploading) return false;
+    set({ rally: { ...rally, history: historyPush(rally.history, draft), selected: null } });
+    return true;
+  },
+
+  rallyResetToVehicle: (draft) => {
+    const { rally, active, uploading } = get();
+    if (!active || uploading) return;
+    set({ rally: { ...rally, history: historyPush(rally.history, draft), base: draft, selected: null, vehicleChanged: false } });
+  },
+
+  rallySyncFromVehicle: (draft) => {
+    const { rally, active } = get();
+    if (!active) return;
+    set({ rally: { history: historyInit(draft), base: draft, selected: fitSelection(rally.selected, draft.points.length), vehicleChanged: false } });
+  },
+
+  rallySelect: (index) => set({ rally: { ...get().rally, selected: index } }),
+
+  setRallyVehicleChanged: (changed) => {
+    const { rally } = get();
+    if (rally.vehicleChanged !== changed) set({ rally: { ...rally, vehicleChanged: changed } });
+  },
+
+  rallyRebase: (base) => {
+    const { rally, active } = get();
+    if (!active) return;
+    set({ rally: { ...rally, base, vehicleChanged: false } });
+  },
+
+  rallyUploaded: (readBack) => {
+    const { rally, active } = get();
+    if (!active) return;
+    set({ rally: { history: historyInit(readBack), base: readBack, selected: fitSelection(rally.selected, readBack.points.length), vehicleChanged: false } });
+  },
 }));
 
 // Save after every change. A draft is a few kB, and the map commits a drag only when it ends.
-let lastSaved: { active: boolean; present: MissionDraft; base: MissionDraft; source: DraftSource } | null = null;
+let lastSaved: {
+  active: boolean;
+  present: MissionDraft;
+  base: MissionDraft;
+  source: DraftSource;
+  rallyPresent: RallyDraft;
+  rallyBase: RallyDraft;
+} | null = null;
 useMissionPlanStore.subscribe((s) => {
   if (
     lastSaved &&
     lastSaved.active === s.active &&
     lastSaved.present === s.history.present &&
     lastSaved.base === s.base &&
-    lastSaved.source === s.source
+    lastSaved.source === s.source &&
+    lastSaved.rallyPresent === s.rally.history.present &&
+    lastSaved.rallyBase === s.rally.base
   ) {
     return;
   }
-  lastSaved = { active: s.active, present: s.history.present, base: s.base, source: s.source };
+  lastSaved = {
+    active: s.active,
+    present: s.history.present,
+    base: s.base,
+    source: s.source,
+    rallyPresent: s.rally.history.present,
+    rallyBase: s.rally.base,
+  };
   save(s);
 });

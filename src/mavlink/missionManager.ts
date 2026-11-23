@@ -249,6 +249,7 @@ export class MissionManager {
         lat: it.x ?? 0,
         lon: it.y ?? 0,
         alt: it.z ?? 0,
+        frame: it.frame,
       }));
       useTelemetryStore.setState({ rallyPoints: rps });
     }
@@ -367,11 +368,35 @@ export class MissionManager {
    * Upload a mission (seq 0 = home first) and then download it again, so the caller can check what the vehicle
    * actually holds. `readBack` is what the vehicle sent; it is empty when the read failed.
    */
-  public async uploadMissionAndReadBack(
+  public uploadMissionAndReadBack(
     items: MissionItemIntData[],
     targetSys?: number,
     targetComp?: number
   ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: MissionWaypoint[]; error?: string }> {
+    return this.uploadAndReadBack('mission', 0, items, (sys, comp) => this.fetchWaypoints(sys, comp), targetSys, targetComp);
+  }
+
+  /**
+   * Upload rally points (mission_type 2) and download them again, like uploadMissionAndReadBack. An empty
+   * `readBack` after uploading points means the read failed; after uploading none, that the vehicle has none.
+   */
+  public uploadRallyAndReadBack(
+    items: MissionItemIntData[],
+    targetSys?: number,
+    targetComp?: number
+  ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: RallyPoint[]; error?: string }> {
+    return this.uploadAndReadBack('rally', 2, items, (sys, comp) => this.fetchRally(sys, comp), targetSys, targetComp);
+  }
+
+  private async uploadAndReadBack<T>(
+    type: 'mission' | 'rally',
+    missionType: number,
+    items: MissionItemIntData[],
+    read: (sysId: number, compId: number) => Promise<T[]>,
+    targetSys?: number,
+    targetComp?: number
+  ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: T[]; error?: string }> {
+    const name = type === 'mission' ? 'Mission' : 'Rally points';
     if (this.status.isFetching || this.status.isUploading) {
       return { success: false, method: 'legacy', readBack: [], error: 'A mission transfer is already in progress.' };
     }
@@ -381,9 +406,9 @@ export class MissionManager {
     this.isCancelled = false;
 
     try {
-      const res = await this.uploadSection('mission', 0, items, undefined, sysId, compId);
+      const res = await this.uploadSection(type, missionType, items, undefined, sysId, compId);
       if (!res.success) {
-        this.setStatus({ message: res.error || 'Mission upload failed.' });
+        this.setStatus({ message: res.error || `${name} upload failed.` });
         this.scheduleMessageClear(8000);
         return { success: false, method: res.method, readBack: [], error: res.error };
       }
@@ -393,18 +418,19 @@ export class MissionManager {
         isFetching: true,
         method: 'ftp',
         uploadProgress: undefined,
-        message: 'Reading the mission back from the vehicle...',
+        message: `Reading the ${type === 'mission' ? 'mission' : 'rally points'} back from the vehicle...`,
       });
-      const readBack = await this.fetchWaypoints(sysId, compId);
-      if (readBack.length === 0) {
-        // The read failed (a failed stream leaves the mission empty). The vehicle acknowledged the upload, so keep
-        // showing the uploaded mission rather than none.
-        this.updateStoreItems('mission', items);
+      const readBack = await read(sysId, compId);
+      if (readBack.length === 0 && items.length > 0) {
+        // The read failed (a failed stream leaves the list empty). The vehicle acknowledged the upload, so keep
+        // showing what was uploaded rather than nothing.
+        this.updateStoreItems(type, items);
       }
-      this.setStatus({ waypointCount: readBack.length });
+      if (type === 'mission') this.setStatus({ waypointCount: readBack.length });
+      else this.setStatus({ rallyCount: readBack.length });
       return { success: true, method: res.method, readBack };
     } catch (err: any) {
-      const error = `Mission upload failed: ${err?.message || err}`;
+      const error = `${name} upload failed: ${err?.message || err}`;
       this.setStatus({ message: error });
       this.scheduleMessageClear(8000);
       return { success: false, method: 'legacy', readBack: [], error };
@@ -843,6 +869,7 @@ export class MissionManager {
       lat: data.x,
       lon: data.y,
       alt: data.z,
+      frame: data.frame,
     }));
 
     rallyPoints.sort((a, b) => a.seq - b.seq);
@@ -974,7 +1001,7 @@ export class MissionManager {
       console.warn('[MissionManager] Not a rally.dat file (bad length or magic, expected 0x763d)');
       return null;
     }
-    return dat.items.map((it) => ({ seq: it.seq, lat: it.rawX / 1e7, lon: it.rawY / 1e7, alt: it.z }));
+    return dat.items.map((it) => ({ seq: it.seq, lat: it.rawX / 1e7, lon: it.rawY / 1e7, alt: it.z, frame: it.frame }));
   }
 }
 

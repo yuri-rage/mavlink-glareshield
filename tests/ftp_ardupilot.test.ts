@@ -398,5 +398,30 @@ for (const loss of [0.1, 0.2]) {
   check('draft upload: a param the vehicle stored differently is reported, route still verified', p.status === 'params-differ' && p.comparison.params.length === 1);
 }
 
+// 10. Rally points: upload a rally draft, read it back (the vehicle regenerates rally.dat: seq, alt in cm) and judge.
+{
+  const { missionManager } = await import('../src/mavlink/missionManager.ts');
+  const rd = await import('../src/mavlink/rallyDraft.ts');
+  const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
+  let rally = rd.rallyDraftFromPoints([]);
+  rally = rd.addRallyPoint(rally, null, 37.7801234, -122.4101234).draft;
+  rally = rd.addRallyPoint(rally, null, 37.7702345, -122.4302345).draft;
+  rally = rd.updateRallyPoint(rally, 1, { alt: 45.337, frame: 0 });
+
+  new ArduPilotFtpSim().install();
+  const res = await missionManager.uploadRallyAndReadBack(rd.rallyDraftToItems(rally), 1, 1);
+  await sleep(50);
+  const verdict = rd.checkRallyReadBack(rally, res.readBack);
+  check('rally upload over MAVFTP: accepted and read back', res.success && res.method === 'ftp' && res.readBack.length === 2, `${res.success} ${res.method} ${res.readBack.length}`);
+  check('rally upload: regenerated read-back (alt in cm, frame kept) verifies', verdict.status === 'verified', verdict.differences.join('; '));
+  check('rally upload: the map shows the read-back with its frame', useTelemetryStore.getState().rallyPoints[1]?.frame === 0);
+
+  // Clearing all rally points: nothing uploaded, nothing back, verified (unlike a mission, empty is a valid answer).
+  new ArduPilotFtpSim().install();
+  const cleared = await missionManager.uploadRallyAndReadBack([], 1, 1);
+  await sleep(50);
+  check('clearing rally points verifies', cleared.success && rd.checkRallyReadBack({ points: [] }, cleared.readBack).status === 'verified', `${cleared.success} ${cleared.readBack.length} ${cleared.error ?? ''}`);
+}
+
 console.log(failures.length ? `\n${failures.length} MAVFTP ArduPilot-sim check(s) FAILED` : '\nAll MAVFTP ArduPilot-sim checks PASSED');
 process.exit(failures.length ? 1 : 0);
