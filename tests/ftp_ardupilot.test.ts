@@ -498,5 +498,45 @@ for (const loss of [0.1, 0.2]) {
   check('no rally: upload refusal also remembered', useTelemetryStore.getState().rallySupport === 'unsupported');
 }
 
+// 12. Armed: a mission goes item-by-item, never over MAVFTP. ArduPilot can't clear a running mission, so a shorter
+// mission.dat would leave the old tail behind; the item protocol truncates to the new count.
+{
+  const { missionManager } = await import('../src/mavlink/missionManager.ts');
+  const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
+  const realLegacy = missionManager.uploadLegacyItems.bind(missionManager);
+  let legacyCalls = 0;
+  (missionManager as any).uploadLegacyItems = async () => {
+    legacyCalls++;
+    return true;
+  };
+  const items = [
+    { seq: 0, command: 16, frame: 0, x: 37.7749, y: -122.4194, z: 10 },
+    { seq: 1, command: 16, frame: 3, x: 37.775, y: -122.419, z: 30 },
+  ];
+  const hb = useTelemetryStore.getState().heartbeat;
+
+  useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: true } });
+  const armedSim = new ArduPilotFtpSim();
+  armedSim.install();
+  const armed = await missionManager.uploadSection('mission', 0, items as any, undefined, 1, 1);
+  await sleep(50);
+  check('armed: mission uploaded item-by-item, no MAVFTP write attempted',
+    armed.success && armed.method === 'legacy' && legacyCalls === 1 && !armedSim.requests.some((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)),
+    `${armed.method} ${legacyCalls} ${armedSim.requests.join(' ')}`);
+
+  const rallySim = new ArduPilotFtpSim();
+  rallySim.install();
+  const rally = await missionManager.uploadSection('rally', 2, [{ seq: 0, command: 5100, frame: 3, x: 37.78, y: -122.41, z: 30 }] as any, undefined, 1, 1);
+  await sleep(50);
+  check('armed: rally points still go over MAVFTP (ArduPilot clears them whatever the state)', rally.success && rally.method === 'ftp');
+
+  useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: false } });
+  new ArduPilotFtpSim().install();
+  const disarmed = await missionManager.uploadSection('mission', 0, items as any, undefined, 1, 1);
+  await sleep(50);
+  check('disarmed: mission over MAVFTP as before', disarmed.success && disarmed.method === 'ftp');
+  (missionManager as any).uploadLegacyItems = realLegacy;
+}
+
 console.log(failures.length ? `\n${failures.length} MAVFTP ArduPilot-sim check(s) FAILED` : '\nAll MAVFTP ArduPilot-sim checks PASSED');
 process.exit(failures.length ? 1 : 0);
