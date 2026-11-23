@@ -77,6 +77,17 @@ interface MissionPlanPanelProps {
   transferBusy: boolean;
 }
 
+/**
+ * The value to commit when a number field loses focus, or null for none. Only a change to the text counts: the
+ * text shown is rounded (altitude to 0.1 m or whole feet, positions to 7 digits), so comparing it with the exact
+ * value would commit the rounding when a field is merely tabbed through.
+ */
+export function typedValue(text: string, shown: string): number | null {
+  if (text.trim() === shown) return null;
+  const v = parseFloat(text);
+  return Number.isFinite(v) ? v : null;
+}
+
 /** A number input that keeps what is typed until Enter or blur, then commits a finite value. */
 const NumField: React.FC<{
   label: string;
@@ -93,8 +104,8 @@ const NumField: React.FC<{
   }, [shown]);
   const commit = () => {
     editing.current = false;
-    const v = parseFloat(text);
-    if (Number.isFinite(v) && v !== value) onCommit(v);
+    const v = typedValue(text, shown);
+    if (v !== null) onCommit(v);
     // Show the draft's value again: the new one once the edit lands, the old one if it was refused.
     setText(shown);
   };

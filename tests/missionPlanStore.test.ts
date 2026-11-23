@@ -88,6 +88,34 @@ check('sync: draft and base become the vehicle mission, fresh history', S().hist
   );
 }
 
+// Review fixes: what happens when the vehicle's mission changes.
+{
+  const { vehicleMissionUpdate } = await import('../src/store/missionPlanStore.ts');
+  const base = { active: true, uploading: false, transferring: false, vehicleKnown: true, dirty: false, vehicleEqualsBase: false };
+  check('vehicle update: clean draft follows a changed vehicle mission', vehicleMissionUpdate(base) === 'sync');
+  check('vehicle update: clean draft already matching does nothing (keeps redo)', vehicleMissionUpdate({ ...base, vehicleEqualsBase: true }) === 'none');
+  check('vehicle update: nothing during a download or upload', vehicleMissionUpdate({ ...base, transferring: true }) === 'none' && vehicleMissionUpdate({ ...base, uploading: true }) === 'none');
+  check('vehicle update: nothing before the vehicle mission is known (after a reload)', vehicleMissionUpdate({ ...base, dirty: true, vehicleKnown: false }) === 'none');
+  check('vehicle update: dirty draft + changed vehicle shows the banner', vehicleMissionUpdate({ ...base, dirty: true }) === 'changed');
+  check('vehicle update: dirty draft + vehicle back to base clears it', vehicleMissionUpdate({ ...base, dirty: true, vehicleEqualsBase: true }) === 'unchanged');
+  check('vehicle update: not planning does nothing', vehicleMissionUpdate({ ...base, active: false }) === 'none');
+}
+check('replace while uploading reports it was refused', (() => {
+  S().setUploading(true);
+  const r = S().replace(vehicle, { kind: 'file', name: 'x' });
+  S().setUploading(false);
+  return r === false;
+})());
+check('replace when allowed reports success', S().replace(vehicle, { kind: 'file', name: 'x' }) === true);
+
+// Number fields commit only typed changes (tabbing through a rounded field changes nothing).
+{
+  const { typedValue } = await import('../src/components/map/MissionPlanPanel.tsx');
+  check('number field: unchanged rounded text commits nothing', typedValue('98', '98') === null && typedValue(' 98 ', '98') === null);
+  check('number field: typed value commits', typedValue('120', '98') === 120);
+  check('number field: junk commits nothing', typedValue('abc', '98') === null && typedValue('', '98') === null);
+}
+
 S().setTool('add');
 S().stop();
 check('stop: inactive, tool back to select, saved draft removed', !S().active && S().tool === 'select' && !mem.has('mavlink_glareshield_mission_draft'));

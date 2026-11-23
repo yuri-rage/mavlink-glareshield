@@ -135,6 +135,22 @@ check('empty mission: home alone, at the given home', (() => {
   check('midpoint insert takes the altitude before it', m.draft.items[3].z === 30);
   check('midpoint insert at home is refused', throws(() => d.insertWaypointBefore(base, 0, 1, 1)));
 }
+// Review fixes: altitude source, route points, invalid jump targets.
+{
+  const roi = { command: 201, frame: 3, param1: 0, param2: 0, param3: 0, param4: 0, x: 35.003, y: -106.003, z: 0, autocontinue: 1 };
+  const withRoi = d.insertItems(base, 4, [roi]); // after WP#3 (40 m)
+  check('new waypoint after an ROI takes the waypoint altitude before it, not the ROI\'s 0', d.newWaypoint(withRoi, 5, 1, 1).z === 40, String(d.newWaypoint(withRoi, 5, 1, 1).z));
+  const landStart = d.insertItems(base, 4, [{ ...roi, command: 189 }]);
+  check('new waypoint after DO_LAND_START skips it too', d.newWaypoint(landStart, 5, 1, 1).z === 40);
+  check('route points: waypoint, takeoff, land yes; ROI, land start, servo no',
+    d.isRoutePoint(16) && d.isRoutePoint(22) && d.isRoutePoint(21) && !d.isRoutePoint(201) && !d.isRoutePoint(189) && !d.isRoutePoint(183));
+
+  const badJump = d.updateItem(base, 4, { param1: 7 }); // 6 items: 7 is past the end
+  const grown = d.appendWaypoint(d.appendWaypoint(badJump, 35.01, -106.01), 35.02, -106.02);
+  check('invalid jump target stays invalid after appending items', grown.items[4].param1 >= grown.items.length, String(grown.items[4].param1));
+  check('…and still fails validation', d.validateDraft(grown).some((i: any) => i.index === 4 && i.severity === 'error'));
+}
+
 check('jumps targeting: finds the jump', JSON.stringify(d.jumpsTargeting(base, 2)) === '[4]');
 
 // ------------------------------------------------------------------------------------------------

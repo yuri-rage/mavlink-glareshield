@@ -380,23 +380,38 @@ export class MissionManager {
     const compId = targetComp ?? (hb.componentId > 0 ? hb.componentId : 1);
     this.isCancelled = false;
 
-    const res = await this.uploadSection('mission', 0, items, undefined, sysId, compId);
-    if (!res.success) {
-      this.setStatus({ isUploading: false, method: 'idle', message: res.error || 'Mission upload failed.', uploadProgress: undefined });
-      this.scheduleMessageClear(8000);
-      return { success: false, method: res.method, readBack: [], error: res.error };
-    }
+    try {
+      const res = await this.uploadSection('mission', 0, items, undefined, sysId, compId);
+      if (!res.success) {
+        this.setStatus({ message: res.error || 'Mission upload failed.' });
+        this.scheduleMessageClear(8000);
+        return { success: false, method: res.method, readBack: [], error: res.error };
+      }
 
-    this.setStatus({
-      isUploading: false,
-      isFetching: true,
-      method: 'ftp',
-      uploadProgress: undefined,
-      message: 'Reading the mission back from the vehicle...',
-    });
-    const readBack = await this.fetchWaypoints(sysId, compId);
-    this.setStatus({ isFetching: false, method: 'idle', waypointCount: readBack.length });
-    return { success: true, method: res.method, readBack };
+      this.setStatus({
+        isUploading: false,
+        isFetching: true,
+        method: 'ftp',
+        uploadProgress: undefined,
+        message: 'Reading the mission back from the vehicle...',
+      });
+      const readBack = await this.fetchWaypoints(sysId, compId);
+      if (readBack.length === 0) {
+        // The read failed (a failed stream leaves the mission empty). The vehicle acknowledged the upload, so keep
+        // showing the uploaded mission rather than none.
+        this.updateStoreItems('mission', items);
+      }
+      this.setStatus({ waypointCount: readBack.length });
+      return { success: true, method: res.method, readBack };
+    } catch (err: any) {
+      const error = `Mission upload failed: ${err?.message || err}`;
+      this.setStatus({ message: error });
+      this.scheduleMessageClear(8000);
+      return { success: false, method: 'legacy', readBack: [], error };
+    } finally {
+      // Whatever happened, the transfer is over: never leave the map stuck "in progress".
+      this.setStatus({ isUploading: false, isFetching: false, method: 'idle', uploadProgress: undefined });
+    }
   }
 
   /**
