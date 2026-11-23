@@ -94,6 +94,7 @@ import { MapMissionFooter } from './MapMissionFooter';
 import { MissionMenu } from './MissionMenu';
 import { MapViewMenu, type MapLayerType } from './MapViewMenu';
 import { FlyToPopover } from './FlyToPopover';
+import { fliesSplines, joinLegs, missionPathLegs, routeIndices, type PathItem } from '../../mavlink/missionPath';
 import { MissionPlanPanel } from './MissionPlanPanel';
 import { PLAN_LAYER_SWITCH_WIDTH, PlanLayerSwitch } from './PlanLayerSwitch';
 import { DraftUploadModal, RallyUploadModal } from './DraftUploadModal';
@@ -289,6 +290,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   // Either draft (mission or rally) with unsaved changes.
   const planDirty = useMissionPlanStore((s) => s.active && isAnyDirty(s));
   const planLayer = useMissionPlanStore((s) => s.layer);
+  /** The connected vehicle flies spline waypoints as curves (Copter); others skip them. */
+  const vehicleSplines = fliesSplines(getVehicleCategory(heartbeat.type));
   const planTool = useMissionPlanStore((s) => s.tool);
   const planSelected = useMissionPlanStore((s) => s.selected);
   const planRallySelected = useMissionPlanStore((s) => s.rally.selected);
@@ -475,13 +478,27 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     const renderItemsPreview = (items: MissionItemIntData[], type: string) => {
       if (type === 'mission') {
-        const validCoords = items
-          .filter((w) => (w.x !== 0 || w.y !== 0) && Math.abs(w.x ?? 0) <= 90 && Math.abs(w.y ?? 0) <= 180)
-          .map((w) => [w.x!, w.y!] as [number, number]);
+        // Only items with a position (for the others x/y are plain params), drawn along the path the vehicle
+        // flies (missionPath: spline legs curved for a copter), each labelled with its item number.
+        const sorted = [...items].sort((a, b) => a.seq - b.seq);
+        const pathItems: PathItem[] = sorted.map((w) => ({
+          command: w.command,
+          lat: w.x ?? 0,
+          lon: w.y ?? 0,
+          alt: w.z ?? 0,
+          frame: w.frame ?? 3,
+          param1: w.param1 ?? 0,
+        }));
+        const splines = fliesSplines(getVehicleCategory(useTelemetryStore.getState().heartbeat.type));
+        const pinned = sorted
+          .map((w, i) => ({ seq: w.seq, i }))
+          .filter(({ i }) => drawablePosition(pathItems[i].command, pathItems[i].lat, pathItems[i].lon));
+        const validCoords = pinned.map(({ i }) => [pathItems[i].lat, pathItems[i].lon] as [number, number]);
 
         if (validCoords.length > 0) {
           validCoords.forEach((pt) => previewPoints.push(pt));
-          const line = L.polyline(validCoords, {
+          const legs = missionPathLegs(pathItems, routeIndices(pathItems, splines), splines);
+          const line = L.polyline(joinLegs(legs), {
             color: '#f59e0b',
             weight: 3,
             dashArray: '6, 6',
@@ -489,10 +506,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           }).addTo(map);
           previewLayersRef.current.push(line);
 
-          validCoords.forEach(([lat, lon], idx) => {
+          validCoords.forEach(([lat, lon], k) => {
+            const label = pinned[k].seq;
             const icon = L.divIcon({
               className: 'preview-wp-icon',
-              html: `<div style="background:#f59e0b;color:#000;font-size:10px;font-weight:bold;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.6);">${idx}</div>`,
+              html: `<div style="background:#f59e0b;color:#000;font-size:10px;font-weight:bold;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.6);">${label}</div>`,
               iconSize: [18, 18],
               iconAnchor: [9, 9],
             });
@@ -1681,8 +1699,18 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     // Filter valid waypoints
     const validWps = missionWaypoints.filter((w) => cmdHasLocation(w.command) && (w.lat !== 0 || w.lon !== 0) && Math.abs(w.lat) <= 90 && Math.abs(w.lon) <= 180);
-    const lineCoords: [number, number][] = validWps.map((w) => [w.lat, w.lon]);
-    missionPolylineRef.current.setLatLngs(lineCoords);
+    // The line follows the path the vehicle flies (missionPath): navigation items only (an ROI gets a pin, not a
+    // leg), spline legs curved for a vehicle that flies them, skipped for one that doesn't.
+    const ordered = [...missionWaypoints].sort((a, b) => a.seq - b.seq);
+    const pathItems: PathItem[] = ordered.map((w) => ({
+      command: w.command,
+      lat: w.lat,
+      lon: w.lon,
+      alt: w.alt,
+      frame: w.frame ?? 3,
+      param1: w.param1 ?? 0,
+    }));
+    missionPolylineRef.current.setLatLngs(joinLegs(missionPathLegs(pathItems, routeIndices(pathItems, vehicleSplines), vehicleSplines)));
     // While planning the vehicle's mission stays visible for comparison, dimmed and not clickable.
     missionPolylineRef.current.setStyle({ opacity: planning ? 0.35 : 1 });
 
@@ -1725,7 +1753,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       m.addTo(mapInstanceRef.current!);
       missionMarkersRef.current.push(m);
     });
-  }, [missionWaypoints, planning]);
+  }, [missionWaypoints, planning, vehicleSplines]);
 
   // Update geofence rendering - Mission Planner solid red lines with transparent/dimmed interiors
   useEffect(() => {
