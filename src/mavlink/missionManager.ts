@@ -321,18 +321,24 @@ export class MissionManager {
     const typeName = type === 'mission' ? 'Mission' : type === 'fence' ? 'Geofence' : 'Rally points';
     const ftpPath = type === 'mission' ? '@MISSION/mission.dat' : type === 'fence' ? '@MISSION/fence.dat' : '@MISSION/rally.dat';
 
-    // Not a mission over MAVFTP while armed. ArduPilot's mission.dat upload clears the mission first, but
-    // AP_Mission::clear() refuses while armed with the mission running, and the items are then written by index: a
+    // Not a mission over MAVFTP while armed in AUTO / AUTO_RTL. ArduPilot's mission.dat upload clears the mission first,
+    // but AP_Mission::clear() refuses while armed with the mission running, and the items are then written by index: a
     // shorter mission leaves the old mission's last items behind (AP_Filesystem_Mission::finish_upload_mission). The
     // item-by-item protocol truncates to the new count whatever the state (MissionItemProtocol_Waypoints::truncate).
-    const useFtp = !(type === 'mission' && hb.isArmed);
+    // Every vehicle stops its mission on leaving AUTO (ModeAuto::exit; Sub's exit_mode), so in other modes clear()
+    // works and MAVFTP is safe. A mode the app doesn't recognise (named by number, e.g. COPTER_31) might be one
+    // running the mission: treat it as running. A switch into AUTO during a MAVFTP upload can still beat the clear;
+    // the read-back after the upload reports that as not verified.
+    const unrecognisedMode = /_\d+$/.test(hb.modeName);
+    const missionRunningMode = hb.modeName === 'AUTO' || hb.modeName === 'AUTO_RTL' || unrecognisedMode;
+    const useFtp = !(type === 'mission' && hb.isArmed && missionRunningMode);
 
     this.setStatus({
       isUploading: true,
       method: useFtp ? 'ftp' : 'legacy',
       message: useFtp
         ? `Uploading ${typeName} (${items.length} items) via MAVFTP...`
-        : `Uploading ${typeName} item-by-item (the vehicle is armed)...`,
+        : `Uploading ${typeName} item-by-item (armed in ${hb.modeName})...`,
       uploadProgress: {
         type,
         current: 0,
@@ -378,7 +384,7 @@ export class MissionManager {
     if (useFtp) {
       console.warn(`[MissionManager] MAVFTP upload unavailable or rejected for ${typeName}, falling back to legacy item-by-item stream...`);
     } else {
-      console.log(`[MissionManager] Vehicle armed: uploading the ${typeName.toLowerCase()} item-by-item, not via MAVFTP.`);
+      console.log(`[MissionManager] Vehicle armed in ${hb.modeName}: uploading the ${typeName.toLowerCase()} item-by-item, not via MAVFTP.`);
     }
     this.setStatus({
       isUploading: true,
