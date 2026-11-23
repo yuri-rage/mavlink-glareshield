@@ -10,6 +10,7 @@ import { downloadFile } from '../../lib/download';
 import { useMissionPlanStore } from '../../store/missionPlanStore';
 import type { MissionWaypoint } from '../../store/telemetryStore';
 import type { MissionDraft } from '../../mavlink/missionDraft';
+import { rallyDraftToPoints } from '../../mavlink/rallyDraft';
 
 /** The draft as mission waypoints, for the file writers. */
 function draftWaypoints(draft: MissionDraft): MissionWaypoint[] {
@@ -64,7 +65,9 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
   const draft = useMissionPlanStore((s) => (s.active ? s.history.present : null));
   const waypoints = draft ? draftWaypoints(draft) : vehicleWaypoints;
   const fencePoints = useTelemetryStore((s) => s.fencePoints);
-  const rallyPoints = useTelemetryStore((s) => s.rallyPoints);
+  const vehicleRally = useTelemetryStore((s) => s.rallyPoints);
+  const rallyDraft = useMissionPlanStore((s) => (s.active ? s.rally.history.present : null));
+  const rallyPoints = rallyDraft ? rallyDraftToPoints(rallyDraft) : vehicleRally;
 
   // Home (seq 0) is not counted as a waypoint, as in the header badge.
   const wpCount = Math.max(0, waypoints.length - 1);
@@ -170,14 +173,14 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
             />
             <MenuItem
               icon={<Flag className="h-3.5 w-3.5 text-[#f0abfc]" />}
-              label="Rally points (.waypoints)"
+              label={planning ? 'Draft rally points (.waypoints)' : 'Rally points (.waypoints)'}
               detail={String(rallyPoints.length)}
               disabled={rallyPoints.length === 0}
               onClick={run(saveRally)}
             />
             <div className="px-2.5 pt-1 pb-1 text-[10px] text-zinc-500 leading-snug">
               {planning
-                ? 'Saves the draft with the vehicle\u2019s fence and rally points. '
+                ? 'Saves the drafts (mission and rally points) with the vehicle\u2019s fence. '
                 : 'Saves what the map shows. '}
               Files open in QGroundControl and Mission Planner, and can be dropped back on the map.
             </div>

@@ -10,7 +10,8 @@ import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { cmdHasLocation } from '../../mavlink/messages';
 import { insertWaypointAfter, insertWaypointBefore, isRoutePoint, setItemPosition, type MissionDraft } from '../../mavlink/missionDraft';
-import { useMissionPlanStore } from '../../store/missionPlanStore';
+import { useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
+import { addRallyPoint, moveRallyPoint, type RallyDraft } from '../../mavlink/rallyDraft';
 
 const DRAFT_LINES_PANE = 'draftLinesPane';
 const DRAFT_MARKERS_PANE = 'draftMarkersPane';
@@ -45,6 +46,38 @@ const handleIcon = L.divIcon({
   iconAnchor: [10, 10],
 });
 
+/** A rally point flag: magenta (the vehicle's rally colour), "R1"…; the selected one blue and larger. */
+function rallyIcon(label: string, selected: boolean, dim: boolean): L.DivIcon {
+  const fill = selected ? '#0ea5e9' : '#d946ef';
+  const scale = selected ? 1.2 : 1;
+  const w = Math.round(28 * scale);
+  const h = Math.round(34 * scale);
+  return L.divIcon({
+    className: `rally-marker${selected ? ' gs-draft-draggable' : ''}`,
+    html: `
+      <div style="opacity:${dim ? 0.45 : 1}; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.85)); width: ${w}px; height: ${h}px;">
+        <svg width="${w}" height="${h}" viewBox="0 0 28 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <line x1="5" y1="2" x2="5" y2="33" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M 6 3 L 26 3 L 21 10 L 26 17 L 6 17 Z" fill="${fill}" stroke="#ffffff" stroke-width="${selected ? 2 : 1.4}" stroke-linejoin="round"/>
+          <text x="15.5" y="13.6" font-size="${label.length > 2 ? '7.5' : '9'}" font-weight="900" font-family="ui-monospace, monospace, sans-serif" text-anchor="middle" fill="#ffffff">${label}</text>
+        </svg>
+      </div>`,
+    iconSize: [w, h],
+    iconAnchor: [Math.round(5 * scale), h - 1],
+  });
+}
+
+/** Apply a rally edit that also picks the point to select; a refused edit leaves the draft alone. */
+function commitRally(make: (d: RallyDraft) => { draft: RallyDraft; index: number }) {
+  const st = useMissionPlanStore.getState();
+  try {
+    const r = make(st.rally.history.present);
+    st.rallyEdit(() => r.draft, r.index);
+  } catch (err) {
+    console.warn('[planning] rally edit refused:', err);
+  }
+}
+
 /** True for a position worth drawing: a location command with a real position. */
 export function drawablePosition(command: number, lat: number, lon: number): boolean {
   return cmdHasLocation(command) && (lat !== 0 || lon !== 0) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
@@ -63,20 +96,27 @@ function commit(make: (d: MissionDraft) => { draft: MissionDraft; index: number 
 
 /**
  * `ready` must become true once the map exists. `onItemMenu` is called on right-click / long-press of a draft pin
- * (not home), with the item and where to open the menu in the map container.
+ * (not home) on the active layer, with the layer, the item and where to open the menu in the map container.
+ *
+ * Both layers are drawn; only the active one (the panel's Mission | Rally switch) takes clicks, drags and the Place
+ * tool. The other is dimmed and not clickable, so a click can never edit the layer you aren't looking at.
  */
 export function useDraftLayer(
   mapRef: React.MutableRefObject<L.Map | null>,
   ready: boolean,
-  onItemMenu?: (index: number, x: number, y: number) => void
+  onItemMenu?: (layer: PlanLayer, index: number, x: number, y: number) => void
 ) {
   const onItemMenuRef = useRef(onItemMenu);
   onItemMenuRef.current = onItemMenu;
   const active = useMissionPlanStore((s) => s.active);
+  const layer = useMissionPlanStore((s) => s.layer);
   const draft = useMissionPlanStore((s) => s.history.present);
   const selected = useMissionPlanStore((s) => s.selected);
+  const rally = useMissionPlanStore((s) => s.rally.history.present);
+  const rallySelected = useMissionPlanStore((s) => s.rally.selected);
   const layersRef = useRef<L.Layer[]>([]);
   const handlesRef = useRef<L.Marker[]>([]);
+  const rallyLayersRef = useRef<L.Layer[]>([]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -98,6 +138,7 @@ export function useDraftLayer(
     clearHandles();
     const map = mapRef.current;
     if (!map || !ready || !active) return;
+    const editing = layer === 'mission';
 
     /** Items with a position, in mission order: each gets a pin. */
     const points = draft.items
@@ -110,12 +151,13 @@ export function useDraftLayer(
 
     const line =
       route.length > 1
-        ? L.polyline(latLngs, { pane: DRAFT_LINES_PANE, color: '#f59e0b', weight: 3, opacity: 0.95, interactive: false }).addTo(map)
+        ? L.polyline(latLngs, { pane: DRAFT_LINES_PANE, color: '#f59e0b', weight: 3, opacity: editing ? 0.95 : 0.4, interactive: false }).addTo(map)
         : null;
     if (line) layersRef.current.push(line);
 
     const drawHandles = () => {
       clearHandles();
+      if (!editing) return;
       for (let k = 1; k < route.length; k++) {
         const a = route[k - 1];
         const b = route[k];
@@ -134,7 +176,7 @@ export function useDraftLayer(
     points.forEach((r) => {
       const k = route.indexOf(r); // position in the route line, -1 for points off the route
       const isHome = r.index === 0;
-      const isSel = selected === r.index;
+      const isSel = editing && selected === r.index;
       const draggable = isSel && !isHome;
       const marker = L.marker([r.lat, r.lon], {
         icon: pinIcon(isHome ? 'H' : String(r.index), isSel, isHome),
@@ -143,6 +185,8 @@ export function useDraftLayer(
         keyboard: false,
         draggable,
         autoPan: draggable,
+        opacity: editing ? 1 : 0.45,
+        interactive: editing,
         title: draggable ? `#${r.index}: drag to move` : isHome ? 'Home' : `#${r.index}`,
       })
         .on('click', () => {
@@ -152,7 +196,7 @@ export function useDraftLayer(
           L.DomEvent.preventDefault(e.originalEvent);
           if (isHome || useMissionPlanStore.getState().uploading) return;
           useMissionPlanStore.getState().select(r.index);
-          onItemMenuRef.current?.(r.index, e.containerPoint.x, e.containerPoint.y);
+          onItemMenuRef.current?.('mission', r.index, e.containerPoint.x, e.containerPoint.y);
         });
       if (draggable) {
         marker.on('dragstart', clearHandles);
@@ -181,14 +225,58 @@ export function useDraftLayer(
     return () => {
       map.off('zoomend', drawHandles);
     };
-  }, [mapRef, ready, active, draft, selected]);
+  }, [mapRef, ready, active, draft, selected, layer]);
 
-  // Map clicks while planning: add with the Place tool, otherwise clear the selection.
+  // Rally flags: the selected one (on the rally layer) can be dragged; clicking selects; right-click opens the menu.
+  useEffect(() => {
+    rallyLayersRef.current.forEach((l) => l.remove());
+    rallyLayersRef.current = [];
+    const map = mapRef.current;
+    if (!map || !ready || !active) return;
+    const editing = layer === 'rally';
+    rally.points.forEach((p, i) => {
+      if (!(Math.abs(p.lat) <= 90 && Math.abs(p.lon) <= 180) || (p.lat === 0 && p.lon === 0)) return;
+      const isSel = editing && rallySelected === i;
+      const marker = L.marker([p.lat, p.lon], {
+        icon: rallyIcon(`R${i + 1}`, isSel, !editing),
+        pane: DRAFT_MARKERS_PANE,
+        zIndexOffset: isSel ? 1100 : editing ? 300 : 50,
+        keyboard: false,
+        draggable: isSel,
+        autoPan: isSel,
+        interactive: editing,
+        title: isSel ? `R${i + 1}: drag to move` : `Rally point R${i + 1}`,
+      })
+        .on('click', () => useMissionPlanStore.getState().rallySelect(i))
+        .on('contextmenu', (e: L.LeafletMouseEvent) => {
+          L.DomEvent.preventDefault(e.originalEvent);
+          if (useMissionPlanStore.getState().uploading) return;
+          useMissionPlanStore.getState().rallySelect(i);
+          onItemMenuRef.current?.('rally', i, e.containerPoint.x, e.containerPoint.y);
+        });
+      if (isSel) {
+        marker.on('dragend', () => {
+          const q = marker.getLatLng();
+          if (q.lat === p.lat && q.lng === p.lon) return; // pressed and released without moving
+          commitRally((d) => ({ draft: moveRallyPoint(d, i, q.lat, q.lng), index: i }));
+        });
+      }
+      marker.addTo(map);
+      rallyLayersRef.current.push(marker);
+    });
+  }, [mapRef, ready, active, rally, rallySelected, layer]);
+
+  // Map clicks while planning, on the active layer: add with the Place tool, otherwise clear the selection.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || !active) return;
     const onClick = (e: L.LeafletMouseEvent) => {
       const st = useMissionPlanStore.getState();
+      if (st.layer === 'rally') {
+        if (st.tool === 'add') commitRally((d) => addRallyPoint(d, st.rally.selected, e.latlng.lat, e.latlng.lng));
+        else st.rallySelect(null);
+        return;
+      }
       if (st.tool === 'add') commit((d) => insertWaypointAfter(d, st.selected, e.latlng.lat, e.latlng.lng));
       else st.select(null);
     };
@@ -204,6 +292,8 @@ export function useDraftLayer(
       layersRef.current = [];
       handlesRef.current.forEach((h) => h.remove());
       handlesRef.current = [];
+      rallyLayersRef.current.forEach((l) => l.remove());
+      rallyLayersRef.current = [];
     },
     []
   );
