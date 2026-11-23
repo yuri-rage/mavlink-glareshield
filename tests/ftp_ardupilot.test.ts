@@ -598,5 +598,17 @@ for (const loss of [0.1, 0.2]) {
     `ok=${ok} refused=${refused.join(',')} stored=${stored.length}`);
 }
 
+// 15. The refusal that starts a session reset arrives just before the create's own timeout (a slow link). The
+// pending timeout must be cancelled, or it fires during the 80 ms pause and sends a duplicate create.
+{
+  const sim = new ArduPilotFtpSim({ delayReply: (req) => (req.opcode === FTP_OPCODE.CreateFile ? TIMEOUT_MS - 40 : 0) });
+  sim.install();
+  sim.fd = { mode: 'r', path: '@PARAM/param.pck', buf: new Uint8Array(10), len: 10 }; // left open: the first create is refused
+  const ok = await mavFtpClient.writeFile(1, 1, PATH, DATA, 239, TIMEOUT_MS);
+  await sleep(50);
+  const creates = sim.requests.filter((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)).length;
+  check('late CreateFile refusal: no duplicate create during the reset pause', ok && creates === 2, `${creates} creates: ${sim.requests.slice(0, 8).join(' ')}`);
+}
+
 console.log(failures.length ? `\n${failures.length} MAVFTP ArduPilot-sim check(s) FAILED` : '\nAll MAVFTP ArduPilot-sim checks PASSED');
 process.exit(failures.length ? 1 : 0);
