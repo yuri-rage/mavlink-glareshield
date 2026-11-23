@@ -94,6 +94,8 @@ check('distance: about 11.1 km per 0.1° of latitude', Math.abs(r.distanceM(35, 
   check('read-back moved: mismatch', r.checkRallyReadBack(base, readBack.map((p: any, i: number) => (i === 1 ? { ...p, lat: p.lat + 1e-5 } : p)) as any).status === 'mismatch');
   check('nothing read back after uploading points: unreadable', r.checkRallyReadBack(base, []).status === 'unreadable');
   check('cleared (none uploaded, none back): verified', r.checkRallyReadBack({ points: [] }, []).status === 'verified');
+  check('cleared but the read failed: unreadable, not verified', r.checkRallyReadBack({ points: [] }, [], false).status === 'unreadable');
+  check('a matching list from a failed read is still unreadable', r.checkRallyReadBack(base, readBack as any, false).status === 'unreadable');
   check('equal drafts', r.rallyDraftsEqual(base, r.rallyDraftFromPoints(stored as any)));
 }
 

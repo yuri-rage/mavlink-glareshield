@@ -425,18 +425,24 @@ for (const loss of [0.1, 0.2]) {
   // The read fails after an acknowledged upload: unreadable, and the map keeps the uploaded rally points.
   const realFetchRally = missionManager.fetchRally.bind(missionManager);
   (missionManager as any).fetchRally = async () => {
-    useTelemetryStore.setState({ rallyPoints: [] });
+    missionManager.lastRallyReadOk = false; // a timed-out stream
     return [];
   };
   new ArduPilotFtpSim().install();
   const unread = await missionManager.uploadRallyAndReadBack(rd.rallyDraftToItems(rally), 1, 1);
   await sleep(50);
-  (missionManager as any).fetchRally = realFetchRally;
   check('rally read-back fails: unreadable, map keeps the uploaded points',
-    unread.success && rd.checkRallyReadBack(rally, unread.readBack).status === 'unreadable' && useTelemetryStore.getState().rallyPoints.length === 2,
+    unread.success && !unread.readOk && rd.checkRallyReadBack(rally, unread.readBack, unread.readOk).status === 'unreadable' && useTelemetryStore.getState().rallyPoints.length === 2,
     String(useTelemetryStore.getState().rallyPoints.length));
+  // Clearing all rally points with a failed read: the empty result proves nothing, so it is not verified.
+  new ArduPilotFtpSim().install();
+  const clearUnread = await missionManager.uploadRallyAndReadBack([], 1, 1);
+  await sleep(50);
+  (missionManager as any).fetchRally = realFetchRally;
+  check('clearing rally points with a failed read: unreadable, not verified',
+    clearUnread.success && rd.checkRallyReadBack({ points: [] }, clearUnread.readBack, clearUnread.readOk).status === 'unreadable');
 
-  check('clearing rally points verifies', cleared.success && rd.checkRallyReadBack({ points: [] }, cleared.readBack).status === 'verified', `${cleared.success} ${cleared.readBack.length} ${cleared.error ?? ''}`);
+  check('clearing rally points verifies', cleared.success && cleared.readOk && rd.checkRallyReadBack({ points: [] }, cleared.readBack, cleared.readOk).status === 'verified', `${cleared.success} ${cleared.readBack.length} ${cleared.error ?? ''}`);
 }
 
 console.log(failures.length ? `\n${failures.length} MAVFTP ArduPilot-sim check(s) FAILED` : '\nAll MAVFTP ArduPilot-sim checks PASSED');
