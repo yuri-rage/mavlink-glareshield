@@ -25,8 +25,7 @@ import {
   Trash2,
   Check,
   Activity,
-  FileText,
-} from 'lucide-react';
+  FileText, Waves } from 'lucide-react';
 
 function getMavCmdName(cmdId: number): string {
   for (const [key, val] of Object.entries(MAV_CMD)) {
@@ -123,6 +122,15 @@ const BUILT_IN_CATALOG = [
       "The vehicle's DataFlash (.bin) logs: list, download to this computer (MAVFTP when possible, otherwise MAVLink) and erase. ArduPilot only sends logs while disarmed.",
     icon: FileText,
     defaultSpan: 6,
+  },
+  {
+    id: 'built-in-inspector',
+    name: 'MAVLink Inspector',
+    category: 'telemetry',
+    description:
+      'Every message on the link by system and component, with its rate; select one for its latest fields, decoded from ArduPilot\'s message definitions with units. For development and debugging.',
+    icon: Waves,
+    defaultSpan: 12,
   },
   {
     id: 'built-in-pid-tuning',

@@ -1,3 +1,5 @@
+import { DIALECT_MESSAGES } from './dialect.generated';
+
 // MAVLink Message IDs
 export const MAVLINK_MSG_ID = {
   HEARTBEAT: 0,
@@ -151,6 +153,13 @@ export const MAVLINK_MESSAGE_CRC_EXTRA: Record<number, number> = {
   [MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8]: 133,
   [MAVLINK_MSG_ID.ESC_TELEMETRY_9_TO_12]: 85,
 };
+
+// Every other message of the dialect (ArduPilot's ardupilotmega.xml and its includes, generated): the parser accepts
+// them all, so they reach listeners, the tlog and the MAVLink Inspector. The table above agrees with the generated one
+// (tests/dialect.test.ts).
+for (const [id, msg] of Object.entries(DIALECT_MESSAGES)) {
+  if (MAVLINK_MESSAGE_CRC_EXTRA[Number(id)] === undefined) MAVLINK_MESSAGE_CRC_EXTRA[Number(id)] = msg[1];
+}
 
 // Common MAV_CMD IDs
 export const MAV_CMD = {

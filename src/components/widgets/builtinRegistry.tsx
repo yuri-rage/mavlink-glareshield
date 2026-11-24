@@ -18,6 +18,7 @@ const MapWidget = lazy(() => import('../map/MapWidget').then((m) => ({ default: 
 const TelemetryChartsWidget = lazy(() => import('./TelemetryChartsWidget').then((m) => ({ default: m.TelemetryChartsWidget })));
 const ParametersWidget = lazy(() => import('./ParametersWidget').then((m) => ({ default: m.ParametersWidget })));
 const LogsWidget = lazy(() => import('./LogsWidget').then((m) => ({ default: m.LogsWidget })));
+const InspectorWidget = lazy(() => import('./InspectorWidget').then((m) => ({ default: m.InspectorWidget })));
 const PidTuningWidget = lazy(() => import('./PidTuningWidget').then((m) => ({ default: m.PidTuningWidget })));
 const NtripWidget = lazy(() => import('./NtripWidget').then((m) => ({ default: m.NtripWidget })));
 
@@ -64,6 +65,8 @@ export function renderBuiltinWidget(widgetId: string, colSpan: number): React.Re
       return lazyWidget(<TelemetryChartsWidget />);
     case 'built-in-logs':
       return lazyWidget(<LogsWidget />);
+    case 'built-in-inspector':
+      return lazyWidget(<InspectorWidget />);
     case 'built-in-pid-tuning':
       return lazyWidget(<PidTuningWidget />);
     case 'built-in-ntrip':
