@@ -22,6 +22,7 @@ import {
 import { getVehicleCategory } from '../../mavlink/messages';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { useMissionPlanStore } from '../../store/missionPlanStore';
+import { useMissionTerrainStore } from '../../store/missionTerrainStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 
 interface VehicleState {
@@ -144,7 +145,8 @@ const UploadConfirm: React.FC<{
 export const DraftUploadModal: React.FC<VehicleState & { vehicle: MissionDraft }> = ({ vehicle, vehicleType, armed, modeName, onConfirm, onCancel }) => {
   // The live draft: what this shows is what gets uploaded, even if it changes while the dialog is open.
   const draft = useMissionPlanStore((s) => s.history.present);
-  const issues = useMemo(() => validateDraft(draft, getVehicleCategory(vehicleType)), [draft, vehicleType]);
+  const terrainIssues = useMissionTerrainStore((s) => s.issues);
+  const issues = useMemo(() => [...validateDraft(draft, getVehicleCategory(vehicleType)), ...terrainIssues], [draft, vehicleType, terrainIssues]);
   const changes = useMemo(() => {
     const c = compareDrafts(vehicle, draft);
     return [...c.structural, ...c.params];
