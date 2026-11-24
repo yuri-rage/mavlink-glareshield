@@ -13,6 +13,7 @@ import {
   emergencySquawk,
   icaoHex,
   ownForThreat,
+  escapeHtml,
   rankTraffic,
   relAltText,
   type Threat,
@@ -32,7 +33,7 @@ function icon(a: TrafficAircraft, t: Threat | null, stale: boolean, label: strin
     className: '',
     html: `<div style="opacity:${stale ? 0.4 : 1};display:flex;flex-direction:column;align-items:center;width:90px;margin-left:-32px">
       ${plane}
-      <div style="margin-top:1px;padding:0 3px;border-radius:3px;background:rgba(9,9,11,0.8);color:${colour};font:700 10px/13px ui-monospace,monospace;white-space:nowrap">${label}</div>
+      <div style="margin-top:1px;padding:0 3px;border-radius:3px;background:rgba(9,9,11,0.8);color:${colour};font:700 10px/13px ui-monospace,monospace;white-space:nowrap">${escapeHtml(label)}</div>
     </div>`,
     iconSize: [26, 26],
     iconAnchor: [13, 13],
@@ -54,8 +55,8 @@ function popupHtml(a: TrafficAircraft, t: Threat | null, fmtAlt: Fmt, fmtDist: F
     t?.cpaS != null && t.cpaS < 300 ? ['Closest', `${fmtDist(t.cpaM!).full} in ${Math.round(t.cpaS)} s`] : null,
     ['Last heard', `${Math.max(0, Math.round((Date.now() - a.heardAtMs) / 1000))} s ago${a.simulated ? ' (simulated)' : ''}`],
   ].filter(Boolean) as [string, string][];
-  return `<b>${a.callsign ?? icaoHex(a.icao)}</b><table style="margin-top:3px;font-size:11px">${rows
-    .map(([k, v]) => `<tr><td style="color:#71717a;padding-right:8px">${k}</td><td>${v}</td></tr>`)
+  return `<b>${escapeHtml(a.callsign ?? icaoHex(a.icao))}</b><table style="margin-top:3px;font-size:11px">${rows
+    .map(([k, v]) => `<tr><td style="color:#71717a;padding-right:8px">${k}</td><td>${escapeHtml(v)}</td></tr>`)
     .join('')}</table>`;
 }
 

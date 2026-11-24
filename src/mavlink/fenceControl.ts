@@ -16,7 +16,7 @@ export const FENCE_TYPE_ALT_MIN = 8;
 /** MAV_SYS_STATUS_GEOFENCE. */
 const GEOFENCE = 1 << 20;
 /** FENCE_STATUS comes about once a second while enabled; older than this, the fence is taken as no longer enabled. */
-export const FENCE_STATUS_FRESH_MS = 5000;
+export const FENCE_STATUS_FRESH_MS = 3000;
 export const MAV_CMD_DO_FENCE_ENABLE = 207;
 
 export interface FenceStateInput {
@@ -53,12 +53,17 @@ export function vehicleFenceState(v: FenceStateInput): FenceState {
   const fresh = v.fenceStatusAt > 0 && v.nowMs - v.fenceStatusAt <= FENCE_STATUS_FRESH_MS;
   const present = (v.sensorsPresent & GEOFENCE) !== 0;
   if (types === 0 && !present) return { state: 'none', types, reportOnly };
-  // SYS_STATUS's enabled bit is off for report-only fences even when enabled, but FENCE_STATUS still comes then.
-  const enabled = fresh || (present && (v.sensorsEnabled & GEOFENCE) !== 0);
+  // SYS_STATUS decides when it reports the fence present: it changes at once when the fence is switched (FENCE_STATUS
+  // only stops coming, and the last one stays fresh for a few seconds). FENCE_STATUS counts only where SYS_STATUS
+  // can't say: a report-only fence (its enabled bit is off even when enabled) or one it doesn't report as present
+  // (polygons only, none loaded yet).
+  const sysEnabled = present && (v.sensorsEnabled & GEOFENCE) !== 0;
+  const enabled = sysEnabled || (fresh && (reportOnly || !present));
   if (!enabled) {
     if (v.sensorsPresent === 0 && !fresh) return { state: 'unknown', types, reportOnly };
     return { state: 'off', types, reportOnly };
   }
+  // Reached only while enabled, so a FENCE_STATUS left over from before a disable can't show a breach.
   const breached = (fresh && v.fenceStatusBreached) || (present && (v.sensorsHealth & GEOFENCE) === 0);
   return { state: breached ? 'breach' : 'on', types, reportOnly };
 }

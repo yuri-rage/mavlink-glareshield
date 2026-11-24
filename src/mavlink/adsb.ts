@@ -40,6 +40,20 @@ export const TRAFFIC_STALE_MS = 10_000;
 /** No report for this long: dropped. */
 export const TRAFFIC_EXPIRE_MS = 60_000;
 
+/**
+ * A callsign as it can be shown: printable ASCII without HTML-special characters (it is raw bytes off the radio and
+ * ends up in map labels), trimmed; null when nothing is left.
+ */
+export function cleanCallsign(raw: unknown): string | null {
+  const s = String(raw ?? '').replace(/[^\x20-\x7E]/g, '').replace(/[<>&"'`]/g, '').trim();
+  return s || null;
+}
+
+/** Text for HTML (map labels and popups). */
+export function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
 /** An ADSB_VEHICLE (as decoded) to an aircraft, or null when it isn't one (no valid position, or an obstacle). */
 export function trafficFromMessage(d: any, nowMs: number): TrafficAircraft | null {
   const flags = Number(d?.flags) || 0;
@@ -55,7 +69,7 @@ export function trafficFromMessage(d: any, nowMs: number): TrafficAircraft | nul
     headingDeg: flags & ADSB_FLAGS.VALID_HEADING ? d.heading : null,
     speedMs: flags & ADSB_FLAGS.VALID_VELOCITY ? d.hor_velocity : null,
     climbMs: flags & ADSB_FLAGS.VERTICAL_VELOCITY_VALID ? d.ver_velocity : null,
-    callsign: flags & ADSB_FLAGS.VALID_CALLSIGN && d.callsign ? d.callsign : null,
+    callsign: flags & ADSB_FLAGS.VALID_CALLSIGN ? cleanCallsign(d.callsign) : null,
     squawk: flags & ADSB_FLAGS.VALID_SQUAWK ? d.squawk : null,
     emitterType: d.emitter_type ?? 0,
     simulated: (flags & ADSB_FLAGS.SIMULATED) !== 0,
@@ -148,20 +162,15 @@ export function assessThreat(
     cpaS = -dot / v2;
     cpaM = Math.hypot(e + rvE * cpaS, n + rvN * cpaS);
   }
-  const vertWithin = (limit: number) => {
-    if (relAltM === null) return true;
-    if (Math.abs(relAltM) <= limit) return true;
-    // At closest approach, using both climb rates where known.
-    if (cpaS !== null && cpaS <= th.cpaHorizonS) {
-      const relClimb = (t.climbMs ?? 0) - (own.velUp ?? 0);
-      return Math.abs(relAltM + relClimb * cpaS) <= limit;
-    }
-    return false;
-  };
+  // Unknown altitude can't be ruled out. The range checks use the separation now; the closest-approach check uses the
+  // separation then (both climb rates where known; unknown counts as level flight, which is the separation now).
+  const vertNow = (limit: number) => relAltM === null || Math.abs(relAltM) <= limit;
+  const vertAtCpa = (limit: number) =>
+    relAltM === null || cpaS === null || Math.abs(relAltM + ((t.climbMs ?? 0) - (own.velUp ?? 0)) * cpaS) <= limit;
   let level: ThreatLevel = 'none';
-  if (distanceM <= th.cautionRangeM && vertWithin(th.cautionVerticalM)) level = 'caution';
-  const cpaAlert = cpaS !== null && cpaM !== null && cpaS <= th.cpaHorizonS && cpaM <= th.cpaAlertM && vertWithin(th.alertVerticalM);
-  if ((distanceM <= th.alertRangeM && vertWithin(th.alertVerticalM)) || cpaAlert) level = 'alert';
+  if (distanceM <= th.cautionRangeM && vertNow(th.cautionVerticalM)) level = 'caution';
+  const cpaAlert = cpaS !== null && cpaM !== null && cpaS <= th.cpaHorizonS && cpaM <= th.cpaAlertM && vertAtCpa(th.alertVerticalM);
+  if ((distanceM <= th.alertRangeM && vertNow(th.alertVerticalM)) || cpaAlert) level = 'alert';
   return { level, distanceM, bearingDeg, relAltM, closing, cpaS, cpaM };
 }
 

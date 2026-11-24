@@ -25,6 +25,9 @@ check('present, not enabled: off', st({ sensorsPresent: G, sensorsHealth: G }).s
 check('enabled and unhealthy (breached): breach', st({ sensorsPresent: G, sensorsEnabled: G, sensorsHealth: 0 }).state === 'breach');
 check('FENCE_STATUS breached: breach', st({ sensorsPresent: G, sensorsEnabled: G, sensorsHealth: G, fenceStatusAt: now - 500, fenceStatusBreached: true }).state === 'breach');
 check('report only: SYS_STATUS says off, but a fresh FENCE_STATUS means on', st({ sensorsPresent: G, sensorsHealth: G, fenceAction: 0, fenceStatusAt: now - 800 }).state === 'on' && st({ fenceAction: 0 }).reportOnly);
+check('just disabled: SYS_STATUS says off at once, a FENCE_STATUS from a moment ago doesn\'t keep it on', st({ sensorsPresent: G, sensorsHealth: G, fenceStatusAt: now - 500 }).state === 'off');
+check('disabled while breached: off, not BREACH', st({ sensorsPresent: G, sensorsHealth: G, fenceStatusAt: now - 500, fenceStatusBreached: true }).state === 'off');
+check('enabled with nothing SYS_STATUS reports present (no polygons yet): FENCE_STATUS says on', st({ sensorsPresent: 1, hasZones: false, fenceType: 4, fenceStatusAt: now - 500 }).state !== 'off');
 check('stale FENCE_STATUS doesn\'t count', st({ sensorsPresent: G, sensorsHealth: G, fenceStatusAt: now - 10_000 }).state === 'off');
 check('polygons only, none loaded: nothing to enforce', st({ hasZones: false, sensorsPresent: 1 }).state === 'none');
 check('altitude fence configured, no zones: types without polygons', st({ hasZones: false, fenceType: 5, sensorsPresent: G, sensorsHealth: G }).types === 1);

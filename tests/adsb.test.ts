@@ -32,6 +32,8 @@ const o = frame('fd250000000101f60000050000008093dc1400afd1c00000000000000000000
 check('obstacle-database item (OA_DB) is not traffic', a.trafficFromMessage(decodePayload(o.messageId, o.payload), now) === null);
 check('no valid position: not traffic', a.trafficFromMessage({ ...d, flags: d.flags & ~1 }, now) === null);
 check('missing heading/velocity flags: unknown, not zero', (() => { const x = a.trafficFromMessage({ ...d, flags: 1 }, now)!; return x.headingDeg === null && x.speedMs === null && x.altMslM === null && x.callsign === null; })());
+check('callsign cleaned: printable, no HTML characters', a.cleanCallsign('N1<b>2\x01\"') === 'N1b2' && a.cleanCallsign('   ') === null && a.cleanCallsign(undefined) === null);
+check('HTML escaped for labels', a.escapeHtml('<img src=x onerror=1>') === '&lt;img src=x onerror=1&gt;');
 check('emergency squawks', a.emergencySquawk(7700) === 'emergency' && a.emergencySquawk(7600) === 'radio failure' && a.emergencySquawk(1200) === null);
 
 // Store: newer report wins, expiry
@@ -61,6 +63,12 @@ check('emergency squawks', a.emergencySquawk(7700) === 'emergency' && a.emergenc
   check('same, flying away: caution only', lv(at(2500, 0, { altMslM: 1720, headingDeg: 0, speedMs: 60 })) === 'caution');
   check('passing 1.5 km to the side: no CPA alert', lv(at(2500, 1500, { altMslM: 1720, headingDeg: 180, speedMs: 60 })) === 'caution');
   check('descending onto our level by closest approach: alert', lv(at(2500, 0, { altMslM: 1900, headingDeg: 180, speedMs: 60, climbMs: -4 })) === 'alert');
+  check('level with us now but climbing away by closest approach: no closest-approach alert (caution)',
+    lv(at(2500, 0, { altMslM: 1700, headingDeg: 180, speedMs: 60, climbMs: 8 })) === 'caution');
+  // 2.9 km away (inside caution range), 400 m above (outside caution vertical) and descending to our level by its closest
+  // approach in 25 s, which passes 2.5 km to the side: the range checks use the separation now, so not a caution.
+  check('400 m above now, descending to our level by a distant closest approach: not a caution',
+    lv(at(1500, 2500, { altMslM: 2100, headingDeg: 180, speedMs: 60, climbMs: -16 })) === 'none');
   check('bearing and compass point', Math.round(a.assessThreat(at(1000, 1000), own).bearingDeg) === 45 && a.compassPoint(45) === 'NE');
 }
 
