@@ -17,6 +17,8 @@ import { useTelemetryStore } from '../../store/telemetryStore';
 import { useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
 import { addRallyPoint, moveRallyPoint, type RallyDraft } from '../../mavlink/rallyDraft';
 import { waypointRadius } from '../../mavlink/waypointRadius';
+import { RADIUS_PARAMS, planningVehicle, useLastVehicleStore } from '../../store/lastVehicleStore';
+import { paramManager } from '../../mavlink/paramManager';
 
 const DRAFT_LINES_PANE = 'draftLinesPane';
 const DRAFT_MARKERS_PANE = 'draftMarkersPane';
@@ -116,11 +118,21 @@ export function useDraftLayer(
   const active = useMissionPlanStore((s) => s.active);
   // Spline legs are drawn as the curve only for a vehicle that flies them (Copter); others skip spline waypoints.
   const splines = useTelemetryStore((s) => fliesSplines(getVehicleCategory(s.heartbeat.type)));
-  const category = useTelemetryStore((s) => getVehicleCategory(s.heartbeat.type));
-  // The parameters the radii come from; the circles redraw when one of them is read or changed.
-  const radiusParams = useTelemetryStore((s) =>
-    ['WP_RADIUS', 'WP_LOITER_RAD', 'WPNAV_RADIUS_M', 'WPNAV_RADIUS'].map((n) => s.parameters[n]?.value ?? '').join(',')
-  );
+  // The vehicle the radii are drawn for: the connected one, else the last one connected (remembered in this
+  // browser), so planning offline shows the same circles. Redrawn when either changes.
+  const liveRadius = useTelemetryStore((s) => `${s.heartbeat.type}:${s.heartbeat.modeName === 'DISCONNECTED'}:${RADIUS_PARAMS.map((n) => s.parameters[n]?.value ?? '').join(',')}`);
+  const lastVehicle = useLastVehicleStore();
+  const linkedSys = useTelemetryStore((s) => (s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED' ? s.heartbeat.systemId : 0));
+  const linkedType = useTelemetryStore((s) => s.heartbeat.type);
+  // Planning while connected: make sure the radius parameters for this vehicle have been read (they may not have
+  // been yet if the full parameter list hasn't loaded).
+  useEffect(() => {
+    if (!active || !linkedSys) return;
+    const cat = getVehicleCategory(linkedType);
+    const names = cat === 'plane' ? ['WP_RADIUS', 'WP_LOITER_RAD'] : cat === 'copter' ? ['WPNAV_RADIUS_M'] : cat === 'rover' ? ['WP_RADIUS'] : [];
+    const have = useTelemetryStore.getState().parameters;
+    for (const n of names) if (have[n] === undefined) paramManager.requestParam(linkedSys, 1, n);
+  }, [active, linkedSys, linkedType]);
   const layer = useMissionPlanStore((s) => s.layer);
   const draft = useMissionPlanStore((s) => s.history.present);
   const selected = useMissionPlanStore((s) => s.selected);
@@ -169,11 +181,12 @@ export function useDraftLayer(
     if (line) layersRef.current.push(line);
 
     // Waypoint radii: thin dashed circles, under the pins; each follows its pin while dragged.
-    const params = useTelemetryStore.getState().parameters;
+    const vehicle = planningVehicle();
+    const category = getVehicleCategory(vehicle.type);
     const circles = new Map<number, L.Circle>();
     draft.items.forEach((it, index) => {
       if (index === 0 || !drawablePosition(it.command, it.x, it.y)) return;
-      const r = waypointRadius(it, category, (n) => params[n]?.value);
+      const r = waypointRadius(it, category, (n) => vehicle.params[n]);
       if (!r) return;
       const c = L.circle([it.x, it.y], {
         pane: DRAFT_LINES_PANE,
@@ -261,7 +274,7 @@ export function useDraftLayer(
     return () => {
       map.off('zoomend', drawHandles);
     };
-  }, [mapRef, ready, active, draft, selected, layer, splines, category, radiusParams]);
+  }, [mapRef, ready, active, draft, selected, layer, splines, liveRadius, lastVehicle]);
 
   // Rally flags: the selected one (on the rally layer) can be dragged; clicking selects; right-click opens the menu.
   useEffect(() => {
