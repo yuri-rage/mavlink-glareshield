@@ -2,6 +2,8 @@
 // - numbered amber pins and the route, above the vehicle's mission; clicking a pin selects it;
 // - the selected pin (never home) can be dragged; the route follows live and the move is committed on release,
 //   as one undo step. Only the selected pin drags, so a finger panning the map from a pin can't move it;
+// - around each waypoint, its radius as a thin dashed circle: yellow for the item's own radius, white for the
+//   vehicle's default (waypointRadius.ts says which the vehicle flies);
 // - a "+" handle in the middle of each leg inserts a waypoint there (shown when the leg is long enough to tap);
 // - with the Place tool, a map click adds a waypoint after the selected item; with Select, it clears the selection.
 // Every edit goes through the draft model (missionDraft.ts), so home and DO_JUMP targets are kept.
@@ -14,6 +16,7 @@ import { fliesSplines, joinLegs, legMidpoint, missionPathLegs, routeIndices, typ
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
 import { addRallyPoint, moveRallyPoint, type RallyDraft } from '../../mavlink/rallyDraft';
+import { waypointRadius } from '../../mavlink/waypointRadius';
 
 const DRAFT_LINES_PANE = 'draftLinesPane';
 const DRAFT_MARKERS_PANE = 'draftMarkersPane';
@@ -113,6 +116,11 @@ export function useDraftLayer(
   const active = useMissionPlanStore((s) => s.active);
   // Spline legs are drawn as the curve only for a vehicle that flies them (Copter); others skip spline waypoints.
   const splines = useTelemetryStore((s) => fliesSplines(getVehicleCategory(s.heartbeat.type)));
+  const category = useTelemetryStore((s) => getVehicleCategory(s.heartbeat.type));
+  // The parameters the radii come from; the circles redraw when one of them is read or changed.
+  const radiusParams = useTelemetryStore((s) =>
+    ['WP_RADIUS', 'WP_LOITER_RAD', 'WPNAV_RADIUS_M', 'WPNAV_RADIUS'].map((n) => s.parameters[n]?.value ?? '').join(',')
+  );
   const layer = useMissionPlanStore((s) => s.layer);
   const draft = useMissionPlanStore((s) => s.history.present);
   const selected = useMissionPlanStore((s) => s.selected);
@@ -159,6 +167,27 @@ export function useDraftLayer(
         ? L.polyline(joinLegs(legs), { pane: DRAFT_LINES_PANE, color: '#f59e0b', weight: 3, opacity: editing ? 0.95 : 0.4, interactive: false }).addTo(map)
         : null;
     if (line) layersRef.current.push(line);
+
+    // Waypoint radii: thin dashed circles, under the pins; each follows its pin while dragged.
+    const params = useTelemetryStore.getState().parameters;
+    const circles = new Map<number, L.Circle>();
+    draft.items.forEach((it, index) => {
+      if (index === 0 || !drawablePosition(it.command, it.x, it.y)) return;
+      const r = waypointRadius(it, category, (n) => params[n]?.value);
+      if (!r) return;
+      const c = L.circle([it.x, it.y], {
+        pane: DRAFT_LINES_PANE,
+        radius: r.radiusM,
+        color: r.source === 'item' ? '#facc15' : '#ffffff',
+        weight: 1.5,
+        dashArray: '5 5',
+        opacity: editing ? 0.9 : 0.35,
+        fill: false,
+        interactive: false,
+      }).addTo(map);
+      circles.set(index, c);
+      layersRef.current.push(c);
+    });
 
     const drawHandles = () => {
       clearHandles();
@@ -211,6 +240,7 @@ export function useDraftLayer(
           const moved = pathItems.slice();
           moved[r.index] = { ...moved[r.index], lat: p.lat, lon: p.lng };
           line?.setLatLngs(joinLegs(missionPathLegs(moved, route, splines)));
+          circles.get(r.index)?.setLatLng(p);
         });
         marker.on('dragend', () => {
           const p = marker.getLatLng();
@@ -231,7 +261,7 @@ export function useDraftLayer(
     return () => {
       map.off('zoomend', drawHandles);
     };
-  }, [mapRef, ready, active, draft, selected, layer, splines]);
+  }, [mapRef, ready, active, draft, selected, layer, splines, category, radiusParams]);
 
   // Rally flags: the selected one (on the rally layer) can be dragged; clicking selects; right-click opens the menu.
   useEffect(() => {

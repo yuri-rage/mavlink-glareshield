@@ -1,16 +1,18 @@
 // The planning editor's fence view: the fence draft's shapes and return point, the selected shape's fields, and the
 // fence draft's own actions (upload, save to file, reset). Shapes are drawn on the map (Place, or right-click);
-// vertices and whole shapes are moved there by dragging.
+// vertices and whole shapes are moved there by dragging, or typed in here (a polygon's vertex list expands).
 
-import React, { useEffect, useRef } from 'react';
-import { AlertTriangle, Download, FolderOpen, RotateCcw, Trash2, Upload, XCircle } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, ChevronDown, ChevronRight, Download, FolderOpen, RotateCcw, Trash2, Upload, X, XCircle } from 'lucide-react';
 import { missionFileStem, toQgcWpl } from '../../mavlink/missionFileWriter';
 import {
   FENCE_PARAMS,
   fenceDraftToItems,
   moveShape,
+  moveVertex,
   polygonCenter,
   removeShape,
+  removeVertex,
   setInclusion,
   setRadius,
   setReturnPoint,
@@ -71,6 +73,7 @@ const ShapeEditor: React.FC<{
   const shape = draft.shapes[index];
   const imperial = useUnitsStore((s) => s.system === 'mph' || s.system === 'kts');
   const del = useConfirmStep();
+  const [showVertices, setShowVertices] = useState(false);
   const centre = shape.kind === 'polygon' ? polygonCenter(shape.vertices) : shape.center;
   const moveTo = (lat: number, lon: number) => apply((d) => moveShape(d, index, { lat, lon }));
 
@@ -104,9 +107,44 @@ const ShapeEditor: React.FC<{
           onCommit={(v) => apply((d) => setRadius(d, index, imperial ? v / FT_PER_M : v))}
         />
       ) : (
-        <div className="text-[10px] leading-snug text-zinc-500">
-          {shape.vertices.length} vertices. Drag a vertex to move it, click a <b className="text-zinc-300">+</b> to add one,
-          right-click a vertex to delete it; drag the centre handle to move the whole polygon.
+        <div className="space-y-1.5">
+          <button
+            type="button"
+            onClick={() => setShowVertices((v) => !v)}
+            aria-expanded={showVertices}
+            className="flex w-full items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-left text-[11px] font-bold text-zinc-200 hover:bg-zinc-800"
+          >
+            {showVertices ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            {shape.vertices.length} vertices
+            <span className="ml-auto font-normal text-zinc-500">{showVertices ? 'hide' : 'edit'}</span>
+          </button>
+          {showVertices && (
+            <ol className="max-h-64 space-y-1 overflow-y-auto pr-0.5">
+              {shape.vertices.map((v, k) => (
+                <li key={k} className="flex items-end gap-1">
+                  <span className="w-6 shrink-0 pb-1.5 font-mono text-[10px] font-bold text-zinc-400">V{k + 1}</span>
+                  <div className="grid min-w-0 flex-1 grid-cols-2 gap-1">
+                    <NumField label="Lat" value={v.lat} digits={7} onCommit={(lat) => apply((d) => moveVertex(d, index, k, { lat, lon: v.lon }))} />
+                    <NumField label="Lon" value={v.lon} digits={7} onCommit={(lon) => apply((d) => moveVertex(d, index, k, { lat: v.lat, lon }))} />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={shape.vertices.length <= 3}
+                    onClick={() => apply((d) => removeVertex(d, index, k))}
+                    title={shape.vertices.length <= 3 ? 'A polygon needs at least 3 vertices' : `Delete vertex ${k + 1}`}
+                    aria-label={`Delete vertex ${k + 1}`}
+                    className="mb-0.5 h-7 shrink-0 rounded-md border border-zinc-700 px-1 text-zinc-400 hover:text-red-300 disabled:opacity-30"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )}
+          <div className="text-[10px] leading-snug text-zinc-500">
+            On the map: drag a vertex to move it, click a <b className="text-zinc-300">+</b> to add one, right-click a vertex
+            to delete it; drag the centre handle to move the whole polygon.
+          </div>
         </div>
       )}
 
