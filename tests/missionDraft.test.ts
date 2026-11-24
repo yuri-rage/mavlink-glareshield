@@ -263,5 +263,37 @@ check('home is not validated', !issues(d.draftFromWaypoints([{ ...HOME, lat: 0, 
   check('save to .waypoints and load: same mission', Boolean(loaded) && d.draftsEqual(edited, loaded!), loaded ? JSON.stringify(d.compareDrafts(edited, loaded)) : 'no parse');
 }
 
+// ------------------------------------------------------------------------------------------------
+// Waypoint at a bearing and distance
+// ------------------------------------------------------------------------------------------------
+{
+  const near = (a: number, b: number, tol: number) => Math.abs(a - b) <= tol;
+  let p = d.destinationPoint(0, 0, 90, 111195.08);
+  check('great circle: 1° of arc east along the equator', near(p.lat, 0, 1e-9) && near(p.lon, 1, 1e-6), JSON.stringify(p));
+  p = d.destinationPoint(35, -106, 0, 1000);
+  check('1 km north from 35°N', near(p.lat, 35.0089932, 1e-6) && near(p.lon, -106, 1e-12), JSON.stringify(p));
+  p = d.destinationPoint(0, 179.9, 90, 22239);
+  check('across the antimeridian: wraps to -179.9', near(p.lon, -179.9, 1e-4), JSON.stringify(p));
+  // A long Plane leg: 20 km at 045 from 35N, by the inverse (haversine and initial bearing).
+  p = d.destinationPoint(35, -106, 45, 20000);
+  const rad = Math.PI / 180;
+  const dLat = (p.lat - 35) * rad, dLon = (p.lon + 106) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(35 * rad) * Math.cos(p.lat * rad) * Math.sin(dLon / 2) ** 2;
+  const dist = 2 * 6371008.8 * Math.asin(Math.sqrt(h));
+  const brg = Math.atan2(Math.sin(dLon) * Math.cos(p.lat * rad), Math.cos(35 * rad) * Math.sin(p.lat * rad) - Math.sin(35 * rad) * Math.cos(p.lat * rad) * Math.cos(dLon)) / rad;
+  check('20 km at 045: distance and initial bearing exact', near(dist, 20000, 0.01) && near(brg, 45, 1e-6), `${dist.toFixed(3)} m, ${brg.toFixed(6)}°`);
+
+  const r = d.insertWaypointAtBearing(base, 2, 90, 100, 2);
+  const it = r.draft.items[r.index];
+  check('inserted right after the reference waypoint', r.index === 3 && r.draft.items.length === base.items.length + 1 && it.command === 16, `${r.index} ${cmds(r.draft)}`);
+  check('100 m east of it, at its altitude', near(it.x, 35.001, 1e-7) && near(d.destinationPoint(35.001, -106.001, 90, 100).lon, it.y, 1e-12) && it.z === 30 && it.frame === 3, JSON.stringify(it));
+  const jump = r.draft.items.find((x) => x.command === 177)!;
+  check('the jump still targets the same waypoint', jump.param1 === 2, String(jump.param1));
+  check('a reference without a position is refused', throws(() => d.insertWaypointAtBearing(base, 1, 0, 100, 1)));
+  check('a distance of 0 is refused', throws(() => d.insertWaypointAtBearing(base, 2, 0, 0, 2)));
+  const fromHome = d.insertWaypointAtBearing(base, 0, 180, 50, null);
+  check('from home with nothing selected: at the end', fromHome.index === base.items.length && near(fromHome.draft.items[fromHome.index].x, d.destinationPoint(35, -106, 180, 50).lat, 1e-12), String(fromHome.index));
+}
+
 console.log(failures.length ? `\n${failures.length} mission draft check(s) FAILED` : '\nAll mission draft checks PASSED');
 process.exit(failures.length ? 1 : 0);

@@ -327,6 +327,44 @@ export function insertWaypointAfter(
   return { draft: insertItems(draft, at, [newWaypoint(draft, at, lat, lon, fallbackAlt)]), index: at };
 }
 
+/** Mean Earth radius (m), as ArduPilot's Location uses for its spherical offsets at long range. */
+const EARTH_RADIUS_M = 6371008.8;
+
+/**
+ * The point `distM` metres from (lat, lon) along the great circle starting on `bearingDeg` (true): exact on the
+ * sphere at any range, unlike a flat-earth offset. Longitude wrapped to [-180, 180).
+ */
+export function destinationPoint(lat: number, lon: number, bearingDeg: number, distM: number): { lat: number; lon: number } {
+  const rad = Math.PI / 180;
+  const d = distM / EARTH_RADIUS_M;
+  const b = bearingDeg * rad;
+  const p1 = lat * rad;
+  const p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(b));
+  const l2 = lon * rad + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2));
+  return { lat: p2 / rad, lon: ((((l2 / rad + 180) % 360) + 360) % 360) - 180 };
+}
+
+/**
+ * Add a waypoint at a bearing (degrees true) and distance (m) from item `from` (home or any item with a position),
+ * inserted after item `after` (null: at the end). It takes its altitude as any inserted waypoint does. Returns the
+ * draft and the new item's index; refuses a reference without a position or a distance that isn't positive.
+ */
+export function insertWaypointAtBearing(
+  draft: MissionDraft,
+  from: number,
+  bearingDeg: number,
+  distM: number,
+  after: number | null,
+  fallbackAlt = DEFAULT_WAYPOINT_ALT
+): { draft: MissionDraft; index: number } {
+  const ref = draft.items[from];
+  if (!ref || (ref.x === 0 && ref.y === 0)) throw new RangeError(`Item ${from} has no position to measure from`);
+  if (!Number.isFinite(bearingDeg)) throw new RangeError('Bearing must be a number');
+  if (!Number.isFinite(distM) || distM <= 0) throw new RangeError('Distance must be more than 0');
+  const p = destinationPoint(ref.x, ref.y, bearingDeg, distM);
+  return insertWaypointAfter(draft, after, p.lat, p.lon, fallbackAlt);
+}
+
 /**
  * Add a waypoint on the leg that ends at location item `legEnd`: it goes just before that item, after any
  * commands without a location on the way. Returns the draft and the new item's index.

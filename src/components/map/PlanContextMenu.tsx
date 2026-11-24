@@ -1,14 +1,18 @@
 // Right-click (long-press on touch) menu while planning, on the active layer: on a mission pin (which also selects
-// it, opening it in the panel), insert a waypoint before it or delete it; on a rally flag, delete it; on the map,
+// it, opening it in the panel), insert a waypoint before it or at a bearing and distance from it (home too), or
+// delete it; on a rally flag, delete it; on the map,
 // place a waypoint or rally point there. On the fence layer: on a shape, switch it between inclusion and exclusion
 // or delete it; on a vertex, delete it; on the return point, remove it; on the map, place the return point or a
 // square there. Closes on Escape, an outside click, and any change to either draft, so it
 // can't act on a renumbered item.
 
-import React, { useEffect, useRef } from 'react';
-import { MapPinPlus, Plus, Repeat, Square, Trash2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Compass, MapPinPlus, Plus, Repeat, Square, Trash2 } from 'lucide-react';
+import { useUnitsStore } from '../../store/unitsStore';
+import { FT_PER_M } from './planUi';
 import {
   insertWaypointAfter,
+  insertWaypointAtBearing,
   insertWaypointBefore,
   isRoutePoint,
   jumpsTargeting,
@@ -72,6 +76,58 @@ function commit(make: (d: MissionDraft) => { draft: MissionDraft; index: number 
   }
 }
 
+/** The last bearing and distance entered (this session), so a pattern can be stepped out one waypoint at a time. */
+let lastBearingRange = { bearing: '', distance: '' };
+
+/**
+ * Bearing (degrees true) and distance (the user's units) from item `from`; adds a waypoint there after item
+ * `after` (null: at the end) and selects it.
+ */
+const BearingRangeForm: React.FC<{ from: number; after: number | null; onDone: () => void }> = ({ from, after, onDone }) => {
+  const imperial = useUnitsStore((s) => s.system === 'mph' || s.system === 'kts');
+  const [bearing, setBearing] = useState(lastBearingRange.bearing);
+  const [distance, setDistance] = useState(lastBearingRange.distance);
+  const b = Number(bearing);
+  const dist = Number(distance);
+  const valid = bearing.trim() !== '' && Number.isFinite(b) && Number.isFinite(dist) && dist > 0;
+  const submit = () => {
+    if (!valid) return;
+    lastBearingRange = { bearing, distance };
+    const distM = imperial ? dist / FT_PER_M : dist;
+    commit((d) => insertWaypointAtBearing(d, from, ((b % 360) + 360) % 360, distM, after));
+    onDone();
+  };
+  const field = 'h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-1.5 font-mono text-[11px] text-zinc-100';
+  return (
+    <form
+      className="space-y-1.5 px-2 pb-1.5 pt-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      <div className="grid grid-cols-2 gap-1.5">
+        <label className="text-[10px] text-zinc-400">
+          Bearing (°T)
+          <input autoFocus inputMode="decimal" value={bearing} onChange={(e) => setBearing(e.target.value)} className={field} aria-label="Bearing in degrees true" />
+        </label>
+        <label className="text-[10px] text-zinc-400">
+          Distance ({imperial ? 'ft' : 'm'})
+          <input inputMode="decimal" value={distance} onChange={(e) => setDistance(e.target.value)} className={field} aria-label="Distance" />
+        </label>
+      </div>
+      <button
+        type="submit"
+        disabled={!valid}
+        className="flex h-7 w-full items-center justify-center gap-1 rounded-md bg-amber-500 text-[11px] font-bold text-zinc-950 hover:bg-amber-400 disabled:bg-zinc-800 disabled:text-zinc-500"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Add waypoint{after === null ? ' at the end' : ` after #${after}`}
+      </button>
+    </form>
+  );
+};
+
 const ITEM = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800';
 
 export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, onClose }) => {
@@ -79,12 +135,13 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
   const rally = useMissionPlanStore((s) => s.rally.history.present);
   const fence = useMissionPlanStore((s) => s.fence.history.present);
   const ref = useRef<HTMLDivElement | null>(null);
+  const [bearingForm, setBearingForm] = useState(false);
   // An item menu whose item is gone (or is home) has nothing to show: close it rather than leave an invisible menu
   // that still swallows the next click.
   const fenceShape = target.kind === 'fence-shape' || target.kind === 'fence-vertex' ? fence.shapes[target.shape] : undefined;
   const missing =
     (target.kind === 'item' &&
-      (target.layer === 'rally' ? !rally.points[target.index] : target.index < 1 || !draft.items[target.index])) ||
+      (target.layer === 'rally' ? !rally.points[target.index] : target.index < 0 || !draft.items[target.index])) ||
     ((target.kind === 'fence-shape' || target.kind === 'fence-vertex') && !fenceShape) ||
     (target.kind === 'fence-vertex' && (fenceShape?.kind !== 'polygon' || !fenceShape.vertices[target.vertex])) ||
     (target.kind === 'fence-return' && !fence.returnPoint);
@@ -131,7 +188,7 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
   const style: React.CSSProperties = {
     left: target.x,
     top: target.y,
-    transform: `translate(${target.x > area.width - 216 ? '-100%' : '0'}, ${target.y > area.height - 150 ? '-100%' : '0'})`,
+    transform: `translate(${target.x > area.width - 216 ? '-100%' : '0'}, ${target.y > area.height - (bearingForm ? 260 : 150) ? '-100%' : '0'})`,
   };
 
   const run = (fn: () => void) => () => {
@@ -265,10 +322,27 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
         <span className="ml-auto pl-2 text-[10px] text-zinc-500">after {selected !== null && selected >= 1 ? `#${selected}` : 'last'}</span>
       </button>
     );
+  } else if (target.index === 0) {
+    // Home: only a waypoint measured from it (after the selected item, as a map click places one).
+    const selected = useMissionPlanStore.getState().selected;
+    body = (
+      <>
+        <div className="px-2 pb-1 pt-0.5 font-mono text-[10px] font-bold text-amber-300">Home</div>
+        {bearingForm ? (
+          <BearingRangeForm from={0} after={selected !== null && selected >= 1 ? selected : null} onDone={onClose} />
+        ) : (
+          <button type="button" className={ITEM} onClick={() => setBearingForm(true)}>
+            <Compass className="h-3.5 w-3.5 text-amber-400" />
+            Add waypoint at bearing / distance…
+          </button>
+        )}
+      </>
+    );
   } else {
     const i = target.index;
     const it = draft.items[i];
     if (!it) return null;
+    const hasPosition = drawablePosition(it.command, it.x, it.y);
     const prev = previousRoutePoint(draft, i);
     // Only a route point ends a leg to insert on.
     const here = isRoutePoint(it.command) && drawablePosition(it.command, it.x, it.y) ? { lat: it.x, lon: it.y } : null;
@@ -288,6 +362,15 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
             Insert waypoint before
           </button>
         )}
+        {hasPosition &&
+          (bearingForm ? (
+            <BearingRangeForm from={i} after={i} onDone={onClose} />
+          ) : (
+            <button type="button" className={ITEM} onClick={() => setBearingForm(true)}>
+              <Compass className="h-3.5 w-3.5 text-amber-400" />
+              Add waypoint at bearing / distance…
+            </button>
+          ))}
         <button
           type="button"
           className={`${ITEM} text-red-300 hover:bg-red-950/60`}
