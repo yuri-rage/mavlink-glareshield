@@ -8,6 +8,8 @@ import './index.css';
 import './mavlink/tlogBoot';
 // ADS-B traffic from the vehicle.
 import './mavlink/adsbBoot';
+// The vehicle's gimbal.
+import './mavlink/gimbalBoot';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

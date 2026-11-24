@@ -57,6 +57,8 @@ export class MessageRateManager {
     [MAVLINK_MSG_ID.FENCE_STATUS]: 1,
     // ADS-B traffic: one aircraft per message, so this is how many aircraft a second are refreshed.
     [MAVLINK_MSG_ID.ADSB_VEHICLE]: 10,
+    // The gimbal's yaw lock (its attitude is below, with the mount).
+    [MAVLINK_MSG_ID.GIMBAL_MANAGER_STATUS]: 1,
     // 5 Hz (x0.5 / x2 for the low / high profiles) so the map trace shows small path-tracking deviations.
     [MAVLINK_MSG_ID.GLOBAL_POSITION_INT]: 5,
     [MAVLINK_MSG_ID.GPS_RAW_INT]: 2,
@@ -82,7 +84,8 @@ export class MessageRateManager {
     [MAVLINK_MSG_ID.ESC_TELEMETRY_9_TO_12]: 4,
     [MAVLINK_MSG_ID.EXTENDED_SYS_STATE]: 1,
     [MAVLINK_MSG_ID.MOUNT_STATUS]: 2,
-    [MAVLINK_MSG_ID.GIMBAL_DEVICE_ATTITUDE_STATUS]: 2,
+    // 4 Hz: the map's look-at line follows the gimbal smoothly.
+    [MAVLINK_MSG_ID.GIMBAL_DEVICE_ATTITUDE_STATUS]: 4,
     [MAVLINK_MSG_ID.EFI_STATUS]: 1,
     [MAVLINK_MSG_ID.GENERATOR_STATUS]: 1,
     // Tuning: fast enough to see a step response (x0.5 / x2 for the low / high profiles). Only sent while

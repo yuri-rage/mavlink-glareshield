@@ -849,6 +849,30 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         yaw: getInt32(8) / 100,
       };
 
+    case MAVLINK_MSG_ID.GIMBAL_MANAGER_INFORMATION: {
+      const deg = 180 / Math.PI;
+      return {
+        time_boot_ms: getUint32(0),
+        cap_flags: getUint32(4),
+        roll_min: getFloat32(8) * deg,
+        roll_max: getFloat32(12) * deg,
+        pitch_min: getFloat32(16) * deg,
+        pitch_max: getFloat32(20) * deg,
+        yaw_min: getFloat32(24) * deg,
+        yaw_max: getFloat32(28) * deg,
+        gimbal_device_id: getUint8(32),
+      };
+    }
+
+    case MAVLINK_MSG_ID.GIMBAL_MANAGER_STATUS:
+      return {
+        time_boot_ms: getUint32(0),
+        flags: getUint32(4),
+        gimbal_device_id: getUint8(8),
+        primary_control_sysid: getUint8(9),
+        primary_control_compid: getUint8(10),
+      };
+
     case MAVLINK_MSG_ID.GIMBAL_DEVICE_ATTITUDE_STATUS: {
       const q = [getFloat32(4), getFloat32(8), getFloat32(12), getFloat32(16)];
       const [w, x, y, z] = q;
