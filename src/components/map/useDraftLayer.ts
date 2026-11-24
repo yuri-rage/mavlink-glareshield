@@ -231,8 +231,9 @@ export function useDraftLayer(
         })
         .on('contextmenu', (e: L.LeafletMouseEvent) => {
           L.DomEvent.preventDefault(e.originalEvent);
-          if (isHome || useMissionPlanStore.getState().uploading) return;
-          useMissionPlanStore.getState().select(r.index);
+          if (useMissionPlanStore.getState().uploading) return;
+          // Home isn't selectable, but its menu adds a waypoint measured from it.
+          if (!isHome) useMissionPlanStore.getState().select(r.index);
           onItemMenuRef.current?.('mission', r.index, e.containerPoint.x, e.containerPoint.y);
         });
       if (draggable) {
