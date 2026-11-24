@@ -63,6 +63,20 @@ check('emergency squawks', a.emergencySquawk(7700) === 'emergency' && a.emergenc
   check('bearing and compass point', Math.round(a.assessThreat(at(1000, 1000), own).bearingDeg) === 45 && a.compassPoint(45) === 'NE');
 }
 
+// The map label's relative height follows the user's units.
+{
+  const { useUnitsStore } = await import('../src/store/unitsStore.ts');
+  const label = (relAltM: number, climb: number | null) => a.relAltText(relAltM, climb, useUnitsStore.getState().formatAltitude);
+  useUnitsStore.getState().setSystem('kmh');
+  const metric = label(49.9, -2.5);
+  useUnitsStore.getState().setSystem('kts');
+  const kts = label(49.9, -2.5);
+  useUnitsStore.getState().setSystem('mph');
+  const mph = label(-30.48, 3);
+  check('relative height: metres for km/h, feet for knots and mph', metric === '+50 m ↓' && kts === '+164 ft ↓' && mph === '−100 ft ↑', `${metric} / ${kts} / ${mph}`);
+  check('vertical speed in the popup: the climb formatter (fpm when imperial)', useUnitsStore.getState().formatClimb(2.54).full === '+500 fpm');
+}
+
 // Announcing
 {
   const ann = new Map<number, number>();
