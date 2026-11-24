@@ -87,6 +87,14 @@ export interface WidgetAction {
   commandId: number; // MAV_CMD
   params: [number, number, number, number, number, number, number];
   confirmation?: boolean;
+  /**
+   * How the command goes out: COMMAND_LONG (default) or COMMAND_INT. With COMMAND_INT, `frame` is the MAV_FRAME; in a
+   * global frame params 5 and 6 are latitude and longitude in degrees (sent ×1e7), otherwise whole numbers.
+   */
+  send?: 'long' | 'int';
+  frame?: number;
+  /** Not a command: 'system-time' sends SYSTEM_TIME with this device's clock (commandId and params unused). */
+  special?: 'system-time';
 }
 
 export interface WidgetParamControl {

@@ -325,6 +325,10 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   const setCmdParam = (i: number, v: string) => setCmdParams((prev) => prev.map((x, j) => (j === i ? v : x)));
   // "Custom" stays selected while the user types an ID, even one that happens to match a preset.
   const [customCommand, setCustomCommand] = useState(false);
+  // COMMAND_LONG or COMMAND_INT (in `cmdFrame`), and the one non-command action (set the vehicle's clock).
+  const [sendAs, setSendAs] = useState<'long' | 'int'>('long');
+  const [cmdFrame, setCmdFrame] = useState(3);
+  const [specialAction, setSpecialAction] = useState<'system-time' | undefined>(undefined);
   const [showMoreParams, setShowMoreParams] = useState(false);
   // Toggles and sliders overwrite a param with their own value, so they are offered only the presets where that
   // value is what the command expects (see CommandPreset.toggle / slider).
@@ -332,14 +336,17 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   const offeredPresets = COMMAND_PRESETS.filter((c) => presetFitsWidget(c, presetKind));
   const selectedPreset = customCommand
     ? undefined
-    : findCommandPreset(parseInt(commandId, 10) || 0, cmdParams.map((v) => parseFloat(v) || 0), presetKind);
+    : findCommandPreset(parseInt(commandId, 10) || 0, cmdParams.map((v) => parseFloat(v) || 0), presetKind, specialAction);
   const applyPreset = (key: string) => {
     const preset = COMMAND_PRESETS.find((c) => c.key === key);
     if (!preset) {
       setCustomCommand(true);
+      setSpecialAction(undefined);
       return;
     }
     setCustomCommand(false);
+    setSpecialAction(preset.special);
+    setSendAs('long');
     setCommandId(String(preset.commandId));
     setCmdParams(preset.params.map(String));
     setShowMoreParams(preset.params.slice(3).some((v) => v !== 0));
@@ -363,7 +370,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     }
     const kind = presetKindFor(next);
     if (kind === 'button' || customCommand) return;
-    if (findCommandPreset(parseInt(commandId, 10) || 0, cmdParams.map((v) => parseFloat(v) || 0), kind)) return;
+    if (findCommandPreset(parseInt(commandId, 10) || 0, cmdParams.map((v) => parseFloat(v) || 0), kind, specialAction)) return;
     const first = COMMAND_PRESETS.find((c) => presetFitsWidget(c, kind));
     if (first) applyPreset(first.key);
   };
@@ -419,7 +426,10 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     setCmdParams(loaded);
     // Judged for the widget's own type: a saved toggle whose command isn't a toggle preset is the user's Custom
     // choice, kept as is.
-    setCustomCommand(!findCommandPreset(a?.commandId || 20, a?.params ?? [], presetKindFor(w?.displayType)));
+    setSpecialAction(a?.special);
+    setSendAs(a?.send === 'int' ? 'int' : 'long');
+    setCmdFrame(a?.frame ?? 3);
+    setCustomCommand(!findCommandPreset(a?.commandId || 20, a?.params ?? [], presetKindFor(w?.displayType), a?.special));
     setShowMoreParams(loaded.slice(3).some((v) => Number(v) !== 0));
     setRequireConfirm(a?.confirmation ?? true);
   };
@@ -540,6 +550,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
         commandId: parseInt(commandId, 10) || 0,
         params: cmdParams.map((v) => parseFloat(v) || 0) as [number, number, number, number, number, number, number],
         confirmation: requireConfirm,
+        ...(specialAction ? { special: specialAction } : sendAs === 'int' ? { send: 'int' as const, frame: cmdFrame } : {}),
       };
     }
 
@@ -1413,7 +1424,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                         .filter((c) => c.group === group)
                         .map((c) => (
                           <option key={c.key} value={c.key}>
-                            {presetTitle(c, presetKind)} ({c.commandId})
+                            {presetTitle(c, presetKind)}{c.special ? '' : ` (${c.commandId})`}
                           </option>
                         ))}
                     </optgroup>
@@ -1447,6 +1458,46 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
               </p>
             )}
 
+            {!specialAction && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Send as</label>
+                  <select
+                    value={sendAs}
+                    onChange={(e) => setSendAs(e.target.value === 'int' ? 'int' : 'long')}
+                    className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs text-zinc-200"
+                  >
+                    <option value="long">COMMAND_LONG</option>
+                    <option value="int">COMMAND_INT</option>
+                  </select>
+                </div>
+                {sendAs === 'int' && (
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-zinc-400">Frame</label>
+                    <select
+                      value={cmdFrame}
+                      onChange={(e) => setCmdFrame(Number(e.target.value))}
+                      className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs text-zinc-200"
+                    >
+                      <option value={3}>Global, relative to home</option>
+                      <option value={0}>Global, above sea level</option>
+                      <option value={10}>Global, above terrain</option>
+                      <option value={2}>None (params as numbers)</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+            {!specialAction && sendAs === 'int' && (
+              <p className="text-[10px] text-zinc-500 -mt-1">
+                {[0, 3, 10].includes(cmdFrame)
+                  ? 'Param 5 and 6 are latitude and longitude in degrees (sent ×10⁷); param 7 is altitude (m).'
+                  : 'Params 5 and 6 are sent as whole numbers (x, y); param 7 as is.'}
+              </p>
+            )}
+
+            {!specialAction && (
+            <>
             <div className="grid grid-cols-3 gap-2">
               {['Param 1', 'Param 2', 'Param 3'].map((label, i) => (
                 <div key={label} className="space-y-1">
@@ -1483,6 +1534,8 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                   </div>
                 ))}
               </div>
+            )}
+            </>
             )}
           </div>
         )}

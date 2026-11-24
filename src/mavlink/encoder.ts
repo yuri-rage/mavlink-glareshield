@@ -135,6 +135,15 @@ export class MavlinkEncoder {
     return this.packV2(MAVLINK_MSG_ID.COMMAND_INT, payload);
   }
 
+  /** SYSTEM_TIME: this device's clock (UTC, µs) and time since boot (ms), for vehicles without GPS time. */
+  public createSystemTime(timeUnixUsec: number, timeBootMs: number): Uint8Array {
+    const payload = new Uint8Array(12);
+    const view = new DataView(payload.buffer);
+    view.setBigUint64(0, BigInt(Math.max(0, Math.floor(timeUnixUsec))), true);
+    view.setUint32(8, Math.max(0, Math.floor(timeBootMs)) >>> 0, true);
+    return this.packV2(MAVLINK_MSG_ID.SYSTEM_TIME, payload);
+  }
+
   // DO_REPOSITION with explicit coordinate frame, target position, and NaN yaw (maintain heading)
   public createDoReposition(
     targetSystem = 1,
