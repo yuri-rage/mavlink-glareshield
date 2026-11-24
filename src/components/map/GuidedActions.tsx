@@ -1,17 +1,19 @@
 // Guided actions while flying (mavlink/guidedActions.ts builds the commands):
-// - the map header's altitude button: change altitude (Copter, Plane), and set home to the vehicle's position;
+// - the map header's button: change altitude (Copter, Plane), change speed (AUTO / GUIDED), pause and resume
+//   (Copter), and set home to the vehicle's position;
 // - in the Fly-to card, for the point picked: orbit it (Plane) and set home there.
 // Each says what it will do before it does it, and anything that moves home or takes the vehicle out of its mode
 // asks for a second press naming the consequence.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowUpDown, Home, Orbit, RotateCcw, RotateCw } from 'lucide-react';
+import { ArrowUpDown, Gauge, Home, Orbit, Pause, Play, RotateCcw, RotateCw } from 'lucide-react';
 import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { getVehicleCategory } from '../../mavlink/messages';
-import { canChangeAltitude, canOrbit, changeAltitude, orbit, setHome, type CommandIntSpec } from '../../mavlink/guidedActions';
-import { useLengthUnit, wholeLength } from '../../lib/inputUnits';
+import { canChangeAltitude, canChangeSpeed, canOrbit, canPause, changeAltitude, changeSpeed, orbit, pauseContinue, setHome, type CommandIntSpec } from '../../mavlink/guidedActions';
+import { useConnectionParam } from '../../lib/useConnectionParam';
+import { useLengthUnit, useSpeedUnit, wholeLength } from '../../lib/inputUnits';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { terrainService } from '../../mavlink/terrainBoot';
 import { useLastVehicleStore } from '../../store/lastVehicleStore';
@@ -57,6 +59,92 @@ const SetHomeHereButton: React.FC = () => {
         <Home className="h-3.5 w-3.5" />
         {confirm.armed ? 'Confirm: set home here' : 'Set home to vehicle position'}
       </button>
+      <AckChip ack={ack} />
+    </div>
+  );
+};
+
+/** Change speed (AUTO / GUIDED): groundspeed, or Plane's airspeed within its limits (with a way back to default). */
+const SpeedSection: React.FC<{ open: boolean }> = ({ open }) => {
+  const spd = useSpeedUnit();
+  const type = useTelemetryStore((s) => s.heartbeat.type);
+  const modeName = useTelemetryStore((s) => s.heartbeat.modeName);
+  const category = getVehicleCategory(type);
+  const plane = category === 'plane';
+  // Plane's airspeed limits, this connection's (AIRSPEED_MIN/MAX, or ARSPD_FBW_MIN/MAX before 4.6).
+  // Every hook called every time (no short-circuit): the newer name wins when both answer.
+  const minNew = useConnectionParam('AIRSPEED_MIN', plane);
+  const minOld = useConnectionParam('ARSPD_FBW_MIN', plane);
+  const maxNew = useConnectionParam('AIRSPEED_MAX', plane);
+  const maxOld = useConnectionParam('ARSPD_FBW_MAX', plane);
+  const min = minNew ?? minOld;
+  const max = maxNew ?? maxOld;
+  const [input, setInput] = useState('');
+  const { ack, send } = useSender();
+  useEffect(() => {
+    if (!open) return;
+    // From the position's velocity (always streamed; VFR_HUD may not be, outside the HUD); Plane's airspeed when
+    // VFR_HUD has one.
+    const st = useTelemetryStore.getState();
+    const ground = Math.hypot(st.position.vx, st.position.vy);
+    setInput(String(Number(spd.fromSi(plane && st.vfr.airspeed > 0 ? st.vfr.airspeed : ground).toFixed(1))));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  if (!canChangeSpeed(category)) return null;
+  const typed = Number(input);
+  const fmt = (ms: number) => `${Number(spd.fromSi(ms).toFixed(1))} ${spd.unit}`;
+  const plan = changeSpeed(category, modeName, input.trim() !== '' && Number.isFinite(typed) ? spd.toSi(typed) : NaN, { min, max }, fmt);
+  const backToDefault = plane ? changeSpeed(category, modeName, null, {}, fmt) : null;
+  return (
+    <form
+      className="space-y-1.5 border-t border-zinc-800 pt-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (plan) send(plan.spec);
+      }}
+    >
+      <div className="flex items-center gap-1.5">
+        <label htmlFor="guided-speed" className="mr-auto font-bold text-zinc-200">
+          {plane ? 'Airspeed' : 'Speed'}
+        </label>
+        <input id="guided-speed" inputMode="decimal" value={input} onChange={(e) => setInput(e.target.value)} className={FIELD} />
+        <span className="text-[10px] text-zinc-500">{spd.unit}</span>
+      </div>
+      {plan?.warning && <p className="text-[10px] leading-snug text-amber-300">{plan.warning}</p>}
+      <div className="flex gap-1">
+        <button type="submit" disabled={!plan} className={`${BTN} ${PLAIN} disabled:opacity-40`}>
+          <Gauge className="h-3.5 w-3.5" />
+          Change {plane ? 'airspeed' : 'speed'}
+        </button>
+        {backToDefault && (
+          <button type="button" onClick={() => send(backToDefault.spec)} title="Back to AIRSPEED_CRUISE" className={`${BTN} ${PLAIN} w-auto px-2`}>
+            Default
+          </button>
+        )}
+      </div>
+      <AckChip ack={ack} />
+    </form>
+  );
+};
+
+/** Copter in AUTO or GUIDED: pause (hold where it is) and resume. */
+const PauseSection: React.FC = () => {
+  const type = useTelemetryStore((s) => s.heartbeat.type);
+  const modeName = useTelemetryStore((s) => s.heartbeat.modeName);
+  const { ack, send } = useSender();
+  if (!canPause(getVehicleCategory(type), modeName)) return null;
+  return (
+    <div className="space-y-1 border-t border-zinc-800 pt-2">
+      <div className="flex gap-1">
+        <button type="button" onClick={() => send(pauseContinue(true))} title={`Stop and hold position (${modeName} stays on)`} className={`${BTN} ${PLAIN}`}>
+          <Pause className="h-3.5 w-3.5" />
+          Pause
+        </button>
+        <button type="button" onClick={() => send(pauseContinue(false))} title={modeName === 'AUTO' ? 'Carry on with the mission' : 'Carry on to the guided target'} className={`${BTN} ${PLAIN}`}>
+          <Play className="h-3.5 w-3.5" />
+          Resume
+        </button>
+      </div>
       <AckChip ack={ack} />
     </div>
   );
@@ -119,7 +207,7 @@ export const AltitudeAction: React.FC<{ target: { lat: number; lon: number } | n
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        title={disabled ? 'Connect to a vehicle (not while planning)' : 'Change altitude · set home'}
+        title={disabled ? 'Connect to a vehicle (not while planning)' : 'Altitude · speed · home'}
         className={`inline-flex h-7 w-7 items-center justify-center rounded-md border ${open ? 'border-sky-400 bg-sky-500 text-white' : 'border-zinc-700 text-sky-300 hover:bg-zinc-800'} disabled:opacity-40`}
       >
         <ArrowUpDown className="h-3.5 w-3.5" />
@@ -151,6 +239,8 @@ export const AltitudeAction: React.FC<{ target: { lat: number; lon: number } | n
           ) : (
             <p className="text-[10px] leading-snug text-zinc-500">No altitude change for this vehicle.</p>
           )}
+          <SpeedSection open={open} />
+          <PauseSection />
           <div className="border-t border-zinc-800 pt-2">
             <SetHomeHereButton />
           </div>

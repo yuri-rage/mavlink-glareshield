@@ -1,5 +1,5 @@
 // Guided actions: the commands as each vehicle handles them.
-import { changeAltitude, orbit, setHome, canOrbit, canChangeAltitude, MAV_CMD_DO_CHANGE_ALTITUDE, MAV_CMD_DO_REPOSITION, MAV_CMD_DO_SET_HOME } from '../src/mavlink/guidedActions.ts';
+import { changeAltitude, orbit, setHome, canOrbit, canChangeAltitude, changeSpeed, pauseContinue, canPause, MAV_CMD_DO_CHANGE_ALTITUDE, MAV_CMD_DO_REPOSITION, MAV_CMD_DO_SET_HOME, MAV_CMD_DO_CHANGE_SPEED, MAV_CMD_DO_PAUSE_CONTINUE } from '../src/mavlink/guidedActions.ts';
 
 const failures: string[] = [];
 const check = (name: string, ok: boolean, detail = '') => {
@@ -28,6 +28,19 @@ check('only Plane orbits a point', canOrbit('plane') && !canOrbit('copter') && !
 const h = setHome({ lat: 35.5, lon: -106.5, altMslM: 1890.5 });
 check('set home at a point: param1 0, GLOBAL frame, MSL altitude', h.command === MAV_CMD_DO_SET_HOME && h.params[0] === 0 && h.frame === 0 && h.params[4] === 355000000 && h.params[6] === 1890.5, JSON.stringify(h));
 check('set home to the vehicle: param1 1', setHome(null).params[0] === 1);
+
+let sp = changeSpeed('copter', 'AUTO', 7);
+check('copter: groundspeed (type 1), m/s in param2', sp?.spec.command === MAV_CMD_DO_CHANGE_SPEED && sp.spec.params[0] === 1 && sp.spec.params[1] === 7 && sp.warning === null && sp.kind === 'groundspeed', JSON.stringify(sp));
+sp = changeSpeed('plane', 'GUIDED', 25, { min: 12, max: 30 });
+check('plane: airspeed (type 0), throttle unchanged (-1)', sp?.spec.params[0] === 0 && sp.spec.params[1] === 25 && sp.spec.params[2] === -1 && sp.kind === 'airspeed' && sp.warning === null, JSON.stringify(sp));
+check('plane above AIRSPEED_MAX: warned, still built', /maximum/.test(changeSpeed('plane', 'AUTO', 40, { min: 12, max: 30 })?.warning ?? ''));
+check('plane below AIRSPEED_MIN: warned', /minimum/.test(changeSpeed('plane', 'AUTO', 8, { min: 12, max: 30 })?.warning ?? ''));
+check('plane default: -2', changeSpeed('plane', 'AUTO', null)?.spec.params[1] === -2);
+check('copter has no default speed command', changeSpeed('copter', 'AUTO', null) === null);
+check('outside AUTO/GUIDED: warned (the vehicle fails it)', /Only in AUTO or GUIDED/.test(changeSpeed('rover', 'MANUAL', 3)?.warning ?? ''));
+check('sub: no speed change', changeSpeed('sub', 'GUIDED', 1) === null);
+check('pause: param1 0, resume: 1', pauseContinue(true).params[0] === 0 && pauseContinue(false).params[0] === 1 && pauseContinue(true).command === MAV_CMD_DO_PAUSE_CONTINUE);
+check('pause: Copter in AUTO or GUIDED only', canPause('copter', 'AUTO') && canPause('copter', 'GUIDED') && !canPause('copter', 'LOITER') && !canPause('plane', 'AUTO'));
 
 console.log(failures.length ? `\n${failures.length} guided-action check(s) FAILED` : '\nAll guided-action checks PASSED');
 if (failures.length) process.exit(1);
