@@ -627,6 +627,28 @@ export function getAllVehicleFlightModes(type: number): { label: string; mode: n
   }
 }
 
+/**
+ * A VTOL MAV_TYPE (19-25). ArduPlane reports one only for a tiltrotor, a tailsitter, or with Q_MAV_TYPE set: a
+ * standard QuadPlane reports FIXED_WING (QuadPlane::get_mav_type), so use isVtolPlane to tell.
+ */
+export function isVtolType(type: number): boolean {
+  return type >= 19 && type <= 25;
+}
+
+/**
+ * The vehicle is a VTOL (ArduPlane QuadPlane, tiltrotor, tailsitter): a VTOL MAV_TYPE, or a plane with Q_ENABLE set,
+ * or one reporting a VTOL state in EXTENDED_SYS_STATE (hover 3, forward 4, transitions 1-2; a plain plane reports 0).
+ * Takeoff, hover and landing are then VTOL (GUIDED takeoff, QLOITER, QLAND), not fixed-wing.
+ */
+export function isVtolPlane(type: number, qEnable: number | undefined, vtolState: number): boolean {
+  if (isVtolType(type)) return true;
+  if (getVehicleCategory(type) !== 'plane') return false;
+  return (qEnable !== undefined && Math.round(qEnable) === 1) || vtolState !== 0;
+}
+
+/** ArduPlane modes the VTOL controls use. */
+export const PLANE_MODE = { MANUAL: 0, FBWA: 5, CRUISE: 7, LOITER: 12, TAKEOFF: 13, GUIDED: 15, QLOITER: 19, QLAND: 20, QRTL: 21 } as const;
+
 export function getGuidedModeNum(type: number): number {
   const category = getVehicleCategory(type);
   if (category === 'plane' || category === 'rover') {

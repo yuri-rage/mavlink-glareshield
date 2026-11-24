@@ -504,5 +504,15 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   check('presets: the clock action isn\'t offered on toggles or sliders', !presets.COMMAND_PRESETS.filter((c) => presets.presetFitsWidget(c, 'toggle') || presets.presetFitsWidget(c, 'slider')).some((c) => c.special));
 }
 
+// VTOL detection: a standard QuadPlane reports FIXED_WING (ArduPlane QuadPlane::get_mav_type).
+{
+  const { isVtolPlane } = await import('../src/mavlink/messages.ts');
+  check('VTOL MAV_TYPE: VTOL', isVtolPlane(21, undefined, 0) && isVtolPlane(20, undefined, 0));
+  check('fixed-wing type with Q_ENABLE 1: VTOL', isVtolPlane(1, 1, 0));
+  check('fixed-wing type reporting a VTOL state: VTOL (before the parameter arrives)', isVtolPlane(1, undefined, 3) && isVtolPlane(1, undefined, 4));
+  check('plain plane (Q_ENABLE 0, state undefined): not VTOL', !isVtolPlane(1, 0, 0) && !isVtolPlane(1, undefined, 0));
+  check('a copter reporting a VTOL state isn\'t a VTOL plane', !isVtolPlane(2, undefined, 3));
+}
+
 console.log(failures.length ? `\n${failures.length} widget check(s) FAILED` : '\nAll widget checks PASSED');
 process.exit(failures.length ? 1 : 0);
