@@ -27,7 +27,8 @@ import { useUnitsStore } from '../../store/unitsStore';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { downloadFile } from '../../lib/download';
 import { OPEN_ACCEPT } from './MissionMenu';
-import { FT_PER_M, ICON_BTN, NumField } from './planUi';
+import { ICON_BTN, NumField } from './planUi';
+import { useLengthUnit } from '../../lib/inputUnits';
 import { FenceControlBody } from './FenceControl';
 
 interface FencePlanBodyProps {
@@ -71,7 +72,7 @@ const ShapeEditor: React.FC<{
   apply: (fn: (d: FenceDraft) => FenceDraft, select?: number | null) => void;
 }> = ({ draft, index, issues, apply }) => {
   const shape = draft.shapes[index];
-  const imperial = useUnitsStore((s) => s.system === 'mph' || s.system === 'kts');
+  const len = useLengthUnit();
   const del = useConfirmStep();
   const [showVertices, setShowVertices] = useState(false);
   const centre = shape.kind === 'polygon' ? polygonCenter(shape.vertices) : shape.center;
@@ -101,10 +102,10 @@ const ShapeEditor: React.FC<{
       </div>
       {shape.kind === 'circle' ? (
         <NumField
-          label={`Radius (${imperial ? 'ft' : 'm'})`}
-          value={imperial ? shape.radius * FT_PER_M : shape.radius}
+          label={`Radius (${len.unit})`}
+          value={len.fromSi(shape.radius)}
           digits={1}
-          onCommit={(v) => apply((d) => setRadius(d, index, imperial ? v / FT_PER_M : v))}
+          onCommit={(v) => apply((d) => setRadius(d, index, len.toSi(v)))}
         />
       ) : (
         <div className="space-y-1.5">

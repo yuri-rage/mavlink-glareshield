@@ -51,7 +51,8 @@ import { useUnitsStore } from '../../store/unitsStore';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { downloadFile } from '../../lib/download';
 import { OPEN_ACCEPT } from './MissionMenu';
-import { FT_PER_M, ICON_BTN, INPUT, NumField, frameTag } from './planUi';
+import { ICON_BTN, INPUT, NumField, frameTag } from './planUi';
+import { RAW_LENGTH, RAW_SPEED, lengthUnit, paramUnitKind, relabel, speedUnit } from '../../lib/inputUnits';
 
 export { typedValue } from './planUi';
 
@@ -139,7 +140,18 @@ const ItemEditor: React.FC<{
   const it = draft.items[index];
   const info = missionCommandInfo(it.command);
   const hasLocation = cmdHasLocation(it.command);
-  const imperial = useUnitsStore((s) => s.system === 'mph' || s.system === 'kts');
+  // Altitude and the length / speed params in the display units, or raw (m, m/s: as sent), as the toggle says.
+  const system = useUnitsStore((s) => s.system);
+  const paramUnits = useUnitsStore((s) => s.paramUnits);
+  const setParamUnits = useUnitsStore((s) => s.setParamUnits);
+  const raw = paramUnits === 'raw';
+  const len = raw ? RAW_LENGTH : lengthUnit(system);
+  const spd = raw ? RAW_SPEED : speedUnit(system);
+  const unitFor = (label: string) => {
+    const k = paramUnitKind(label);
+    return k === 'length' ? len : k === 'speed' ? spd : null;
+  };
+  const hasUnitFields = hasLocation || info.params.some((l) => l && paramUnitKind(l));
   const del = useConfirmStep();
   const jumps = jumpsTargeting(draft, index);
   const last = draft.items.length - 1;
@@ -155,6 +167,25 @@ const ItemEditor: React.FC<{
         value={it.command}
         onChange={(cmd) => apply((d) => changeCommand(d, index, cmd, getMapCenter() ?? undefined), index)}
       />
+      {hasUnitFields && (
+        <div className="flex items-center justify-end gap-1 text-[10px] text-zinc-500">
+          Units
+          <div className="flex rounded-md border border-zinc-700 p-0.5" role="group" aria-label="Units for this item's values">
+            {(['user', 'raw'] as const).map((u) => (
+              <button
+                key={u}
+                type="button"
+                aria-pressed={paramUnits === u}
+                onClick={() => setParamUnits(u)}
+                title={u === 'raw' ? 'As sent to the vehicle: metres and m/s' : 'In the display units (Settings)'}
+                className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${paramUnits === u ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800'}`}
+              >
+                {u === 'raw' ? 'Raw' : `${lengthUnit(system).unit} · ${speedUnit(system).unit}`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {hasLocation && (
         <>
@@ -163,12 +194,7 @@ const ItemEditor: React.FC<{
             <NumField label="Longitude" value={it.y} digits={7} onCommit={(v) => set({ y: v })} />
           </div>
           <div className="grid grid-cols-2 gap-1.5">
-            <NumField
-              label={`Altitude (${imperial ? 'ft' : 'm'})`}
-              value={imperial ? it.z * FT_PER_M : it.z}
-              digits={imperial ? 0 : 1}
-              onCommit={(v) => set({ z: imperial ? v / FT_PER_M : v })}
-            />
+            <NumField label={`Altitude (${len.unit})`} value={len.fromSi(it.z)} digits={len.digits} onCommit={(v) => set({ z: len.toSi(v) })} />
             <label className="block min-w-0 space-y-0.5">
               <span className="block truncate text-[10px] text-zinc-500">Altitude frame</span>
               <select value={it.frame} onChange={(e) => set({ frame: Number(e.target.value) })} className={INPUT}>
@@ -186,16 +212,19 @@ const ItemEditor: React.FC<{
 
       {(info.params.some(Boolean) || (!hasLocation && info.extra?.some(Boolean))) && (
         <div className="grid grid-cols-2 gap-1.5">
-          {info.params.map((label, k) =>
-            label ? (
+          {info.params.map((label, k) => {
+            if (!label) return null;
+            const u = unitFor(label);
+            return (
               <NumField
                 key={`p${k}`}
-                label={label}
-                value={params[k]}
-                onCommit={(v) => set({ [`param${k + 1}`]: v } as Partial<DraftItem>)}
+                label={u ? relabel(label, u.unit) : label}
+                value={u ? u.fromSi(params[k]) : params[k]}
+                digits={u?.digits}
+                onCommit={(v) => set({ [`param${k + 1}`]: u ? u.toSi(v) : v } as Partial<DraftItem>)}
               />
-            ) : null
-          )}
+            );
+          })}
           {!hasLocation &&
             info.extra?.map((label, k) =>
               label ? (

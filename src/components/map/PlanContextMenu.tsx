@@ -9,7 +9,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Compass, MapPinPlus, Plus, Repeat, Square, Trash2 } from 'lucide-react';
 import { useUnitsStore } from '../../store/unitsStore';
-import { FT_PER_M } from './planUi';
+import { useLengthUnit } from '../../lib/inputUnits';
 import {
   insertWaypointAfter,
   insertWaypointAtBearing,
@@ -84,7 +84,7 @@ let lastBearingRange = { bearing: '', distance: '' };
  * `after` (null: at the end) and selects it.
  */
 const BearingRangeForm: React.FC<{ from: number; after: number | null; onDone: () => void }> = ({ from, after, onDone }) => {
-  const imperial = useUnitsStore((s) => s.system === 'mph' || s.system === 'kts');
+  const len = useLengthUnit();
   const [bearing, setBearing] = useState(lastBearingRange.bearing);
   const [distance, setDistance] = useState(lastBearingRange.distance);
   const b = Number(bearing);
@@ -93,7 +93,7 @@ const BearingRangeForm: React.FC<{ from: number; after: number | null; onDone: (
   const submit = () => {
     if (!valid) return;
     lastBearingRange = { bearing, distance };
-    const distM = imperial ? dist / FT_PER_M : dist;
+    const distM = len.toSi(dist);
     commit((d) => insertWaypointAtBearing(d, from, ((b % 360) + 360) % 360, distM, after));
     onDone();
   };
@@ -112,7 +112,7 @@ const BearingRangeForm: React.FC<{ from: number; after: number | null; onDone: (
           <input autoFocus inputMode="decimal" value={bearing} onChange={(e) => setBearing(e.target.value)} className={field} aria-label="Bearing in degrees true" />
         </label>
         <label className="text-[10px] text-zinc-400">
-          Distance ({imperial ? 'ft' : 'm'})
+          Distance ({len.unit})
           <input inputMode="decimal" value={distance} onChange={(e) => setDistance(e.target.value)} className={field} aria-label="Distance" />
         </label>
       </div>
@@ -271,7 +271,7 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
           >
             <Square className="h-3.5 w-3.5 text-red-400" />
             {inclusion ? 'Inclusion' : 'Exclusion'} square here
-            <span className="ml-auto pl-2 text-[10px] text-zinc-500">{FENCE_SQUARE_M} m</span>
+            <span className="ml-auto pl-2 text-[10px] text-zinc-500">{useUnitsStore.getState().formatAltitude(FENCE_SQUARE_M).full}</span>
           </button>
         ))}
       </>

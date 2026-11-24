@@ -2,6 +2,7 @@ import 'leaflet/dist/leaflet.css';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTelemetryStore, sendTrackedCommand, computeDistanceAndBearing } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
+import { useLengthUnit } from '../../lib/inputUnits';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { missionManager, MissionManagerStatus, groupFencePolygons } from '../../mavlink/missionManager';
 import { mavlinkConnection } from '../../mavlink/connection';
@@ -143,6 +144,9 @@ interface MapWidgetProps {
 }
 
 /** The Home marker's popup: source, altitude, position, and the vector from the vehicle when known. */
+/** An altitude or length for a map popup, in the display units. */
+const popAlt = (m: number) => useUnitsStore.getState().formatAltitude(m).full;
+
 function homePopupHtml(home: {
   source: string;
   alt: number;
@@ -151,7 +155,7 @@ function homePopupHtml(home: {
   distanceM: number | null;
   bearingDeg: number | null;
 }): string {
-  return `<b>Home Position (${home.source})</b><br/>Alt: ${home.alt.toFixed(1)}m<br/>Lat: ${home.lat.toFixed(6)}<br/>Lon: ${home.lon.toFixed(6)}${
+  return `<b>Home Position (${home.source})</b><br/>Alt: ${popAlt(home.alt)} MSL<br/>Lat: ${home.lat.toFixed(6)}<br/>Lon: ${home.lon.toFixed(6)}${
     home.distanceM !== null ? `<br/>${useUnitsStore.getState().formatHomeVector(home.bearingDeg, home.distanceM)}` : ''
   }`;
 }
@@ -266,6 +270,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   };
 
   const { formatAltitude, altitudeMode, formatHomeVector } = useUnitsStore();
+  const unitSystem = useUnitsStore((s) => s.system);
+  const flyLen = useLengthUnit();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const activeTileLayerRef = useRef<L.TileLayer | null>(null);
@@ -734,8 +740,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const openFlyToPrompt = (lat: number, lon: number, accuracyM?: number) => {
     const st = useTelemetryStore.getState();
     if (st.heartbeat.lastHeartbeatTime === 0 || st.heartbeat.modeName === 'DISCONNECTED') return;
-    const curAlt = Math.max(10, Math.round(st.position.relativeAlt || 20));
-    setFlyToAltInput(String(curAlt));
+    // Typed in the display units (ft or m); sent in metres.
+    const curAlt = Math.max(10, st.position.relativeAlt || 20);
+    setFlyToAltInput(String(Math.round(flyLen.fromSi(curAlt))));
     setPendingFlyTo({ lat, lon, accuracyM });
     setFlyToMode(false);
   };
@@ -1666,7 +1673,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   useEffect(() => {
     homeMarkerRef.current?.setPopupContent(homePopupHtml(homePosition));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homePosition.distanceM, homePosition.bearingDeg, homePosition.alt, formatHomeVector]);
+  }, [homePosition.distanceM, homePosition.bearingDeg, homePosition.alt, formatHomeVector, unitSystem]);
 
   // While a point is picked, track it on screen and mark it on the map.
   useEffect(() => {
@@ -1776,7 +1783,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       zIndexOffset: 300,
     })
       .bindPopup(
-        `<b>Guided Fly-To Target</b><br/>Alt: ${activeFlyToTarget.alt}m<br/>Lat: ${activeFlyToTarget.lat.toFixed(
+        `<b>Guided Fly-To Target</b><br/>Alt: ${popAlt(activeFlyToTarget.alt)} above home<br/>Lat: ${activeFlyToTarget.lat.toFixed(
           6
         )}<br/>Lon: ${activeFlyToTarget.lon.toFixed(6)}`
       )
@@ -1789,7 +1796,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         flyToMarkerRef.current = null;
       }
     };
-  }, [activeFlyToTarget]);
+  }, [activeFlyToTarget, unitSystem]);
 
   // Update dashed vector line connecting vehicle to target (efficient setLatLngs without recreation)
   useEffect(() => {
@@ -1825,7 +1832,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
   const handleConfirmFlyTo = () => {
     if (!pendingFlyTo) return;
-    const alt = Math.max(2, Number(flyToAltInput) || 20);
+    const typed = Number(flyToAltInput);
+    const alt = Math.max(2, Number.isFinite(typed) && typed > 0 ? flyLen.toSi(typed) : 20);
     const { lat, lon } = pendingFlyTo;
     const encoder = mavlinkConnection.getEncoder();
     const sysId = heartbeat.systemId || 1;
@@ -1847,7 +1855,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     const repoCmd = encoder.createDoReposition(sysId, compId, lat, lon, alt);
     sendTrackedCommand(repoCmd, {
-      label: `Fly To (${lat.toFixed(4)}, ${lon.toFixed(4)}) @ ${alt}m`,
+      label: `Fly To (${lat.toFixed(4)}, ${lon.toFixed(4)}) @ ${formatAltitude(alt).full}`,
       targetKey: 'action:reposition',
     }).then((ack) => {
       // Drop the target only when the vehicle refused it. A timeout keeps it (over a lossy link the ACK can go
@@ -1935,12 +1943,12 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         interactive: !planning,
       });
       if (!planning) {
-        m.bindPopup(`<b>${isHome ? 'Home Location (WP #0)' : `Waypoint #${wp.seq}`}</b><br/>Cmd: ${wp.command}<br/>Alt: ${wp.alt}m<br/>Lat: ${wp.lat.toFixed(6)}<br/>Lon: ${wp.lon.toFixed(6)}`);
+        m.bindPopup(`<b>${isHome ? 'Home Location (WP #0)' : `Waypoint #${wp.seq}`}</b><br/>Cmd: ${wp.command}<br/>Alt: ${popAlt(wp.alt)}<br/>Lat: ${wp.lat.toFixed(6)}<br/>Lon: ${wp.lon.toFixed(6)}`);
       }
       m.addTo(mapInstanceRef.current!);
       missionMarkersRef.current.push(m);
     });
-  }, [missionWaypoints, planning, vehicleSplines, radiusKey, lastVehicle]);
+  }, [missionWaypoints, planning, vehicleSplines, radiusKey, lastVehicle, unitSystem]);
 
   // Update geofence rendering - Mission Planner solid red lines with transparent/dimmed interiors
   useEffect(() => {
@@ -2023,7 +2031,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           ...dim,
         })
           .bindPopup(
-            `<b>${isInc ? 'Inclusion' : 'Exclusion'} Circle Fence (#${fp.seq})</b><br/>Radius: ${rad}m<br/>Center: ${centerLat.toFixed(6)}, ${centerLon.toFixed(6)}`
+            `<b>${isInc ? 'Inclusion' : 'Exclusion'} Circle Fence (#${fp.seq})</b><br/>Radius: ${popAlt(rad)}<br/>Center: ${centerLat.toFixed(6)}, ${centerLon.toFixed(6)}`
           )
           .addTo(mapInstanceRef.current!);
         fenceLayersRef.current.push(circle);
@@ -2055,7 +2063,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         fenceLayersRef.current.push(marker);
       }
     });
-  }, [fencePoints, missionWaypoints, planning]);
+  }, [fencePoints, missionWaypoints, planning, unitSystem]);
 
   // Update rally points rendering
   useEffect(() => {
@@ -2093,12 +2101,12 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         interactive: !planning,
       });
       if (!planning) {
-        m.bindPopup(`<b>Rally Point R${rp.seq + 1}</b><br/>Alt: ${rp.alt}m<br/>Lat: ${rp.lat.toFixed(6)}<br/>Lon: ${rp.lon.toFixed(6)}`);
+        m.bindPopup(`<b>Rally Point R${rp.seq + 1}</b><br/>Alt: ${popAlt(rp.alt)}<br/>Lat: ${rp.lat.toFixed(6)}<br/>Lon: ${rp.lon.toFixed(6)}`);
       }
       m.addTo(mapInstanceRef.current!);
       rallyMarkersRef.current.push(m);
     });
-  }, [rallyPoints, planning]);
+  }, [rallyPoints, planning, unitSystem]);
 
   // Update RTK base station marker rendering - blue needle pin with bold "B"
   useEffect(() => {
@@ -2140,7 +2148,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       .bindPopup(
         `<b>RTK Base Station (ARP)</b><br/>Lat: ${baseStationPosition.lat.toFixed(6)}<br/>Lon: ${baseStationPosition.lon.toFixed(
           6
-        )}${baseStationPosition.alt !== undefined ? `<br/>Alt: ${baseStationPosition.alt.toFixed(1)}m` : ''}`
+        )}${baseStationPosition.alt !== undefined ? `<br/>Alt: ${popAlt(baseStationPosition.alt)} MSL` : ''}`
       )
       .addTo(mapInstanceRef.current);
 
@@ -2152,7 +2160,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         baseMarkerRef.current = null;
       }
     };
-  }, [baseStationPosition]);
+  }, [baseStationPosition, unitSystem]);
 
   const aspectClass = isFullWidth
     ? (aspectRatio === '1:1'

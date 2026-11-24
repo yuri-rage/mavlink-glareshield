@@ -1,6 +1,7 @@
 // A small card pinned beside the point picked on the map: set the altitude and send the vehicle there in GUIDED
 // (DO_REPOSITION). Enter sends, Escape cancels.
 
+import { useLengthUnit } from '../../lib/inputUnits';
 import React, { useEffect, useRef } from 'react';
 import { LocateFixed, Minus, Navigation, Plus, X } from 'lucide-react';
 
@@ -50,8 +51,12 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
   const top = above ? anchor.y - GAP - cardH : Math.min(anchor.y + GAP, bounds.height - cardH - 4);
   const left = Math.max(4, Math.min(anchor.x - CARD_W / 2, bounds.width - CARD_W - 4));
 
+  // Typed in the display units: steps of 5 m or 15 ft, never below 2 m.
+  const len = useLengthUnit();
+  const stepBy = len.unit === 'ft' ? 15 : 5;
+  const minAlt = Math.ceil(len.fromSi(2));
   const step = (delta: number) => {
-    const v = Math.max(2, Math.round((Number(altInput) || 0) + delta));
+    const v = Math.max(minAlt, Math.round((Number(altInput) || 0) + delta));
     onAltInput(String(v));
   };
 
@@ -96,30 +101,30 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
       <div className="px-2.5 pt-0.5 font-mono text-[10px] text-zinc-400">
         {lat.toFixed(6)}, {lon.toFixed(6)}
         {accuracyM !== undefined && (
-          <span className={accuracyM > 30 ? 'text-amber-400' : 'text-zinc-500'}> ±{Math.round(accuracyM)} m</span>
+          <span className={accuracyM > 30 ? 'text-amber-400' : 'text-zinc-500'}> ±{Math.round(len.fromSi(accuracyM))} {len.unit}</span>
         )}
       </div>
 
       <div className="px-2.5 pt-2 flex items-center gap-1.5">
-        <label htmlFor="flyto-alt" className="text-zinc-400 mr-auto" title="Metres above home">
+        <label htmlFor="flyto-alt" className="text-zinc-400 mr-auto" title="Above home">
           Altitude
         </label>
-        <button type="button" onClick={() => step(-5)} className="h-6 w-6 rounded border border-zinc-700 text-zinc-300 hover:bg-zinc-800 flex items-center justify-center" aria-label="5 m lower">
+        <button type="button" onClick={() => step(-stepBy)} className="h-6 w-6 rounded border border-zinc-700 text-zinc-300 hover:bg-zinc-800 flex items-center justify-center" aria-label={`${stepBy} ${len.unit} lower`}>
           <Minus className="h-3 w-3" />
         </button>
         <input
           id="flyto-alt"
           type="number"
           inputMode="decimal"
-          min={2}
-          max={1000}
+          min={minAlt}
+          max={Math.round(len.fromSi(1000))}
           step={1}
           value={altInput}
           onChange={(e) => onAltInput(e.target.value)}
           className="h-6 w-14 rounded border border-zinc-700 bg-zinc-900 text-center font-mono text-zinc-100 focus:outline-none focus:border-sky-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
         />
-        <span className="text-[10px] text-zinc-500 -ml-1 mr-0.5">m</span>
-        <button type="button" onClick={() => step(5)} className="h-6 w-6 rounded border border-zinc-700 text-zinc-300 hover:bg-zinc-800 flex items-center justify-center" aria-label="5 m higher">
+        <span className="text-[10px] text-zinc-500 -ml-1 mr-0.5">{len.unit}</span>
+        <button type="button" onClick={() => step(stepBy)} className="h-6 w-6 rounded border border-zinc-700 text-zinc-300 hover:bg-zinc-800 flex items-center justify-center" aria-label={`${stepBy} ${len.unit} higher`}>
           <Plus className="h-3 w-3" />
         </button>
       </div>
