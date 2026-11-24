@@ -277,7 +277,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   useEffect(() => {
     const prev = flyUnitsRef.current;
     flyUnitsRef.current = unitSystem;
-    if (prev === unitSystem) return;
+    // km/h and m/s (or mph and kts) share a length unit: nothing to convert, and a half-typed value stays as it is.
+    if (lengthUnit(prev).unit === lengthUnit(unitSystem).unit) return;
     setFlyToAltInput((text) => {
       const v = Number(text);
       if (text.trim() === '' || !Number.isFinite(v)) return text;
