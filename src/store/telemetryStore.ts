@@ -1787,6 +1787,11 @@ mavlinkConnection.onStatus((status) => {
         isArmed: false,
         lastHeartbeatTime: 0,
       },
+      // The next vehicle may be another: its flight state, battery monitors and ESCs start over (a QuadPlane's VTOL
+      // state would otherwise make a fixed-wing plane look like a VTOL; an 8-ESC vehicle's count would stick).
+      extendedState: { landedState: 0, vtolState: 0, lastUpdate: 0 },
+      batteries: {},
+      esc: { voltage: escZeros(), current: escZeros(), totalCurrent: escZeros(), rpm: escZeros(), temperature: escZeros(), count: 4 },
     }));
   }
 });

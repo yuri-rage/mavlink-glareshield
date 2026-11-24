@@ -190,8 +190,11 @@ export function missionProfile(
   return { points, marks, length: dist, homeMsl, homeFrom };
 }
 
-/** A height in whole metres, the default for the messages (the app passes one in the user's units). */
-const wholeMetres = (m: number) => `${Math.round(m)} m`;
+/**
+ * A height in whole metres, the default for the messages (the app passes one in the user's units). Any height above
+ * zero is at least one unit: never "0 m below" for a fraction under.
+ */
+const wholeMetres = (m: number) => `${m > 0 ? Math.max(1, Math.round(m)) : Math.round(m)} m`;
 
 /**
  * Where the route comes within `clearanceM` of the terrain (or below it), one issue per leg, at the leg's end item.
@@ -210,8 +213,7 @@ export function terrainIssues(profile: MissionProfile, legs: PathLeg[], clearanc
     if (w.agl >= clearanceM) continue;
     const leg = legs[li];
     const where = leg.from === 0 ? `from home to #${leg.to}` : `from #${leg.from} to #${leg.to}`;
-    // Never "0 m below" for a fraction under: at least a whole unit.
-    const below = w.agl < 0 ? Math.max(-w.agl, 1) : 0;
+    const below = w.agl < 0 ? -w.agl : 0; // the formatter rounds, to at least one of its units
     out.push({
       index: leg.to,
       severity: 'warning',

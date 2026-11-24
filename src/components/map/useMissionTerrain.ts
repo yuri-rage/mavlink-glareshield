@@ -49,8 +49,9 @@ export function useMissionTerrain() {
       await terrainService.heightsAt([...rough.points, ...homePos]);
       if (cancelled) return;
       const profile = missionProfile(items, legs, (lat, lon) => terrainService.heightNow(lat, lon), { homeMslHint: hint });
-      // Heights in the warnings in the user's units, whole feet or metres (at least 1 below: never "0 ft below").
-      const fmt = (m: number) => (imperial ? `${Math.max(Math.round(m * 3.28084), m > 0 ? 1 : 0)} ft` : `${Math.round(m)} m`);
+      // Heights in the warnings in the user's units, whole feet or metres; above zero is at least 1 (never "0 ft below").
+      const whole = (v: number) => (v > 0 ? Math.max(1, Math.round(v)) : Math.round(v));
+      const fmt = (m: number) => (imperial ? `${whole(m * 3.28084)} ft` : `${whole(m)} m`);
       useMissionTerrainStore.setState({ profile, issues: terrainIssues(profile, legs, clearanceM, fmt), loading: false });
     }, DEBOUNCE_MS);
     return () => {

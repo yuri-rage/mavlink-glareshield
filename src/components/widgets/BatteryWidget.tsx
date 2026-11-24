@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { MAVLINK_MSG_ID } from '../../mavlink/messages';
@@ -7,12 +7,23 @@ import { Battery, BatteryCharging, Gauge, Zap, Activity } from 'lucide-react';
 
 export const BatteryWidget: React.FC = () => {
   const battery = useTelemetryStore((state) => state.battery);
-  // Other battery monitors (BATT2_ ...), reporting within the last 10 s.
-  const batteries = useTelemetryStore((state) => state.batteries);
-  const others = Object.values(batteries)
-    .filter((b) => b.id !== 0 && Date.now() - b.at < 10_000)
-    .sort((a, b) => a.id - b.id);
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
+  // Other battery monitors (BATT2_ ...), while linked and reporting within the last 10 s. A 2 s tick drops one that
+  // goes quiet even when nothing else re-renders the widget.
+  const batteries = useTelemetryStore((state) => state.batteries);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const hasOthers = Object.keys(batteries).some((k) => k !== '0');
+  useEffect(() => {
+    if (!hasOthers) return;
+    const t = setInterval(() => setNowMs(Date.now()), 2000);
+    return () => clearInterval(t);
+  }, [hasOthers]);
+  const linked = heartbeat.lastHeartbeatTime > 0 && heartbeat.modeName !== 'DISCONNECTED';
+  const others = linked
+    ? Object.values(batteries)
+        .filter((b) => b.id !== 0 && Math.max(nowMs, Date.now()) - b.at < 10_000)
+        .sort((a, b) => a.id - b.id)
+    : [];
 
   useEffect(() => {
     messageRateManager.registerRequirement('battery-sys', MAVLINK_MSG_ID.SYS_STATUS);

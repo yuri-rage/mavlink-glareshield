@@ -3,8 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { mavlinkConnection } from '../../mavlink/connection';
-import { paramManager } from '../../mavlink/paramManager';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
+import { useConnectionParam } from '../../lib/useConnectionParam';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import {
@@ -16,9 +16,6 @@ import {
   getAutoModeNum,
   isVtolPlane,
 } from '../../mavlink/messages';
-
-/** Fly the mission's landing sequence (Plane: AUTO from the nearest DO_LAND_START). */
-const MAV_CMD_DO_LAND_START = 189;
 import {
   Shield,
   ShieldAlert,
@@ -66,15 +63,15 @@ export const ArmingModesWidget: React.FC = () => {
   const autoModeNum = getAutoModeNum(heartbeat.type);
   // A QuadPlane takes off, hovers and lands as a VTOL: GUIDED + NAV_TAKEOFF (a VTOL takeoff), QLOITER, QLAND. Only a
   // fixed-wing plane uses TAKEOFF mode, fixed-wing LOITER and a mission landing.
-  const vtolState = useTelemetryStore((s) => s.extendedState.vtolState); // 3 hover (MC), 4 forward (FW), 1/2 transitioning
-  const qEnable = useTelemetryStore((s) => s.parameters['Q_ENABLE']?.value);
-  // A standard QuadPlane reports FIXED_WING: Q_ENABLE or a reported VTOL state tells (ask for Q_ENABLE on a plane).
+  // The VTOL state only while it is current (as the navbar uses it): 3 hover (MC), 4 forward (FW), 1/2 transitioning.
+  const extended = useTelemetryStore((s) => s.extendedState);
+  const vtolState = extended.lastUpdate > 0 && nowMs - extended.lastUpdate < 5000 ? extended.vtolState : 0;
+  // A standard QuadPlane reports FIXED_WING: Q_ENABLE (read this connection, never a previous vehicle's) or a
+  // reported VTOL state tells.
+  const qEnable = useConnectionParam('Q_ENABLE', category === 'plane');
   const isVtol = isVtolPlane(heartbeat.type, qEnable, vtolState);
   const forwardConfirm = useConfirmStep(6000);
   const fixedWing = category === 'plane' && !isVtol;
-  useEffect(() => {
-    if (category === 'plane' && heartbeat.systemId > 0 && qEnable === undefined) paramManager.requestParam(heartbeat.systemId, heartbeat.componentId || 1, 'Q_ENABLE');
-  }, [category, heartbeat.systemId, heartbeat.componentId, qEnable]);
   const vtolForward = isVtol && vtolState === 4;
   const loiterModeNum = fixedWing || vtolForward ? PLANE_MODE.LOITER : isVtol ? PLANE_MODE.QLOITER : 5;
   const targetTakeoffModeNum = fixedWing ? PLANE_MODE.TAKEOFF : guidedModeNum;
@@ -162,11 +159,12 @@ export const ArmingModesWidget: React.FC = () => {
   const landsHow: 'land' | 'qland' | 'mission' | null =
     category === 'copter' || category === 'generic' ? 'land' : isVtol ? 'qland' : fixedWing ? 'mission' : null;
   const triggerLand = () => {
+    if (!landsHow) return;
     if (landsHow === 'qland') {
       handleSetMode(PLANE_MODE.QLAND, 'Land (QLAND)', 'mode-land');
       return;
     }
-    const cmd = encoder.createCommandLong(sysId, compId, landsHow === 'mission' ? MAV_CMD_DO_LAND_START : MAV_CMD.NAV_LAND);
+    const cmd = encoder.createCommandLong(sysId, compId, landsHow === 'mission' ? MAV_CMD.DO_LAND_START : MAV_CMD.NAV_LAND);
     void sendTrackedCommand(cmd, {
       label: landsHow === 'mission' ? 'Land: mission landing sequence' : 'Land Now',
       targetKey: 'mode-land',
@@ -683,7 +681,7 @@ export const ArmingModesWidget: React.FC = () => {
               <Button
                 variant="outline"
                 size="sm"
-                className={`h-7 ${forwardConfirm.armed ? 'border-amber-500 bg-amber-600 text-zinc-950' : 'border-sky-700/60 text-sky-300'}`}
+                className={`h-7 ${forwardConfirm.armed ? 'border-amber-500 bg-amber-600 text-zinc-950' : 'border-sky-700/60 text-sky-300'} ${getFeedbackRing('mode-cruise')}`}
                 title="Forward flight (CRUISE): from a hover this starts a forward transition"
                 onClick={() => {
                   if (vtolState !== 4 && !forwardConfirm.armed) return forwardConfirm.arm();
@@ -692,6 +690,7 @@ export const ArmingModesWidget: React.FC = () => {
                 }}
               >
                 {forwardConfirm.armed ? 'Confirm: transition to forward flight' : 'Forward'}
+                {getFeedbackBadge('mode-cruise')}
               </Button>
             </span>
           </div>

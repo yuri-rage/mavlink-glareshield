@@ -163,6 +163,7 @@ for (const [id, msg] of Object.entries(DIALECT_MESSAGES)) {
 
 // Common MAV_CMD IDs
 export const MAV_CMD = {
+  DO_LAND_START: 189,
   NAV_WAYPOINT: 16,
   NAV_LOITER_UNLIM: 17,
   NAV_RETURN_TO_LAUNCH: 20,
