@@ -6,6 +6,8 @@ import App from './App';
 import './index.css';
 // Telemetry logging starts with the app, before any connection.
 import './mavlink/tlogBoot';
+// ADS-B traffic from the vehicle.
+import './mavlink/adsbBoot';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

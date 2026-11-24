@@ -115,6 +115,8 @@ import { useFenceDraftLayer } from './useFenceDraftLayer';
 import { finishFencePolygon } from './fenceCommit';
 import { FencePlaceHint } from './FencePlaceHint';
 import { FenceChip } from './FenceControl';
+import { TrafficBanner } from './TrafficBanner';
+import { useTrafficLayer } from './useTrafficLayer';
 import {
   checkRallyReadBack,
   rallyDraftFromItems,
@@ -924,6 +926,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
   useDraftLayer(mapInstanceRef, mapReady, (layer, index, x, y) => setPlanMenu({ kind: 'item', layer, index, x, y }));
   useFenceDraftLayer(mapInstanceRef, mapReady, setPlanMenu);
+  useTrafficLayer(mapInstanceRef, mapReady);
 
   const planLayout = mapAreaWidth >= 560 ? 'side' : 'sheet';
   // Keep the tile attribution clear of the editor. Set on the element directly: Leaflet owns its className.
@@ -2362,6 +2365,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           </div>
           {/* The vehicle's fence: on, off or breached, and the switch. */}
           <FenceChip />
+          {/* The worst ADS-B traffic threat, if any. */}
+          <TrafficBanner onFocus={(lat, lon) => mapInstanceRef.current?.panTo([lat, lon], { animate: true })} />
           {planning && (
             <div className="pointer-events-auto flex flex-col items-start gap-1.5">
               <div className="flex items-center rounded-lg border border-zinc-700 bg-zinc-950/90 p-0.5 shadow-md" role="group" aria-label="Map tool">
