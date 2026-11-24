@@ -71,7 +71,7 @@ export interface TlogMeta {
 /** How long an interruption can last and still continue the same log (unless the vehicle is armed). */
 export const TLOG_RESUME_GAP_MS = 5 * 60 * 1000;
 /** Boot times closer than this are the same power-up (they are derived from message times, so they jitter). */
-const BOOT_TOLERANCE_MS = 15_000;
+export const BOOT_TOLERANCE_MS = 15_000;
 
 /**
  * Whether a connection to the vehicle `now` continues the last log (`last`) or starts a new one. It continues only

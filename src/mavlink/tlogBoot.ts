@@ -21,6 +21,8 @@ mavlinkConnection.onPacket((p) => tlogRecorder.onReceived(p));
 mavlinkConnection.onSend((data) => tlogRecorder.onSent(data));
 mavlinkConnection.onStatus((status) => tlogRecorder.onStatus(status, mavlinkConnection.isManualDisconnect));
 useTlogStore.subscribe((s, prev) => {
+  // A lower cap deletes old logs now, not at the next log.
+  if (s.capMb !== prev.capMb) tlogRecorder.pruneNow();
   if (s.enabled === prev.enabled) return;
   tlogRecorder.setEnabled(s.enabled);
   if (s.enabled) requestPersistence();
