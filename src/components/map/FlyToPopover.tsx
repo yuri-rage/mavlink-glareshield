@@ -19,13 +19,15 @@ interface FlyToPopoverProps {
   accuracyM?: number;
   onSend: () => void;
   onCancel: () => void;
+  /** More actions for the picked point, under the fly button (e.g. pointing the camera there). */
+  extra?: React.ReactNode;
 }
 
 const CARD_W = 232;
 const CARD_H = 160;
 const GAP = 14;
 
-export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bounds, altInput, onAltInput, modeName, armed, accuracyM, onSend, onCancel }) => {
+export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bounds, altInput, onAltInput, modeName, armed, accuracyM, onSend, onCancel, extra }) => {
   const sendRef = useRef<HTMLButtonElement | null>(null);
   const inGuided = modeName === 'GUIDED';
 
@@ -43,8 +45,9 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
   }, [onCancel]);
 
   // Above the point when there is room, otherwise below; always inside the map.
-  const above = anchor.y - GAP - CARD_H >= 4;
-  const top = above ? anchor.y - GAP - CARD_H : Math.min(anchor.y + GAP, bounds.height - CARD_H - 4);
+  const cardH = CARD_H + (extra ? 40 : 0);
+  const above = anchor.y - GAP - cardH >= 4;
+  const top = above ? anchor.y - GAP - cardH : Math.min(anchor.y + GAP, bounds.height - cardH - 4);
   const left = Math.max(4, Math.min(anchor.x - CARD_W / 2, bounds.width - CARD_W - 4));
 
   const step = (delta: number) => {
@@ -142,6 +145,7 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
         >
           {inGuided ? 'Fly here' : 'Switch to GUIDED & fly here'}
         </button>
+        {extra && <div className="pt-1.5">{extra}</div>}
       </div>
     </form>
   );

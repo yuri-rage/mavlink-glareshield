@@ -115,6 +115,8 @@ import { useFenceDraftLayer } from './useFenceDraftLayer';
 import { finishFencePolygon } from './fenceCommit';
 import { FencePlaceHint } from './FencePlaceHint';
 import { FenceChip } from './FenceControl';
+import { GimbalChip, PointCameraButton } from './GimbalControl';
+import { useGimbalLayer } from './useGimbalLayer';
 import { TrafficBanner } from './TrafficBanner';
 import { useTrafficLayer } from './useTrafficLayer';
 import {
@@ -927,6 +929,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   useDraftLayer(mapInstanceRef, mapReady, (layer, index, x, y) => setPlanMenu({ kind: 'item', layer, index, x, y }));
   useFenceDraftLayer(mapInstanceRef, mapReady, setPlanMenu);
   useTrafficLayer(mapInstanceRef, mapReady);
+  useGimbalLayer(mapInstanceRef, mapReady);
 
   const planLayout = mapAreaWidth >= 560 ? 'side' : 'sheet';
   // Keep the tile attribution clear of the editor. Set on the element directly: Leaflet owns its className.
@@ -2364,7 +2367,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             )}
           </div>
           {/* The vehicle's fence: on, off or breached, and the switch. */}
-          <FenceChip />
+          <div className="flex items-center gap-1.5">
+            <FenceChip />
+            {/* Only while a gimbal is enabled. */}
+            <GimbalChip />
+          </div>
           {/* The worst ADS-B traffic threat, if any. */}
           <TrafficBanner onFocus={(lat, lon) => mapInstanceRef.current?.panTo([lat, lon], { animate: true })} />
           {planning && (
@@ -2461,6 +2468,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             accuracyM={pendingFlyTo.accuracyM}
             onSend={handleConfirmFlyTo}
             onCancel={cancelFlyTo}
+            extra={pendingFlyTo.accuracyM === undefined ? <PointCameraButton lat={pendingFlyTo.lat} lon={pendingFlyTo.lon} onDone={cancelFlyTo} /> : undefined}
           />
         )}
 
