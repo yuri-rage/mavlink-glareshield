@@ -52,6 +52,8 @@ export class TlogRecorder {
   /** The file open for writing (it can stay open across a dropped link, waiting to see if the flight continues). */
   private openName: string | null = null;
   private recording = false;
+  /** A file is being chosen and opened: frames keep being held until it is open. */
+  private deciding = false;
   private pending: Uint8Array[] = [];
   private pendingBytes = 0;
   private queue: Uint8Array[] = [];
@@ -261,14 +263,26 @@ export class TlogRecorder {
   private decide() {
     this.decideTimer = null;
     const v = this.vehicle;
-    if (!v || this.recording || !this.connected || !this.enabled) return;
-    this.recording = true; // further frames queue behind the held ones
-    const held = this.pending;
-    this.pending = [];
-    this.pendingBytes = 0;
-    this.queue = [...held, ...this.queue];
-    this.queueBytes = this.queue.reduce((t, r) => t + r.length, 0);
+    if (!v || this.recording || this.deciding || !this.connected || !this.enabled) return;
+    // Frames stay held (recording is false) until the chosen file is open: storage work queued before this (closing
+    // the previous log) flushes only that log's frames, never the new session's.
+    this.deciding = true;
     this.enqueue(async () => {
+      try {
+        await this.chooseAndOpen(v);
+      } finally {
+        this.deciding = false;
+      }
+    });
+    this.flushTimer ??= setInterval(() => {
+      if (this.queueBytes > 0) this.enqueue(() => this.flush());
+    }, this.flushMs);
+  }
+
+  private async chooseAndOpen(v: NonNullable<TlogRecorder['vehicle']>) {
+    {
+      // Things changed while this waited its turn (disconnect, logging off, a reboot or swap): not this session.
+      if (!this.connected || !this.enabled || this.vehicle !== v) return;
       if (!this.storage) {
         this.stop('This browser can’t store telemetry logs (no private file storage).');
         return;
@@ -309,13 +323,16 @@ export class TlogRecorder {
       }
       this.openName = name;
       saveTlogIndex(this.index);
+      // The file is open: what was held goes first, and from now on frames queue for it.
+      this.queue = [...this.pending, ...this.queue];
+      this.queueBytes = this.queue.reduce((t, r) => t + r.length, 0);
+      this.pending = [];
+      this.pendingBytes = 0;
+      this.recording = true;
       useTlogStore.setState({ phase: 'recording', active: name, activeBytes: this.index[name].bytes, decision: reason, error: null });
       await this.prune();
       await this.flush();
-    });
-    this.flushTimer ??= setInterval(() => {
-      if (this.queueBytes > 0) this.enqueue(() => this.flush());
-    }, this.flushMs);
+    }
   }
 
   /** Run storage work one step at a time, in order. */
