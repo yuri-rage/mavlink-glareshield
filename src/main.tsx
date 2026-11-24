@@ -10,6 +10,8 @@ import './mavlink/tlogBoot';
 import './mavlink/adsbBoot';
 // The vehicle's gimbal.
 import './mavlink/gimbalBoot';
+// Terrain: elevation tiles, and answering the vehicle's terrain requests.
+import './mavlink/terrainBoot';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

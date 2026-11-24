@@ -212,6 +212,20 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         mavlink_version: getUint8(8),
       };
 
+    case MAVLINK_MSG_ID.TERRAIN_REQUEST:
+      return { mask: getBigUint64(0), lat: getInt32(8), lon: getInt32(12), grid_spacing: getUint16(16) };
+
+    case MAVLINK_MSG_ID.TERRAIN_REPORT:
+      return {
+        lat: getInt32(0) / 1e7,
+        lon: getInt32(4) / 1e7,
+        terrain_height: getFloat32(8),
+        current_height: getFloat32(12),
+        spacing: getUint16(16),
+        pending: getUint16(18),
+        loaded: getUint16(20),
+      };
+
     case MAVLINK_MSG_ID.ADSB_VEHICLE: {
       let callsign = '';
       for (let i = 27; i < 36; i++) {
