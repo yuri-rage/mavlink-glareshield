@@ -1,5 +1,6 @@
 import { TlogIndicator, TlogSettings } from './TlogSettings';
 import { AdsbSettings } from './AdsbSettings';
+import { TerrainSettings } from './TerrainSettings';
 import React, { useState, useRef, useEffect } from 'react';
 import { useConnectionStore } from '../../store/connectionStore';
 import {
@@ -1343,6 +1344,8 @@ export const Navbar: React.FC = () => {
           <TlogSettings />
 
           <AdsbSettings />
+
+          <TerrainSettings />
 
           <div className="pt-3 border-t border-zinc-800">
             <RestoreDefaults />

@@ -116,6 +116,9 @@ import { finishFencePolygon } from './fenceCommit';
 import { FencePlaceHint } from './FencePlaceHint';
 import { FenceChip } from './FenceControl';
 import { GimbalChip, PointCameraButton } from './GimbalControl';
+import { TerrainChip } from './TerrainChip';
+import { TERRAIN_ATTRIBUTION } from '../../mavlink/terrain';
+import { useTerrainStore } from '../../store/terrainStore';
 import { useGimbalLayer } from './useGimbalLayer';
 import { TrafficBanner } from './TrafficBanner';
 import { useTrafficLayer } from './useTrafficLayer';
@@ -930,6 +933,16 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   useFenceDraftLayer(mapInstanceRef, mapReady, setPlanMenu);
   useTrafficLayer(mapInstanceRef, mapReady);
   useGimbalLayer(mapInstanceRef, mapReady);
+  // The elevation data's attribution, while it is in use.
+  const terrainOn = useTerrainStore((s) => s.enabled);
+  useEffect(() => {
+    const ctl = mapInstanceRef.current?.attributionControl;
+    if (!ctl || !mapReady || !terrainOn) return;
+    ctl.addAttribution(TERRAIN_ATTRIBUTION);
+    return () => {
+      ctl.removeAttribution(TERRAIN_ATTRIBUTION);
+    };
+  }, [mapReady, terrainOn]);
 
   const planLayout = mapAreaWidth >= 560 ? 'side' : 'sheet';
   // Keep the tile attribution clear of the editor. Set on the element directly: Leaflet owns its className.
@@ -2371,6 +2384,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             <FenceChip />
             {/* Only while a gimbal is enabled. */}
             <GimbalChip />
+            {/* Only once the vehicle reports terrain. */}
+            <TerrainChip />
           </div>
           {/* The worst ADS-B traffic threat, if any. */}
           <TrafficBanner onFocus={(lat, lon) => mapInstanceRef.current?.panTo([lat, lon], { animate: true })} />

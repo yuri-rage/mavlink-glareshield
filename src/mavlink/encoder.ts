@@ -144,6 +144,27 @@ export class MavlinkEncoder {
     return this.packV2(MAVLINK_MSG_ID.SYSTEM_TIME, payload);
   }
 
+  /** TERRAIN_DATA: one 4 x 4 sub-grid of a terrain block (lat/lon 1e7 deg of the block's corner; heights in m). */
+  public createTerrainData(lat: number, lon: number, gridSpacing: number, gridbit: number, heights: number[]): Uint8Array {
+    const payload = new Uint8Array(43);
+    const view = new DataView(payload.buffer);
+    view.setInt32(0, lat, true);
+    view.setInt32(4, lon, true);
+    view.setUint16(8, gridSpacing, true);
+    for (let i = 0; i < 16; i++) view.setInt16(10 + i * 2, heights[i] ?? 0, true);
+    view.setUint8(42, gridbit);
+    return this.packV2(MAVLINK_MSG_ID.TERRAIN_DATA, payload);
+  }
+
+  /** TERRAIN_CHECK: ask the vehicle for the terrain height it has at a point (answered with TERRAIN_REPORT). */
+  public createTerrainCheck(latDeg: number, lonDeg: number): Uint8Array {
+    const payload = new Uint8Array(8);
+    const view = new DataView(payload.buffer);
+    view.setInt32(0, Math.round(latDeg * 1e7), true);
+    view.setInt32(4, Math.round(lonDeg * 1e7), true);
+    return this.packV2(MAVLINK_MSG_ID.TERRAIN_CHECK, payload);
+  }
+
   // DO_REPOSITION with explicit coordinate frame, target position, and NaN yaw (maintain heading)
   public createDoReposition(
     targetSystem = 1,
