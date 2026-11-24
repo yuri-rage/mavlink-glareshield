@@ -67,6 +67,37 @@ const p4 = mp.missionProfile(relHome as any, legs, terrain, { stepM: 50 });
 check('home altitude unknown: taken from the terrain at home', p4.homeMsl === 1000 && p4.homeFrom === 'terrain');
 check('terrain unknown: no altitudes, no issues', mp.terrainIssues(mp.missionProfile(relHome as any, legs, () => null), legs, 30).length === 0);
 
+// Offline: home has no position (0, 0). Never look up terrain there; relative altitudes unknown, no false warnings.
+{
+  const asked: string[] = [];
+  const offline = [{ ...items[0], lat: 0, lon: 0, alt: 0 }, ...items.slice(1)];
+  const offLegs = missionPathLegs(offline as any, routeIndices(offline as any, false), false);
+  const look = (lat: number, lon: number) => (asked.push(`${lat},${lon}`), terrain(lat, lon));
+  const po = mp.missionProfile(offline as any, offLegs, look, { stepM: 50 });
+  check('home at 0, 0: terrain never looked up there, home unknown', !asked.includes('0,0') && po.homeMsl === null && po.homeFrom === 'unknown');
+  check('home at 0, 0: relative legs aren\'t placed, so no false below-terrain warnings', mp.terrainIssues(po, offLegs, 30).every((i) => !/below/.test(i.message) || i.index === 4), JSON.stringify(mp.terrainIssues(po, offLegs, 30)));
+}
+
+// Takeoffs: one in a terrain frame without a position climbs over home's terrain; one with a position (Plane) is an
+// unchecked climb from the ground.
+{
+  const terrTo = items.map((x, i) => (i === 1 ? { ...x, frame: 10, alt: 40 } : x));
+  const p5 = mp.missionProfile(terrTo as any, legs, terrain, { stepM: 10 });
+  check('terrain-frame takeoff without a position: 40 m above home\'s terrain (1040), not looked up at 0, 0', near(p5.points.find((q) => q.leg === 0 && q.checked)!.alt, 1040));
+  const plane = [items[0], it(22, 35.003, 40), it(16, 35.01, 100), it(21, 35.02, 0)];
+  const pl = missionPathLegs(plane as any, routeIndices(plane as any, false), false);
+  const pp = mp.missionProfile(plane as any, pl, terrain, { stepM: 10 });
+  const climb = pp.points.filter((q) => q.leg === 0);
+  check('positioned takeoff: the leg to it climbs from the ground (1000) to 1040, unchecked', near(climb[0].alt, 1000) && near(climb[climb.length - 1].alt, 1040) && climb.every((q) => !q.checked));
+}
+
+// A fraction below the terrain reads "1 m below", not "0 m below".
+{
+  const pr = { points: [{ dist: 10, lat: 35, lon: -106, alt: 999.7, terrain: 1000, leg: 0, checked: true }], marks: [], length: 10, homeMsl: 1000, homeFrom: 'mission' as const };
+  const m = mp.terrainIssues(pr as any, [{ from: 0, to: 1, spline: false, latLngs: [] }] as any, 30)[0].message;
+  check('a fraction below: "1 m below"', /goes 1 m below/.test(m), m);
+}
+
 check('checked vehicles: copter, plane, unknown; not rover, sub, tracker',
   mp.terrainChecked('copter') && mp.terrainChecked('plane') && mp.terrainChecked('generic') && !mp.terrainChecked('rover') && !mp.terrainChecked('sub') && !mp.terrainChecked('tracker'));
 

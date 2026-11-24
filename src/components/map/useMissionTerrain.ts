@@ -42,7 +42,9 @@ export function useMissionTerrain() {
       // A first pass names the points; fetch their tiles, then compute with them loaded.
       const rough = missionProfile(items, legs, () => null, { homeMslHint: hint });
       useMissionTerrainStore.setState({ loading: true });
-      await terrainService.heightsAt([...rough.points, { lat: items[0].lat, lon: items[0].lon }]);
+      // Home's terrain too, when it has a position (0, 0 is "unknown", not a place to fetch).
+      const homePos = items[0] && (items[0].lat !== 0 || items[0].lon !== 0) ? [{ lat: items[0].lat, lon: items[0].lon }] : [];
+      await terrainService.heightsAt([...rough.points, ...homePos]);
       if (cancelled) return;
       const profile = missionProfile(items, legs, (lat, lon) => terrainService.heightNow(lat, lon), { homeMslHint: hint });
       useMissionTerrainStore.setState({ profile, issues: terrainIssues(profile, legs, clearanceM), loading: false });

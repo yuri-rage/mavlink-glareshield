@@ -49,12 +49,16 @@ export function sampleHeight(lat: number, lon: number, getTile: (tx: number, ty:
   const y0 = Math.floor(py);
   const fx = px - x0;
   const fy = py - y0;
+  const world = 2 ** z * TILE_SIZE;
   const at = (gx: number, gy: number): number | null => {
-    const tx = Math.floor(gx / TILE_SIZE);
-    const ty = Math.floor(gy / TILE_SIZE);
+    // Across the antimeridian the map wraps; at the poles of web mercator it stops.
+    const wx = ((gx % world) + world) % world;
+    const wy = Math.min(world - 1, Math.max(0, gy));
+    const tx = Math.floor(wx / TILE_SIZE);
+    const ty = Math.floor(wy / TILE_SIZE);
     const t = getTile(tx, ty);
     if (!t) return null;
-    return t[(gy - ty * TILE_SIZE) * TILE_SIZE + (gx - tx * TILE_SIZE)];
+    return t[(wy - ty * TILE_SIZE) * TILE_SIZE + (wx - tx * TILE_SIZE)];
   };
   const a = at(x0, y0);
   const b = at(x0 + 1, y0);
@@ -70,9 +74,12 @@ export function tilesFor(lat: number, lon: number, z = TERRAIN_ZOOM): TileKey[] 
   const px = x * TILE_SIZE - 0.5;
   const py = y * TILE_SIZE - 0.5;
   const keys = new Map<string, TileKey>();
+  const world = 2 ** z * TILE_SIZE;
   for (const gx of [Math.floor(px), Math.floor(px) + 1]) {
     for (const gy of [Math.floor(py), Math.floor(py) + 1]) {
-      const k = { x: Math.floor(gx / TILE_SIZE), y: Math.floor(gy / TILE_SIZE) };
+      const wx = ((gx % world) + world) % world;
+      const wy = Math.min(world - 1, Math.max(0, gy));
+      const k = { x: Math.floor(wx / TILE_SIZE), y: Math.floor(wy / TILE_SIZE) };
       keys.set(`${k.x}/${k.y}`, k);
     }
   }

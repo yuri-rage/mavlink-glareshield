@@ -18,7 +18,7 @@ useTerrainStore.subscribe((s) => {
 
 const server = new TerrainServer(
   terrainService,
-  (packet) => mavlinkConnection.send(packet),
+  (packet) => mavlinkConnection.send(packet), // false with no link: the server stops and doesn't count it
   (lat, lon, spacing, bit, heights) => mavlinkConnection.getEncoder().createTerrainData(lat, lon, spacing, bit, heights),
   (sent, unavailable) => useTerrainStore.setState((s) => ({ sent: s.sent + sent, unavailable: s.unavailable + unavailable }))
 );

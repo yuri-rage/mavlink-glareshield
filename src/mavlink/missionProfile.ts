@@ -88,6 +88,8 @@ export function missionProfile(
 ): MissionProfile {
   const stepM = opts.stepM ?? 20;
   const home = items[0];
+  // Home without a position (offline, before a GPS fix) is 0, 0: never look up terrain there (Null Island, 0 m).
+  const homeHasPos = Boolean(home && (home.lat !== 0 || home.lon !== 0));
   let homeMsl: number | null = null;
   let homeFrom: MissionProfile['homeFrom'] = 'unknown';
   if (opts.homeMslHint !== undefined && opts.homeMslHint !== null) {
@@ -96,7 +98,7 @@ export function missionProfile(
   } else if (home && isMsl(home.frame) && home.alt !== 0) {
     homeMsl = home.alt;
     homeFrom = 'mission';
-  } else if (home) {
+  } else if (homeHasPos) {
     const t = terrainAt(home.lat, home.lon);
     if (t !== null) {
       homeMsl = t;
@@ -104,13 +106,16 @@ export function missionProfile(
     }
   }
 
-  /** An item's altitude MSL at its own position (terrain items need the terrain there). */
+  /** An item's altitude MSL at its own position (terrain items need the terrain there). A takeoff without a position
+   *  takes off from home: its above-terrain altitude is over home's terrain. */
   const endMsl = (i: number): number | null => {
     if (i === 0) return homeMsl;
     const it = items[i];
     if (isMsl(it.frame)) return it.alt;
     if (isTerrainFrame(it.frame)) {
-      const t = terrainAt(it.lat, it.lon);
+      const noPos = it.lat === 0 && it.lon === 0;
+      if (noPos && !homeHasPos) return null;
+      const t = noPos ? terrainAt(home.lat, home.lon) : terrainAt(it.lat, it.lon);
       return t === null ? null : t + it.alt;
     }
     return homeMsl === null ? null : homeMsl + it.alt;
@@ -132,13 +137,15 @@ export function missionProfile(
     const to = items[leg.to];
     const fromHome = leg.from === 0;
     const toLand = to.command === CMD_NAV_LAND || to.command === CMD_NAV_VTOL_LAND;
+    // A takeoff with a position (Plane, VTOL): the leg to it is the climb from home's ground, not checked.
+    const toTakeoff = fromHome && (to.command === CMD_NAV_TAKEOFF || to.command === CMD_NAV_VTOL_TAKEOFF);
     // The altitudes the leg runs between.
     const dest = endMsl(leg.to);
     const takeoff = fromHome ? takeoffMsl(leg.to) : null;
-    const a0 = fromHome ? (takeoff ?? dest) : endMsl(leg.from);
+    const a0 = toTakeoff ? homeMsl : fromHome ? (takeoff ?? dest) : endMsl(leg.from);
     const a1 = toLand ? a0 : dest;
     // Flown above terrain when the destination is (and isn't a land, which keeps the altitude it arrives at).
-    const terrainLeg = isTerrainFrame(to.frame) && !toLand;
+    const terrainLeg = isTerrainFrame(to.frame) && !toLand && !toTakeoff;
     const fromTerrain = terrainAt(from.lat, from.lon);
     // The origin's height above terrain: its altitude less the terrain there (for the leg from home, the takeoff
     // altitude above home's ground, or level with the destination when there is no takeoff).
@@ -170,7 +177,7 @@ export function missionProfile(
       if (terrainLeg) alt = terrain === null || originAgl === null ? null : terrain + originAgl + (to.alt - originAgl) * frac;
       else alt = a0 === null || a1 === null ? null : a0 + (a1 - a0) * frac;
       // Unchecked: the leg's first point when it leaves home on the ground (no takeoff to climb), nothing else here.
-      points.push({ dist: dist + target, lat, lon, alt, terrain, leg: li, checked: !(fromHome && s === 0) });
+      points.push({ dist: dist + target, lat, lon, alt, terrain, leg: li, checked: !toTakeoff && !(fromHome && s === 0) });
     }
     dist += legLen;
     // Into a land: the descent at the land point, unchecked.
@@ -197,13 +204,14 @@ export function terrainIssues(profile: MissionProfile, legs: PathLeg[], clearanc
     if (w.agl >= clearanceM) continue;
     const leg = legs[li];
     const where = leg.from === 0 ? `from home to #${leg.to}` : `from #${leg.from} to #${leg.to}`;
-    const m = Math.round(w.agl);
+    // Whole metres, never "0 m below" for a fraction under.
+    const m = w.agl < 0 ? Math.max(1, Math.round(-w.agl)) : Math.round(w.agl);
     out.push({
       index: leg.to,
       severity: 'warning',
       minAgl: w.agl,
       at: w.at,
-      message: w.agl < 0 ? `The leg ${where} goes ${-m} m below the terrain.` : `The leg ${where} comes within ${m} m of the terrain (clearance ${clearanceM} m).`,
+      message: w.agl < 0 ? `The leg ${where} goes ${m} m below the terrain.` : `The leg ${where} comes within ${m} m of the terrain (clearance ${clearanceM} m).`,
     });
   }
   return out;
