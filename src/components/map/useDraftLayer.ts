@@ -278,6 +278,8 @@ export function useDraftLayer(
     if (!map || !ready || !active) return;
     const onClick = (e: L.LeafletMouseEvent) => {
       const st = useMissionPlanStore.getState();
+      // The fence layer handles its own clicks (useFenceDraftLayer); never let one add a waypoint.
+      if (st.layer === 'fence') return;
       if (st.layer === 'rally') {
         if (st.tool === 'add') commitRally((d) => addRallyPoint(d, st.rally.selected, e.latlng.lat, e.latlng.lng));
         else st.rallySelect(null);

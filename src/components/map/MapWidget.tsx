@@ -100,7 +100,11 @@ import { PLAN_LAYER_SWITCH_WIDTH, PlanLayerSwitch } from './PlanLayerSwitch';
 import { DraftUploadModal, RallyUploadModal } from './DraftUploadModal';
 import { PlanContextMenu, type PlanMenuTarget } from './PlanContextMenu';
 import { useDraftLayer, drawablePosition } from './useDraftLayer';
-import { isAnyDirty, isDraftDirty, isRallyDirty, useMissionPlanStore, vehicleMissionUpdate } from '../../store/missionPlanStore';
+import { isAnyDirty, isDraftDirty, isFenceDirty, isRallyDirty, useMissionPlanStore, vehicleMissionUpdate } from '../../store/missionPlanStore';
+import { fenceDraftFromItems, fenceDraftFromPoints, fenceDraftsEqual, polygonCenter, type FenceDraft } from '../../mavlink/fenceDraft';
+import { useFenceDraftLayer } from './useFenceDraftLayer';
+import { finishFencePolygon } from './fenceCommit';
+import { FencePlaceHint } from './FencePlaceHint';
 import {
   checkRallyReadBack,
   rallyDraftFromItems,
@@ -643,6 +647,14 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       st.rally.history.present.points.forEach((p) => {
         if (validMapPosition(p.lat, p.lon)) points.push([p.lat, p.lon]);
       });
+      // Circles by their extent, so the whole circle fits.
+      st.fence.history.present.shapes.forEach((sh) => {
+        if (sh.kind === 'polygon') sh.vertices.forEach((p) => validMapPosition(p.lat, p.lon) && points.push([p.lat, p.lon]));
+        else if (validMapPosition(sh.center.lat, sh.center.lon)) {
+          const b = L.latLng(sh.center.lat, sh.center.lon).toBounds(sh.radius * 2);
+          points.push([b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]);
+        }
+      });
     }
     fencePoints.forEach((f) => {
       if (f.lat !== 0 || f.lon !== 0) points.push([f.lat, f.lon]);
@@ -890,6 +902,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   }, []);
 
   useDraftLayer(mapInstanceRef, mapReady, (layer, index, x, y) => setPlanMenu({ kind: 'item', layer, index, x, y }));
+  useFenceDraftLayer(mapInstanceRef, mapReady, setPlanMenu);
 
   const planLayout = mapAreaWidth >= 560 ? 'side' : 'sheet';
   // Keep the tile attribution clear of the editor. Set on the element directly: Leaflet owns its className.
@@ -919,6 +932,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
   /** The vehicle's rally points as a draft. */
   const vehicleRallyDraft = useCallback((): RallyDraft => rallyDraftFromPoints(useTelemetryStore.getState().rallyPoints), []);
+  /** The vehicle's fence as a draft. */
+  const vehicleFenceDraft = useCallback((): FenceDraft => fenceDraftFromPoints(useTelemetryStore.getState().fencePoints), []);
 
   const startPlanning = () => {
     setFlyToMode(false);
@@ -935,7 +950,12 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     const s = useTelemetryStore.getState();
     useMissionPlanStore
       .getState()
-      .start(vehicleDraft(), s.missionWaypoints.length > 0 ? { kind: 'vehicle' } : { kind: 'empty' }, vehicleRallyDraft());
+      .start(
+        vehicleDraft(),
+        s.missionWaypoints.length > 0 ? { kind: 'vehicle' } : { kind: 'empty' },
+        vehicleRallyDraft(),
+        vehicleFenceDraft()
+      );
   };
 
   // Entering planning, from the menu or resumed after a reload: stop following the vehicle (it would pan the map away
@@ -1033,6 +1053,23 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     else if (action === 'changed') st.setRallyVehicleChanged(true);
     else if (action === 'unchanged') st.setRallyVehicleChanged(false);
   }, [planning, rallyPoints, missionStatus.isFetching, missionStatus.isUploading, planUploading, vehicleRallyDraft]);
+
+  // And for the fence layer (a download fetches the fence too).
+  useEffect(() => {
+    const st = useMissionPlanStore.getState();
+    const vehicle = vehicleFenceDraft();
+    const action = vehicleMissionUpdate({
+      active: planning,
+      uploading: planUploading,
+      transferring: missionStatus.isFetching || Boolean(missionStatus.isUploading),
+      vehicleKnown: fencePoints.length > 0 || missionFetchedRef.current,
+      dirty: isFenceDirty(st),
+      vehicleEqualsBase: fenceDraftsEqual(vehicle, st.fence.base),
+    });
+    if (action === 'sync') st.fenceSyncFromVehicle(vehicle);
+    else if (action === 'changed') st.setFenceVehicleChanged(true);
+    else if (action === 'unchanged') st.setFenceVehicleChanged(false);
+  }, [planning, fencePoints, missionStatus.isFetching, missionStatus.isUploading, planUploading, vehicleFenceDraft]);
 
   /**
    * Upload the rally draft, read it back and compare, like the mission: only a matching read-back counts, and the
@@ -1139,14 +1176,32 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [planDirty]);
 
-  // Planning keys, ignored while typing in a field: Escape leaves the Place tool, then the maximized view (planning
-  // stays on); Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or Ctrl+Y redoes.
+  // Planning keys, ignored while typing in a field: Escape cancels a fence polygon being drawn, then leaves the Place
+  // tool, then the maximized view (planning stays on); Enter finishes the polygon and Backspace drops its last
+  // vertex; Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or Ctrl+Y redoes.
   useEffect(() => {
     if (!planning) return;
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       const st = useMissionPlanStore.getState();
+      const drawing = st.layer === 'fence' ? st.fenceDrawing : null;
+      if (drawing && drawing.length > 0) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finishFencePolygon();
+          return;
+        }
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          st.setFenceDrawing(drawing.length > 1 ? drawing.slice(0, -1) : null);
+          return;
+        }
+        if (e.key === 'Escape') {
+          st.setFenceDrawing(null);
+          return;
+        }
+      }
       if (e.key === 'Escape') {
         if (st.tool === 'add') st.setTool('select');
         else if (maximized) setMaximizedByUser(false);
@@ -1200,10 +1255,20 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     if (!map.getBounds().pad(-0.15).contains([p.lat, p.lon])) map.panTo([p.lat, p.lon], { animate: true, duration: 0.3 });
   }, []);
 
+  /** Pan to a draft fence shape (or, with -2, the return point) when it is out of view. */
+  const focusFenceShape = useCallback((index: number) => {
+    const map = mapInstanceRef.current;
+    const d = useMissionPlanStore.getState().fence.history.present;
+    const sh = index >= 0 ? d.shapes[index] : undefined;
+    const p = index === -2 ? d.returnPoint : sh ? (sh.kind === 'circle' ? sh.center : polygonCenter(sh.vertices)) : null;
+    if (!map || !p || !validMapPosition(p.lat, p.lon)) return;
+    if (!map.getBounds().pad(-0.15).contains([p.lat, p.lon])) map.panTo([p.lat, p.lon], { animate: true, duration: 0.3 });
+  }, []);
+
   /**
    * A file opened while planning goes into the drafts, never straight to the vehicle: its mission into the mission
-   * draft (home stays the draft's), its rally points into the rally draft. Each is one undo step on its layer.
-   * Fence sections aren't editable here and are reported as not loaded.
+   * draft (home stays the draft's), its rally points into the rally draft, its fence into the fence draft. Each is
+   * one undo step on its layer.
    */
   const loadFileIntoDraft = async (file: File) => {
     if (useMissionPlanStore.getState().uploading) {
@@ -1221,6 +1286,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         : [{ type: parsed.type === 'plan' ? 'mission' : parsed.type, items: parsed.items }];
       const missionItems = sections.find((sec) => sec.type === 'mission')?.items ?? [];
       const rallyItems = sections.find((sec) => sec.type === 'rally')?.items ?? [];
+      const fenceItems = sections.find((sec) => sec.type === 'fence')?.items ?? [];
       const st = useMissionPlanStore.getState();
       const loaded: string[] = [];
       const refused: string[] = [];
@@ -1249,23 +1315,35 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           }
         }
       }
+      if (fenceItems.length > 0) {
+        const fence = fenceDraftFromItems(fenceItems);
+        if (fence.shapes.length > 0 || fence.returnPoint) {
+          if (st.fenceReplace(fence)) {
+            loaded.push('fence');
+            fence.shapes.forEach((sh) =>
+              (sh.kind === 'circle' ? [sh.center] : sh.vertices).forEach((p) => validMapPosition(p.lat, p.lon) && pts.push([p.lat, p.lon]))
+            );
+          } else {
+            refused.push('fence');
+          }
+        }
+      }
       if (loaded.length === 0) {
         setPlanNotice(
           refused.length > 0
             ? `${file.name} was not opened: the drafts can't be changed right now.`
-            : `${file.name} has no mission or rally points to edit.`
+            : `${file.name} has no mission, rally points or fence to edit.`
         );
         return;
       }
-      // Stay on the active layer if the file had something for it (a .plan usually carries both); otherwise show
-      // the layer that was loaded.
+      // Stay on the active layer if the file had something for it (a .plan usually carries all three); otherwise
+      // show the first layer that was loaded.
+      const layerOf = { mission: 'mission', 'rally points': 'rally', fence: 'fence' } as const;
       const now = useMissionPlanStore.getState().layer;
-      const activeLoaded = now === 'rally' ? loaded.includes('rally points') : loaded.includes('mission');
-      if (!activeLoaded) useMissionPlanStore.getState().setLayer(loaded.includes('mission') ? 'mission' : 'rally');
-      const skipped = sections.filter((sec) => sec.type !== 'mission' && sec.type !== 'rally').map((sec) => sec.type);
-      setPlanNotice(
-        `Loaded the ${loaded.join(' and ')} from ${file.name}${skipped.length > 0 ? `; its ${skipped.join(' and ')} were not loaded` : ''}.`
-      );
+      if (!loaded.some((l) => layerOf[l as keyof typeof layerOf] === now)) {
+        useMissionPlanStore.getState().setLayer(layerOf[loaded[0] as keyof typeof layerOf]);
+      }
+      setPlanNotice(`Loaded the ${loaded.join(' and ').replace(/ and (?=.* and )/g, ', ')} from ${file.name}.`);
       if (pts.length > 0) mapInstanceRef.current?.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 19 });
     } catch (err: any) {
       setPlanNotice(err?.message || `Could not read ${file.name}.`);
@@ -1770,6 +1848,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     // 1. Group polygon fences so consecutive polygon fences are rendered independently
     // and each contains only the number of vertices described by the fence file
     const polygons = groupFencePolygons(fencePoints);
+    // While planning, the vehicle's fence stays visible for comparison with the draft: dimmed, and not clickable so
+    // its popups don't catch clicks meant for the draft.
+    const dim = planning ? { opacity: 0.35, interactive: false } : {};
 
     polygons.forEach((polyData, idx) => {
       const isInclusion = polyData.type === 'inclusion';
@@ -1783,8 +1864,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         weight: 2.5,
         fill: !isInclusion,
         fillColor: isInclusion ? 'transparent' : '#ef4444',
-        fillOpacity: isInclusion ? 0 : 0.15,
+        fillOpacity: isInclusion ? 0 : planning ? 0.06 : 0.15,
         pane: 'fencesPane',
+        ...dim,
       })
         .bindPopup(
           `<b>Geofence ${typeLabel}${countLabel}</b><br/>${polyData.points.length} vertices${
@@ -1827,8 +1909,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           weight: strokeWeight,
           fill: !isInc,
           fillColor: isInc ? 'transparent' : '#ef4444',
-          fillOpacity: isInc ? 0 : 0.15,
+          fillOpacity: isInc ? 0 : planning ? 0.06 : 0.15,
           pane: 'fencesPane',
+          ...dim,
         })
           .bindPopup(
             `<b>${isInc ? 'Inclusion' : 'Exclusion'} Circle Fence (#${fp.seq})</b><br/>Radius: ${rad}m<br/>Center: ${centerLat.toFixed(6)}, ${centerLon.toFixed(6)}`
@@ -1856,13 +1939,14 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           icon: retIcon,
           pane: 'rallyMarkersPane',
           zIndexOffset: 80,
+          ...(planning ? { opacity: 0.35, interactive: false } : {}),
         })
           .bindPopup(`<b>Fence Return Point</b><br/>Lat: ${centerLat.toFixed(6)}<br/>Lon: ${centerLon.toFixed(6)}`)
           .addTo(mapInstanceRef.current!);
         fenceLayersRef.current.push(marker);
       }
     });
-  }, [fencePoints, missionWaypoints]);
+  }, [fencePoints, missionWaypoints, planning]);
 
   // Update rally points rendering
   useEffect(() => {
@@ -2221,7 +2305,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                 {(
                   [
                     { tool: 'select', label: 'Select', icon: <MousePointer2 className="h-3.5 w-3.5" />, title: 'Select and drag waypoints' },
-                    { tool: 'add', label: 'Place', icon: <MapPinPlus className="h-3.5 w-3.5" />, title: 'Click the map to place waypoints, one per click (Esc to stop)' },
+                    { tool: 'add', label: 'Place', icon: <MapPinPlus className="h-3.5 w-3.5" />, title: 'Click the map to place waypoints, rally points or fence shapes (Esc to stop)' },
                   ] as const
                 ).map((b) => (
                   <button
@@ -2245,10 +2329,16 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               </div>
               {planTool === 'add' && (
                 <div className="rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md">
-                  {planLayer === 'rally'
-                    ? `Click the map to place rally points${planRallySelected !== null ? ` after R${planRallySelected + 1}` : ''}`
-                    : `Click the map to place waypoints after ${planSelected !== null && planSelected >= 1 ? `#${planSelected}` : 'the last item'}`}
-                  <span className="text-zinc-500"> · Esc to stop</span>
+                  {planLayer === 'fence' ? (
+                    <FencePlaceHint />
+                  ) : (
+                    <>
+                      {planLayer === 'rally'
+                        ? `Click the map to place rally points${planRallySelected !== null ? ` after R${planRallySelected + 1}` : ''}`
+                        : `Click the map to place waypoints after ${planSelected !== null && planSelected >= 1 ? `#${planSelected}` : 'the last item'}`}
+                      <span className="text-zinc-500"> · Esc to stop</span>
+                    </>
+                  )}
                 </div>
               )}
               {planNotice && (
@@ -2346,6 +2436,12 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             }}
             onRallyKeepDraft={() => useMissionPlanStore.getState().rallyRebase(vehicleRallyDraft())}
             onRequestRallyUpload={() => setRallyUploadVehicle(vehicleRallyDraft())}
+            onFocusFenceShape={focusFenceShape}
+            onFenceResetToVehicle={() => {
+              useMissionPlanStore.getState().fenceResetToVehicle(vehicleFenceDraft());
+              setPlanNotice(null);
+            }}
+            onFenceKeepDraft={() => useMissionPlanStore.getState().fenceRebase(vehicleFenceDraft())}
           />
         )}
       </CardContent>

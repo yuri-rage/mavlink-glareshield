@@ -147,6 +147,34 @@ check('replace when allowed reports success', S().replace(vehicle, { kind: 'file
   const fromOld = await import('../src/store/missionPlanStore.ts?fence=2' as string);
   check('older saved draft (no fence) loads, fence layer empty and clean',
     fromOld.useMissionPlanStore.getState().active && fromOld.useMissionPlanStore.getState().fence.history.present.shapes.length === 0 && !fromOld.isFenceDirty(fromOld.useMissionPlanStore.getState()));
+  // Drawing a polygon: it isn't in the draft until finished, and leaving Place, the layer or the kind drops it.
+  const v3 = [{ lat: 35, lon: -106 }, { lat: 35.001, lon: -106 }, { lat: 35.001, lon: -105.999 }];
+  S().setLayer('fence');
+  S().setTool('add');
+  S().setFenceDrawing(v3);
+  check('drawing a polygon: not in the draft yet', S().fenceDrawing?.length === 3 && S().fence.history.present.shapes.length === 2);
+  S().setTool('select');
+  check('leaving Place drops the polygon being drawn', S().fenceDrawing === null);
+  S().setTool('add');
+  S().setFenceDrawing(v3);
+  S().setLayer('rally');
+  check('switching layer drops it', S().fenceDrawing === null);
+  S().setLayer('fence');
+  S().setFenceDrawing(v3);
+  S().setFenceDrawKind('circle-exclusion');
+  check('changing what Place draws drops it', S().fenceDrawing === null && S().fenceDrawKind === 'circle-exclusion');
+  S().setFenceDrawKind('polygon-exclusion');
+  S().setFenceDrawing(v3);
+  const { finishFencePolygon } = await import('../src/components/map/fenceCommit.ts');
+  check('finishing adds it as one undo step, selected, with the chosen zone type',
+    finishFencePolygon() && S().fenceDrawing === null && S().fence.history.present.shapes.length === 3 &&
+      S().fence.history.present.shapes[2].inclusion === false && S().fence.selected === 2);
+  S().undo();
+  check('undo removes the finished polygon', S().fence.history.present.shapes.length === 2);
+  S().setFenceDrawing(v3.slice(0, 2));
+  check('a polygon with 2 vertices does not finish', !finishFencePolygon() && S().fence.history.present.shapes.length === 2);
+  S().setFenceDrawing(null);
+  S().setTool('select');
   S().fenceUploaded(fence);
   check('fence uploaded: clean, fresh history', !r.isFenceDirty(S()) && S().fence.history.past.length === 0);
   S().stop();
