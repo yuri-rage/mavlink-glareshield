@@ -66,6 +66,8 @@ export class MissionManager {
   private lastLegacyComplete = false;
   /** The last fetchRally read the vehicle's rally points completely. An empty list is only "none" when true. */
   public lastRallyReadOk = false;
+  /** The last fetchFence read the vehicle's fence completely (see lastRallyReadOk). */
+  public lastFenceReadOk = false;
   /** MAV_MISSION_RESULT the vehicle rejected the last streamed upload with, or null (accepted, or no answer). */
   private lastUploadRejection: number | null = null;
   private legacyAbort: (() => void) | null = null;
@@ -485,15 +487,37 @@ export class MissionManager {
     );
   }
 
+  /**
+   * Upload a geofence (mission_type 1) and download it again, like the rally points: an empty `readBack` is the
+   * vehicle's answer only when `readOk` (the read completed).
+   */
+  public uploadFenceAndReadBack(
+    items: MissionItemIntData[],
+    targetSys?: number,
+    targetComp?: number
+  ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: FencePoint[]; readOk: boolean; error?: string }> {
+    return this.uploadAndReadBack(
+      'fence',
+      1,
+      items,
+      async (sys, comp) => {
+        const points = await this.fetchFence(sys, comp);
+        return { items: points, ok: this.lastFenceReadOk };
+      },
+      targetSys,
+      targetComp
+    );
+  }
+
   private async uploadAndReadBack<T>(
-    type: 'mission' | 'rally',
+    type: 'mission' | 'rally' | 'fence',
     missionType: number,
     items: MissionItemIntData[],
     read: (sysId: number, compId: number) => Promise<{ items: T[]; ok: boolean }>,
     targetSys?: number,
     targetComp?: number
   ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: T[]; readOk: boolean; error?: string }> {
-    const name = type === 'mission' ? 'Mission' : 'Rally points';
+    const name = type === 'mission' ? 'Mission' : type === 'fence' ? 'Geofence' : 'Rally points';
     if (this.status.isFetching || this.status.isUploading) {
       return { success: false, method: 'legacy', readBack: [], readOk: false, error: 'A mission transfer is already in progress.' };
     }
@@ -515,7 +539,7 @@ export class MissionManager {
         isFetching: true,
         method: 'ftp',
         uploadProgress: undefined,
-        message: `Reading the ${type === 'mission' ? 'mission' : 'rally points'} back from the vehicle...`,
+        message: `Reading the ${type === 'mission' ? 'mission' : type === 'fence' ? 'geofence' : 'rally points'} back from the vehicle...`,
       });
       const { items: readBack, ok: readOk } = await read(sysId, compId);
       if (!readOk) {
@@ -524,6 +548,7 @@ export class MissionManager {
         this.updateStoreItems(type, items);
       }
       if (type === 'mission') this.setStatus({ waypointCount: readBack.length });
+      else if (type === 'fence') this.setStatus({ fenceCount: readBack.length });
       else this.setStatus({ rallyCount: readBack.length });
       return { success: true, method: res.method, readBack, readOk };
     } catch (err: any) {
@@ -861,6 +886,7 @@ export class MissionManager {
    * Fetches geofence items (MAVFTP -> fallback sequential stream -> fallback parameter fence)
    */
   public async fetchFence(sysId: number, compId: number): Promise<FencePoint[]> {
+    this.lastFenceReadOk = false;
     if (this.isCancelled) return [];
     this.setStatus({ message: 'Checking geofence via MAVFTP (@MISSION/fence.dat)...' });
 
@@ -887,6 +913,7 @@ export class MissionManager {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} fence items via MAVFTP!`);
           useTelemetryStore.setState({ fencePoints: unpacked });
           this.setStatus({ fenceCount: unpacked.length });
+          this.lastFenceReadOk = true;
           return unpacked;
         }
       }
@@ -901,6 +928,12 @@ export class MissionManager {
     this.setStatus({ method: 'legacy', message: 'Requesting geofence via MAVLink stream...' });
     const legacyFence = await this.fetchLegacyItems(1, sysId, compId);
     if (this.isCancelled) return [];
+    if (!this.lastLegacyComplete) {
+      // Timed out or cancelled: what arrived (maybe nothing) is not the vehicle's fence. Keep the one the map shows,
+      // and return it so a caller's count agrees; lastFenceReadOk stays false.
+      console.warn('[MissionManager] Fence stream incomplete; keeping the fence already known.');
+      return useTelemetryStore.getState().fencePoints;
+    }
 
     if (legacyFence && legacyFence.length > 0) {
       const fencePoints: FencePoint[] = legacyFence.map((data) => {
@@ -923,10 +956,13 @@ export class MissionManager {
       console.log(`[MissionManager] Successfully downloaded ${fencePoints.length} fence points via MAVLink stream!`);
       useTelemetryStore.setState({ fencePoints });
       this.setStatus({ fenceCount: fencePoints.length });
+      this.lastFenceReadOk = true;
       return fencePoints;
     }
+    // A complete read of no items: the vehicle has no fence.
     useTelemetryStore.setState({ fencePoints: [] });
     this.setStatus({ fenceCount: 0 });
+    this.lastFenceReadOk = true;
     return [];
   }
 
