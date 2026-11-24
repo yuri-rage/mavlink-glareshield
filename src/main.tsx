@@ -12,6 +12,8 @@ import './mavlink/adsbBoot';
 import './mavlink/gimbalBoot';
 // Terrain: elevation tiles, and answering the vehicle's terrain requests.
 import './mavlink/terrainBoot';
+// Remembers the last vehicle's type and waypoint radii, for planning offline.
+import './store/lastVehicleStore';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
