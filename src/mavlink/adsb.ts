@@ -192,3 +192,13 @@ export function rankTraffic(aircraft: TrafficAircraft[], own: ReturnType<typeof 
     .map((a) => ({ a, t: own ? assessThreat(a, own) : null }))
     .sort((x, y) => (x.t && y.t ? order[x.t.level] - order[y.t.level] || x.t.distanceM - y.t.distanceM : 0));
 }
+
+/** "+120 m ↑" relative height, in the user's units. */
+export function relAltText(relAltM: number | null, climbMs: number | null, formatAltitude: (m: number) => { value: string; unit: string }): string {
+  if (relAltM === null) return 'alt ?';
+  const f = formatAltitude(Math.abs(relAltM));
+  // Whole units: separation to a tenth of a metre is false precision (altitude sources differ by tens of metres).
+  f.value = String(Math.round(Number(f.value)));
+  const arrow = climbMs === null || Math.abs(climbMs) < 1 ? '' : climbMs > 0 ? ' ↑' : ' ↓';
+  return `${relAltM >= 0 ? '+' : '−'}${f.value} ${f.unit}${arrow}`;
+}

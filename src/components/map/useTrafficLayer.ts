@@ -13,22 +13,13 @@ import {
   icaoHex,
   ownForThreat,
   rankTraffic,
+  relAltText,
   type Threat,
   type TrafficAircraft,
 } from '../../mavlink/adsb';
 
 const PANE = 'trafficPane';
 const COLOURS = { none: '#38bdf8', caution: '#f59e0b', alert: '#ef4444', emergency: '#e879f9' };
-
-/** "+120 m ↑" relative height, in the user's units. */
-export function relAltText(relAltM: number | null, climbMs: number | null, formatAltitude: (m: number) => { value: string; unit: string }): string {
-  if (relAltM === null) return 'alt ?';
-  const f = formatAltitude(Math.abs(relAltM));
-  // Whole units: separation to a tenth of a metre is false precision (altitude sources differ by tens of metres).
-  f.value = String(Math.round(Number(f.value)));
-  const arrow = climbMs === null || Math.abs(climbMs) < 1 ? '' : climbMs > 0 ? ' ↑' : ' ↓';
-  return `${relAltM >= 0 ? '+' : '−'}${f.value} ${f.unit}${arrow}`;
-}
 
 function icon(a: TrafficAircraft, t: Threat | null, stale: boolean, label: string): L.DivIcon {
   const colour = emergencySquawk(a.squawk) ? COLOURS.emergency : COLOURS[t?.level ?? 'none'];
@@ -47,7 +38,9 @@ function icon(a: TrafficAircraft, t: Threat | null, stale: boolean, label: strin
   });
 }
 
-function popupHtml(a: TrafficAircraft, t: Threat | null, fmtAlt: (m: number) => { full: string }, fmtDist: (m: number) => { full: string }, fmtSpeed: (m: number) => { full: string }) {
+type Fmt = (v: number) => { full: string };
+
+function popupHtml(a: TrafficAircraft, t: Threat | null, fmtAlt: Fmt, fmtDist: Fmt, fmtSpeed: Fmt, fmtClimb: Fmt) {
   const em = emergencySquawk(a.squawk);
   const rows = [
     ['ICAO', icaoHex(a.icao)],
@@ -55,7 +48,7 @@ function popupHtml(a: TrafficAircraft, t: Threat | null, fmtAlt: (m: number) => 
     a.altMslM !== null ? ['Altitude', `${fmtAlt(a.altMslM).full} MSL (${a.altGeometric ? 'GNSS' : 'barometric'})`] : null,
     a.speedMs !== null ? ['Speed', fmtSpeed(a.speedMs).full] : null,
     a.headingDeg !== null ? ['Track', `${Math.round(a.headingDeg)}°`] : null,
-    a.climbMs !== null ? ['Vertical', `${a.climbMs >= 0 ? '+' : ''}${a.climbMs.toFixed(1)} m/s`] : null,
+    a.climbMs !== null ? ['Vertical', fmtClimb(a.climbMs).full] : null,
     t ? ['Distance', `${fmtDist(t.distanceM).full}, bearing ${Math.round(t.bearingDeg)}°${t.closing ? ', closing' : ''}`] : null,
     t?.cpaS != null && t.cpaS < 300 ? ['Closest', `${fmtDist(t.cpaM!).full} in ${Math.round(t.cpaS)} s`] : null,
     ['Last heard', `${Math.max(0, Math.round((Date.now() - a.heardAtMs) / 1000))} s ago${a.simulated ? ' (simulated)' : ''}`],
@@ -69,7 +62,7 @@ export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, re
   const markers = useRef(new Map<number, L.Marker>());
   const aircraft = useTrafficStore((s) => s.aircraft);
   const position = useTelemetryStore((s) => s.position);
-  const { formatAltitude, formatDistance, formatSpeed } = useUnitsStore();
+  const { formatAltitude, formatDistance, formatSpeed, formatClimb } = useUnitsStore();
 
   useEffect(() => {
     const map = mapRef.current;
@@ -97,7 +90,7 @@ export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, re
         m.setIcon(ic);
         m.setZIndexOffset(t?.level === 'alert' ? 1000 : 0);
       }
-      m.setPopupContent(popupHtml(a, t, formatAltitude, formatDistance, formatSpeed));
+      m.setPopupContent(popupHtml(a, t, formatAltitude, formatDistance, formatSpeed, formatClimb));
     }
     for (const [icao, m] of markers.current) {
       if (!seen.has(icao)) {
@@ -105,7 +98,7 @@ export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, re
         markers.current.delete(icao);
       }
     }
-  }, [mapRef, ready, aircraft, position, formatAltitude, formatDistance, formatSpeed]);
+  }, [mapRef, ready, aircraft, position, formatAltitude, formatDistance, formatSpeed, formatClimb]);
 
   useEffect(
     () => () => {

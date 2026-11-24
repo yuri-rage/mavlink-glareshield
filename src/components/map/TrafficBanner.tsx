@@ -6,8 +6,7 @@ import { Plane } from 'lucide-react';
 import { useTrafficStore } from '../../store/trafficStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
-import { compassPoint, emergencySquawk, icaoHex, ownForThreat, rankTraffic } from '../../mavlink/adsb';
-import { relAltText } from './useTrafficLayer';
+import { compassPoint, emergencySquawk, icaoHex, ownForThreat, rankTraffic, relAltText } from '../../mavlink/adsb';
 
 export const TrafficBanner: React.FC<{ onFocus: (lat: number, lon: number) => void }> = ({ onFocus }) => {
   const aircraft = useTrafficStore((s) => s.aircraft);
