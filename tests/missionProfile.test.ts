@@ -98,6 +98,14 @@ check('terrain unknown: no altitudes, no issues', mp.terrainIssues(mp.missionPro
   check('a fraction below: "1 m below"', /goes 1 m below/.test(m), m);
 }
 
+{
+  const ft = (m: number) => `${Math.round(m * 3.28084)} ft`;
+  const msgs = mp.terrainIssues(prof, legs, 30, ft).map((i) => i.message).join(' / ');
+  check('warnings in the user\'s units (feet)', /goes 492 ft below/.test(msgs) && !/ m /.test(msgs), msgs);
+  const within = mp.terrainIssues(prof2, legs, 30, ft)[0].message;
+  check('the clearance in feet too', /within 49 ft .*clearance 98 ft/.test(within), within);
+}
+
 check('checked vehicles: copter, plane, unknown; not rover, sub, tracker',
   mp.terrainChecked('copter') && mp.terrainChecked('plane') && mp.terrainChecked('generic') && !mp.terrainChecked('rover') && !mp.terrainChecked('sub') && !mp.terrainChecked('tracker'));
 

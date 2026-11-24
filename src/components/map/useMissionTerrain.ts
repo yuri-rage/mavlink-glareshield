@@ -11,6 +11,7 @@ import { getVehicleCategory } from '../../mavlink/messages';
 import { fliesSplines, missionPathLegs, routeIndices, type PathItem } from '../../mavlink/missionPath';
 import { missionProfile, terrainChecked, terrainIssues } from '../../mavlink/missionProfile';
 import { terrainService } from '../../mavlink/terrainBoot';
+import { useUnitsStore } from '../../store/unitsStore';
 
 const DEBOUNCE_MS = 250;
 
@@ -22,6 +23,7 @@ export function useMissionTerrain() {
   const vehicleType = useTelemetryStore((s) => s.heartbeat.type);
   const homeKnown = useTelemetryStore((s) => s.homePosition.source !== 'none');
   const homeAlt = useTelemetryStore((s) => s.homePosition.alt);
+  const imperial = useUnitsStore((s) => s.system === 'mph' || s.system === 'kts');
 
   useEffect(() => {
     const category = getVehicleCategory(vehicleType);
@@ -47,11 +49,13 @@ export function useMissionTerrain() {
       await terrainService.heightsAt([...rough.points, ...homePos]);
       if (cancelled) return;
       const profile = missionProfile(items, legs, (lat, lon) => terrainService.heightNow(lat, lon), { homeMslHint: hint });
-      useMissionTerrainStore.setState({ profile, issues: terrainIssues(profile, legs, clearanceM), loading: false });
+      // Heights in the warnings in the user's units, whole feet or metres (at least 1 below: never "0 ft below").
+      const fmt = (m: number) => (imperial ? `${Math.max(Math.round(m * 3.28084), m > 0 ? 1 : 0)} ft` : `${Math.round(m)} m`);
+      useMissionTerrainStore.setState({ profile, issues: terrainIssues(profile, legs, clearanceM, fmt), loading: false });
     }, DEBOUNCE_MS);
     return () => {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [active, draft, enabled, clearanceM, vehicleType, homeKnown, homeAlt]);
+  }, [active, draft, enabled, clearanceM, vehicleType, homeKnown, homeAlt, imperial]);
 }

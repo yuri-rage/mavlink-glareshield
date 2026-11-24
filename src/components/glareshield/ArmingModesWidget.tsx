@@ -3,15 +3,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { mavlinkConnection } from '../../mavlink/connection';
+import { paramManager } from '../../mavlink/paramManager';
+import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import {
   MAV_CMD,
   MAV_TYPE,
+  PLANE_MODE,
   getVehicleCategory,
   getGuidedModeNum,
   getAutoModeNum,
+  isVtolPlane,
 } from '../../mavlink/messages';
+
+/** Fly the mission's landing sequence (Plane: AUTO from the nearest DO_LAND_START). */
+const MAV_CMD_DO_LAND_START = 189;
 import {
   Shield,
   ShieldAlert,
@@ -57,8 +64,21 @@ export const ArmingModesWidget: React.FC = () => {
   const isBoat = heartbeat.type === MAV_TYPE.SURFACE_BOAT;
   const guidedModeNum = getGuidedModeNum(heartbeat.type);
   const autoModeNum = getAutoModeNum(heartbeat.type);
-  const targetTakeoffModeNum = category === 'plane' ? 13 : guidedModeNum;
-  const targetTakeoffModeLabel = category === 'plane' ? 'TAKEOFF' : 'GUIDED';
+  // A QuadPlane takes off, hovers and lands as a VTOL: GUIDED + NAV_TAKEOFF (a VTOL takeoff), QLOITER, QLAND. Only a
+  // fixed-wing plane uses TAKEOFF mode, fixed-wing LOITER and a mission landing.
+  const vtolState = useTelemetryStore((s) => s.extendedState.vtolState); // 3 hover (MC), 4 forward (FW), 1/2 transitioning
+  const qEnable = useTelemetryStore((s) => s.parameters['Q_ENABLE']?.value);
+  // A standard QuadPlane reports FIXED_WING: Q_ENABLE or a reported VTOL state tells (ask for Q_ENABLE on a plane).
+  const isVtol = isVtolPlane(heartbeat.type, qEnable, vtolState);
+  const forwardConfirm = useConfirmStep(6000);
+  const fixedWing = category === 'plane' && !isVtol;
+  useEffect(() => {
+    if (category === 'plane' && heartbeat.systemId > 0 && qEnable === undefined) paramManager.requestParam(heartbeat.systemId, heartbeat.componentId || 1, 'Q_ENABLE');
+  }, [category, heartbeat.systemId, heartbeat.componentId, qEnable]);
+  const vtolForward = isVtol && vtolState === 4;
+  const loiterModeNum = fixedWing || vtolForward ? PLANE_MODE.LOITER : isVtol ? PLANE_MODE.QLOITER : 5;
+  const targetTakeoffModeNum = fixedWing ? PLANE_MODE.TAKEOFF : guidedModeNum;
+  const targetTakeoffModeLabel = fixedWing ? 'TAKEOFF' : 'GUIDED';
 
   const isVehicleConnected =
     heartbeat.lastHeartbeatTime > 0 &&
@@ -136,17 +156,26 @@ export const ArmingModesWidget: React.FC = () => {
     }
   };
 
+  // Land, as each vehicle does it: Copter lands where it is (NAV_LAND); a QuadPlane switches to QLAND; a fixed-wing
+  // plane flies the mission's landing sequence (DO_LAND_START: AUTO from the nearest DO_LAND_START, refused when the
+  // mission has none). Rover, boat and sub don't land.
+  const landsHow: 'land' | 'qland' | 'mission' | null =
+    category === 'copter' || category === 'generic' ? 'land' : isVtol ? 'qland' : fixedWing ? 'mission' : null;
   const triggerLand = () => {
-    const cmd = encoder.createCommandLong(sysId, compId, MAV_CMD.NAV_LAND);
+    if (landsHow === 'qland') {
+      handleSetMode(PLANE_MODE.QLAND, 'Land (QLAND)', 'mode-land');
+      return;
+    }
+    const cmd = encoder.createCommandLong(sysId, compId, landsHow === 'mission' ? MAV_CMD_DO_LAND_START : MAV_CMD.NAV_LAND);
     void sendTrackedCommand(cmd, {
-      label: 'Land Now',
+      label: landsHow === 'mission' ? 'Land: mission landing sequence' : 'Land Now',
       targetKey: 'mode-land',
     });
   };
 
   const triggerTakeoff = (altM = takeoffAltMeters) => {
-    if (category === 'plane') {
-      handleSetMode(13, 'Switch to TAKEOFF mode', 'mode-takeoff');
+    if (fixedWing) {
+      handleSetMode(PLANE_MODE.TAKEOFF, 'Switch to TAKEOFF mode', 'mode-takeoff');
       return;
     }
     const safeAlt = Math.max(1, Math.min(500, altM));
@@ -181,7 +210,7 @@ export const ArmingModesWidget: React.FC = () => {
     try {
       const st1 = useTelemetryStore.getState();
       if (st1.heartbeat.customMode !== targetTakeoffModeNum) {
-        setAutoSeqStep(`Step 1/${category === 'plane' ? '2' : '3'}: Switching to ${targetTakeoffModeLabel} mode…`);
+        setAutoSeqStep(`Step 1/${fixedWing ? '2' : '3'}: Switching to ${targetTakeoffModeLabel} mode…`);
         const modeAck = await sendTrackedCommand(
           encoder.createSetMode(sysId, compId, targetTakeoffModeNum),
           { label: `Auto-Takeoff: Switch to ${targetTakeoffModeLabel}`, targetKey: 'mode-takeoff' }
@@ -208,7 +237,7 @@ export const ArmingModesWidget: React.FC = () => {
 
       const st2 = useTelemetryStore.getState();
       if (!st2.heartbeat.isArmed) {
-        setAutoSeqStep(`Step 2/${category === 'plane' ? '2' : '3'}: Arming motors…`);
+        setAutoSeqStep(`Step 2/${fixedWing ? '2' : '3'}: Arming motors…`);
         const armAck = await sendTrackedCommand(
           encoder.createArmDisarm(sysId, compId, true),
           { label: 'Auto-Takeoff: Arm Motors', targetKey: 'mode-takeoff' }
@@ -234,7 +263,7 @@ export const ArmingModesWidget: React.FC = () => {
         return;
       }
 
-      if (category !== 'plane') {
+      if (!fixedWing) {
         setAutoSeqStep(`Step 3/3: Commanding Takeoff to ${dispAlt}…`);
         const toAck = await sendTrackedCommand(
           encoder.createCommandLong(sysId, compId, MAV_CMD.NAV_TAKEOFF, [0, 0, 0, 0, 0, 0, safeAlt]),
@@ -276,7 +305,8 @@ export const ArmingModesWidget: React.FC = () => {
       });
       armedBySequenceRef.current = false;
     } else {
-      handleSetMode(category === 'plane' ? 12 : 5, 'Abort Takeoff (Loiter)', 'mode-loiter');
+      // A VTOL aborting its takeoff holds its hover (QLOITER), never fixed-wing LOITER (a transition near the ground).
+      handleSetMode(isVtol ? PLANE_MODE.QLOITER : fixedWing ? PLANE_MODE.LOITER : 5, 'Abort Takeoff (Loiter)', 'mode-loiter');
     }
   };
 
@@ -298,7 +328,7 @@ export const ArmingModesWidget: React.FC = () => {
   const isLoiterActive =
     isVehicleConnected &&
     (category === 'plane'
-      ? heartbeat.customMode === 12
+      ? heartbeat.customMode === PLANE_MODE.LOITER || heartbeat.customMode === PLANE_MODE.QLOITER
       : isBoat
         ? heartbeat.customMode === 5
         : heartbeat.customMode === 5);
@@ -585,18 +615,14 @@ export const ArmingModesWidget: React.FC = () => {
                   size="sm"
                   disabled={!isVehicleConnected}
                   onClick={() =>
-                    handleSetMode(
-                      category === 'plane' ? 12 : 5,
-                      'Pause / Loiter',
-                      'mode-loiter'
-                    )
+                    handleSetMode(loiterModeNum, loiterModeNum === PLANE_MODE.QLOITER ? 'Hover (QLOITER)' : 'Pause / Loiter', 'mode-loiter')
                   }
                   className={`border-cyan-600/50 text-cyan-300 hover:bg-cyan-950/40 gap-1 font-bold h-10 ${
                     isLoiterActive ? 'bg-cyan-950/60 border-cyan-400 ring-1 ring-cyan-400 shadow-sm' : ''
                   } ${getFeedbackRing('mode-loiter')}`}
                 >
                   <Anchor className="h-4 w-4 text-cyan-400 shrink-0" />
-                  <span className="truncate">Loiter</span>
+                  <span className="truncate">{loiterModeNum === PLANE_MODE.QLOITER ? 'QLoiter' : 'Loiter'}</span>
                   {getFeedbackBadge('mode-loiter')}
                 </Button>
 
@@ -619,20 +645,57 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!isVehicleConnected || landsHow === null}
+                  title={
+                    landsHow === 'mission'
+                      ? 'Fly the mission\'s landing sequence (AUTO from the nearest DO_LAND_START; refused without one)'
+                      : landsHow === 'qland'
+                        ? 'Land vertically where it is (QLAND)'
+                        : landsHow === null
+                          ? 'This vehicle doesn\'t land'
+                          : 'Land where it is'
+                  }
                   onClick={triggerLand}
                   className={`border-amber-600/50 text-amber-300 hover:bg-amber-950/40 gap-1 font-bold h-10 ${
                     isLandActive ? 'bg-amber-950/60 border-amber-400 ring-1 ring-amber-400 shadow-sm' : ''
                   } ${getFeedbackRing('mode-land')}`}
                 >
                   <PlaneLanding className="h-4 w-4 text-amber-400 shrink-0" />
-                  <span className="truncate">Land</span>
+                  <span className="truncate">{landsHow === 'qland' ? 'QLand' : 'Land'}</span>
                   {getFeedbackBadge('mode-land')}
                 </Button>
               </>
             )}
           </div>
         </div>
+
+        {/* VTOL: flight state, and hover / forward flight by mode (DO_VTOL_TRANSITION works only in AUTO). */}
+        {isVtol && isVehicleConnected && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 px-2.5 py-1.5 text-xs">
+            <span className="text-[11px] font-bold uppercase text-zinc-400">VTOL</span>
+            <span className={`font-mono font-bold ${vtolState === 4 ? 'text-sky-300' : vtolState === 3 ? 'text-emerald-300' : vtolState === 1 || vtolState === 2 ? 'text-amber-300' : 'text-zinc-500'}`}>
+              {vtolState === 3 ? 'HOVER' : vtolState === 4 ? 'FORWARD FLIGHT' : vtolState === 1 ? 'TRANSITION → FORWARD' : vtolState === 2 ? 'TRANSITION → HOVER' : 'STATE UNKNOWN'}
+            </span>
+            <span className="ml-auto flex gap-1.5">
+              <Button variant="outline" size="sm" className="h-7 border-emerald-700/60 text-emerald-300" title="Hover in place (QLOITER): back-transitions from forward flight" onClick={() => handleSetMode(PLANE_MODE.QLOITER, 'Hover (QLOITER)', 'mode-loiter')}>
+                Hover
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className={`h-7 ${forwardConfirm.armed ? 'border-amber-500 bg-amber-600 text-zinc-950' : 'border-sky-700/60 text-sky-300'}`}
+                title="Forward flight (CRUISE): from a hover this starts a forward transition"
+                onClick={() => {
+                  if (vtolState !== 4 && !forwardConfirm.armed) return forwardConfirm.arm();
+                  forwardConfirm.cancel();
+                  handleSetMode(PLANE_MODE.CRUISE, 'Forward flight (CRUISE)', 'mode-cruise');
+                }}
+              >
+                {forwardConfirm.armed ? 'Confirm: transition to forward flight' : 'Forward'}
+              </Button>
+            </span>
+          </div>
+        )}
 
         {/* Guided Takeoff Workflow Panel */}
         {showTakeoffPanel && category !== 'rover' && category !== 'sub' && (
@@ -770,14 +833,14 @@ export const ArmingModesWidget: React.FC = () => {
                       onClick={runAutoTakeoffSequence}
                       className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold h-9 text-xs gap-1.5"
                       title={
-                        category === 'plane'
+                        fixedWing
                           ? 'Switches to TAKEOFF mode and arms motors for launch'
                           : 'Automatically switches to GUIDED, arms motors, and commands takeoff'
                       }
                     >
                       <PlaneTakeoff className="h-3.5 w-3.5" />
                       {isTakeoffReady
-                        ? category === 'plane'
+                        ? fixedWing
                           ? 'Ready for Launch'
                           : `Takeoff to ${displayTakeoffAlt} ${altUnit}`
                         : `Auto: Takeoff (${displayTakeoffAlt}${altUnit})`}
@@ -790,7 +853,7 @@ export const ArmingModesWidget: React.FC = () => {
                         onClick={() => triggerTakeoff(takeoffAltMeters)}
                         className="w-full border-zinc-700 text-zinc-300 hover:bg-zinc-800 h-7 text-[11px]"
                       >
-                        {category === 'plane' ? 'TAKEOFF Mode Only' : 'Send NAV_TAKEOFF Only'}
+                        {fixedWing ? 'TAKEOFF Mode Only' : 'Send NAV_TAKEOFF Only'}
                       </Button>
                     )}
                   </>

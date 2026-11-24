@@ -190,8 +190,14 @@ export function missionProfile(
   return { points, marks, length: dist, homeMsl, homeFrom };
 }
 
-/** Where the route comes within `clearanceM` of the terrain (or below it), one issue per leg, at the leg's end item. */
-export function terrainIssues(profile: MissionProfile, legs: PathLeg[], clearanceM: number): TerrainIssue[] {
+/** A height in whole metres, the default for the messages (the app passes one in the user's units). */
+const wholeMetres = (m: number) => `${Math.round(m)} m`;
+
+/**
+ * Where the route comes within `clearanceM` of the terrain (or below it), one issue per leg, at the leg's end item.
+ * `fmt` writes a height (m) for the message, in the user's units.
+ */
+export function terrainIssues(profile: MissionProfile, legs: PathLeg[], clearanceM: number, fmt: (m: number) => string = wholeMetres): TerrainIssue[] {
   const worst = new Map<number, { agl: number; at: number }>();
   for (const p of profile.points) {
     if (!p.checked || p.alt === null || p.terrain === null) continue;
@@ -204,14 +210,17 @@ export function terrainIssues(profile: MissionProfile, legs: PathLeg[], clearanc
     if (w.agl >= clearanceM) continue;
     const leg = legs[li];
     const where = leg.from === 0 ? `from home to #${leg.to}` : `from #${leg.from} to #${leg.to}`;
-    // Whole metres, never "0 m below" for a fraction under.
-    const m = w.agl < 0 ? Math.max(1, Math.round(-w.agl)) : Math.round(w.agl);
+    // Never "0 m below" for a fraction under: at least a whole unit.
+    const below = w.agl < 0 ? Math.max(-w.agl, 1) : 0;
     out.push({
       index: leg.to,
       severity: 'warning',
       minAgl: w.agl,
       at: w.at,
-      message: w.agl < 0 ? `The leg ${where} goes ${m} m below the terrain.` : `The leg ${where} comes within ${m} m of the terrain (clearance ${clearanceM} m).`,
+      message:
+        w.agl < 0
+          ? `The leg ${where} goes ${fmt(below)} below the terrain.`
+          : `The leg ${where} comes within ${fmt(w.agl)} of the terrain (clearance ${fmt(clearanceM)}).`,
     });
   }
   return out;
