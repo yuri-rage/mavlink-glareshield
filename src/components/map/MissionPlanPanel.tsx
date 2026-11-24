@@ -44,6 +44,7 @@ import { isAnyDirty, isDraftDirty, isFenceDirty, isRallyDirty, useMissionPlanSto
 import { validateRallyDraft } from '../../mavlink/rallyDraft';
 import { validateFenceDraft } from '../../mavlink/fenceDraft';
 import { RallyPlanBody } from './RallyPlanBody';
+import { useMissionTerrainStore } from '../../store/missionTerrainStore';
 import { FencePlanBody } from './FencePlanBody';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
@@ -326,7 +327,9 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  const issues = useMemo(() => validateDraft(draft, getVehicleCategory(vehicleType)), [draft, vehicleType]);
+  // The draft's own checks, and terrain clearance along the route (aircraft, terrain data on; computed elsewhere).
+  const terrainIssues = useMissionTerrainStore((s) => s.issues);
+  const issues = useMemo(() => [...validateDraft(draft, getVehicleCategory(vehicleType)), ...terrainIssues], [draft, vehicleType, terrainIssues]);
   // The header's counts are for the layer being edited.
   const activeIssues: { index: number; severity: string }[] = layer === 'rally' ? rallyIssues : layer === 'fence' ? fenceIssues : issues;
   const errors = activeIssues.filter((i) => i.severity === 'error').length;

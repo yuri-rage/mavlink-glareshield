@@ -117,6 +117,10 @@ import { FencePlaceHint } from './FencePlaceHint';
 import { FenceChip } from './FenceControl';
 import { GimbalChip, PointCameraButton } from './GimbalControl';
 import { TerrainChip } from './TerrainChip';
+import { MissionProfileStrip, ProfileToggle } from './MissionProfileStrip';
+import { useMissionTerrain } from './useMissionTerrain';
+import { useMissionTerrainStore } from '../../store/missionTerrainStore';
+import { terrainChecked } from '../../mavlink/missionProfile';
 import { TERRAIN_ATTRIBUTION } from '../../mavlink/terrain';
 import { useTerrainStore } from '../../store/terrainStore';
 import { useGimbalLayer } from './useGimbalLayer';
@@ -933,6 +937,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   useFenceDraftLayer(mapInstanceRef, mapReady, setPlanMenu);
   useTrafficLayer(mapInstanceRef, mapReady);
   useGimbalLayer(mapInstanceRef, mapReady);
+  // The draft's terrain profile and clearance issues, while planning.
+  useMissionTerrain();
+  const showProfile = useMissionTerrainStore((s) => s.showProfile);
   // The elevation data's attribution, while it is in use.
   const terrainOn = useTerrainStore((s) => s.enabled);
   useEffect(() => {
@@ -2417,6 +2424,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                   </button>
                 ))}
               </div>
+              {terrainChecked(getVehicleCategory(heartbeat.type)) && terrainOn && (
+                <ProfileToggle disabledReason={planLayout === 'sheet' ? 'The profile needs a wider map (maximize it)' : undefined} />
+              )}
               {planTool === 'add' && (
                 <div className="rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md">
                   {planLayer === 'fence' ? (
@@ -2502,6 +2512,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             area={{ width: mapAreaWidth, height: mapAreaRef.current?.clientHeight ?? 0 }}
             onClose={closePlanMenu}
           />
+        )}
+        {planning && showProfile && planLayout === 'side' && planLayer === 'mission' && terrainOn && terrainChecked(getVehicleCategory(heartbeat.type)) && (
+          // Along the bottom, left of the side panel (264 px wide, 8 px in).
+          <MissionProfileStrip style={{ left: 8, right: 280, bottom: 8 }} />
         )}
         {planning && (
           <MissionPlanPanel
