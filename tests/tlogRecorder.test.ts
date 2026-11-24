@@ -138,6 +138,58 @@ check('logging on again: recording', useTlogStore.getState().phase === 'recordin
   useTlogStore.setState({ capMb: 2048 });
 }
 
+// 10. The link stays up (a bridge) while the vehicle reboots or is swapped: a new log each time; a fast vehicle
+// clock or two vehicles on one link don't rotate.
+{
+  const st = createMemoryTlogStorage();
+  const rec = new TlogRecorder(deps(st));
+  clockMs += 3_600_000;
+  await connectAndHear(rec, 1, 100_000);
+  const a = useTlogStore.getState().active;
+  // SITL sped up: the vehicle's time since boot runs ahead of the wall clock, so its boot time drifts earlier.
+  clockMs += 10_000;
+  rec.onReceived(attitude(100_000 + 40_000));
+  await sleep(30);
+  check('vehicle clock running fast (boot time drifting earlier): same log', useTlogStore.getState().active === a);
+  // Two vehicles on one link: both heard, no rotation.
+  rec.onReceived(heartbeat(2));
+  rec.onReceived(heartbeat(1));
+  await sleep(30);
+  check('a second vehicle while the first is still heard: same log', useTlogStore.getState().active === a);
+  // Reboot with the link up: time since boot starts over.
+  clockMs += 5_000;
+  rec.onReceived(attitude(2_000));
+  rec.onReceived(heartbeat(1));
+  rec.onReceived(attitude(2_100));
+  await sleep(60);
+  const b = useTlogStore.getState().active;
+  check('vehicle rebooted with the link up: old log closed, new one started', Boolean(b) && b !== a && loadTlogIndex()[a!]?.closed === true, `${a} → ${b}`);
+  // Swap: vehicle 1 goes silent, vehicle 3 appears.
+  clockMs += 8_000;
+  rec.onReceived(heartbeat(3));
+  rec.onReceived(attitude(50_000, 3));
+  await sleep(60);
+  const c = useTlogStore.getState().active;
+  check('vehicle swapped with the link up: new log for the new vehicle', Boolean(c) && c !== b && loadTlogIndex()[c!]?.sysId === 3, String(c));
+
+  // Lowering the cap deletes now.
+  const before = Object.keys(loadTlogIndex()).length;
+  useTlogStore.setState({ capMb: 0.0001 });
+  rec.pruneNow();
+  await sleep(30);
+  check('lowering the cap prunes at once', Object.keys(loadTlogIndex()).length < before);
+  useTlogStore.setState({ capMb: 2048 });
+
+  // Page hide: the index has the time now, without waiting for the worker.
+  clockMs += 700;
+  (rec as any).chain = new Promise(() => {}); // the worker never answers (the page is going)
+  rec.onPageHide();
+  check('page hide records the last write time at once', loadTlogIndex()[c!]?.lastWriteMs === clockMs);
+
+  const logs = useTlogStore.getState().logs;
+  check('the UI list holds copies, not the recorder\'s objects', logs.length > 0 && logs.every((l) => (rec as any).index[l.name] !== l));
+}
+
 // 9. Storage full: recording stops and says so.
 {
   const full = createMemoryTlogStorage({ quotaBytes: 100 });

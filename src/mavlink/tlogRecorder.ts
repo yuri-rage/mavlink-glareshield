@@ -11,6 +11,7 @@
 // the browser can't store files, recording stops and says so.
 
 import {
+  BOOT_TOLERANCE_MS,
   TLOG_RESUME_GAP_MS,
   TlogFrameSplitter,
   encodeTlogRecord,
@@ -36,6 +37,8 @@ export interface TlogRecorderDeps {
 const FLUSH_BYTES = 256 * 1024;
 const PENDING_MAX_BYTES = 4 * 1024 * 1024;
 const PRUNE_EVERY_BYTES = 16 * 1024 * 1024;
+/** The logged vehicle silent this long while another vehicle is heard: it was swapped (the link stayed up). */
+const VEHICLE_SWAP_SILENCE_MS = 5000;
 
 export class TlogRecorder {
   private storage: TlogStorage | null;
@@ -53,7 +56,7 @@ export class TlogRecorder {
   private pendingBytes = 0;
   private queue: Uint8Array[] = [];
   private queueBytes = 0;
-  private vehicle: { sysId: number; type: number; armed: boolean } | null = null;
+  private vehicle: { sysId: number; type: number; armed: boolean; lastHeardMs: number } | null = null;
   private bootEpochMs: number | undefined;
   private decideTimer: ReturnType<typeof setTimeout> | null = null;
   private flushTimer: ReturnType<typeof setInterval> | null = null;
@@ -119,6 +122,15 @@ export class TlogRecorder {
 
   /** Before the page goes away: write what's queued (best effort; the log stays open, so it can be continued). */
   onPageHide() {
+    // The worker's reply may never be handled once the page is going: record the time now, so the next load
+    // judges the gap from here.
+    const m = this.openName ? this.index[this.openName] : undefined;
+    if (m) {
+      m.lastWriteMs = this.nowMs();
+      if (this.vehicle) m.armed = this.vehicle.armed;
+      if (this.bootEpochMs !== undefined) m.bootEpochMs = this.bootEpochMs;
+      saveTlogIndex(this.index);
+    }
     this.enqueue(() => this.flush());
   }
 
@@ -157,7 +169,7 @@ export class TlogRecorder {
       }
       for (const n of Object.keys(this.index)) if (!names.has(n)) delete this.index[n];
       saveTlogIndex(this.index);
-      useTlogStore.setState({ logs: Object.values(this.index).sort((a, b) => b.startMs - a.startMs) });
+      this.publish();
     } catch {
       // Listing failed: keep the last list.
     }
@@ -167,15 +179,23 @@ export class TlogRecorder {
 
   private watchVehicle(p: MavlinkPacket) {
     const pl = p.payload;
+    // Anything from the logged vehicle means it's still there (not only its heartbeat).
+    if (this.vehicle && p.systemId === this.vehicle.sysId) this.vehicle.lastHeardMs = this.nowMs();
     if (p.messageId === MAVLINK_MSG_ID.HEARTBEAT && pl.length >= 7) {
       const type = pl[4];
       const autopilot = pl[5];
       if (!isVehicleAutopilotHeartbeat(type, autopilot, p.componentId)) return;
+      const now = this.nowMs();
+      if (this.vehicle && p.systemId !== this.vehicle.sysId && now - this.vehicle.lastHeardMs > VEHICLE_SWAP_SILENCE_MS) {
+        // The link stayed up but the vehicle changed: this one gets its own log.
+        this.rotate();
+      }
       if (!this.vehicle) {
-        this.vehicle = { sysId: p.systemId, type, armed: (pl[6] & 128) !== 0 };
+        this.vehicle = { sysId: p.systemId, type, armed: (pl[6] & 128) !== 0, lastHeardMs: now };
         if (!this.recording) this.decideTimer ??= setTimeout(() => this.decide(), this.bootWaitMs);
       } else if (p.systemId === this.vehicle.sysId) {
         this.vehicle.armed = (pl[6] & 128) !== 0;
+        this.vehicle.lastHeardMs = now;
       }
       return;
     }
@@ -183,7 +203,13 @@ export class TlogRecorder {
     if (this.vehicle && p.systemId === this.vehicle.sysId && (p.messageId === MAVLINK_MSG_ID.ATTITUDE || p.messageId === MAVLINK_MSG_ID.GLOBAL_POSITION_INT) && pl.length >= 4) {
       const bootMs = new DataView(pl.buffer, pl.byteOffset, 4).getUint32(0, true);
       if (bootMs > 0) {
-        this.bootEpochMs = this.nowMs() - bootMs;
+        const boot = this.nowMs() - bootMs;
+        // Rebooted with the link up (a bridge stays connected): a new power-up gets its own log. Only a jump later
+        // counts: a vehicle clock running fast (SITL sped up) moves the derived boot time steadily earlier.
+        if (this.recording && this.bootEpochMs !== undefined && boot - this.bootEpochMs > BOOT_TOLERANCE_MS) {
+          this.rotate();
+        }
+        this.bootEpochMs = boot;
         if (!this.recording && this.decideTimer) {
           clearTimeout(this.decideTimer);
           this.decideTimer = null;
@@ -191,6 +217,25 @@ export class TlogRecorder {
         }
       }
     }
+  }
+
+  /**
+   * Close the current log (it is complete) and choose again: the next vehicle heartbeat (and boot time) picks the
+   * file, which is a new one since this one is closed. What arrives meanwhile is held, as at connection.
+   */
+  private rotate() {
+    if (!this.recording) return;
+    this.recording = false;
+    this.vehicle = null;
+    this.bootEpochMs = undefined;
+    this.clearPending();
+    this.enqueue(() => this.closeLog());
+    useTlogStore.setState({ phase: 'waiting' });
+  }
+
+  /** The cap changed in Settings: apply it now. */
+  pruneNow() {
+    this.enqueue(() => this.prune());
   }
 
   private add(rec: Uint8Array) {
@@ -307,6 +352,7 @@ export class TlogRecorder {
       saveTlogIndex(this.index);
     }
     useTlogStore.setState({ activeBytes: total });
+    this.publish();
     this.sincePrune += size;
     if (this.sincePrune >= PRUNE_EVERY_BYTES) await this.prune();
   }
@@ -336,7 +382,13 @@ export class TlogRecorder {
     }
     saveTlogIndex(this.index);
     const total = Object.values(this.index).reduce((t, l) => t + l.bytes, 0);
-    useTlogStore.setState({ overCap: total > capBytes, logs: Object.values(this.index).sort((a, b) => b.startMs - a.startMs) });
+    useTlogStore.setState({ overCap: total > capBytes });
+    this.publish();
+  }
+
+  /** The list for the UI: copies, so the store never shares objects the recorder changes. */
+  private publish() {
+    useTlogStore.setState({ logs: Object.values(this.index).map((m) => ({ ...m })).sort((a, b) => b.startMs - a.startMs) });
   }
 
   private fail(err: unknown) {
