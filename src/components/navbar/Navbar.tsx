@@ -1,3 +1,4 @@
+import { TlogIndicator, TlogSettings } from './TlogSettings';
 import React, { useState, useRef, useEffect } from 'react';
 import { useConnectionStore } from '../../store/connectionStore';
 import {
@@ -700,6 +701,8 @@ export const Navbar: React.FC = () => {
               </div>
             )}
 
+            <TlogIndicator onClick={openConnectModal} />
+
             {/* Daylight / Dark Cockpit Theme Toggle (Rank 7) */}
             <Button
               type="button"
@@ -1335,6 +1338,8 @@ export const Navbar: React.FC = () => {
               ))}
             </div>
           </div>
+
+          <TlogSettings />
 
           <div className="pt-3 border-t border-zinc-800">
             <RestoreDefaults />

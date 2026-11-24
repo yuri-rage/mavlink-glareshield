@@ -8,6 +8,7 @@ import { cn } from '../../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useVehicleTarget } from './custom/panelKit';
 import { downloadFile } from '../../lib/download';
+import { TlogList } from './TlogList';
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -259,6 +260,7 @@ export const LogsWidget: React.FC = () => {
             </div>
           </>
         )}
+        <TlogList />
       </CardContent>
     </Card>
   );
