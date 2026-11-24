@@ -2,7 +2,7 @@
 // red alert, magenta for an emergency squawk), labelled with callsign and height relative to the vehicle, faded when
 // its report is getting old. Click for details. Markers are updated in place (reports arrive several times a second).
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { useTrafficStore } from '../../store/trafficStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
@@ -66,13 +66,6 @@ export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, re
   const position = useTelemetryStore((s) => s.position);
   const { formatAltitude, formatDistance, formatSpeed, formatClimb } = useUnitsStore();
   const showOnMap = useAdsbSettingsStore((s) => s.showOnMap);
-  // Redrawn every 2 s even with nothing new: aircraft fade at TRAFFIC_STALE_MS and "Last heard" stays current while
-  // nothing else changes (e.g. disconnected, or own position steady).
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 2000);
-    return () => clearInterval(t);
-  }, []);
   const thresholds = useAdsbSettingsStore((s) => s.thresholds);
 
   useEffect(() => {
@@ -81,7 +74,11 @@ export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, re
     map.createPane(PANE).style.zIndex = '595';
   }, [mapRef, ready]);
 
-  useEffect(() => {
+  // The markers are drawn by this function, kept current each render; the effect below runs it when the data
+  // changes, and a 2 s timer runs it while aircraft are shown (they fade at TRAFFIC_STALE_MS and "Last heard" counts
+  // up even when nothing else changes), without re-rendering the map.
+  const draw = useRef<() => void>(() => {});
+  draw.current = () => {
     const map = mapRef.current;
     if (!map || !ready) return;
     const now = Date.now();
@@ -110,7 +107,16 @@ export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, re
         markers.current.delete(icao);
       }
     }
-  }, [mapRef, ready, aircraft, position, formatAltitude, formatDistance, formatSpeed, formatClimb, showOnMap, thresholds, tick]);
+  };
+
+  useEffect(() => draw.current(), [mapRef, ready, aircraft, position, formatAltitude, formatDistance, formatSpeed, formatClimb, showOnMap, thresholds]);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (markers.current.size > 0) draw.current();
+    }, 2000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(
     () => () => {
