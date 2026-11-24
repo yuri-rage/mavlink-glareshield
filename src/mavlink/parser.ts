@@ -212,6 +212,30 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         mavlink_version: getUint8(8),
       };
 
+    case MAVLINK_MSG_ID.ADSB_VEHICLE: {
+      let callsign = '';
+      for (let i = 27; i < 36; i++) {
+        const ch = getUint8(i);
+        if (ch === 0) break;
+        callsign += String.fromCharCode(ch);
+      }
+      return {
+        ICAO_address: getUint32(0),
+        lat: getInt32(4) / 1e7,
+        lon: getInt32(8) / 1e7,
+        altitude: getInt32(12) / 1000, // m
+        heading: getUint16(16) / 100, // degrees
+        hor_velocity: getUint16(18) / 100, // m/s
+        ver_velocity: getInt16(20) / 100, // m/s, up
+        flags: getUint16(22),
+        squawk: getUint16(24),
+        altitude_type: getUint8(26),
+        callsign: callsign.trim(),
+        emitter_type: getUint8(36),
+        tslc: getUint8(37), // s since the receiver last heard it
+      };
+    }
+
     case MAVLINK_MSG_ID.FENCE_STATUS: {
       // ArduPilot sends it only while the fence is enabled.
       return {

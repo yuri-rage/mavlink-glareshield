@@ -55,6 +55,8 @@ export class MessageRateManager {
     [MAVLINK_MSG_ID.ATTITUDE]: 10,
     // The fence switch's breach state and count (ArduPilot sends it only while the fence is enabled).
     [MAVLINK_MSG_ID.FENCE_STATUS]: 1,
+    // ADS-B traffic: one aircraft per message, so this is how many aircraft a second are refreshed.
+    [MAVLINK_MSG_ID.ADSB_VEHICLE]: 10,
     // 5 Hz (x0.5 / x2 for the low / high profiles) so the map trace shows small path-tracking deviations.
     [MAVLINK_MSG_ID.GLOBAL_POSITION_INT]: 5,
     [MAVLINK_MSG_ID.GPS_RAW_INT]: 2,
