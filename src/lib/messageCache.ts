@@ -107,6 +107,7 @@ export function recordPacket(packet: MavlinkPacket, now = Date.now()): void {
     return;
   }
 
+  const seenBefore = lastSeen.get(name);
   lastSeen.set(name, now);
   let decoded: Record<string, unknown>;
   try {
@@ -125,6 +126,17 @@ export function recordPacket(packet: MavlinkPacket, now = Date.now()): void {
     lastSeen.set(axisName, now);
     latest.set(axisName, { fields: axisFields, time: now, systemId: packet.systemId });
     pidTuningRecorder.record(fields, now);
+    return;
+  }
+  if (packet.messageId === MAVLINK_MSG_ID.BATTERY_STATUS && typeof fields.id === 'number' && fields.id !== 0) {
+    // Each battery monitor reports with its id: BATTERY_STATUS is the first (id 0, BATT_), the others are kept as
+    // BATTERY_STATUS_2, _3 ... (id 1 is BATT2_), so a binding never flips between packs. BATTERY_STATUS keeps the
+    // time the first battery last reported (not this one's), or its bindings would look fresh while it is silent.
+    if (seenBefore === undefined) lastSeen.delete(name);
+    else lastSeen.set(name, seenBefore);
+    const packName = `BATTERY_STATUS_${fields.id + 1}`;
+    lastSeen.set(packName, now);
+    latest.set(packName, { fields, time: now, systemId: packet.systemId });
     return;
   }
   latest.set(name, { fields, time: now, systemId: packet.systemId });
