@@ -280,7 +280,7 @@ export function extractMultiBarItems(group: MultiBarGroupType, state: any): Mult
     }
     case 'esc-rpm': {
       const rpm = state.esc?.rpm ?? [0, 0, 0, 0];
-      return Array.from({ length: 4 }, (_, i) => ({
+      return Array.from({ length: escCount(state) }, (_, i) => ({
         label: `ESC${i + 1}`,
         value: rpm[i] ?? 0,
         min: 0,
@@ -290,7 +290,7 @@ export function extractMultiBarItems(group: MultiBarGroupType, state: any): Mult
     }
     case 'esc-temp': {
       const temp = state.esc?.temperature ?? [0, 0, 0, 0];
-      return Array.from({ length: 4 }, (_, i) => ({
+      return Array.from({ length: escCount(state) }, (_, i) => ({
         label: `ESC${i + 1}`,
         value: temp[i] ?? 0,
         min: 0,
@@ -302,7 +302,7 @@ export function extractMultiBarItems(group: MultiBarGroupType, state: any): Mult
     }
     case 'esc-current': {
       const curr = state.esc?.current ?? [0, 0, 0, 0];
-      return Array.from({ length: 4 }, (_, i) => ({
+      return Array.from({ length: escCount(state) }, (_, i) => ({
         label: `ESC${i + 1}`,
         value: Number((curr[i] ?? 0).toFixed(1)),
         min: 0,
@@ -347,14 +347,20 @@ export function extractMultiBarItems(group: MultiBarGroupType, state: any): Mult
   }
 }
 
-const MULTI_BAR_MSG_ID: Record<MultiBarGroupType, number> = {
+/** ESCs to show: as many as report (4, 8 or 12). */
+const escCount = (state: { esc?: { count?: number } }) => Math.min(12, Math.max(4, state.esc?.count ?? 4));
+
+const ESC_BLOCKS = [MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4, MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8, MAVLINK_MSG_ID.ESC_TELEMETRY_9_TO_12];
+
+/** The messages each multi-bar group needs (ESC groups: every block; the vehicle sends only those it has). */
+const MULTI_BAR_MSG_ID: Record<MultiBarGroupType, number | number[]> = {
   'rc-8': MAVLINK_MSG_ID.RC_CHANNELS,
   'rc-8-scaled': MAVLINK_MSG_ID.RC_CHANNELS,
   'servo-8': MAVLINK_MSG_ID.SERVO_OUTPUT_RAW,
   'servo-8-scaled': MAVLINK_MSG_ID.SERVO_OUTPUT_RAW,
-  'esc-rpm': MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4,
-  'esc-temp': MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4,
-  'esc-current': MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4,
+  'esc-rpm': ESC_BLOCKS,
+  'esc-temp': ESC_BLOCKS,
+  'esc-current': ESC_BLOCKS,
   'vibration-xyz': MAVLINK_MSG_ID.VIBRATION,
   'ekf-variances': MAVLINK_MSG_ID.EKF_STATUS_REPORT,
   'battery-cells': MAVLINK_MSG_ID.BATTERY_STATUS,
@@ -369,14 +375,18 @@ export function requiredMessageIds(def: CustomWidgetDefinition): number[] {
   if (def.displayType === 'composite') return [...new Set(cardPanels(def).flatMap(requiredMessageIds))];
   if (def.displayType === 'multi-bar') {
     const id = MULTI_BAR_MSG_ID[multiBarGroup(def)];
-    return id !== undefined ? [id] : [];
+    return id === undefined ? [] : Array.isArray(id) ? [...id] : [id];
   }
   const fb = feedbackBinding(def);
   const ids = new Set<number>();
   for (const b of [...panelBindings(def), ...(fb ? [fb] : [])]) {
     const name = baseMessageName(b.messageName);
-    // PID_TUNING_ROLL, PID_TUNING_STEER, …: one axis of PID_TUNING.
-    const id = name.startsWith('PID_TUNING_') ? MAVLINK_MSG_ID.PID_TUNING : (MAVLINK_MSG_ID as Record<string, number>)[name];
+    // PID_TUNING_ROLL, PID_TUNING_STEER, …: one axis of PID_TUNING. BATTERY_STATUS_2, _3 …: another battery's.
+    const id = name.startsWith('PID_TUNING_')
+      ? MAVLINK_MSG_ID.PID_TUNING
+      : /^BATTERY_STATUS_\d+$/.test(name)
+        ? MAVLINK_MSG_ID.BATTERY_STATUS
+        : (MAVLINK_MSG_ID as Record<string, number>)[name];
     if (id !== undefined) ids.add(id);
   }
   return [...ids];

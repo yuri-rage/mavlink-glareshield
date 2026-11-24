@@ -7,6 +7,11 @@ import { Battery, BatteryCharging, Gauge, Zap, Activity } from 'lucide-react';
 
 export const BatteryWidget: React.FC = () => {
   const battery = useTelemetryStore((state) => state.battery);
+  // Other battery monitors (BATT2_ ...), reporting within the last 10 s.
+  const batteries = useTelemetryStore((state) => state.batteries);
+  const others = Object.values(batteries)
+    .filter((b) => b.id !== 0 && Date.now() - b.at < 10_000)
+    .sort((a, b) => a.id - b.id);
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
 
   useEffect(() => {
@@ -98,6 +103,22 @@ export const BatteryWidget: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Other battery monitors: each with its own numbers, never mixed into the first. */}
+        {others.length > 0 && (
+          <div className="space-y-1">
+            {others.map((b) => (
+              <div key={b.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg border border-zinc-800 bg-zinc-900/80 px-2.5 py-1.5 font-mono text-xs">
+                <span className="text-[11px] font-bold uppercase text-zinc-400">Battery {b.id + 1}</span>
+                <span className="text-zinc-100">{b.voltage > 0 ? `${b.voltage.toFixed(2)} V` : '--.-- V'}</span>
+                <span className="text-zinc-100">{b.current.toFixed(1)} A</span>
+                <span className="text-zinc-300">{b.consumedMah} mAh</span>
+                <span className={b.remaining >= 0 && b.remaining < 25 ? 'text-red-300' : 'text-zinc-300'}>{b.remaining >= 0 ? `${b.remaining}%` : '--%'}</span>
+                {b.temperature !== undefined && <span className="text-zinc-400">{b.temperature.toFixed(0)}°C</span>}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Cell Voltages when true per-cell telemetry is available */}
         {hasPerCellTelemetry && (

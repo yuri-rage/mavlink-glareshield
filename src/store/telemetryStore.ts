@@ -69,6 +69,14 @@ export interface VehicleBattery {
   cellVoltages: number[];
 }
 
+/** One battery monitor as BATTERY_STATUS reports it (ArduPilot: id 0 = BATT_, 1 = BATT2_, ...). */
+export interface BatteryPack extends VehicleBattery {
+  id: number;
+  temperature?: number; // degC
+  /** When it last reported (ms). */
+  at: number;
+}
+
 export interface VehicleVFR {
   airspeed: number;
   groundspeed: number;
@@ -148,13 +156,19 @@ export interface VehicleRPM {
   rpm2: number;
 }
 
+/** ESC telemetry for up to 12 ESCs (ESC_TELEMETRY_1_TO_4, _5_TO_8, _9_TO_12), indexed by ESC number - 1. */
 export interface VehicleESC {
-  voltage: number[]; // V (4 ESCs)
-  current: number[]; // A (4 ESCs)
-  totalCurrent: number[]; // mAh (4 ESCs)
-  rpm: number[]; // RPM (4 ESCs)
-  temperature: number[]; // degC (4 ESCs)
+  voltage: number[]; // V
+  current: number[]; // A
+  totalCurrent: number[]; // mAh
+  rpm: number[]; // RPM
+  temperature: number[]; // degC
+  /** How many ESCs report: 4, 8 or 12 (the highest block seen). */
+  count: number;
 }
+
+const ESC_SLOTS = 12;
+const escZeros = () => new Array<number>(ESC_SLOTS).fill(0);
 
 /** EXTENDED_SYS_STATE: whether the vehicle is on the ground or flying, and a VTOL's flight state. */
 export interface VehicleExtendedState {
@@ -283,7 +297,10 @@ interface TelemetryState {
   position: VehiclePosition;
   gps: VehicleGPS;
   gps2: VehicleGPS | null;
+  /** The primary battery (id 0, and SYS_STATUS's voltage): what widgets, bindings and alerts use. */
   battery: VehicleBattery;
+  /** Every battery monitor by id, the primary included. Others never touch `battery`. */
+  batteries: Record<number, BatteryPack>;
   vfr: VehicleVFR;
   sysStatus: VehicleSysStatus;
   /** FENCE_STATUS (sent only while the fence is enabled): breached now, how often, the latest breach's kind
@@ -420,6 +437,8 @@ const HANDLED_MESSAGE_IDS = new Set<number>([
   MAVLINK_MSG_ID.RPM,
   MAVLINK_MSG_ID.VIBRATION,
   MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4,
+  MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8,
+  MAVLINK_MSG_ID.ESC_TELEMETRY_9_TO_12,
   MAVLINK_MSG_ID.AUTOPILOT_VERSION,
   MAVLINK_MSG_ID.STATUSTEXT,
   MAVLINK_MSG_ID.PARAM_VALUE,
@@ -698,6 +717,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     consumedMah: 0,
     cellVoltages: [],
   },
+  batteries: {},
   vfr: {
     airspeed: 0,
     groundspeed: 0,
@@ -771,11 +791,12 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     rpm2: 0,
   },
   esc: {
-    voltage: [0, 0, 0, 0],
-    current: [0, 0, 0, 0],
-    totalCurrent: [0, 0, 0, 0],
-    rpm: [0, 0, 0, 0],
-    temperature: [0, 0, 0, 0],
+    voltage: escZeros(),
+    current: escZeros(),
+    totalCurrent: escZeros(),
+    rpm: escZeros(),
+    temperature: escZeros(),
+    count: 4,
   },
   extendedState: { landedState: 0, vtolState: 0, lastUpdate: 0 },
   power: {
@@ -1270,14 +1291,24 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         case MAVLINK_MSG_ID.EXTENDED_SYS_STATE:
           return { extendedState: { landedState: data.landed_state, vtolState: data.vtol_state, lastUpdate: now } };
 
-        case MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4: {
+        case MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4:
+        case MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8:
+        case MAVLINK_MSG_ID.ESC_TELEMETRY_9_TO_12: {
+          // Each block is four ESCs: put it at its place (ESC 5 is index 4), keeping the other blocks.
+          const at = packet.messageId === MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4 ? 0 : packet.messageId === MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8 ? 4 : 8;
+          const put = (prev: number[], block: number[]) => {
+            const next = prev.length === ESC_SLOTS ? [...prev] : escZeros().map((z, i) => prev[i] ?? z);
+            block.forEach((v, i) => (next[at + i] = v));
+            return next;
+          };
           return {
             esc: {
-              voltage: data.voltage,
-              current: data.current,
-              totalCurrent: data.totalcurrent,
-              rpm: data.rpm,
-              temperature: data.temperature,
+              voltage: put(state.esc.voltage, data.voltage),
+              current: put(state.esc.current, data.current),
+              totalCurrent: put(state.esc.totalCurrent, data.totalcurrent),
+              rpm: put(state.esc.rpm, data.rpm),
+              temperature: put(state.esc.temperature, data.temperature),
+              count: Math.max(state.esc.count ?? 4, at + 4),
             },
           };
         }
@@ -1286,7 +1317,23 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           const sumCellVoltage = data.voltages && data.voltages.length > 0
             ? data.voltages.reduce((a: number, b: number) => a + b, 0)
             : 0;
+          // Each monitor reports with its id: keep them apart, so two packs don't overwrite each other.
+          const id: number = data.id ?? 0;
+          const prev = state.batteries[id];
+          const pack: BatteryPack = {
+            id,
+            voltage: sumCellVoltage > 0 ? sumCellVoltage : prev?.voltage ?? 0,
+            current: data.current_battery !== undefined ? data.current_battery : prev?.current ?? 0,
+            consumedMah: data.current_consumed !== undefined ? data.current_consumed : prev?.consumedMah ?? 0,
+            remaining: data.battery_remaining >= 0 ? data.battery_remaining : prev?.remaining ?? -1,
+            cellVoltages: data.voltages && data.voltages.length > 0 ? data.voltages : prev?.cellVoltages ?? [],
+            temperature: data.temperature,
+            at: Date.now(),
+          };
+          const batteries = { ...state.batteries, [id]: pack };
+          if (id !== 0) return { batteries };
           return {
+            batteries,
             battery: {
               ...state.battery,
               voltage: state.battery.voltage > 0 ? state.battery.voltage : (sumCellVoltage > 0 ? sumCellVoltage : state.battery.voltage),
