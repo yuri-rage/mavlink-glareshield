@@ -63,7 +63,6 @@ function popupHtml(a: TrafficAircraft, t: Threat | null, fmtAlt: Fmt, fmtDist: F
 export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, ready: boolean) {
   const markers = useRef(new Map<number, L.Marker>());
   const aircraft = useTrafficStore((s) => s.aircraft);
-  const position = useTelemetryStore((s) => s.position);
   const { formatAltitude, formatDistance, formatSpeed, formatClimb } = useUnitsStore();
   const showOnMap = useAdsbSettingsStore((s) => s.showOnMap);
   const thresholds = useAdsbSettingsStore((s) => s.thresholds);
@@ -83,6 +82,9 @@ export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, re
     if (!map || !ready) return;
     const now = Date.now();
     // Turned off in the View menu: no symbols (warnings are separate, in Settings).
+    // The vehicle's position read now, not subscribed: as a hook of the map it would re-render the whole map on every
+    // fix. Own movement redraws through the store subscription below, only while there is traffic.
+    const position = useTelemetryStore.getState().position;
     const ranked = showOnMap ? rankTraffic(Object.values(aircraft), ownForThreat(position), thresholds) : [];
     const seen = new Set<number>();
     for (const { a, t } of ranked) {
@@ -109,7 +111,16 @@ export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, re
     }
   };
 
-  useEffect(() => draw.current(), [mapRef, ready, aircraft, position, formatAltitude, formatDistance, formatSpeed, formatClimb, showOnMap, thresholds]);
+  useEffect(() => draw.current(), [mapRef, ready, aircraft, formatAltitude, formatDistance, formatSpeed, formatClimb, showOnMap, thresholds]);
+
+  // The vehicle moving changes each aircraft's relative height and threat: redraw, while any are shown.
+  useEffect(
+    () =>
+      useTelemetryStore.subscribe((st, prev) => {
+        if (st.position !== prev.position && markers.current.size > 0) draw.current();
+      }),
+    []
+  );
 
   useEffect(() => {
     const t = setInterval(() => {

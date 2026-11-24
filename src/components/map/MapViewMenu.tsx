@@ -1,6 +1,7 @@
 // The map header's view menu: imagery, the full-width aspect ratio, layers (ADS-B traffic), fitting the view, and
 // clearing the trace.
 
+import { useTelemetryStore } from '../../store/telemetryStore';
 import React from 'react';
 import { Eraser, Layers, Maximize2, Plane } from 'lucide-react';
 import { useAdsbSettingsStore } from '../../store/adsbSettingsStore';
@@ -16,7 +17,6 @@ interface MapViewMenuProps {
   aspect?: MapAspect;
   onAspect?: (aspect: MapAspect) => void;
   onFit: () => void;
-  tracePoints: number;
   onClearTrace: () => void;
 }
 
@@ -26,7 +26,9 @@ const ASPECTS: { value: MapAspect; label: string }[] = [
   { value: '1:1', label: 'Square 1:1' },
 ];
 
-export const MapViewMenu: React.FC<MapViewMenuProps> = ({ layer, onLayer, aspect, onAspect, onFit, tracePoints, onClearTrace }) => {
+export const MapViewMenu: React.FC<MapViewMenuProps> = ({ layer, onLayer, aspect, onAspect, onFit, onClearTrace }) => {
+  // The trail's length, read here so a new point re-renders this menu, not the map.
+  const tracePoints = useTelemetryStore((s) => s.flightTrace.length);
   const showTraffic = useAdsbSettingsStore((s) => s.showOnMap);
   return (
   <HeaderMenu icon={<Layers className="h-3.5 w-3.5 text-sky-400" />} label="View" title="Map imagery, shape and view" widthClass="w-56">
