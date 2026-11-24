@@ -18,7 +18,6 @@ import { useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStor
 import { addRallyPoint, moveRallyPoint, type RallyDraft } from '../../mavlink/rallyDraft';
 import { radiusCircle } from './radiusCircle';
 import { RADIUS_PARAMS, planningVehicle, useLastVehicleStore } from '../../store/lastVehicleStore';
-import { paramManager } from '../../mavlink/paramManager';
 
 const DRAFT_LINES_PANE = 'draftLinesPane';
 const DRAFT_MARKERS_PANE = 'draftMarkersPane';
@@ -122,17 +121,6 @@ export function useDraftLayer(
   // browser), so planning offline shows the same circles. Redrawn when either changes.
   const liveRadius = useTelemetryStore((s) => `${s.heartbeat.type}:${s.heartbeat.modeName === 'DISCONNECTED'}:${RADIUS_PARAMS.map((n) => s.parameters[n]?.value ?? '').join(',')}`);
   const lastVehicle = useLastVehicleStore();
-  const linkedSys = useTelemetryStore((s) => (s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED' ? s.heartbeat.systemId : 0));
-  const linkedType = useTelemetryStore((s) => s.heartbeat.type);
-  // Planning while connected: make sure the radius parameters for this vehicle have been read (they may not have
-  // been yet if the full parameter list hasn't loaded).
-  useEffect(() => {
-    if (!active || !linkedSys) return;
-    const cat = getVehicleCategory(linkedType);
-    const names = cat === 'plane' ? ['WP_RADIUS', 'WP_LOITER_RAD'] : cat === 'copter' ? ['WPNAV_RADIUS_M'] : cat === 'rover' ? ['WP_RADIUS'] : [];
-    const have = useTelemetryStore.getState().parameters;
-    for (const n of names) if (have[n] === undefined) paramManager.requestParam(linkedSys, 1, n);
-  }, [active, linkedSys, linkedType]);
   const layer = useMissionPlanStore((s) => s.layer);
   const draft = useMissionPlanStore((s) => s.history.present);
   const selected = useMissionPlanStore((s) => s.selected);

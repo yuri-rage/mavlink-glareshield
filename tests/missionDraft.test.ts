@@ -290,6 +290,9 @@ check('home is not validated', !issues(d.draftFromWaypoints([{ ...HOME, lat: 0, 
   const jump = r.draft.items.find((x) => x.command === 177)!;
   check('the jump still targets the same waypoint', jump.param1 === 2, String(jump.param1));
   check('a reference without a position is refused', throws(() => d.insertWaypointAtBearing(base, 1, 0, 100, 1)));
+  check('a command without a location (jump) is refused as a reference', throws(() => d.insertWaypointAtBearing(base, 4, 0, 100, 4)));
+  const pole = d.destinationPoint(89.9999999, 0, 0, 50);
+  check('near the pole: a number, not NaN', Number.isFinite(pole.lat) && Number.isFinite(pole.lon), JSON.stringify(pole));
   check('a distance of 0 is refused', throws(() => d.insertWaypointAtBearing(base, 2, 0, 0, 2)));
   const fromHome = d.insertWaypointAtBearing(base, 0, 180, 50, null);
   check('from home with nothing selected: at the end', fromHome.index === base.items.length && near(fromHome.draft.items[fromHome.index].x, d.destinationPoint(35, -106, 180, 50).lat, 1e-12), String(fromHome.index));

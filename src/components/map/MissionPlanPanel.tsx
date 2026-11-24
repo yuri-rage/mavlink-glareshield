@@ -94,7 +94,7 @@ interface MissionPlanPanelProps {
 }
 
 /** One line describing an item, for the list. */
-function itemSummary(it: DraftItem, formatAlt: (m: number) => string): string {
+function itemSummary(it: DraftItem, formatAlt: (m: number) => string, fmtParam: (label: string, v: number) => string): string {
   if (it.command === CMD_DO_JUMP) {
     return `→ #${it.param1}, ${it.param2 === -1 ? 'forever' : `×${it.param2}`}`;
   }
@@ -105,7 +105,7 @@ function itemSummary(it: DraftItem, formatAlt: (m: number) => string): string {
   const info = missionCommandInfo(it.command);
   const vals = [it.param1, it.param2, it.param3, it.param4];
   const parts = info.params
-    .map((label, k) => (label ? `${label.replace(/ \(.*\)$/, '')} ${Number(vals[k].toPrecision(6))}` : ''))
+    .map((label, k) => (label ? `${label.replace(/ \(.*\)$/, '')} ${fmtParam(label, vals[k])}` : ''))
     .filter(Boolean)
     .slice(0, 2);
   return parts.join(', ');
@@ -178,7 +178,7 @@ const ItemEditor: React.FC<{
                 aria-pressed={paramUnits === u}
                 onClick={() => setParamUnits(u)}
                 title={u === 'raw' ? 'As sent to the vehicle: metres and m/s' : 'In the display units (Settings)'}
-                className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${paramUnits === u ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800'}`}
+                className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${paramUnits === u ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:bg-zinc-800'}`}
               >
                 {u === 'raw' ? 'Raw' : `${lengthUnit(system).unit} · ${speedUnit(system).unit}`}
               </button>
@@ -347,6 +347,14 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   const systemId = useTelemetryStore((s) => s.heartbeat.systemId);
   const hasVehicleMission = useTelemetryStore((s) => s.missionWaypoints.length > 0);
   const formatAltitude = useUnitsStore((s) => s.formatAltitude);
+  // List rows give lengths and speeds as the item editor does: display units, or raw when chosen.
+  const unitSystem = useUnitsStore((s) => s.system);
+  const rawParams = useUnitsStore((s) => s.paramUnits === 'raw');
+  const summaryParam = (label: string, v: number) => {
+    const kind = paramUnitKind(label);
+    const u = kind === 'length' ? (rawParams ? RAW_LENGTH : lengthUnit(unitSystem)) : kind === 'speed' ? (rawParams ? RAW_SPEED : speedUnit(unitSystem)) : null;
+    return u ? `${Number(u.fromSi(v).toFixed(u.digits))} ${u.unit}` : String(Number(v.toPrecision(6)));
+  };
 
   const [collapsed, setCollapsed] = useState(false);
   const [addCommand, setAddCommand] = useState(16);
@@ -647,7 +655,7 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
                         ? it.x === 0 && it.y === 0
                           ? 'set by the vehicle'
                           : `${it.x.toFixed(5)}, ${it.y.toFixed(5)}`
-                        : itemSummary(it, (m) => formatAltitude(m).full)}
+                        : itemSummary(it, (m) => formatAltitude(m).full, summaryParam)}
                     </span>
                     {own.some((x) => x.severity === 'error') ? (
                       <XCircle className="h-3 w-3 shrink-0 text-red-400" />

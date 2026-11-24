@@ -2,7 +2,7 @@ import 'leaflet/dist/leaflet.css';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTelemetryStore, sendTrackedCommand, computeDistanceAndBearing } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
-import { useLengthUnit } from '../../lib/inputUnits';
+import { lengthUnit, useLengthUnit } from '../../lib/inputUnits';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { missionManager, MissionManagerStatus, groupFencePolygons } from '../../mavlink/missionManager';
 import { mavlinkConnection } from '../../mavlink/connection';
@@ -272,6 +272,18 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const { formatAltitude, altitudeMode, formatHomeVector } = useUnitsStore();
   const unitSystem = useUnitsStore((s) => s.system);
   const flyLen = useLengthUnit();
+  // The units changed with the Fly-to card open: convert what it shows, so the same height is sent.
+  const flyUnitsRef = useRef(unitSystem);
+  useEffect(() => {
+    const prev = flyUnitsRef.current;
+    flyUnitsRef.current = unitSystem;
+    if (prev === unitSystem) return;
+    setFlyToAltInput((text) => {
+      const v = Number(text);
+      if (text.trim() === '' || !Number.isFinite(v)) return text;
+      return String(Math.round(lengthUnit(unitSystem).fromSi(lengthUnit(prev).toSi(v))));
+    });
+  }, [unitSystem]);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const activeTileLayerRef = useRef<L.TileLayer | null>(null);
@@ -740,9 +752,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const openFlyToPrompt = (lat: number, lon: number, accuracyM?: number) => {
     const st = useTelemetryStore.getState();
     if (st.heartbeat.lastHeartbeatTime === 0 || st.heartbeat.modeName === 'DISCONNECTED') return;
-    // Typed in the display units (ft or m); sent in metres.
+    // Typed in the display units (ft or m); sent in metres. Read now: this runs from map handlers bound at mount,
+    // so a unit captured then could be stale.
     const curAlt = Math.max(10, st.position.relativeAlt || 20);
-    setFlyToAltInput(String(Math.round(flyLen.fromSi(curAlt))));
+    setFlyToAltInput(String(Math.round(lengthUnit(useUnitsStore.getState().system).fromSi(curAlt))));
     setPendingFlyTo({ lat, lon, accuracyM });
     setFlyToMode(false);
   };

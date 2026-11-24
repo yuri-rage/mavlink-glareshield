@@ -8,8 +8,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Compass, MapPinPlus, Plus, Repeat, Square, Trash2 } from 'lucide-react';
-import { useUnitsStore } from '../../store/unitsStore';
-import { useLengthUnit } from '../../lib/inputUnits';
+import { useLengthUnit, wholeLength } from '../../lib/inputUnits';
 import {
   insertWaypointAfter,
   insertWaypointAtBearing,
@@ -76,8 +75,11 @@ function commit(make: (d: MissionDraft) => { draft: MissionDraft; index: number 
   }
 }
 
-/** The last bearing and distance entered (this session), so a pattern can be stepped out one waypoint at a time. */
-let lastBearingRange = { bearing: '', distance: '' };
+/**
+ * The last bearing and distance entered (this session), so a pattern can be stepped out one waypoint at a time. The
+ * distance is kept in metres, so it means the same after a change of units.
+ */
+let lastBearingRange: { bearing: string; distanceM: number | null } = { bearing: '', distanceM: null };
 
 /**
  * Bearing (degrees true) and distance (the user's units) from item `from`; adds a waypoint there after item
@@ -86,14 +88,16 @@ let lastBearingRange = { bearing: '', distance: '' };
 const BearingRangeForm: React.FC<{ from: number; after: number | null; onDone: () => void }> = ({ from, after, onDone }) => {
   const len = useLengthUnit();
   const [bearing, setBearing] = useState(lastBearingRange.bearing);
-  const [distance, setDistance] = useState(lastBearingRange.distance);
+  const [distance, setDistance] = useState(() =>
+    lastBearingRange.distanceM === null ? '' : String(Number(len.fromSi(lastBearingRange.distanceM).toFixed(len.digits)))
+  );
   const b = Number(bearing);
   const dist = Number(distance);
   const valid = bearing.trim() !== '' && Number.isFinite(b) && Number.isFinite(dist) && dist > 0;
   const submit = () => {
     if (!valid) return;
-    lastBearingRange = { bearing, distance };
     const distM = len.toSi(dist);
+    lastBearingRange = { bearing, distanceM: distM };
     commit((d) => insertWaypointAtBearing(d, from, ((b % 360) + 360) % 360, distM, after));
     onDone();
   };
@@ -136,6 +140,9 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
   const fence = useMissionPlanStore((s) => s.fence.history.present);
   const ref = useRef<HTMLDivElement | null>(null);
   const [bearingForm, setBearingForm] = useState(false);
+  // A right-click on another pin moves the open menu: start it collapsed again.
+  useEffect(() => setBearingForm(false), [target]);
+  const menuLen = useLengthUnit();
   // An item menu whose item is gone (or is home) has nothing to show: close it rather than leave an invisible menu
   // that still swallows the next click.
   const fenceShape = target.kind === 'fence-shape' || target.kind === 'fence-vertex' ? fence.shapes[target.shape] : undefined;
@@ -271,7 +278,7 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
           >
             <Square className="h-3.5 w-3.5 text-red-400" />
             {inclusion ? 'Inclusion' : 'Exclusion'} square here
-            <span className="ml-auto pl-2 text-[10px] text-zinc-500">{useUnitsStore.getState().formatAltitude(FENCE_SQUARE_M).full}</span>
+            <span className="ml-auto pl-2 text-[10px] text-zinc-500">{wholeLength(FENCE_SQUARE_M, menuLen)}</span>
           </button>
         ))}
       </>
