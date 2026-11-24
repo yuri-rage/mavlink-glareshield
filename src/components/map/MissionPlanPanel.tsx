@@ -655,7 +655,7 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
                         ? it.x === 0 && it.y === 0
                           ? 'set by the vehicle'
                           : `${it.x.toFixed(5)}, ${it.y.toFixed(5)}`
-                        : itemSummary(it, (m) => formatAltitude(m).full, summaryParam)}
+                        : itemSummary(it, (m) => (rawParams ? `${Number(m.toFixed(2))} m` : formatAltitude(m).full), summaryParam)}
                     </span>
                     {own.some((x) => x.severity === 'error') ? (
                       <XCircle className="h-3 w-3 shrink-0 text-red-400" />

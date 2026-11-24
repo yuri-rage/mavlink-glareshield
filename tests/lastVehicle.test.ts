@@ -42,5 +42,14 @@ check('connected: a value left by the previous vehicle is not used', planningVeh
 param('WP_RADIUS', 2);
 check('the rover\'s own WP_RADIUS once it sends it', planningVehicle().params.WP_RADIUS === 2, JSON.stringify(planningVehicle()));
 
+// A Copter 4.7+ was remembered (WPNAV_RADIUS_M); an older Copter (WPNAV_RADIUS, cm) connects.
+hb(0, false);
+hb(2);
+param('WPNAV_RADIUS_M', 3);
+hb(0, false);
+hb(2);
+param('WPNAV_RADIUS', 150);
+check('an older Copter\'s WPNAV_RADIUS replaces the remembered WPNAV_RADIUS_M', planningVehicle().params.WPNAV_RADIUS === 150 && planningVehicle().params.WPNAV_RADIUS_M === undefined, JSON.stringify(planningVehicle()));
+
 console.log(failures.length ? `\n${failures.length} last-vehicle check(s) FAILED` : '\nAll last-vehicle checks PASSED');
 if (failures.length) process.exit(1);

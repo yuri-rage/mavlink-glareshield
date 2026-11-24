@@ -86,7 +86,14 @@ useTelemetryStore.subscribe((s, prev) => {
   if (s.parameters !== prev.parameters) {
     for (const n of RADIUS_PARAMS) {
       const p = s.parameters[n];
-      if (p && p !== prev.parameters[n] && p.value !== next.params[n]) next = { ...next, params: { ...next.params, [n]: p.value } };
+      if (p && p !== prev.parameters[n] && p.value !== next.params[n]) {
+        const params = { ...next.params, [n]: p.value };
+        // A Copter has one or the other (WPNAV_RADIUS in cm before 4.7, WPNAV_RADIUS_M after): the other is a
+        // previous vehicle's, and WPNAV_RADIUS_M would be read first.
+        if (n === 'WPNAV_RADIUS') delete params.WPNAV_RADIUS_M;
+        if (n === 'WPNAV_RADIUS_M') delete params.WPNAV_RADIUS;
+        next = { ...next, params };
+      }
     }
   }
   if (next !== last) save(next);
