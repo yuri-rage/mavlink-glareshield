@@ -76,7 +76,7 @@ export const MissionProfileStrip: React.FC<{ style?: React.CSSProperties }> = ({
         {loading && <span className="animate-pulse text-sky-300">loading terrain…</span>}
         {minAgl !== null && (
           <span className="font-mono text-red-300">
-            {minAgl < 0 ? `${formatAltitude(-minAgl).full} below terrain` : `${formatAltitude(minAgl).full} above terrain`} at worst
+            {minAgl < 0 ? `${formatAltitude(-minAgl).full} below terrain` : `${formatAltitude(minAgl).full} above terrain`} at lowest
           </span>
         )}
         {profile?.homeFrom === 'terrain' && <span className="text-amber-300" title="The mission's home has no altitude: the terrain there is used">home altitude from terrain</span>}
