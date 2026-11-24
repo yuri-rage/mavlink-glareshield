@@ -244,6 +244,101 @@ export function fenceBreached(draft: FenceDraft, p: LatLon, opts: { inclusionUni
   return opts.inclusionUnion ? inclusions > 0 && outsideInclusions === inclusions : outsideInclusions > 0;
 }
 
+/**
+ * Why `p` breaches the fence, by shape (F1 is shape 0), following the same rule as fenceBreached; empty when it
+ * doesn't. Being inside an exclusion zone is a breach on its own; inclusion zones breach when `p` is outside any of
+ * them (or, with `inclusionUnion`, outside all of them).
+ */
+export function fenceBreachReasons(draft: FenceDraft, p: LatLon, opts: { inclusionUnion?: boolean } = {}): string[] {
+  const reasons: string[] = [];
+  const outside: number[] = [];
+  let inclusions = 0;
+  draft.shapes.forEach((s, i) => {
+    const inside = s.kind === 'polygon' ? s.vertices.length >= 3 && insidePolygon(p, s.vertices) : distanceM(p, s.center) <= s.radius;
+    if (s.inclusion) {
+      inclusions++;
+      if (!inside) outside.push(i);
+    } else if (inside) {
+      reasons.push(`inside exclusion ${s.kind} F${i + 1}`);
+    }
+  });
+  const names = (list: number[]) => list.map((i) => `F${i + 1}`).join(', ');
+  if (opts.inclusionUnion) {
+    if (inclusions > 0 && outside.length === inclusions) reasons.push(`outside every inclusion zone (${names(outside)})`);
+  } else if (outside.length > 0) {
+    reasons.push(`outside inclusion zone${outside.length === 1 ? '' : 's'} ${names(outside)}`);
+  }
+  return reasons;
+}
+
+/** What uploading `draft` changes from the vehicle's fence `vehicle`, in words, shape by shape. */
+export function fenceChanges(vehicle: FenceDraft, draft: FenceDraft): string[] {
+  const out: string[] = [];
+  const label = (s: FenceShape) => `${s.inclusion ? 'inclusion' : 'exclusion'} ${s.kind}`;
+  const n = Math.max(vehicle.shapes.length, draft.shapes.length);
+  for (let i = 0; i < n; i++) {
+    const a = vehicle.shapes[i];
+    const b = draft.shapes[i];
+    if (!a) out.push(`F${i + 1} added: ${label(b)}`);
+    else if (!b) out.push(`F${i + 1} removed: ${label(a)}`);
+    else if (compareFenceDrafts({ shapes: [a], returnPoint: null }, { shapes: [b], returnPoint: null }).length > 0) {
+      out.push(`F${i + 1} changed: ${label(a) === label(b) ? label(b) : `${label(a)} → ${label(b)}`}`);
+    }
+  }
+  if (!vehicle.returnPoint && draft.returnPoint) out.push('return point added');
+  else if (vehicle.returnPoint && !draft.returnPoint) out.push('return point removed');
+  else if (vehicle.returnPoint && draft.returnPoint && compareFenceDrafts({ shapes: [], returnPoint: vehicle.returnPoint }, { shapes: [], returnPoint: draft.returnPoint }).length > 0) {
+    out.push('return point moved');
+  }
+  return out;
+}
+
+/**
+ * What the vehicle does on a fence breach for FENCE_ACTION `action` (AC_Fence parameter docs), as a phrase that
+ * follows "the vehicle will", or null for report only. Copter disarms instead when it is on the ground.
+ */
+export function fenceActionText(category: string, action: number | undefined): string | null {
+  if (action === undefined) return 'take its fence action (FENCE_ACTION unknown)';
+  const a = Math.round(action);
+  if (a === 0) return null;
+  const table: Record<string, Record<number, string>> = {
+    copter: { 1: 'RTL (or land)', 2: 'land', 3: 'SmartRTL (or RTL, or land)', 4: 'brake (or land)', 5: 'SmartRTL (or land)' },
+    rover: { 1: 'RTL (or hold)', 2: 'hold', 3: 'SmartRTL (or RTL, or hold)', 4: 'SmartRTL (or hold)', 5: 'TERMINATE (disarm)', 6: 'loiter (or hold)' },
+    plane: { 1: 'RTL (to the fence return point if set)', 6: 'switch to Guided (to the fence return point if set)', 7: 'switch to Guided, throttle passed through', 8: 'AUTOLAND if possible, else RTL' },
+  };
+  return table[category]?.[a] ?? `take fence action ${a}`;
+}
+
+/** MAV_SYS_STATUS_GEOFENCE: ArduPilot reports it enabled when a fence is enabled with an action other than report. */
+const SYS_STATUS_GEOFENCE = 1 << 20;
+
+/** The parameters the fence checks read; the editor and the upload dialog ask the vehicle for them by name. */
+export const FENCE_PARAMS = ['FENCE_ENABLE', 'FENCE_TYPE', 'FENCE_ACTION', 'FENCE_OPTIONS', 'FENCE_AUTOENABLE'];
+
+/**
+ * Whether the vehicle's fence is on (enforcing, with an action), or undefined when it can't be told (treated as
+ * possibly on). ArduPilot's SYS_STATUS geofence bit is authoritative when it reports the fence present: enabled then
+ * covers FENCE_ENABLE, auto-enable and an RC switch, and excludes report-only. But polygons count as present only once
+ * some are loaded, so a vehicle with fencing on and no fence yet reports nothing, and the first upload enforces at
+ * once: then fall back to the parameters.
+ */
+export function fencingState(v: {
+  sensorsPresent: number;
+  sensorsEnabled: number;
+  fenceEnable?: number;
+  fenceAction?: number;
+  fenceAutoEnable?: number;
+  armed: boolean;
+}): boolean | undefined {
+  if ((v.sensorsPresent & SYS_STATUS_GEOFENCE) !== 0) return (v.sensorsEnabled & SYS_STATUS_GEOFENCE) !== 0;
+  if (v.fenceAction !== undefined && Math.round(v.fenceAction) === 0) return false;
+  if (v.fenceEnable === undefined) return undefined;
+  if (Math.round(v.fenceEnable) === 1) return true;
+  // Auto-enabled fences switch on at arming or takeoff: can't tell from here.
+  if (v.armed && v.fenceAutoEnable !== undefined && Math.round(v.fenceAutoEnable) !== 0) return undefined;
+  return false;
+}
+
 // ------------------------------------------------------------------------------------------------
 // Edits (immutable; an invalid index throws, as in missionDraft)
 // ------------------------------------------------------------------------------------------------

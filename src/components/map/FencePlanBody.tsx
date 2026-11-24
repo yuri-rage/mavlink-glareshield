@@ -6,6 +6,7 @@ import React, { useEffect, useRef } from 'react';
 import { AlertTriangle, Download, FolderOpen, RotateCcw, Trash2, Upload, XCircle } from 'lucide-react';
 import { missionFileStem, toQgcWpl } from '../../mavlink/missionFileWriter';
 import {
+  FENCE_PARAMS,
   fenceDraftToItems,
   moveShape,
   polygonCenter,
@@ -18,6 +19,7 @@ import {
   type FenceShape,
 } from '../../mavlink/fenceDraft';
 import { isFenceDirty, useMissionPlanStore } from '../../store/missionPlanStore';
+import { paramManager } from '../../mavlink/paramManager';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
@@ -157,6 +159,12 @@ export const FencePlanBody: React.FC<FencePlanBodyProps> = ({
       console.warn('[planning] fence edit refused:', e);
     }
   };
+
+  // The fence checks need the vehicle's fence parameters, which aren't downloaded unless asked for.
+  const compId = useTelemetryStore((s) => s.heartbeat.componentId);
+  useEffect(() => {
+    if (systemId > 0) FENCE_PARAMS.forEach((p) => paramManager.requestParam(systemId, compId || 1, p));
+  }, [systemId, compId]);
 
   useEffect(() => {
     if (selected === null) return;

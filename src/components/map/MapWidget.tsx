@@ -97,11 +97,19 @@ import { FlyToPopover } from './FlyToPopover';
 import { fliesSplines, joinLegs, missionPathLegs, routeIndices, type PathItem } from '../../mavlink/missionPath';
 import { MissionPlanPanel } from './MissionPlanPanel';
 import { PLAN_LAYER_SWITCH_WIDTH, PlanLayerSwitch } from './PlanLayerSwitch';
-import { DraftUploadModal, RallyUploadModal } from './DraftUploadModal';
+import { DraftUploadModal, FenceUploadModal, RallyUploadModal } from './DraftUploadModal';
 import { PlanContextMenu, type PlanMenuTarget } from './PlanContextMenu';
 import { useDraftLayer, drawablePosition } from './useDraftLayer';
 import { isAnyDirty, isDraftDirty, isFenceDirty, isRallyDirty, useMissionPlanStore, vehicleMissionUpdate } from '../../store/missionPlanStore';
-import { fenceDraftFromItems, fenceDraftFromPoints, fenceDraftsEqual, polygonCenter, type FenceDraft } from '../../mavlink/fenceDraft';
+import {
+  checkFenceReadBack,
+  fenceDraftFromItems,
+  fenceDraftFromPoints,
+  fenceDraftToItems,
+  fenceDraftsEqual,
+  polygonCenter,
+  type FenceDraft,
+} from '../../mavlink/fenceDraft';
 import { useFenceDraftLayer } from './useFenceDraftLayer';
 import { finishFencePolygon } from './fenceCommit';
 import { FencePlaceHint } from './FencePlaceHint';
@@ -347,6 +355,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const [draftUploadVehicle, setDraftUploadVehicle] = useState<MissionDraft | null>(null);
   /** The vehicle's rally points when the rally upload confirmation opened. */
   const [rallyUploadVehicle, setRallyUploadVehicle] = useState<RallyDraft | null>(null);
+  /** The vehicle's fence when the fence upload confirmation opened. */
+  const [fenceUploadVehicle, setFenceUploadVehicle] = useState<FenceDraft | null>(null);
 
   useEffect(() => {
     flyToModeRef.current = flyToMode;
@@ -1108,6 +1118,47 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       missionManager.report(`Rally points uploaded and verified (${draft.points.length})`);
     } catch (err: any) {
       setPlanNotice(`Rally upload failed: ${err?.message || err}. The draft is unchanged.`);
+    } finally {
+      useMissionPlanStore.getState().setUploading(false);
+    }
+  };
+
+  /**
+   * Upload the fence draft, read it back and compare, like the rally points. The confirmation has already checked
+   * the vehicle's position against it.
+   */
+  const uploadFence = async () => {
+    setFenceUploadVehicle(null);
+    const st = useMissionPlanStore.getState();
+    if (st.uploading) return;
+    const draft = st.fence.history.present;
+    st.setUploading(true);
+    setPlanNotice(null);
+    try {
+      const res = await missionManager.uploadFenceAndReadBack(fenceDraftToItems(draft));
+      if (!res.success) {
+        setPlanNotice(`Fence upload failed: ${res.error || 'the vehicle did not accept the fence'}. The draft is unchanged.`);
+        return;
+      }
+      const check = checkFenceReadBack(draft, res.readBack, res.readOk);
+      if (check.status === 'unreadable') {
+        useMissionPlanStore.getState().fenceRebase(draft);
+        setPlanNotice('Fence uploaded (the vehicle accepted it) but could not be read back to check. Download from the vehicle to verify.');
+        missionManager.report('Fence uploaded but NOT verified', 10000);
+        return;
+      }
+      if (check.status === 'mismatch') {
+        useMissionPlanStore.getState().fenceRebase(check.vehicle);
+        setPlanNotice(
+          `Fence uploaded, but the vehicle's does not match the draft (${check.differences.slice(0, 3).join('; ')}). The draft is kept; check it and upload again.`
+        );
+        missionManager.report('Fence uploaded but NOT verified', 10000);
+        return;
+      }
+      useMissionPlanStore.getState().fenceUploaded(check.vehicle);
+      missionManager.report(draft.shapes.length === 0 && !draft.returnPoint ? 'Fence cleared and verified' : `Fence uploaded and verified (${draft.shapes.length} shapes)`);
+    } catch (err: any) {
+      setPlanNotice(`Fence upload failed: ${err?.message || err}. The draft is unchanged.`);
     } finally {
       useMissionPlanStore.getState().setUploading(false);
     }
@@ -2442,6 +2493,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               setPlanNotice(null);
             }}
             onFenceKeepDraft={() => useMissionPlanStore.getState().fenceRebase(vehicleFenceDraft())}
+            onRequestFenceUpload={() => setFenceUploadVehicle(vehicleFenceDraft())}
           />
         )}
       </CardContent>
@@ -2456,6 +2508,16 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           modeName={heartbeat.modeName}
           onConfirm={uploadRally}
           onCancel={() => setRallyUploadVehicle(null)}
+        />
+      )}
+      {planning && fenceUploadVehicle && (
+        <FenceUploadModal
+          vehicle={fenceUploadVehicle}
+          vehicleType={heartbeat.type}
+          armed={heartbeat.isArmed}
+          modeName={heartbeat.modeName}
+          onConfirm={uploadFence}
+          onCancel={() => setFenceUploadVehicle(null)}
         />
       )}
       {planning && draftUploadVehicle && (
