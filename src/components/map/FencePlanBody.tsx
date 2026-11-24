@@ -26,6 +26,7 @@ import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { downloadFile } from '../../lib/download';
 import { OPEN_ACCEPT } from './MissionMenu';
 import { FT_PER_M, ICON_BTN, NumField } from './planUi';
+import { FenceControlBody } from './FenceControl';
 
 interface FencePlanBodyProps {
   issues: FenceIssue[];
@@ -283,6 +284,10 @@ export const FencePlanBody: React.FC<FencePlanBodyProps> = ({
       </div>
 
       <div className="space-y-1.5 border-t border-zinc-800 px-2 py-1.5">
+        {/* The vehicle's fence switch: what's uploaded is only enforced while it's on. */}
+        <div className="rounded-md border border-zinc-800 bg-zinc-900/60 p-1.5">
+          <FenceControlBody compact />
+        </div>
         {onRequestUpload && (
           <button
             type="button"
