@@ -24,6 +24,7 @@ import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { downloadFile } from '../../lib/download';
+import { OPEN_ACCEPT } from './MissionMenu';
 import { FT_PER_M, ICON_BTN, NumField } from './planUi';
 
 interface FencePlanBodyProps {
@@ -310,7 +311,7 @@ export const FencePlanBody: React.FC<FencePlanBodyProps> = ({
           <input
             ref={fileRef}
             type="file"
-            accept=".plan,.waypoints,.txt,.dat,.json"
+            accept={OPEN_ACCEPT}
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
