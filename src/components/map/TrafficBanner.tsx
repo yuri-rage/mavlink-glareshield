@@ -6,12 +6,15 @@ import { Plane } from 'lucide-react';
 import { useTrafficStore } from '../../store/trafficStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
+import { useAdsbSettingsStore } from '../../store/adsbSettingsStore';
 import { compassPoint, emergencySquawk, icaoHex, ownForThreat, rankTraffic, relAltText } from '../../mavlink/adsb';
 
 export const TrafficBanner: React.FC<{ onFocus: (lat: number, lon: number) => void }> = ({ onFocus }) => {
   const aircraft = useTrafficStore((s) => s.aircraft);
   const position = useTelemetryStore((s) => s.position);
   const { formatAltitude, formatDistance } = useUnitsStore();
+  const warnings = useAdsbSettingsStore((s) => s.warnings);
+  const thresholds = useAdsbSettingsStore((s) => s.thresholds);
   // Re-check as reports age, even when nothing new arrives.
   const [, tick] = useState(0);
   useEffect(() => {
@@ -19,7 +22,8 @@ export const TrafficBanner: React.FC<{ onFocus: (lat: number, lon: number) => vo
     return () => clearInterval(t);
   }, []);
 
-  const ranked = rankTraffic(Object.values(aircraft), ownForThreat(position)).filter((r) => r.t && r.t.level !== 'none');
+  if (!warnings) return null;
+  const ranked = rankTraffic(Object.values(aircraft), ownForThreat(position), thresholds).filter((r) => r.t && r.t.level !== 'none');
   if (ranked.length === 0) return null;
   const { a, t } = ranked[0];
   const alert = t!.level === 'alert';
