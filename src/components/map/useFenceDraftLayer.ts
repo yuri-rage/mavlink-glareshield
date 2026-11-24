@@ -78,7 +78,7 @@ const drawIcon = (first: boolean) =>
 const ll = (p: LatLon): [number, number] => [p.lat, p.lon];
 const style = (shape: FenceShape, selected: boolean, editing: boolean): L.PathOptions => ({
   color: selected ? SELECTED : RED,
-  weight: selected ? 3 : 2,
+  weight: selected ? 3.5 : shape.inclusion ? 3 : 2.5,
   opacity: editing ? 0.95 : 0.45,
   dashArray: shape.inclusion ? undefined : '6 5',
   fillColor: RED,
@@ -105,7 +105,11 @@ export function useFenceDraftLayer(
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || map.getPane(SHAPES_PANE)) return;
-    map.createPane(SHAPES_PANE).style.zIndex = '585';
+    const shapes = map.createPane(SHAPES_PANE);
+    shapes.style.zIndex = '585';
+    // A dark halo around every line, so red reads on red soil, rock and roofs as well as on green: a filter on the
+    // pane follows every drag (vertex, centre, radius) with no extra paths.
+    shapes.style.filter = 'drop-shadow(0 0 1px rgba(0,0,0,0.95)) drop-shadow(0 0 2px rgba(0,0,0,0.6))';
     map.createPane(HANDLES_PANE).style.zIndex = '660';
   }, [mapRef, ready]);
 
