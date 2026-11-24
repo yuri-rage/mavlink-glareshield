@@ -16,7 +16,7 @@ import { fliesSplines, joinLegs, legMidpoint, missionPathLegs, routeIndices, typ
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
 import { addRallyPoint, moveRallyPoint, type RallyDraft } from '../../mavlink/rallyDraft';
-import { waypointRadius } from '../../mavlink/waypointRadius';
+import { radiusCircle } from './radiusCircle';
 import { RADIUS_PARAMS, planningVehicle, useLastVehicleStore } from '../../store/lastVehicleStore';
 import { paramManager } from '../../mavlink/paramManager';
 
@@ -182,22 +182,12 @@ export function useDraftLayer(
 
     // Waypoint radii: thin dashed circles, under the pins; each follows its pin while dragged.
     const vehicle = planningVehicle();
-    const category = getVehicleCategory(vehicle.type);
     const circles = new Map<number, L.Circle>();
     draft.items.forEach((it, index) => {
       if (index === 0 || !drawablePosition(it.command, it.x, it.y)) return;
-      const r = waypointRadius(it, category, (n) => vehicle.params[n]);
-      if (!r) return;
-      const c = L.circle([it.x, it.y], {
-        pane: DRAFT_LINES_PANE,
-        radius: r.radiusM,
-        color: r.source === 'item' ? '#facc15' : '#ffffff',
-        weight: 1.5,
-        dashArray: '5 5',
-        opacity: editing ? 0.9 : 0.35,
-        fill: false,
-        interactive: false,
-      }).addTo(map);
+      const c = radiusCircle(it, it.x, it.y, vehicle, { pane: DRAFT_LINES_PANE, opacity: editing ? 0.9 : 0.35 });
+      if (!c) return;
+      c.addTo(map);
       circles.set(index, c);
       layersRef.current.push(c);
     });

@@ -95,6 +95,8 @@ import { MissionMenu } from './MissionMenu';
 import { MapViewMenu, type MapLayerType } from './MapViewMenu';
 import { FlyToPopover } from './FlyToPopover';
 import { fliesSplines, joinLegs, missionPathLegs, routeIndices, type PathItem } from '../../mavlink/missionPath';
+import { RADIUS_PARAMS, planningVehicle, useLastVehicleStore } from '../../store/lastVehicleStore';
+import { radiusCircle } from './radiusCircle';
 import { MissionPlanPanel } from './MissionPlanPanel';
 import { PLAN_LAYER_SWITCH_WIDTH, PlanLayerSwitch } from './PlanLayerSwitch';
 import { DraftUploadModal, FenceUploadModal, RallyUploadModal } from './DraftUploadModal';
@@ -271,6 +273,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const trailPolylineRef = useRef<L.Polyline | null>(null);
   const missionPolylineRef = useRef<L.Polyline | null>(null);
   const missionMarkersRef = useRef<L.Marker[]>([]);
+  const missionRadiiRef = useRef<L.Circle[]>([]);
   const fenceLayersRef = useRef<L.Layer[]>([]);
   const rallyMarkersRef = useRef<L.Marker[]>([]);
   const baseMarkerRef = useRef<L.Marker | null>(null);
@@ -328,6 +331,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const planLayer = useMissionPlanStore((s) => s.layer);
   /** The connected vehicle flies spline waypoints as curves (Copter); others skip them. */
   const vehicleSplines = fliesSplines(getVehicleCategory(heartbeat.type));
+  // What the waypoint radii are drawn from: the vehicle's type and radius parameters (or the last vehicle's).
+  const radiusKey = useTelemetryStore((s) => `${s.heartbeat.type}:${s.heartbeat.modeName === 'DISCONNECTED'}:${RADIUS_PARAMS.map((n) => s.parameters[n]?.value ?? '').join(',')}`);
+  const lastVehicle = useLastVehicleStore();
   const planTool = useMissionPlanStore((s) => s.tool);
   const planSelected = useMissionPlanStore((s) => s.selected);
   const planRallySelected = useMissionPlanStore((s) => s.rally.selected);
@@ -1861,6 +1867,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     // Clear old mission markers
     missionMarkersRef.current.forEach((m) => m.remove());
     missionMarkersRef.current = [];
+    missionRadiiRef.current.forEach((c) => c.remove());
+    missionRadiiRef.current = [];
 
     // Filter valid waypoints
     const validWps = missionWaypoints.filter((w) => cmdHasLocation(w.command) && (w.lat !== 0 || w.lon !== 0) && Math.abs(w.lat) <= 90 && Math.abs(w.lon) <= 180);
@@ -1878,6 +1886,20 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     missionPolylineRef.current.setLatLngs(joinLegs(missionPathLegs(pathItems, routeIndices(pathItems, vehicleSplines), vehicleSplines)));
     // While planning the vehicle's mission stays visible for comparison, dimmed and not clickable.
     missionPolylineRef.current.setStyle({ opacity: planning ? 0.35 : 1 });
+
+    // Waypoint radii, as in planning (the connected vehicle's rules, else the last one's). Not while planning: the
+    // draft draws its own, and both would clutter the map.
+    if (!planning) {
+      const vehicle = planningVehicle();
+      validWps.forEach((wp) => {
+        if (wp.seq === 0) return;
+        const c = radiusCircle(wp, wp.lat, wp.lon, vehicle, { pane: 'missionLinesPane', opacity: 0.85 });
+        if (c) {
+          c.addTo(mapInstanceRef.current!);
+          missionRadiiRef.current.push(c);
+        }
+      });
+    }
 
     // Add numbered waypoint markers - Mission Planner vibrant green sharply tapered pin icons
     validWps.forEach((wp) => {
@@ -1918,7 +1940,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       m.addTo(mapInstanceRef.current!);
       missionMarkersRef.current.push(m);
     });
-  }, [missionWaypoints, planning, vehicleSplines]);
+  }, [missionWaypoints, planning, vehicleSplines, radiusKey, lastVehicle]);
 
   // Update geofence rendering - Mission Planner solid red lines with transparent/dimmed interiors
   useEffect(() => {
