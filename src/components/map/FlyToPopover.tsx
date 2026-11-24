@@ -68,9 +68,10 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
       onDoubleClick={(e) => e.stopPropagation()}
       onWheel={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.stopPropagation()}
-      // Enter sends from anywhere in the card, including after pressing the +/- buttons.
+      // Enter sends from anywhere in the card, including after pressing the +/- buttons, but not from Cancel or the
+      // extra actions (Enter on "Point camera here" must point the camera, not fly there).
       onKeyDown={(e) => {
-        if (e.key === 'Enter' && !(e.target as HTMLElement).closest('[data-cancel]')) {
+        if (e.key === 'Enter' && !(e.target as HTMLElement).closest('[data-cancel], [data-extra]')) {
           e.preventDefault();
           onSend();
         }
@@ -145,7 +146,11 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
         >
           {inGuided ? 'Fly here' : 'Switch to GUIDED & fly here'}
         </button>
-        {extra && <div className="pt-1.5">{extra}</div>}
+        {extra && (
+          <div className="pt-1.5" data-extra>
+            {extra}
+          </div>
+        )}
       </div>
     </form>
   );

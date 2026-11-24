@@ -64,3 +64,29 @@ export function aimPoint(o: { lat: number; lon: number; heightM: number; pitchDe
 export function gimbalHeading(yawDeg: number, earthFrame: boolean, vehicleHeadingDeg: number): number {
   return (((earthFrame ? yawDeg : vehicleHeadingDeg + yawDeg) % 360) + 360) % 360;
 }
+
+/**
+ * Usable limits: what the gimbal reports, or a fallback where it reports nothing finite (MAVLink uses NaN for an
+ * unknown or unbounded axis). With yaw lock the yaw is a true heading, so it spans the whole circle whatever the
+ * mechanical yaw limits.
+ */
+export function gimbalLimits(info: { pitchMin: number; pitchMax: number; yawMin: number; yawMax: number } | null, yawLock: boolean) {
+  const fin = (v: number | undefined, d: number) => (v !== undefined && Number.isFinite(v) ? v : d);
+  return {
+    pitchMin: fin(info?.pitchMin, -90),
+    pitchMax: fin(info?.pitchMax, 30),
+    yawMin: yawLock ? -180 : fin(info?.yawMin, -180),
+    yawMax: yawLock ? 180 : fin(info?.yawMax, 180),
+  };
+}
+
+/** A heading in -180..180. */
+export const wrap180 = (deg: number) => ((((deg + 180) % 360) + 360) % 360) - 180;
+
+/**
+ * The yaw that means "along the vehicle": 0 relative to it, or with yaw lock (yaw is then a true heading) the
+ * vehicle's own heading. Used by Forward and Down, which otherwise would point north under yaw lock.
+ */
+export function forwardYaw(yawLock: boolean, vehicleHeadingDeg: number): number {
+  return yawLock ? wrap180(vehicleHeadingDeg) : 0;
+}

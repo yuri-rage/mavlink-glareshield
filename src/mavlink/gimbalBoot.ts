@@ -31,9 +31,11 @@ mavlinkConnection.onPacket((p) => {
   }
 });
 
-// Mount types: read once per vehicle.
+// Mount types: read once per vehicle and connection. Only while linked: the telemetry store keeps the last
+// vehicle's parameters after a disconnect, which would otherwise bring the gimbal back and use up the read.
 let askedFor = 0;
 useTelemetryStore.subscribe((s) => {
+  if (mavlinkConnection.getStatus() !== 'connected' || s.heartbeat.lastHeartbeatTime <= 0 || s.heartbeat.modeName === 'DISCONNECTED') return;
   const sys = s.heartbeat.systemId;
   const types = [s.parameters['MNT1_TYPE']?.value, s.parameters['MNT2_TYPE']?.value];
   const g = useGimbalStore.getState();
@@ -45,7 +47,10 @@ useTelemetryStore.subscribe((s) => {
   }
 });
 
-// Once a gimbal is enabled: its attitude and status at a rate, its capabilities once (asked again until they come).
+// Once a gimbal is enabled: its attitude and status at a rate, its capabilities once (asked again until they come,
+// up to INFO_TRIES times per connection: older firmware may never answer).
+const INFO_TRIES = 5;
+let infoAsked = 0;
 let streaming = false;
 setInterval(() => {
   const g = useGimbalStore.getState();
@@ -60,7 +65,8 @@ setInterval(() => {
     }
   }
   const hb = useTelemetryStore.getState().heartbeat;
-  if (enabled && !g.info && hb.systemId > 0 && mavlinkConnection.getStatus() === 'connected') {
+  if (enabled && !g.info && infoAsked < INFO_TRIES && hb.systemId > 0 && mavlinkConnection.getStatus() === 'connected') {
+    infoAsked++;
     mavlinkConnection.send(mavlinkConnection.getEncoder().createRequestMessage(hb.systemId, hb.componentId || 1, MAVLINK_MSG_ID.GIMBAL_MANAGER_INFORMATION));
   }
 }, 3000);
@@ -70,5 +76,6 @@ mavlinkConnection.onStatus((status) => {
   if (status !== 'connected') {
     useGimbalStore.getState().reset();
     askedFor = 0;
+    infoAsked = 0;
   }
 });

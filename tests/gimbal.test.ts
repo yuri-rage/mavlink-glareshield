@@ -58,6 +58,18 @@ check('Plane or Rover: never', !g.roiTurnsVehicle('plane', null) && !g.roiTurnsV
   check('heading: relative yaw adds to the vehicle\'s, earth-frame yaw is its own', g.gimbalHeading(30, false, 350) === 20 && g.gimbalHeading(30, true, 350) === 30);
 }
 
+// Limits and yaw lock
+{
+  const nanInfo = { pitchMin: NaN, pitchMax: NaN, yawMin: NaN, yawMax: NaN };
+  const l = g.gimbalLimits(nanInfo, false);
+  check('NaN limits (unknown/unbounded) fall back to finite ones', l.pitchMin === -90 && l.pitchMax === 30 && l.yawMin === -180 && l.yawMax === 180, JSON.stringify(l));
+  const mech = { pitchMin: -90, pitchMax: 30, yawMin: -160, yawMax: 160 };
+  check('without yaw lock: the mechanical yaw limits', g.gimbalLimits(mech, false).yawMin === -160);
+  check('with yaw lock: yaw is a true heading over the whole circle', g.gimbalLimits(mech, true).yawMin === -180 && g.gimbalLimits(mech, true).yawMax === 180);
+  check('Forward without yaw lock: 0 (along the vehicle)', g.forwardYaw(false, 250) === 0);
+  check('Forward with yaw lock: the vehicle\'s heading as a true heading, not north', g.forwardYaw(true, 250) === -110 && g.forwardYaw(true, 90) === 90);
+}
+
 // Enabled
 {
   const now = 100_000;
