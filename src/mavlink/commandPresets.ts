@@ -24,6 +24,8 @@ export interface CommandPreset {
   toggle?: true | string;
   /** Offered on sliders, which send the slider value in param 2 (speed, servo): the only presets where that fits. */
   slider?: true;
+  /** Not a command (see WidgetAction.special): buttons only. */
+  special?: 'system-time';
 }
 
 export type PresetWidgetKind = 'button' | 'toggle' | 'slider';
@@ -35,6 +37,7 @@ export function presetKindFor(displayType: string | undefined): PresetWidgetKind
 
 /** Whether a preset is offered on a widget of this kind. Buttons send the params as written, so they get all. */
 export function presetFitsWidget(preset: CommandPreset, kind: PresetWidgetKind): boolean {
+  if (preset.special) return kind === 'button';
   return kind === 'button' || (kind === 'toggle' ? Boolean(preset.toggle) : Boolean(preset.slider));
 }
 
@@ -136,6 +139,25 @@ export const COMMAND_PRESETS: CommandPreset[] = [
     key: 'format-sd', group: 'System', title: 'Format SD card', label: 'Format SD', commandId: 526, params: p(1, 1),
     hint: 'Erases the SD card, logs included. P1 and P2 must both be 1.',
   },
+  {
+    // Mission Planner's safety switch: DO_SET_MODE with only MAV_MODE_FLAG_DECODE_POSITION_SAFETY (128) as the base
+    // mode, which every ArduPilot version takes (GCS_MAVLINK::_set_mode_common). P2 0 = safety off (outputs live),
+    // 1 = safety on. Not P1 = 1: that is the custom-mode flag, and P2 0 would then mean mode 0 (Stabilize on Copter).
+    key: 'safety-off', group: 'Vehicle actions', title: 'Safety switch: off (outputs live)', label: 'Safety off', commandId: 176, params: p(128, 0),
+    hint: 'Like pressing the safety button: outputs to the motors and servos go live. P1 = 128 (safety flag), P2 = 0.',
+  },
+  {
+    key: 'safety-on', group: 'Vehicle actions', title: 'Safety switch: on (outputs off)', label: 'Safety on', commandId: 176, params: p(128, 1),
+    hint: 'Stops outputs to the motors and servos. ArduPilot refuses it while armed. P1 = 128 (safety flag), P2 = 1.',
+  },
+  {
+    key: 'adsb-ident', group: 'Vehicle actions', title: 'ADS-B transponder IDENT', label: 'IDENT', commandId: 10001, params: p(),
+    hint: 'Only when air traffic control asks for an IDENT. Needs an ADS-B-out transponder (ArduPilot 4.5+).',
+  },
+  {
+    key: 'system-time', group: 'System', title: 'Set vehicle clock (SYSTEM_TIME)', label: 'Set clock', commandId: 0, params: p(), special: 'system-time',
+    hint: 'Sends this device\'s clock. Not acknowledged; ArduPilot uses it only without GPS time (RTC_TYPES).',
+  },
 ];
 
 export const COMMAND_PRESET_GROUPS = [...new Set(COMMAND_PRESETS.map((c) => c.group))];
@@ -148,8 +170,11 @@ export const COMMAND_PRESET_GROUPS = [...new Set(COMMAND_PRESETS.map((c) => c.gr
 export function findCommandPreset(
   commandId: number,
   params: readonly number[],
-  kind: PresetWidgetKind = 'button'
+  kind: PresetWidgetKind = 'button',
+  special?: 'system-time'
 ): CommandPreset | undefined {
-  const same = COMMAND_PRESETS.filter((c) => c.commandId === commandId && presetFitsWidget(c, kind));
+  // A special action matches only its own preset; a command never matches one.
+  if (special) return COMMAND_PRESETS.find((c) => c.special === special && presetFitsWidget(c, kind));
+  const same = COMMAND_PRESETS.filter((c) => !c.special && c.commandId === commandId && presetFitsWidget(c, kind));
   return same.find((c) => c.params.every((v, i) => (params[i] ?? 0) === v)) ?? same[0];
 }

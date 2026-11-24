@@ -399,6 +399,41 @@ export function describeAck(info: CommandAckInfo): AckView {
 
 type Params7 = [number, number, number, number, number, number, number];
 
+/** MAV_FRAMEs whose x/y are latitude/longitude (GLOBAL, GLOBAL_RELATIVE_ALT, their _INT and terrain variants). */
+export const GLOBAL_FRAMES = new Set([0, 3, 5, 6, 10, 11]);
+
+/** COMMAND_INT x/y/z from params 5–7: degrees ×1e7 in a global frame, whole numbers otherwise; z as is. */
+export function commandIntParams(params: readonly number[], frame: number): Params7 {
+  const global = GLOBAL_FRAMES.has(frame);
+  const xy = (v: number) => (global ? Math.round(v * 1e7) : Math.round(v));
+  return [params[0], params[1], params[2], params[3], xy(params[4]), xy(params[5]), params[6]];
+}
+
+/**
+ * The packet a control sends for `action` with these params (a toggle's or slider's already applied): COMMAND_LONG,
+ * COMMAND_INT in the action's frame, or for the special 'system-time' action, SYSTEM_TIME.
+ */
+export function actionPacket(
+  encoder: {
+    createCommandLong: (s: number, c: number, cmd: number, p: Params7) => Uint8Array;
+    createCommandInt: (s: number, c: number, cmd: number, frame: number, p: Params7) => Uint8Array;
+    createSystemTime: (unixUs: number, bootMs: number) => Uint8Array;
+  },
+  sysId: number,
+  compId: number,
+  action: { commandId: number; send?: 'long' | 'int'; frame?: number; special?: 'system-time' },
+  params: readonly number[],
+  nowMs: number = Date.now(),
+  bootMs: number = typeof performance !== 'undefined' ? performance.now() : 0
+): Uint8Array {
+  if (action.special === 'system-time') return encoder.createSystemTime(nowMs * 1000, bootMs);
+  if (action.send === 'int') {
+    const frame = action.frame ?? 3;
+    return encoder.createCommandInt(sysId, compId, action.commandId, frame, commandIntParams(params, frame));
+  }
+  return encoder.createCommandLong(sysId, compId, action.commandId, [...params] as Params7);
+}
+
 /**
  * Parameters a toggle sends: DO_SET_RELAY puts on/off in param2, DO_SET_SERVO puts the ON PWM (param2, default 1900)
  * or OFF PWM (param3, default 1100) in param2, and any other command gets 1/0 in param1.

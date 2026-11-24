@@ -420,7 +420,7 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   const { getMavCmdName } = await import('../src/mavlink/messages.ts');
   const keys = new Set(COMMAND_PRESETS.map((c: any) => c.key));
   check('command presets: keys are unique', keys.size === COMMAND_PRESETS.length);
-  const unnamed = COMMAND_PRESETS.filter((c: any) => getMavCmdName(c.commandId).startsWith('CMD_')).map((c: any) => c.commandId);
+  const unnamed = COMMAND_PRESETS.filter((c: any) => !c.special && getMavCmdName(c.commandId).startsWith('CMD_')).map((c: any) => c.commandId);
   check('command presets: every command has a MAV_CMD name', unnamed.length === 0, unnamed.join(','));
   check('command presets: params distinguish shared IDs', findCommandPreset(246, [5, 0, 0, 0, 0, 0, 0])?.key === 'reboot-mass-storage' && findCommandPreset(42701, [2])?.key === 'scripting-stop');
   check('command presets: edited params fall back to the command', findCommandPreset(181, [3, 0, 0, 0, 0, 0, 0])?.key === 'relay');
@@ -465,6 +465,41 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   } as any);
   check('import: valid scheme kept', mixed.colorScheme === 'green');
   check('import: only well-formed options kept', JSON.stringify(mixed.paramControl?.options) === JSON.stringify([{ label: 'Slow', value: 1 }, { label: '7', value: 2 }]), JSON.stringify(mixed.paramControl?.options));
+}
+
+// Actions: COMMAND_LONG or COMMAND_INT (frame), and the SYSTEM_TIME special; presets for them.
+{
+  const { actionPacket, commandIntParams } = await import('../src/components/widgets/custom/panelModel.ts');
+  const { MavlinkEncoder } = await import('../src/mavlink/encoder.ts');
+  const { MavlinkParser, decodePayload } = await import('../src/mavlink/parser.ts');
+  const presets = await import('../src/mavlink/commandPresets.ts');
+  const enc = new MavlinkEncoder();
+  const read = (pk: Uint8Array) => {
+    const p = new MavlinkParser().parse(pk)[0];
+    return p ? { id: p.messageId, d: decodePayload(p.messageId, p.payload) } : null;
+  };
+  const params = [1, 2, 3, 4, 35.1234567, -106.7654321, 50] as const;
+  // The parser doesn't decode COMMAND_LONG (the app only sends it): read param 5 and the command from the payload.
+  const lp = new MavlinkParser().parse(actionPacket(enc, 1, 1, { commandId: 192 }, params))[0];
+  const lv = new DataView(lp.payload.buffer, lp.payload.byteOffset);
+  check('action: COMMAND_LONG by default, params as written', lp.messageId === MAVLINK_MSG_ID.COMMAND_LONG && near(lv.getFloat32(16, true), 35.1234567, 1e-5) && lv.getUint16(28, true) === 192);
+  const g = read(actionPacket(enc, 1, 1, { commandId: 192, send: 'int', frame: 3 }, params))!;
+  check('action: COMMAND_INT, global frame: lat/lon ×1e7, alt, frame kept', g.id === MAVLINK_MSG_ID.COMMAND_INT && g.d.command === 192 && g.d.frame === 3 && g.d.x === 351234567 && g.d.y === -1067654321 && g.d.z === 50 && g.d.param1 === 1, JSON.stringify(g.d));
+  const n = read(actionPacket(enc, 1, 1, { commandId: 42701, send: 'int', frame: 2 }, [3, 0, 0, 0, 7, 9, 0]))!;
+  check('action: COMMAND_INT, no frame: x/y as whole numbers', n.d.frame === 2 && n.d.x === 7 && n.d.y === 9 && n.d.param1 === 3);
+  check('commandIntParams rounds rather than truncates', commandIntParams([0, 0, 0, 0, 1.6, -1.6, 0], 2)[4] === 2 && commandIntParams([0, 0, 0, 0, 1.6, -1.6, 0], 2)[5] === -2);
+  const t = read(actionPacket(enc, 1, 1, { commandId: 0, special: 'system-time' }, params, Date.UTC(2026, 10, 24, 12), 4242))!;
+  check('special: SYSTEM_TIME with this device\'s clock and time since start', t.id === MAVLINK_MSG_ID.SYSTEM_TIME && t.d.time_unix_usec === Date.UTC(2026, 10, 24, 12) * 1000 && t.d.time_boot_ms === 4242, JSON.stringify(t.d));
+
+  const w = sanitizeWidgetDefinition({ id: 'a', name: 'A', category: 'control', displayType: 'action-button', action: { label: 'X', commandId: 192, params: [0, 0, 0, 0, 0, 0, 0], send: 'int', frame: 99 } });
+  check('import: COMMAND_INT kept, out-of-range frame falls back to relative-to-home', w.action?.send === 'int' && w.action?.frame === 3);
+  const st = sanitizeWidgetDefinition({ id: 'b', name: 'B', category: 'control', displayType: 'action-button', action: { label: 'C', commandId: 0, params: [] as any, special: 'system-time' } });
+  check('import: the system-time action kept; unknown specials dropped', st.action?.special === 'system-time' && sanitizeWidgetDefinition({ id: 'c', name: 'C', category: 'control', displayType: 'action-button', action: { label: 'C', commandId: 0, params: [] as any, special: 'rm -rf' as any } }).action?.special === undefined);
+
+  check('presets: safety off and on are DO_SET_MODE with the safety flag (128), not the custom-mode flag', presets.findCommandPreset(176, [128, 0])?.key === 'safety-off' && presets.findCommandPreset(176, [128, 1])?.key === 'safety-on' && presets.findCommandPreset(176, [1, 0])?.key === 'set-mode');
+  check('presets: ADS-B IDENT', presets.findCommandPreset(10001, [])?.key === 'adsb-ident');
+  check('presets: the clock action only by its special, never by command 0', presets.findCommandPreset(0, [], 'button', 'system-time')?.key === 'system-time' && presets.findCommandPreset(0, [])?.key !== 'system-time');
+  check('presets: the clock action isn\'t offered on toggles or sliders', !presets.COMMAND_PRESETS.filter((c) => presets.presetFitsWidget(c, 'toggle') || presets.presetFitsWidget(c, 'slider')).some((c) => c.special));
 }
 
 console.log(failures.length ? `\n${failures.length} widget check(s) FAILED` : '\nAll widget checks PASSED');

@@ -5,6 +5,7 @@ import { useTelemetryStore, sendTrackedCommand } from '../../../store/telemetryS
 import { readBinding, type AlertState, type BindingReading, type UnitSystem } from '../../../lib/widgetValues';
 import type { CustomWidgetDefinition, WidgetDataBinding } from '../../../types/widget';
 import { describeAck, type AckView } from './panelModel';
+import { mavlinkConnection } from '../../../mavlink/connection';
 import type { ColorScheme } from './palette';
 
 /** Re-read bound values at this rate (and on unit / definition changes). */
@@ -71,7 +72,12 @@ export function useCommandSender() {
       onResult?.(view.status);
     });
   };
-  return { ack, send };
+  /** A message the vehicle doesn't acknowledge (e.g. SYSTEM_TIME): send it and say so. */
+  const sendUnacknowledged = (packet: Uint8Array, note: string) => {
+    const sent = mavlinkConnection.send(packet);
+    setAck(sent ? { status: 'accepted', text: `Sent (${note})`, time: Date.now() } : { status: 'rejected', text: 'Not sent (link down)', time: Date.now() });
+  };
+  return { ack, send, sendUnacknowledged };
 }
 
 export const AckChip: React.FC<{ ack: AckView | null }> = ({ ack }) => {

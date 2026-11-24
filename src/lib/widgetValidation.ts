@@ -145,7 +145,14 @@ function sanitizeAction(raw: unknown): WidgetAction | undefined {
   if (commandId === undefined) return undefined;
   const src = Array.isArray(a.params) ? a.params : [];
   const params = Array.from({ length: 7 }, (_, i) => finite(src[i]) ?? 0) as WidgetAction['params'];
-  return { label: text(a.label) ?? '', commandId: Math.round(commandId), params, confirmation: a.confirmation === true };
+  const out: WidgetAction = { label: text(a.label) ?? '', commandId: Math.round(commandId), params, confirmation: a.confirmation === true };
+  if (a.send === 'int') {
+    out.send = 'int';
+    const frame = finite(a.frame);
+    out.frame = frame !== undefined && frame >= 0 && frame <= 21 ? Math.round(frame) : 3;
+  }
+  if (a.special === 'system-time') out.special = 'system-time';
+  return out;
 }
 
 function sanitizePanel(raw: unknown, opts: SanitizeOptions): WidgetPanelDefinition | undefined {

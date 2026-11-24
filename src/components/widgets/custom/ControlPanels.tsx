@@ -24,6 +24,7 @@ import {
   relayInstance,
   sliderParams,
   toggleParams,
+  actionPacket,
 } from "./panelModel";
 import { getCachedField } from "../../../lib/messageCache";
 import { extractBit } from "../../../lib/widgetValues";
@@ -44,7 +45,7 @@ import { BitmaskEditor, DetailsButton, ParamDetails } from "../params/ParamEdito
 
 export const ActionButtonPanel: React.FC<PanelProps> = ({ def, scheme }) => {
   const { sysId, compId } = useVehicleTarget();
-  const { ack, send } = useCommandSender();
+  const { ack, send, sendUnacknowledged } = useCommandSender();
   const [isConfirming, setIsConfirming] = useState(false);
 
   const trigger = () => {
@@ -54,15 +55,13 @@ export const ActionButtonPanel: React.FC<PanelProps> = ({ def, scheme }) => {
       return;
     }
     setIsConfirming(false);
-    const cmd = mavlinkConnection
-      .getEncoder()
-      .createCommandLong(
-        sysId,
-        compId,
-        def.action.commandId,
-        def.action.params,
-      );
-    send(cmd, def.action.label || def.name);
+    const packet = actionPacket(mavlinkConnection.getEncoder(), sysId, compId, def.action, def.action.params);
+    if (def.action.special === "system-time") {
+      // No acknowledgement comes for this message; ArduPilot uses it only without GPS time (RTC_TYPES).
+      sendUnacknowledged(packet, "not acknowledged; used only if the vehicle has no GPS time");
+      return;
+    }
+    send(packet, def.action.label || def.name);
   };
 
   return (
@@ -77,7 +76,7 @@ export const ActionButtonPanel: React.FC<PanelProps> = ({ def, scheme }) => {
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span className="truncate">
               Confirm: {def.action?.label || "Execute"}
-              {def.action ? ` — ${getMavCmdName(def.action.commandId)}` : ""}?
+              {def.action ? ` — ${def.action.special === "system-time" ? "SYSTEM_TIME" : getMavCmdName(def.action.commandId)}` : ""}?
             </span>
           </Button>
           <Button
@@ -150,9 +149,7 @@ export const TogglePanel: React.FC<PanelProps> = ({
     setLastSent(next);
     if (!def.action) return;
     const params = toggleParams(def.action.commandId, def.action.params, next);
-    const cmd = mavlinkConnection
-      .getEncoder()
-      .createCommandLong(sysId, compId, def.action.commandId, params);
+    const cmd = actionPacket(mavlinkConnection.getEncoder(), sysId, compId, def.action, params);
     // Rejected or unanswered: the switch didn't move, so don't show it as if it had.
     send(
       cmd,
@@ -245,9 +242,7 @@ export const SliderPanel: React.FC<PanelProps> = ({ def, scheme }) => {
   const execute = (val: number) => {
     if (def.action) {
       const params = sliderParams(def.action.commandId, def.action.params, val);
-      const cmd = mavlinkConnection
-        .getEncoder()
-        .createCommandLong(sysId, compId, def.action.commandId, params);
+      const cmd = actionPacket(mavlinkConnection.getEncoder(), sysId, compId, def.action, params);
       send(cmd, `${def.action.label || def.name}: ${val}`);
     }
     setIsConfirming(false);
