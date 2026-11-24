@@ -103,7 +103,7 @@ const near = (a: number, b: number, tol = 1e-6) => Math.abs(a - b) <= tol;
       return pts.map((p: any, i: number) => (p.lat > 35.02 ? null : 1500 + i));
     },
   };
-  const server = new TerrainServer(fake as any, (p) => sent.push(p), (a, b, s, g, h) => enc.createTerrainData(a, b, s, g, h));
+  const server = new TerrainServer(fake as any, (p) => void sent.push(p), (a, b, s, g, h) => enc.createTerrainData(a, b, s, g, h), () => {}, 0);
   const req = { mask: 0b101n, lat: 350000000, lon: -1060000000, grid_spacing: 100 };
   const first = server.handle(req);
   const dup = server.handle(req); // the vehicle asks again while the first is still fetching
@@ -115,6 +115,26 @@ const near = (a: number, b: number, tol = 1e-6) => Math.abs(a - b) <= tol;
   check('TERRAIN_DATA: block corner, spacing, gridbit, 16 heights', parsed.messageId === 134 && v.getInt32(0, true) === 350000000 && v.getUint16(8, true) === 100 && parsed.payload[42] === 2 && v.getInt16(10, true) === 1516 && v.getInt16(40, true) === 1531);
   const far = await server.handle({ mask: 1n, lat: 360000000, lon: -1060000000, grid_spacing: 100 });
   check('server: a sub-grid the tiles can\'t cover is counted, not sent', far.sent === 0 && far.unavailable === 1 && sent.length === 2);
+
+  // Pacing, and a link that goes: sends stop, failures aren't counted.
+  const times: number[] = [];
+  let up = 3;
+  const flat = { enabled: true, heightsAt: async (pts: any[]) => pts.map(() => 1500) };
+  const paced = new TerrainServer(flat as any, () => (times.push(Date.now()), up-- > 0), (a, b, s, g, h) => enc.createTerrainData(a, b, s, g, h), () => {}, 20);
+  const r = await paced.handle({ mask: (1n << 8n) - 1n, lat: 350000000, lon: -1060000000, grid_spacing: 100 });
+  check('server: paced (~20 ms apart), not one burst', times.length >= 2 && times[1] - times[0] >= 15, times.map((x) => x - times[0]).join(','));
+  check('server: when sending fails (link gone) it stops, counting only what went', r.sent === 3 && times.length === 4, `sent ${r.sent}, tried ${times.length}`);
+  const none = await paced.handle({ mask: 0n, lat: 1, lon: 1, grid_spacing: 100 });
+  check('server: nothing asked, nothing done', none.sent === 0 && none.unavailable === 0);
+}
+
+// Across the antimeridian: tiles wrap.
+{
+  const z = 12;
+  const seen = new Set<number>();
+  const v = t.sampleHeight(10, 179.99999, (tx) => (seen.add(tx), new Float32Array(256 * 256).fill(5)), z);
+  check('at 180 deg the tile west of it and tile 0 are read, never tile 2^z', v === 5 && seen.has(0) && !seen.has(2 ** z), [...seen].join(','));
+  check('tilesFor wraps too', t.tilesFor(10, 179.99999, z).every((k) => k.x >= 0 && k.x < 2 ** z));
 }
 
 console.log(failures.length ? `\n${failures.length} terrain check(s) FAILED` : '\nAll terrain checks PASSED');

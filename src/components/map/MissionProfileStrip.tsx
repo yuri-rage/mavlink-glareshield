@@ -80,6 +80,11 @@ export const MissionProfileStrip: React.FC<{ style?: React.CSSProperties }> = ({
           </span>
         )}
         {profile?.homeFrom === 'terrain' && <span className="text-amber-300" title="The mission's home has no altitude: the terrain there is used">home altitude from terrain</span>}
+        {profile?.homeFrom === 'unknown' && (
+          <span className="text-amber-300" title="Relative altitudes are above home: connect to a vehicle, or give the mission a home">
+            home unknown: relative altitudes not placed
+          </span>
+        )}
         <span className="ml-auto min-w-0 truncate font-mono text-zinc-400">
           {p
             ? `${formatDistance(p.dist).full} · ${p.alt !== null ? formatAltitude(p.alt).full : '?'} MSL · terrain ${p.terrain !== null ? formatAltitude(p.terrain).full : '?'}${
