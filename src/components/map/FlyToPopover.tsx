@@ -2,7 +2,7 @@
 // (DO_REPOSITION). Enter sends, Escape cancels.
 
 import { useLengthUnit } from '../../lib/inputUnits';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { LocateFixed, Minus, Navigation, Plus, X } from 'lucide-react';
 
 interface FlyToPopoverProps {
@@ -30,6 +30,13 @@ const GAP = 14;
 
 export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bounds, altInput, onAltInput, modeName, armed, accuracyM, onSend, onCancel, extra }) => {
   const sendRef = useRef<HTMLButtonElement | null>(null);
+  // The card's real height (its extra actions vary), measured after each render, to place it above or below.
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const [measuredH, setMeasuredH] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const h = formRef.current?.offsetHeight;
+    if (h && h !== measuredH) setMeasuredH(h);
+  });
   const inGuided = modeName === 'GUIDED';
 
   useEffect(() => {
@@ -46,7 +53,7 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
   }, [onCancel]);
 
   // Above the point when there is room, otherwise below; always inside the map.
-  const cardH = CARD_H + (extra ? 40 : 0);
+  const cardH = measuredH ?? CARD_H + (extra ? 40 : 0);
   const above = anchor.y - GAP - cardH >= 4;
   const top = above ? anchor.y - GAP - cardH : Math.min(anchor.y + GAP, bounds.height - cardH - 4);
   const left = Math.max(4, Math.min(anchor.x - CARD_W / 2, bounds.width - CARD_W - 4));
@@ -62,6 +69,7 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
 
   return (
     <form
+      ref={formRef}
       className="absolute z-[1000] rounded-lg border border-sky-500/40 bg-zinc-950/95 backdrop-blur-md shadow-2xl text-xs"
       style={{ top: Math.max(4, top), left, width: CARD_W }}
       onSubmit={(e) => {

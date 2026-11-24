@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { useTelemetryStore, sendTrackedCommand, computeDistanceAndBearing } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { lengthUnit, useLengthUnit } from '../../lib/inputUnits';
+import { AltitudeAction, PointGuidedActions } from './GuidedActions';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { missionManager, MissionManagerStatus, groupFencePolygons } from '../../mavlink/missionManager';
 import { mavlinkConnection } from '../../mavlink/connection';
@@ -335,6 +336,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const [flyToMode, setFlyToMode] = useState(false);
   /** The point picked to fly to; `accuracyM` is set when it is the browser's own location ("fly to me"). */
   const [pendingFlyTo, setPendingFlyTo] = useState<{ lat: number; lon: number; accuracyM?: number } | null>(null);
+  // While the Fly-to card is open, following the vehicle doesn't pan the map: the card is pinned to its point and
+  // would slide out from under the pointer as a moving vehicle is re-centred.
+  const flyToOpenRef = useRef(false);
+  flyToOpenRef.current = pendingFlyTo !== null;
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
   const [flyToAltInput, setFlyToAltInput] = useState<string>('20');
@@ -1575,7 +1580,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       }
 
       // Camera locked to marker with integer pixel panBy only on non-zero steps
-      if (followVehicleRef.current && !isInteractingRef.current) {
+      if (followVehicleRef.current && !isInteractingRef.current && !flyToOpenRef.current) {
         const centerPoint = map.getSize().divideBy(2);
         const vehiclePoint = map.latLngToContainerPoint(latLng);
         const dx = vehiclePoint.x - centerPoint.x;
@@ -2257,6 +2262,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             >
               <Navigation className={`h-3.5 w-3.5 ${flyToMode ? '' : 'text-sky-300'}`} />
             </Button>
+            <AltitudeAction target={activeFlyToTarget ? { lat: activeFlyToTarget.lat, lon: activeFlyToTarget.lon } : null} disabled={!connected || planning} />
 
             <Button
               variant={followVehicle ? 'default' : 'outline'}
@@ -2537,7 +2543,17 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             accuracyM={pendingFlyTo.accuracyM}
             onSend={handleConfirmFlyTo}
             onCancel={cancelFlyTo}
-            extra={pendingFlyTo.accuracyM === undefined ? <PointCameraButton lat={pendingFlyTo.lat} lon={pendingFlyTo.lon} onDone={cancelFlyTo} /> : undefined}
+            extra={
+              <>
+                {pendingFlyTo.accuracyM === undefined && <PointCameraButton lat={pendingFlyTo.lat} lon={pendingFlyTo.lon} onDone={cancelFlyTo} />}
+                <PointGuidedActions
+                  lat={pendingFlyTo.lat}
+                  lon={pendingFlyTo.lon}
+                  altRelM={Math.max(2, flyLen.toSi(Number(flyToAltInput)) || 20)}
+                  onDone={cancelFlyTo}
+                />
+              </>
+            }
           />
         )}
 
