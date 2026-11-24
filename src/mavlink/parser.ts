@@ -212,6 +212,17 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         mavlink_version: getUint8(8),
       };
 
+    case MAVLINK_MSG_ID.FENCE_STATUS: {
+      // ArduPilot sends it only while the fence is enabled.
+      return {
+        breach_time: getUint32(0),
+        breach_count: getUint16(4),
+        breach_status: getUint8(6),
+        breach_type: getUint8(7),
+        breach_mitigation: getUint8(8),
+      };
+    }
+
     case MAVLINK_MSG_ID.SYS_STATUS: {
       const rawVoltage = getUint16(14);
       const rawCurrent = getInt16(16);

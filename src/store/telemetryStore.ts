@@ -286,6 +286,9 @@ interface TelemetryState {
   battery: VehicleBattery;
   vfr: VehicleVFR;
   sysStatus: VehicleSysStatus;
+  /** FENCE_STATUS (sent only while the fence is enabled): breached now, how often, the latest breach's kind
+   *  (0 none, 1 min alt, 2 max alt, 3 boundary), and when it was received (ms, 0 = never). */
+  fenceStatus: { breached: boolean; breachCount: number; breachType: number; receivedAt: number };
   rc: VehicleRC;
   servo: VehicleServo;
   navController: VehicleNavController;
@@ -392,6 +395,7 @@ export function isVehicleReacquired(lastHeartbeatTime: number, now: number): boo
 
 const HANDLED_MESSAGE_IDS = new Set<number>([
   MAVLINK_MSG_ID.HEARTBEAT,
+  MAVLINK_MSG_ID.FENCE_STATUS,
   MAVLINK_MSG_ID.EXTENDED_SYS_STATE,
   MAVLINK_MSG_ID.ATTITUDE,
   MAVLINK_MSG_ID.RAW_IMU,
@@ -702,6 +706,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     alt: 0,
     climb: 0,
   },
+  fenceStatus: { breached: false, breachCount: 0, breachType: 0, receivedAt: 0 },
   sysStatus: {
     load: 0,
     dropRateComm: 0,
@@ -1077,6 +1082,17 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
               yaw,
               hasYaw,
               lastUpdate: Date.now(),
+            },
+          };
+        }
+
+        case MAVLINK_MSG_ID.FENCE_STATUS: {
+          return {
+            fenceStatus: {
+              breached: data.breach_status !== 0,
+              breachCount: data.breach_count ?? 0,
+              breachType: data.breach_type ?? 0,
+              receivedAt: Date.now(),
             },
           };
         }

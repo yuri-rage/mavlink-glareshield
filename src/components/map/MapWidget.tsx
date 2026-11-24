@@ -114,6 +114,7 @@ import {
 import { useFenceDraftLayer } from './useFenceDraftLayer';
 import { finishFencePolygon } from './fenceCommit';
 import { FencePlaceHint } from './FencePlaceHint';
+import { FenceChip } from './FenceControl';
 import {
   checkRallyReadBack,
   rallyDraftFromItems,
@@ -2359,6 +2360,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               </span>
             )}
           </div>
+          {/* The vehicle's fence: on, off or breached, and the switch. */}
+          <FenceChip />
           {planning && (
             <div className="pointer-events-auto flex flex-col items-start gap-1.5">
               <div className="flex items-center rounded-lg border border-zinc-700 bg-zinc-950/90 p-0.5 shadow-md" role="group" aria-label="Map tool">
