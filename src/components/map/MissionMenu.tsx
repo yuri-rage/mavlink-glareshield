@@ -11,6 +11,7 @@ import { useMissionPlanStore } from '../../store/missionPlanStore';
 import type { MissionWaypoint } from '../../store/telemetryStore';
 import { normalFrame, type MissionDraft } from '../../mavlink/missionDraft';
 import { rallyDraftToPoints } from '../../mavlink/rallyDraft';
+import { fenceDraftToPoints } from '../../mavlink/fenceDraft';
 
 /** The draft as mission waypoints, for the file writers. */
 function draftWaypoints(draft: MissionDraft): MissionWaypoint[] {
@@ -43,8 +44,8 @@ interface MissionMenuProps {
   onTogglePlanning: () => void;
 }
 
-/** File types the upload preview understands. */
-const OPEN_ACCEPT = '.plan,.waypoints,.txt,.fence,.rally,.dat,.json';
+/** File types the upload preview (and the planning drafts) understand. */
+export const OPEN_ACCEPT = '.plan,.waypoints,.txt,.fence,.rally,.dat,.json';
 
 const saveText = (filename: string, text: string, type: string) => downloadFile(filename, text, type);
 
@@ -64,7 +65,9 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
   const vehicleWaypoints = useTelemetryStore((s) => s.missionWaypoints);
   const draft = useMissionPlanStore((s) => (s.active ? s.history.present : null));
   const waypoints = draft ? draftWaypoints(draft) : vehicleWaypoints;
-  const fencePoints = useTelemetryStore((s) => s.fencePoints);
+  const vehicleFence = useTelemetryStore((s) => s.fencePoints);
+  const fenceDraft = useMissionPlanStore((s) => (s.active ? s.fence.history.present : null));
+  const fencePoints = fenceDraft ? fenceDraftToPoints(fenceDraft) : vehicleFence;
   const vehicleRally = useTelemetryStore((s) => s.rallyPoints);
   const rallyDraft = useMissionPlanStore((s) => (s.active ? s.rally.history.present : null));
   const rallyPoints = rallyDraft ? rallyDraftToPoints(rallyDraft) : vehicleRally;
@@ -179,7 +182,7 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
             />
             <MenuItem
               icon={<Shield className="h-3.5 w-3.5 text-red-400" />}
-              label="Geofence (.waypoints)"
+              label={planning ? 'Draft geofence (.waypoints)' : 'Geofence (.waypoints)'}
               detail={String(fencePoints.length)}
               disabled={fencePoints.length === 0}
               onClick={run(saveFence)}
@@ -193,7 +196,7 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
             />
             <div className="px-2.5 pt-1 pb-1 text-[10px] text-zinc-500 leading-snug">
               {planning
-                ? 'Saves the drafts (mission and rally points) with the vehicle\u2019s fence. '
+                ? 'Saves the drafts (mission, rally points and fence). '
                 : 'Saves what the map shows. '}
               Files open in QGroundControl and Mission Planner, and can be dropped back on the map.
             </div>

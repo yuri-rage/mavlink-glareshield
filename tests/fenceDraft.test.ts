@@ -164,5 +164,18 @@ check('empty fence: warns it clears the vehicle\'s', has(f.validateFenceDraft(f.
   check('save to .waypoints and load: same fence', Boolean(loaded) && f.fenceDraftsEqual(base, loaded!), loaded ? f.compareFenceDrafts(base, loaded).join('; ') : 'no parse');
 }
 
+// The Mission menu's saves while planning: the draft through the store-point writers (fenceToItems, .plan)
+{
+  const { fenceToItems, toQgcPlan } = await import('../src/mavlink/missionFileWriter.ts');
+  const pts = f.fenceDraftToPoints(base);
+  const wpl = parseDroppedMissionFile('d-fence.waypoints', new TextEncoder().encode(toQgcWpl(fenceToItems(pts))));
+  const viaWpl = wpl ? f.fenceDraftFromItems(wpl.items) : null;
+  check('menu save (.waypoints) of the fence draft loads back the same', Boolean(viaWpl) && f.fenceDraftsEqual(base, viaWpl!), viaWpl ? f.compareFenceDrafts(base, viaWpl).join('; ') : 'no parse');
+  const plan = parseDroppedMissionFile('d.plan', new TextEncoder().encode(toQgcPlan({ waypoints: [], fencePoints: pts, rallyPoints: [], home: null, vehicleType: 2 } as any)));
+  const fenceSec = plan?.sections?.find((sec: any) => sec.type === 'fence');
+  const viaPlan = fenceSec ? f.fenceDraftFromItems(fenceSec.items) : null;
+  check('menu save (.plan) of the fence draft loads back the same', Boolean(viaPlan) && f.fenceDraftsEqual(base, viaPlan!), viaPlan ? f.compareFenceDrafts(base, viaPlan).join('; ') : 'no fence section');
+}
+
 console.log(failures.length ? `\n${failures.length} fence draft check(s) FAILED` : '\nAll fence draft checks PASSED');
 process.exit(failures.length ? 1 : 0);

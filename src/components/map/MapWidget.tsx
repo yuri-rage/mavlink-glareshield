@@ -109,6 +109,7 @@ import {
   fenceDraftsEqual,
   polygonCenter,
   type FenceDraft,
+  type FenceShape,
 } from '../../mavlink/fenceDraft';
 import { useFenceDraftLayer } from './useFenceDraftLayer';
 import { finishFencePolygon } from './fenceCommit';
@@ -161,6 +162,17 @@ function validMapPosition(lat: number, lon: number): boolean {
 }
 
 /** Too small to edit in place: narrow, or a bottom sheet with no room for the list. */
+/** The corners that frame a fence shape on the map: a polygon's vertices, a circle's bounding box. */
+function fenceShapeExtent(sh: FenceShape): [number, number][] {
+  if (sh.kind === 'polygon') return sh.vertices.filter((p) => validMapPosition(p.lat, p.lon)).map((p) => [p.lat, p.lon]);
+  if (!validMapPosition(sh.center.lat, sh.center.lon)) return [];
+  const b = L.latLng(sh.center.lat, sh.center.lon).toBounds(sh.radius * 2);
+  return [
+    [b.getSouth(), b.getWest()],
+    [b.getNorth(), b.getEast()],
+  ];
+}
+
 function mapTooSmall(w: number, h: number): boolean {
   return w < 360 || (w < 560 && h < 520);
 }
@@ -659,12 +671,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       });
       // Circles by their extent, so the whole circle fits.
       st.fence.history.present.shapes.forEach((sh) => {
-        if (sh.kind === 'polygon') sh.vertices.forEach((p) => validMapPosition(p.lat, p.lon) && points.push([p.lat, p.lon]));
-        else if (validMapPosition(sh.center.lat, sh.center.lon)) {
-          const b = L.latLng(sh.center.lat, sh.center.lon).toBounds(sh.radius * 2);
-          points.push([b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]);
-        }
+        points.push(...fenceShapeExtent(sh));
       });
+      const rp = st.fence.history.present.returnPoint;
+      if (rp && validMapPosition(rp.lat, rp.lon)) points.push([rp.lat, rp.lon]);
     }
     fencePoints.forEach((f) => {
       if (f.lat !== 0 || f.lon !== 0) points.push([f.lat, f.lon]);
@@ -1329,7 +1339,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     try {
       const parsed = parseDroppedMissionFile(file.name, new Uint8Array(await file.arrayBuffer()));
       if (!parsed) {
-        setPlanNotice(`${file.name} is not a mission, rally or plan file.`);
+        setPlanNotice(`${file.name} is not a mission, rally, fence or plan file.`);
         return;
       }
       const sections = parsed.sections?.length
@@ -1371,9 +1381,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         if (fence.shapes.length > 0 || fence.returnPoint) {
           if (st.fenceReplace(fence)) {
             loaded.push('fence');
-            fence.shapes.forEach((sh) =>
-              (sh.kind === 'circle' ? [sh.center] : sh.vertices).forEach((p) => validMapPosition(p.lat, p.lon) && pts.push([p.lat, p.lon]))
-            );
+            fence.shapes.forEach((sh) => pts.push(...fenceShapeExtent(sh)));
+            if (fence.returnPoint && validMapPosition(fence.returnPoint.lat, fence.returnPoint.lon)) pts.push([fence.returnPoint.lat, fence.returnPoint.lon]);
           } else {
             refused.push('fence');
           }
@@ -2302,7 +2311,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               <span className="text-sky-300 font-mono">.plan</span>, or binary{' '}
               <span className="text-sky-300 font-mono">.dat</span>.{' '}
               {planning
-                ? 'Its mission replaces the draft (undo brings the draft back). Nothing is sent to the vehicle.'
+                ? 'Its mission, rally points and fence replace the drafts (undo brings them back). Nothing is sent to the vehicle.'
                 : 'Automatically uploads via high-speed MAVFTP with item-by-item fallback.'}
             </div>
           </div>
