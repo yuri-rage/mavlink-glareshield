@@ -2,7 +2,7 @@
 // its latest fields, decoded from the dialect (ArduPilot's ardupilotmega.xml) with their units. Filter by name or ID,
 // pause to read, clear to start over. Collecting runs only while the widget is shown.
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pause, Play, Search, Trash2, Waves } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { mavlinkConnection } from '../../mavlink/connection';
@@ -37,9 +37,11 @@ function componentLabel(compId: number): string {
 
 export const InspectorWidget: React.FC = () => {
   const [, setTick] = useState(0);
+  const refresh = () => setTick((n) => n + 1);
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
-  const [paused, setPaused] = useState(inspector.paused);
+  // Read from the shared collector, so every Inspector shows the same state.
+  const paused = inspector.paused;
 
   useEffect(() => {
     const stop = inspector.start();
@@ -52,7 +54,7 @@ export const InspectorWidget: React.FC = () => {
 
   const f = filter.trim().toLowerCase();
   const entries = [...inspector.entries.values()].filter((e) => !f || name(e.msgId).toLowerCase().includes(f) || String(e.msgId) === f);
-  const groups = useMemo(() => {
+  const groups = (() => {
     const m = new Map<string, InspectorEntry[]>();
     for (const e of entries) {
       const k = `${e.sysId}:${e.compId}`;
@@ -65,8 +67,7 @@ export const InspectorWidget: React.FC = () => {
       const [bs, bc] = b[0].split(':').map(Number);
       return as - bs || ac - bc;
     });
-    // entries is rebuilt every tick
-  }, [entries]);
+  })();
   const total = entries.reduce((s, e) => s + inspector.rate(e), 0);
   const sel = selected ? inspector.entries.get(selected) : undefined;
   const fields = sel ? decodeAny(sel.msgId, sel.lastPayload) : null;
@@ -84,15 +85,19 @@ export const InspectorWidget: React.FC = () => {
             <button
               type="button"
               onClick={() => {
-                inspector.paused = !inspector.paused;
-                setPaused(inspector.paused);
+                inspector.setPaused(!inspector.paused);
+                refresh();
               }}
               title={paused ? 'Resume' : 'Pause (freeze the values to read them)'}
               className={cn('rounded-md border px-1.5 py-0.5', paused ? 'border-amber-500/60 text-amber-300' : 'border-zinc-800 text-zinc-300 hover:bg-zinc-800')}
             >
               {paused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
             </button>
-            <button type="button" onClick={() => (inspector.clear(), setSelected(null))} title="Clear counts" className="rounded-md border border-zinc-800 px-1.5 py-0.5 text-zinc-400 hover:bg-zinc-800">
+            <button type="button" onClick={() => {
+                inspector.clear();
+                setSelected(null);
+                refresh();
+              }} title="Clear counts" className="rounded-md border border-zinc-800 px-1.5 py-0.5 text-zinc-400 hover:bg-zinc-800">
               <Trash2 className="h-3 w-3" />
             </button>
           </span>
@@ -110,8 +115,16 @@ export const InspectorWidget: React.FC = () => {
           />
         </label>
         <div className="grid min-h-0 flex-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-          <div className="min-h-[8rem] overflow-y-auto rounded-md border border-zinc-800">
-            {groups.length === 0 && <p className="p-2 text-zinc-500">{mavlinkConnection.getStatus() === 'connected' ? 'Waiting for messages…' : 'Connect to see the messages on the link.'}</p>}
+          <div className="max-h-[60vh] min-h-[8rem] overflow-y-auto rounded-md border border-zinc-800">
+            {groups.length === 0 && (
+              <p className="p-2 text-zinc-500">
+                {inspector.entries.size > 0
+                  ? `No messages match "${filter.trim()}".`
+                  : mavlinkConnection.getStatus() === 'connected'
+                    ? 'Waiting for messages…'
+                    : 'Connect to see the messages on the link.'}
+              </p>
+            )}
             {groups.map(([k, list]) => {
               const [sys, comp] = k.split(':').map(Number);
               return (
@@ -138,7 +151,7 @@ export const InspectorWidget: React.FC = () => {
               );
             })}
           </div>
-          <div className="min-h-[8rem] overflow-y-auto rounded-md border border-zinc-800">
+          <div className="max-h-[60vh] min-h-[8rem] overflow-y-auto rounded-md border border-zinc-800">
             {!sel ? (
               <p className="p-2 text-zinc-500">Select a message for its latest fields.</p>
             ) : (
@@ -146,7 +159,7 @@ export const InspectorWidget: React.FC = () => {
                 <div className="sticky top-0 flex items-center justify-between gap-2 bg-zinc-900 px-2 py-1 font-mono text-[11px]">
                   <span className="font-bold text-sky-300">{name(sel.msgId)}</span>
                   <span className="text-[10px] text-zinc-500">
-                    #{sel.msgId} · {sel.count} · v{sel.version} · {sel.lastPayload.length} B · {((Date.now() - sel.lastAt) / 1000).toFixed(1)} s ago
+                    #{sel.msgId} · {sel.count} · v{sel.version} · {sel.lastPayload.length} B · {((inspector.clock() - sel.lastAt) / 1000).toFixed(1)} s ago
                   </span>
                 </div>
                 {!fields ? (
