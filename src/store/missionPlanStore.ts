@@ -14,7 +14,7 @@ import {
   type MissionDraft,
 } from '../mavlink/missionDraft';
 import { rallyDraftsEqual, type RallyDraft } from '../mavlink/rallyDraft';
-import { EMPTY_FENCE, fenceDraftsEqual, type FenceDraft } from '../mavlink/fenceDraft';
+import { EMPTY_FENCE, fenceDraftsEqual, type FenceDraft, type LatLon } from '../mavlink/fenceDraft';
 
 const STORAGE_KEY = 'mavlink_glareshield_mission_draft';
 
@@ -43,6 +43,9 @@ export interface FenceLayerState {
   vehicleChanged: boolean;
 }
 
+/** What the Place tool draws on the fence layer. */
+export type FenceDrawKind = 'polygon-inclusion' | 'polygon-exclusion' | 'circle-inclusion' | 'circle-exclusion' | 'return-point';
+
 /** Where the draft came from, shown in the panel. */
 export type DraftSource = { kind: 'vehicle' } | { kind: 'file'; name: string } | { kind: 'empty' };
 
@@ -63,6 +66,9 @@ interface MissionPlanState {
   layer: PlanLayer;
   rally: RallyLayerState;
   fence: FenceLayerState;
+  /** What Place draws on the fence layer, and the polygon being drawn (its vertices so far), not yet in the draft. */
+  fenceDrawKind: FenceDrawKind;
+  fenceDrawing: LatLon[] | null;
 
   /** Turn planning on with `draft` (and `rally`, `fence`), each also its base (no changes yet). */
   start: (draft: MissionDraft, source: DraftSource, rally?: RallyDraft, fence?: FenceDraft) => void;
@@ -109,6 +115,9 @@ interface MissionPlanState {
   setFenceVehicleChanged: (changed: boolean) => void;
   fenceRebase: (base: FenceDraft) => void;
   fenceUploaded: (readBack: FenceDraft) => void;
+  setFenceDrawKind: (kind: FenceDrawKind) => void;
+  /** The polygon being drawn: its vertices so far, or null for none. */
+  setFenceDrawing: (vertices: LatLon[] | null) => void;
 }
 
 /**
@@ -259,6 +268,8 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   fence: restored?.fence
     ? { history: historyInit(restored.fence.present), base: restored.fence.base, selected: null, vehicleChanged: false }
     : fenceInit(),
+  fenceDrawKind: 'polygon-inclusion',
+  fenceDrawing: null,
 
   start: (draft, source, rally, fence) =>
     set({
@@ -272,6 +283,7 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
       layer: 'mission',
       rally: rallyInit(rally),
       fence: fenceInit(fence),
+      fenceDrawing: null,
     }),
 
   stop: () =>
@@ -286,6 +298,7 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
       layer: 'mission',
       rally: rallyInit(),
       fence: fenceInit(),
+      fenceDrawing: null,
     }),
 
   edit: (fn, select) => {
@@ -359,9 +372,11 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
 
   select: (index) => set({ selected: index }),
 
-  setLayer: (layer) => set({ layer }),
+  // Leaving the fence layer drops a polygon being drawn (it was never in the draft).
+  setLayer: (layer) => set({ layer, ...(layer !== 'fence' ? { fenceDrawing: null } : {}) }),
 
-  setTool: (tool) => set({ tool }),
+  // Leaving Place drops a fence polygon being drawn.
+  setTool: (tool) => set({ tool, ...(tool !== 'add' ? { fenceDrawing: null } : {}) }),
 
   setUploading: (uploading) => set({ uploading }),
 
@@ -475,6 +490,10 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
     if (!active) return;
     set({ fence: { ...fence, base, vehicleChanged: false } });
   },
+
+  setFenceDrawKind: (fenceDrawKind) => set({ fenceDrawKind, fenceDrawing: null }),
+
+  setFenceDrawing: (fenceDrawing) => set({ fenceDrawing }),
 
   fenceUploaded: (readBack) => {
     const { fence, active } = get();

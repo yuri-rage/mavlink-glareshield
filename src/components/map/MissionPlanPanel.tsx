@@ -40,9 +40,11 @@ import {
 } from '../../mavlink/missionDraft';
 import { ALTITUDE_FRAMES, MISSION_COMMANDS, missionCommandInfo } from '../../mavlink/missionCommands';
 import { missionFileStem, toQgcWpl } from '../../mavlink/missionFileWriter';
-import { isAnyDirty, isDraftDirty, isRallyDirty, useMissionPlanStore } from '../../store/missionPlanStore';
+import { isAnyDirty, isDraftDirty, isFenceDirty, isRallyDirty, useMissionPlanStore } from '../../store/missionPlanStore';
 import { validateRallyDraft } from '../../mavlink/rallyDraft';
+import { validateFenceDraft } from '../../mavlink/fenceDraft';
 import { RallyPlanBody } from './RallyPlanBody';
+import { FencePlanBody } from './FencePlanBody';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
@@ -81,6 +83,11 @@ interface MissionPlanPanelProps {
   onRallyKeepDraft: () => void;
   /** Open the rally upload confirmation; omitted until available. */
   onRequestRallyUpload?: () => void;
+  /** Fence layer: bring a shape (or -2, the return point) into view, reset, keep the draft, upload. */
+  onFocusFenceShape: (index: number) => void;
+  onFenceResetToVehicle: () => void;
+  onFenceKeepDraft: () => void;
+  onRequestFenceUpload?: () => void;
 }
 
 /** One line describing an item, for the list. */
@@ -257,14 +264,37 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   onRallyResetToVehicle,
   onRallyKeepDraft,
   onRequestRallyUpload,
+  onFocusFenceShape,
+  onFenceResetToVehicle,
+  onFenceKeepDraft,
+  onRequestFenceUpload,
 }) => {
   const layer = useMissionPlanStore((s) => s.layer);
   const rallyDraft = useMissionPlanStore((s) => s.rally.history.present);
   const rallySelected = useMissionPlanStore((s) => s.rally.selected);
   const rallyDirty = useMissionPlanStore((s) => isRallyDirty(s));
   const anyDirty = useMissionPlanStore((s) => isAnyDirty(s));
-  const canUndoActive = useMissionPlanStore((s) => (s.layer === 'rally' ? s.rally.history : s.history).past.length > 0);
-  const canRedoActive = useMissionPlanStore((s) => (s.layer === 'rally' ? s.rally.history : s.history).future.length > 0);
+  const activeHistory = (s: ReturnType<typeof useMissionPlanStore.getState>) =>
+    s.layer === 'rally' ? s.rally.history : s.layer === 'fence' ? s.fence.history : s.history;
+  const canUndoActive = useMissionPlanStore((s) => activeHistory(s).past.length > 0);
+  const canRedoActive = useMissionPlanStore((s) => activeHistory(s).future.length > 0);
+  // Fence checks use the vehicle's fence parameters: FENCE_ENABLE, FENCE_TYPE, and FENCE_OPTIONS bit 1 (inclusion
+  // zones are a union rather than an intersection).
+  const fenceDraft = useMissionPlanStore((s) => s.fence.history.present);
+  const fenceSelected = useMissionPlanStore((s) => s.fence.selected);
+  const fenceDirty = useMissionPlanStore((s) => isFenceDirty(s));
+  const fenceEnable = useTelemetryStore((s) => s.parameters['FENCE_ENABLE']?.value);
+  const fenceType = useTelemetryStore((s) => s.parameters['FENCE_TYPE']?.value);
+  const fenceOptions = useTelemetryStore((s) => s.parameters['FENCE_OPTIONS']?.value);
+  const fenceIssues = useMemo(
+    () =>
+      validateFenceDraft(fenceDraft, {
+        fenceEnable,
+        fenceType,
+        inclusionUnion: fenceOptions !== undefined ? (Math.round(fenceOptions) & 2) !== 0 : undefined,
+      }),
+    [fenceDraft, fenceEnable, fenceType, fenceOptions]
+  );
   // Rally checks need home (primitives, so position updates don't re-render) and the vehicle's RALLY_LIMIT_KM.
   const homeLat = useTelemetryStore((s) => s.homePosition.lat);
   const homeLon = useTelemetryStore((s) => s.homePosition.lon);
@@ -281,7 +311,7 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   const dirty = useMissionPlanStore((s) => isDraftDirty(s));
   const uploading = useMissionPlanStore((s) => s.uploading);
   const vehicleChanged = useMissionPlanStore((s) => s.vehicleChanged);
-  const { edit, undo, redo, select, rallySelect } = useMissionPlanStore.getState();
+  const { edit, undo, redo, select, rallySelect, fenceSelect } = useMissionPlanStore.getState();
   const vehicleType = useTelemetryStore((s) => s.heartbeat.type);
   const systemId = useTelemetryStore((s) => s.heartbeat.systemId);
   const hasVehicleMission = useTelemetryStore((s) => s.missionWaypoints.length > 0);
@@ -297,10 +327,11 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
 
   const issues = useMemo(() => validateDraft(draft, getVehicleCategory(vehicleType)), [draft, vehicleType]);
   // The header's counts are for the layer being edited.
-  const activeIssues: { index: number; severity: string }[] = layer === 'rally' ? rallyIssues : issues;
+  const activeIssues: { index: number; severity: string }[] = layer === 'rally' ? rallyIssues : layer === 'fence' ? fenceIssues : issues;
   const errors = activeIssues.filter((i) => i.severity === 'error').length;
   const warnings = activeIssues.length - errors;
   const rallyErrors = rallyIssues.some((i) => i.severity === 'error');
+  const fenceErrors = fenceIssues.some((i) => i.severity === 'error');
   const issuesAt = (i: number) => issues.filter((x) => x.index === i);
   const missionIssues = issuesAt(-1);
 
@@ -321,6 +352,9 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   useEffect(() => {
     if (rallySelected !== null) setCollapsed(false);
   }, [rallySelected]);
+  useEffect(() => {
+    if (fenceSelected !== null) setCollapsed(false);
+  }, [fenceSelected]);
 
   // Keep the selected row in view, including once the sheet has opened.
   useEffect(() => {
@@ -391,14 +425,18 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
         <div className="min-w-0 flex-1">
           {/* Which draft is being edited is switched over the map (PlanLayerSwitch); here, just its name. */}
           <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider">
-            <span className={layer === 'rally' ? 'text-fuchsia-300' : 'text-amber-300'}>{layer === 'rally' ? 'Rally points' : 'Mission'}</span>
-            {(layer === 'rally' ? rallyDirty : dirty) && (
+            <span className={layer === 'rally' ? 'text-fuchsia-300' : layer === 'fence' ? 'text-red-300' : 'text-amber-300'}>
+              {layer === 'rally' ? 'Rally points' : layer === 'fence' ? 'Fence' : 'Mission'}
+            </span>
+            {(layer === 'rally' ? rallyDirty : layer === 'fence' ? fenceDirty : dirty) && (
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current text-amber-400" title="Unsaved changes" />
             )}
             <span className="truncate font-mono text-[10px] font-normal normal-case tracking-normal text-zinc-500">
               {layer === 'rally'
                 ? `${rallyDraft.points.length} point${rallyDraft.points.length === 1 ? '' : 's'}`
-                : `${draft.items.length - 1} items · ${sourceText}`}
+                : layer === 'fence'
+                  ? `${fenceDraft.shapes.length} shape${fenceDraft.shapes.length === 1 ? '' : 's'}`
+                  : `${draft.items.length - 1} items · ${sourceText}`}
             </span>
           </div>
           {(errors > 0 || warnings > 0) && (
@@ -406,6 +444,12 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
               type="button"
               className="flex items-center gap-1.5 text-[10px]"
               onClick={() => {
+                if (layer === 'fence') {
+                  const first = fenceIssues.find((i) => i.index >= 0 || i.index === -2);
+                  if (first && first.index >= 0) fenceSelect(first.index);
+                  if (first) onFocusFenceShape(first.index);
+                  return;
+                }
                 if (layer === 'rally') {
                   const first = rallyIssues.find((i) => i.index >= 0);
                   if (first) {
@@ -499,6 +543,27 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
                 : rallyErrors
                   ? 'Fix the errors first'
                   : !rallyDirty
+                    ? 'No changes to upload'
+                    : null
+          }
+        />
+      )}
+      {!collapsed && layer === 'fence' && (
+        <FencePlanBody
+          issues={fenceIssues}
+          onFocusShape={onFocusFenceShape}
+          onOpenFile={onOpenFile}
+          onResetToVehicle={onFenceResetToVehicle}
+          onKeepDraft={onFenceKeepDraft}
+          onRequestUpload={onRequestFenceUpload}
+          uploadBlocked={
+            !connected
+              ? 'Connect to a vehicle to upload'
+              : uploading || transferBusy
+                ? 'A mission transfer is in progress'
+                : fenceErrors
+                  ? 'Fix the errors first'
+                  : !fenceDirty
                     ? 'No changes to upload'
                     : null
           }
