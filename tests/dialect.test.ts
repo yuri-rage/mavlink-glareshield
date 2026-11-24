@@ -35,6 +35,12 @@ const sf = decodeAny(253, s.payload)!;
 check('STATUSTEXT: char array as text', field(sf, 'text').value === 'Hello from SITL' && field(sf, 'severity').value === 6);
 const mi = frame('fd070000000101980000001060ea000001a102');
 check('MEMINFO: a v2 payload with trailing zeros trimmed still decodes (zero-padded)', mi.payload.length < payloadLength(152) && field(decodeAny(152, mi.payload)!, 'freemem32').value === 65536, `${mi.payload.length} of ${payloadLength(152)} bytes`);
+const ts = frame('fd1000000001016f00000100000000000010fdffffffffff7fff6da9');
+const tsf = decodeAny(111, ts.payload)!;
+check('64-bit values past 2^53: exact, as decimal strings (signed too)', field(tsf, 'tc1').value === '1152921504606846977' && field(tsf, 'ts1').value === '-36028797018963971', `${field(tsf, 'tc1').value} ${field(tsf, 'ts1').value}`);
+const esc = frame('fd2c0000000101162b00dc05e605f005fa05c800d200dc00e600e8034c04b0041405050006000700080000000000010002001e1f2021c7c6');
+const ef = decodeAny(11030, esc.payload)!;
+check('numeric arrays as lists', JSON.stringify(field(ef, 'temperature').value) === '[30,31,32,33]' && JSON.stringify(field(ef, 'rpm').value) === '[5,6,7,8]' && JSON.stringify(field(ef, 'totalcurrent').value) === '[1000,1100,1200,1300]', JSON.stringify(field(ef, 'rpm').value));
 check('unknown message: null', decodeAny(65000, new Uint8Array()) === null && messageName(65000) === null);
 
 console.log(failures.length ? `\n${failures.length} dialect check(s) FAILED` : '\nAll dialect checks PASSED');
