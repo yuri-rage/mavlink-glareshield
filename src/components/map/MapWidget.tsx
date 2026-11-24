@@ -169,6 +169,13 @@ const ZOOM_KEY = 'mavlink_glareshield_map_zoom';
  * but pins and routes stay sharp: the extra levels are for placing and checking waypoints to within a metre.
  */
 const MAP_MAX_ZOOM = 24;
+/**
+ * Points per trail chunk: a new point redraws only its chunk, not the whole flight, and after a map move Leaflet
+ * skips the chunks out of view.
+ */
+const TRAIL_CHUNK = 500;
+/** Dark magenta, so the trail reads against satellite imagery and stays distinct from the bright mission lines. */
+const TRAIL_STYLE: L.PolylineOptions = { color: '#8c0073', weight: 3.5, opacity: 0.95 };
 /** Planning opens maximized unless the user last chose to plan in place ('0'). */
 const PLAN_MAXIMIZE_PREF_KEY = 'mavlink_glareshield_plan_maximize';
 /** Whether the map is maximized right now while planning, so a reload restores it as it was. */
@@ -235,20 +242,53 @@ function initialZoom(): number {
   return 17;
 }
 
+/** The live position readout over the map: its own subscription, so a fix re-renders this, not the map. */
+const PositionReadout: React.FC<{ show: boolean }> = ({ show }) => {
+  const position = useTelemetryStore((s) => s.position);
+  const home = useTelemetryStore((s) => s.homePosition);
+  const { formatAltitude, altitudeMode, formatHomeVector } = useUnitsStore();
+  return (
+    <>
+      <span>
+        Lat: <b className="text-sky-400">{show ? position.lat.toFixed(6) : '--'}</b>
+      </span>
+      <span>
+        Lon: <b className="text-sky-400">{show ? position.lon.toFixed(6) : '--'}</b>
+      </span>
+      <span>
+        Alt:{' '}
+        <b className="text-emerald-400">
+          {show ? `${formatAltitude(altitudeMode === 'msl' ? position.alt || position.relativeAlt : position.relativeAlt).full} ${altitudeMode.toUpperCase()}` : '--'}
+        </b>
+      </span>
+      {show && home.distanceM !== null && (
+        <span className="text-emerald-300 flex items-center gap-1 border-l border-zinc-800 pl-2">
+          <Home className="h-3 w-3 text-emerald-400 inline" />
+          <b>{formatHomeVector(home.bearingDeg, home.distanceM)}</b>
+        </span>
+      )}
+    </>
+  );
+};
+
 export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const heartbeat = useTelemetryStore((s) => s.heartbeat);
   const connected = heartbeat.lastHeartbeatTime > 0 && heartbeat.modeName !== 'DISCONNECTED';
   const hasConnectedInSession = useTelemetryStore((s) => s.hasConnectedInSession);
-  const position = useTelemetryStore((s) => s.position);
-  const homePosition = useTelemetryStore((s) => s.homePosition);
+  // Not the position itself: it changes with every fix (5-10 Hz) and would re-render this whole component. What
+  // follows it (the marker, the readout, Fly-to, the home popup) subscribes on its own; renders need only these.
+  const hasFix = useTelemetryStore((s) => s.position.lat !== 0 || s.position.lon !== 0);
+  const homeLat = useTelemetryStore((s) => s.homePosition.lat);
+  const homeLon = useTelemetryStore((s) => s.homePosition.lon);
+  const homeSource = useTelemetryStore((s) => s.homePosition.source);
+  const homeAlt = useTelemetryStore((s) => s.homePosition.alt);
   const missionWaypoints = useTelemetryStore((s) => s.missionWaypoints);
   const fencePoints = useTelemetryStore((s) => s.fencePoints);
   const rallyPoints = useTelemetryStore((s) => s.rallyPoints);
-  const flightTrace = useTelemetryStore((s) => s.flightTrace);
   const clearTrace = useTelemetryStore((s) => s.clearTrace);
   const baseStationPosition = useTelemetryStore((s) => s.baseStationPosition);
 
-  const hasValidPosition = (position.lat !== 0 || position.lon !== 0) && (connected || hasConnectedInSession);
+  const hasValidPosition = hasFix && (connected || hasConnectedInSession);
 
   const isFullWidth = colSpan === 12;
   const [aspectRatio, setAspectRatio] = useState<'4:3' | '16:9' | '1:1'>(() => {
@@ -270,7 +310,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     } catch {}
   };
 
-  const { formatAltitude, altitudeMode, formatHomeVector } = useUnitsStore();
+  const { formatAltitude, formatHomeVector } = useUnitsStore();
   const unitSystem = useUnitsStore((s) => s.system);
   const flyLen = useLengthUnit();
   // The units changed with the Fly-to card open: convert what it shows, so the same height is sent.
@@ -290,7 +330,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const mapInstanceRef = useRef<L.Map | null>(null);
   const activeTileLayerRef = useRef<L.TileLayer | null>(null);
   const vehicleMarkerRef = useRef<L.Marker | null>(null);
-  const trailPolylineRef = useRef<L.Polyline | null>(null);
+  /** The trail, drawn in chunks (see TRAIL_CHUNK): only the last one changes as points arrive. */
+  const trailChunksRef = useRef<L.Polyline[]>([]);
+  const trailSyncRef = useRef<() => void>(() => {});
   const missionPolylineRef = useRef<L.Polyline | null>(null);
   const missionMarkersRef = useRef<L.Marker[]>([]);
   const missionRadiiRef = useRef<L.Circle[]>([]);
@@ -647,12 +689,39 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     });
   }, []);
 
-  // Sync flight trace polyline with store
+  // The flight trail follows the store without re-rendering the map: each new point extends the last chunk; a trim
+  // or clear (rare) rebuilds the chunks.
   useEffect(() => {
-    if (trailPolylineRef.current) {
-      trailPolylineRef.current.setLatLngs(flightTrace);
-    }
-  }, [flightTrace]);
+    let resets = -1;
+    let drawn = 0;
+    const sync = () => {
+      const map = mapInstanceRef.current;
+      if (!map) return;
+      const st = useTelemetryStore.getState();
+      const trace = st.flightTrace;
+      if (st.traceResets !== resets || drawn > trace.length) {
+        resets = st.traceResets;
+        trailChunksRef.current.forEach((c) => c.remove());
+        trailChunksRef.current = [];
+        drawn = 0;
+      }
+      for (; drawn < trace.length; drawn++) {
+        let chunk = trailChunksRef.current[trailChunksRef.current.length - 1];
+        if (!chunk || chunk.getLatLngs().length >= TRAIL_CHUNK) {
+          // A new chunk starts at the previous one's last point, so the line stays joined.
+          const prev = drawn > 0 ? [trace[drawn - 1]] : [];
+          chunk = L.polyline(prev, { ...TRAIL_STYLE, pane: 'trailPane', interactive: false }).addTo(map);
+          trailChunksRef.current.push(chunk);
+        }
+        chunk.addLatLng(trace[drawn]);
+      }
+    };
+    trailSyncRef.current = sync;
+    sync();
+    return useTelemetryStore.subscribe((st, prev) => {
+      if (st.traceVersion !== prev.traceVersion) sync();
+    });
+  }, []);
 
   // Register subscription for position
   useEffect(() => {
@@ -696,6 +765,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     if (!mapInstanceRef.current) return;
 
     const points: [number, number][] = [];
+    const position = useTelemetryStore.getState().position;
     if (position.lat !== 0 || position.lon !== 0) {
       points.push([position.lat, position.lon]);
     }
@@ -809,6 +879,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
+    const position = useTelemetryStore.getState().position;
     const hasFix = position.lat !== 0 || position.lon !== 0;
     // Following: centre on the vehicle. Otherwise back where the user left the map. With neither (a fresh load
     // before a fix), home: one the vehicle gave this session, else where it was last session, else the cached
@@ -937,13 +1008,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     // Trail polyline: dark magenta, so it reads against satellite imagery and stays distinct from the
     // bright magenta / yellow mission lines.
-    const trailPoly = L.polyline(flightTrace, {
-      color: '#8c0073',
-      weight: 3.5,
-      opacity: 0.95,
-      pane: 'trailPane',
-    }).addTo(map);
-    trailPolylineRef.current = trailPoly;
+    // The trail, drawn by the sync above. SVG, not a canvas: a canvas renderer reallocates and redraws its whole
+    // canvas after every map move, and following a vehicle moves the map nearly every frame; SVG only shifts its
+    // viewBox, and off-screen chunks are skipped.
+    trailSyncRef.current();
 
     // Mission polyline - Mission Planner bright electric yellow mission path
     const missionPoly = L.polyline([], {
@@ -1487,8 +1555,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     followVehicleRef.current = followVehicle;
   }, [followVehicle]);
 
-  // Buffer incoming GPS fixes for linear interpolation
+  // Buffer incoming GPS fixes for linear interpolation (from the store directly: no render per fix)
   useEffect(() => {
+    const ingest = (position: { lat: number; lon: number; timeBootMs: number }) => {
     if (position.lat === 0 && position.lon === 0) return;
 
     const now = performance.now();
@@ -1531,7 +1600,14 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         vehicleMarkerRef.current.setLatLng([position.lat, position.lon]);
       }
     }
-  }, [position.timeBootMs, position.lat, position.lon]);
+    };
+    ingest(useTelemetryStore.getState().position);
+    return useTelemetryStore.subscribe((st, prev) => {
+      const p = st.position;
+      const q = prev.position;
+      if (p.timeBootMs !== q.timeBootMs || p.lat !== q.lat || p.lon !== q.lon) ingest(p);
+    });
+  }, []);
 
   // Linear interpolation played back one fix-interval late, camera locked to marker
   useEffect(() => {
@@ -1569,14 +1645,18 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         }
       }
 
-      displayPosRef.current = { lat: curLat, lon: curLon, yaw: targetYaw };
-
       const latLng: [number, number] = [curLat, curLon];
-      marker.setLatLng(latLng);
-
-      const iconEl = marker.getElement()?.querySelector('.vehicle-icon-rotator') as HTMLElement | null;
-      if (iconEl) {
-        iconEl.style.transform = `rotate(${targetYaw.toFixed(1)}deg)`;
+      // Settled (no new fix to play back, same heading): leave the marker alone, rather than move it and restyle its
+      // icon 60 times a second while the vehicle sits still.
+      const shown = displayPosRef.current;
+      const moved = !shown || shown.lat !== curLat || shown.lon !== curLon || shown.yaw !== targetYaw;
+      displayPosRef.current = { lat: curLat, lon: curLon, yaw: targetYaw };
+      if (moved) {
+        marker.setLatLng(latLng);
+        const iconEl = marker.getElement()?.querySelector('.vehicle-icon-rotator') as HTMLElement | null;
+        if (iconEl) {
+          iconEl.style.transform = `rotate(${targetYaw.toFixed(1)}deg)`;
+        }
       }
 
       // Camera locked to marker with integer pixel panBy only on non-zero steps
@@ -1655,7 +1735,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     }
 
     const hasMissionHome = missionWaypoints.some((w) => w.seq === 0 && (w.lat !== 0 || w.lon !== 0));
-    if (hasMissionHome || homePosition.source === 'none' || (homePosition.lat === 0 && homePosition.lon === 0)) {
+    if (hasMissionHome || homeSource === 'none' || (homeLat === 0 && homeLon === 0)) {
       return;
     }
 
@@ -1675,7 +1755,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       popupAnchor: [0, -33],
     });
 
-    const m = L.marker([homePosition.lat, homePosition.lon], {
+    const m = L.marker([homeLat, homeLon], {
       icon: homeIcon,
       pane: 'missionMarkersPane',
       zIndexOffset: 220,
@@ -1687,12 +1767,15 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     // Distance and bearing change with every position update: only the popup text follows them (below), the
     // marker isn't rebuilt.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homePosition.lat, homePosition.lon, homePosition.source, missionWaypoints]);
+  }, [homeLat, homeLon, homeSource, missionWaypoints]);
 
+  // The home popup's vector changes with every fix: kept current from the store, not by re-rendering.
   useEffect(() => {
-    homeMarkerRef.current?.setPopupContent(homePopupHtml(homePosition));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homePosition.distanceM, homePosition.bearingDeg, homePosition.alt, formatHomeVector, unitSystem]);
+    homeMarkerRef.current?.setPopupContent(homePopupHtml(useTelemetryStore.getState().homePosition));
+    return useTelemetryStore.subscribe((st, prev) => {
+      if (st.homePosition !== prev.homePosition) homeMarkerRef.current?.setPopupContent(homePopupHtml(st.homePosition));
+    });
+  }, [homeAlt, formatHomeVector, unitSystem]);
 
   // While a point is picked, track it on screen and mark it on the map.
   useEffect(() => {
@@ -1773,11 +1856,18 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   }, [activeFlyToTarget, heartbeat.modeName, heartbeat.isArmed]);
 
   useEffect(() => {
-    if (!activeFlyToTarget || (position.lat === 0 && position.lon === 0)) return;
-    const { distanceM } = computeDistanceAndBearing(position.lat, position.lon, activeFlyToTarget.lat, activeFlyToTarget.lon);
-    // A little over the usual 2 m waypoint radius, so a vehicle holding just outside it still counts as there.
-    if (distanceM < FLY_TO_ARRIVAL_M) setActiveFlyToTarget(null);
-  }, [activeFlyToTarget, position.lat, position.lon]);
+    if (!activeFlyToTarget) return;
+    const check = (position: { lat: number; lon: number }) => {
+      if (position.lat === 0 && position.lon === 0) return;
+      const { distanceM } = computeDistanceAndBearing(position.lat, position.lon, activeFlyToTarget.lat, activeFlyToTarget.lon);
+      // A little over the usual 2 m waypoint radius, so a vehicle holding just outside it still counts as there.
+      if (distanceM < FLY_TO_ARRIVAL_M) setActiveFlyToTarget(null);
+    };
+    check(useTelemetryStore.getState().position);
+    return useTelemetryStore.subscribe((st, prev) => {
+      if (st.position !== prev.position) check(st.position);
+    });
+  }, [activeFlyToTarget]);
 
   // Render active Fly-To target marker (only re-creates when target changes)
   useEffect(() => {
@@ -1819,6 +1909,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
   // Update dashed vector line connecting vehicle to target (efficient setLatLngs without recreation)
   useEffect(() => {
+    const draw = (position: { lat: number; lon: number }) => {
     if (!mapInstanceRef.current) return;
 
     if (!activeFlyToTarget || (position.lat === 0 && position.lon === 0)) {
@@ -1845,7 +1936,12 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         pane: 'missionLinesPane',
       }).addTo(mapInstanceRef.current);
     }
-  }, [activeFlyToTarget, position.lat, position.lon]);
+    };
+    draw(useTelemetryStore.getState().position);
+    return useTelemetryStore.subscribe((st, prev) => {
+      if (st.position !== prev.position) draw(st.position);
+    });
+  }, [activeFlyToTarget]);
 
   const cancelFlyTo = useCallback(() => setPendingFlyTo(null), []);
 
@@ -1978,6 +2074,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     fenceLayersRef.current = [];
 
     const homeWp = missionWaypoints.find((w) => w.seq === 0);
+    const position = useTelemetryStore.getState().position;
     const defaultCenterLat = homeWp?.lat || position.lat || 39.8283457;
     const defaultCenterLon = homeWp?.lon || position.lon || -98.5794797;
 
@@ -2271,6 +2368,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                 setFollowVehicle(true);
                 followVehicleRef.current = true;
                 const lastFix = fixesRef.current[fixesRef.current.length - 1];
+                const position = useTelemetryStore.getState().position;
                 const target = displayPosRef.current ?? (lastFix ? { lat: lastFix.lat, lon: lastFix.lon } : { lat: position.lat, lon: position.lon });
                 if (mapInstanceRef.current && (target.lat !== 0 || target.lon !== 0)) {
                   isFlyingToRef.current = true;
@@ -2301,7 +2399,6 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               aspect={isFullWidth ? aspectRatio : undefined}
               onAspect={isFullWidth ? handleAspectChange : undefined}
               onFit={handleFitBounds}
-              tracePoints={flightTrace.length}
               onClearTrace={clearTrace}
             />
 
@@ -2415,26 +2512,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               planning && planLayout === 'sheet' ? 'max-w-full flex-nowrap overflow-hidden whitespace-nowrap' : 'flex-wrap'
             }`}
           >
-            <span>
-              Lat: <b className="text-sky-400">{hasValidPosition ? position.lat.toFixed(6) : '--'}</b>
-            </span>
-            <span>
-              Lon: <b className="text-sky-400">{hasValidPosition ? position.lon.toFixed(6) : '--'}</b>
-            </span>
-            <span>
-              Alt:{' '}
-              <b className="text-emerald-400">
-                {hasValidPosition
-                  ? `${formatAltitude(altitudeMode === 'msl' ? (position.alt || position.relativeAlt) : position.relativeAlt).full} ${altitudeMode.toUpperCase()}`
-                  : '--'}
-              </b>
-            </span>
-            {hasValidPosition && homePosition.distanceM !== null && (
-              <span className="text-emerald-300 flex items-center gap-1 border-l border-zinc-800 pl-2">
-                <Home className="h-3 w-3 text-emerald-400 inline" />
-                <b>{formatHomeVector(homePosition.bearingDeg, homePosition.distanceM)}</b>
-              </span>
-            )}
+            <PositionReadout show={hasValidPosition} />
           </div>
           {/* The vehicle's fence: on, off or breached, and the switch. */}
           <div className="flex items-center gap-1.5">

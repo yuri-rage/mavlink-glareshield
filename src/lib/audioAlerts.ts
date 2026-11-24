@@ -6,6 +6,46 @@ import { mavlinkConnection } from '../mavlink/connection';
 export const STORAGE_KEY_SOUND = 'mavlink_glareshield_sound_enabled';
 export const STORAGE_KEY_VOICE = 'mavlink_glareshield_voice_enabled';
 export const STORAGE_KEY_WAYPOINT_ANNOUNCE = 'mavlink_glareshield_wp_announce_enabled';
+export const STORAGE_KEY_VOICE_ENGINE = 'mavlink_glareshield_voice_engine';
+
+/**
+ * Which voice speaks: 'neural' (Piper, in a worker: a ~60 MB model and some 150-250 MB of memory once running) or
+ * 'browser' (the device's own speech synthesis: no download, little memory, the device's voice).
+ */
+export type VoiceEngine = 'neural' | 'browser';
+
+/** A device short of memory, or iOS (whose Safari reloads tabs under memory pressure): the device voice by default. */
+export function defaultVoiceEngine(nav: { deviceMemory?: number; userAgent?: string; platform?: string; maxTouchPoints?: number } | undefined): VoiceEngine {
+  if (!nav) return 'neural';
+  if (typeof nav.deviceMemory === 'number' && nav.deviceMemory < 4) return 'browser';
+  const ua = nav.userAgent ?? '';
+  const ios = /iPad|iPhone|iPod/.test(ua) || (nav.platform === 'MacIntel' && (nav.maxTouchPoints ?? 0) > 1);
+  return ios ? 'browser' : 'neural';
+}
+
+function storedVoiceEngine(): VoiceEngine {
+  try {
+    const v = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY_VOICE_ENGINE) : null;
+    if (v === 'neural' || v === 'browser') return v;
+  } catch {}
+  return defaultVoiceEngine(typeof navigator !== 'undefined' ? (navigator as Navigator & { deviceMemory?: number }) : undefined);
+}
+
+/** Stop the neural voice and drop its cached audio, giving back its memory. */
+function releasePiper() {
+  if (piperWorker) {
+    try {
+      piperWorker.terminate();
+    } catch {}
+    piperWorker = null;
+  }
+  pendingWorkerRequests.forEach((p) => {
+    clearTimeout(p.timer);
+    p.reject(new Error('Neural voice turned off'));
+  });
+  pendingWorkerRequests.clear();
+  audioBufferCache.clear();
+}
 
 const PIPER_VOICE_ID = 'en_US-amy-medium';
 const MAX_CACHED_BUFFERS = 64;
@@ -391,6 +431,12 @@ export function speakCallout(text: string, priority = false) {
       return;
     }
 
+    // The device voice: no neural model at all.
+    if (useAudioAlertsStore.getState().voiceEngine === 'browser') {
+      fallbackBrowserSpeak(clean, priority);
+      return;
+    }
+
     // Ensure Piper worker is initialized
     ensurePiperWorker();
 
@@ -477,6 +523,8 @@ interface AudioAlertsState {
   waypointAnnounceEnabled: boolean;
   ttsStatus: TtsEngineStatus;
   ttsDownloadProgress: number;
+  voiceEngine: VoiceEngine;
+  setVoiceEngine: (engine: VoiceEngine) => void;
   toggleSound: () => void;
   toggleVoice: () => void;
   toggleWaypointAnnounce: () => void;
@@ -515,6 +563,20 @@ export const useAudioAlertsStore = create<AudioAlertsState>((set, get) => ({
   })(),
   ttsStatus: 'idle',
   ttsDownloadProgress: 0,
+  voiceEngine: storedVoiceEngine(),
+  setVoiceEngine: (engine: VoiceEngine) => {
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(STORAGE_KEY_VOICE_ENGINE, engine);
+    } catch {}
+    if (engine === 'browser') {
+      releasePiper();
+      set({ voiceEngine: engine, ttsStatus: 'idle', ttsDownloadProgress: 0 });
+    } else {
+      set({ voiceEngine: engine });
+      if (get().soundEnabled && get().voiceEnabled) ensurePiperWorker();
+    }
+    if (get().soundEnabled && get().voiceEnabled) speakCallout(engine === 'browser' ? 'Device voice' : 'Neural voice', true);
+  },
   toggleSound: () => {
     const next = !get().soundEnabled;
     try {
@@ -713,12 +775,13 @@ export function useAudioAlertListener() {
   const prevWpSeqRef = useRef<number>(currentWaypointSeq);
   const lastSpokenWpRef = useRef<{ seq: number; time: number } | null>(null);
 
-  // Initialize Piper Neural TTS Worker in the background when voice callouts are enabled
+  // Initialize Piper Neural TTS Worker in the background when voice callouts are enabled (and it is the voice)
+  const voiceEngine = useAudioAlertsStore((s) => s.voiceEngine);
   useEffect(() => {
-    if (soundEnabled && voiceEnabled) {
+    if (soundEnabled && voiceEnabled && voiceEngine === 'neural') {
       ensurePiperWorker();
     }
-  }, [soundEnabled, voiceEnabled]);
+  }, [soundEnabled, voiceEnabled, voiceEngine]);
 
   // StatusText chimes and spoken callouts
   useEffect(() => {

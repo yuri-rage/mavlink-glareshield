@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create, type StateCreator } from 'zustand';
 import { MAVLINK_MSG_ID, getVehicleModeName, extractFirmwareVersion, isVehicleAutopilotHeartbeat, getMavCmdName, MAV_CMD } from '../mavlink/messages';
 import { decodePacket, MavlinkPacket } from '../mavlink/parser';
 import { mavlinkConnection } from '../mavlink/connection';
@@ -349,7 +349,13 @@ interface TelemetryState {
   manualWaypointJump: { seq: number; time: number } | null;
   fencePoints: FencePoint[];
   rallyPoints: RallyPoint[];
+  /**
+   * The flight trail, appended in place (copying up to TRACE_MAX_POINTS points per fix was the cost of a long
+   * flight): watch traceVersion for changes, and traceResets for a trim or a clear (redraw it all).
+   */
   flightTrace: [number, number][];
+  traceVersion: number;
+  traceResets: number;
   lastCommandAck?: CommandAckInfo;
   commandFeedback?: CommandFeedbackInfo;
   baseStationPosition: BaseStationPosition | null;
@@ -392,16 +398,32 @@ function nearDistanceM(lat1: number, lon1: number, lat2: number, lon2: number): 
   return Math.hypot(x, y) * 6371000;
 }
 
-/** The trace with a new point appended when it is at least TRACE_MIN_SPACING_M from the last one. */
-export function appendTracePoint(trace: [number, number][], lat: number, lon: number): [number, number][] {
-  if (lat === 0 && lon === 0) return trace;
+/** At the cap, the oldest tenth is dropped at once: a rare trim instead of a shift on every point. */
+export const TRACE_TRIM_POINTS = Math.round(TRACE_MAX_POINTS / 10);
+
+/**
+ * Append a point to the trace, in place, when it is at least TRACE_MIN_SPACING_M from the last one. Returns what
+ * happened: 'none' (skipped), 'appended', or 'trimmed' (appended after dropping the oldest TRACE_TRIM_POINTS).
+ */
+export function appendTracePoint(trace: [number, number][], lat: number, lon: number): 'none' | 'appended' | 'trimmed' {
+  if (lat === 0 && lon === 0) return 'none';
   if (trace.length > 0) {
     const last = trace[trace.length - 1];
-    if (nearDistanceM(last[0], last[1], lat, lon) < TRACE_MIN_SPACING_M) return trace;
+    if (nearDistanceM(last[0], last[1], lat, lon) < TRACE_MIN_SPACING_M) return 'none';
   }
-  return trace.length >= TRACE_MAX_POINTS
-    ? [...trace.slice(trace.length - TRACE_MAX_POINTS + 1), [lat, lon]]
-    : [...trace, [lat, lon]];
+  let trimmed = false;
+  if (trace.length >= TRACE_MAX_POINTS) {
+    trace.splice(0, TRACE_TRIM_POINTS);
+    trimmed = true;
+  }
+  trace.push([lat, lon]);
+  return trimmed ? 'trimmed' : 'appended';
+}
+
+/** The store fields after a trace change. */
+function traceChange(state: { traceVersion: number; traceResets: number }, what: 'none' | 'appended' | 'trimmed') {
+  if (what === 'none') return {};
+  return what === 'trimmed' ? { traceVersion: state.traceVersion + 1, traceResets: state.traceResets + 1 } : { traceVersion: state.traceVersion + 1 };
 }
 
 /** Heartbeat gap after which the vehicle counts as re-acquired (rates and home are requested again). */
@@ -658,7 +680,64 @@ function saveNavCache(cache: NavCache) {
 
 const initialNav = loadInitialNavCache();
 
-export const useTelemetryStore = create<TelemetryState>((set) => ({
+/** True while a packet's update is applied: its subscriber notifications are batched (batchedNotify). */
+let packetUpdate = false;
+/** How long packet updates are gathered before subscribers hear of them: about a frame. */
+const NOTIFY_BATCH_MS = 16;
+
+/**
+ * Packets arrive tens to hundreds of times a second, each a store update; notifying every subscriber (and React)
+ * for each was most of the telemetry cost. The state itself is still updated at once (getState() is always
+ * current, so code reading it right after a packet sees it); only the notifications for packet updates are gathered
+ * and delivered once per NOTIFY_BATCH_MS, as one change from the state before the batch to the state after. Any
+ * other update (an action, a setState) notifies at once, after delivering what was gathered, so the order holds.
+ * A subscriber may therefore see several packets' changes at once, never a stale or reordered state.
+ */
+function batchedNotify(config: StateCreator<TelemetryState>): StateCreator<TelemetryState> {
+  return (set, get, api) => {
+    type Listener = (state: TelemetryState, prev: TelemetryState) => void;
+    const listeners = new Set<Listener>();
+    let batchPrev: TelemetryState | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const deliver = (state: TelemetryState, prev: TelemetryState) => listeners.forEach((l) => l(state, prev));
+    const flush = () => {
+      timer = null;
+      if (batchPrev === null) return;
+      const prev = batchPrev;
+      batchPrev = null;
+      deliver(api.getState(), prev);
+    };
+    api.subscribe((state, prev) => {
+      if (packetUpdate) {
+        if (batchPrev === null) {
+          batchPrev = prev;
+          timer = setTimeout(flush, NOTIFY_BATCH_MS);
+        }
+        return;
+      }
+      if (batchPrev !== null) {
+        // Gathered packet changes and this update, delivered together from the state before the batch.
+        const from = batchPrev;
+        batchPrev = null;
+        if (timer) clearTimeout(timer);
+        timer = null;
+        deliver(state, from);
+        return;
+      }
+      deliver(state, prev);
+    });
+    // React's hook and every other subscriber go through this.
+    api.subscribe = (listener: Listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    };
+    return config(set, get, api);
+  };
+}
+
+export const useTelemetryStore = create<TelemetryState>()(batchedNotify((set) => ({
   heartbeat: {
     type: 0,
     autopilot: 0,
@@ -857,6 +936,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   fencePoints: initialNav.fencePoints ?? [],
   rallyPoints: initialNav.rallyPoints ?? [],
   flightTrace: [],
+  traceVersion: 0,
+  traceResets: 0,
   baseStationPosition: null,
   hasConnectedInSession: false,
   armedStartedAt: null,
@@ -868,12 +949,12 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
 
   addTracePoint: (lat: number, lon: number) => {
     set((state) => {
-      const updated = appendTracePoint(state.flightTrace, lat, lon);
-      return updated === state.flightTrace ? state : { flightTrace: updated };
+      const what = appendTracePoint(state.flightTrace, lat, lon);
+      return what === 'none' ? state : traceChange(state, what);
     });
   },
 
-  clearTrace: () => set({ flightTrace: [] }),
+  clearTrace: () => set((s) => ({ flightTrace: [], traceVersion: s.traceVersion + 1, traceResets: s.traceResets + 1 })),
 
   processPacket: (packet: MavlinkPacket) => {
     // Early filter: skip unhandled packets to avoid unnecessary subscriber notifications
@@ -883,6 +964,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
 
     const data = decodePacket(packet);
 
+    packetUpdate = true;
+    try {
     set((state) => {
       const now = Date.now();
 
@@ -1029,7 +1112,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
         }
 
         case MAVLINK_MSG_ID.GLOBAL_POSITION_INT: {
-          const updatedTrace = appendTracePoint(state.flightTrace, data.lat, data.lon);
+          const traceWhat = appendTracePoint(state.flightTrace, data.lat, data.lon);
 
           let updatedHome = state.homePosition;
           if (
@@ -1062,7 +1145,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
               vz: data.vz,
               hdg: data.rawHdg === 65535 ? 65535 : data.hdg,
             },
-            ...(updatedTrace !== state.flightTrace ? { flightTrace: updatedTrace } : {}),
+            ...traceChange(state, traceWhat),
             ...(updatedHome !== state.homePosition ? { homePosition: updatedHome } : {}),
           };
         }
@@ -1704,8 +1787,11 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
           return state;
       }
     });
+    } finally {
+      packetUpdate = false;
+    }
   },
-}));
+})));
 
 // Wire up global packet listener
 mavlinkConnection.onPacket((packet) => {

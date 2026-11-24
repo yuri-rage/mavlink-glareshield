@@ -13,12 +13,19 @@ const CustomWidgetCreatorModal = lazy(() =>
 );
 const ProfileManagerModal = lazy(() => import('./components/editor/ProfileManagerModal').then((m) => ({ default: m.ProfileManagerModal })));
 
+/**
+ * The audio alerts listener, in a component of its own that renders nothing: it subscribes to telemetry (battery,
+ * heartbeat, messages, waypoints), and as a hook of App it re-rendered the whole dashboard with each of those updates.
+ */
+const AudioAlerts: React.FC = () => {
+  useAudioAlertListener();
+  return null;
+};
+
 export const App: React.FC = () => {
   // Only the action: subscribing to the whole store would re-render the entire dashboard on every 1 s stats tick.
   const connect = useConnectionStore((s) => s.connect);
 
-  // Global audio alerts listener active across all tabs
-  useAudioAlertListener();
 
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
   const [isWidgetCreatorOpen, setIsWidgetCreatorOpen] = useState(false);
@@ -32,6 +39,9 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-sky-500/30 overflow-x-clip">
+      {/* Global audio alerts, active across all tabs */}
+      <AudioAlerts />
+
       {/* Top Navbar */}
       <Navbar />
 

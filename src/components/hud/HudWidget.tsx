@@ -117,15 +117,9 @@ function isFailsafeActive(
 
 export const HudWidget: React.FC = () => {
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
-  const hasConnectedInSession = useTelemetryStore((state) => state.hasConnectedInSession);
-  const attitude = useTelemetryStore((state) => state.attitude);
-  const vfr = useTelemetryStore((state) => state.vfr);
-  const position = useTelemetryStore((state) => state.position);
-  const navController = useTelemetryStore((state) => state.navController);
-  const homePosition = useTelemetryStore((state) => state.homePosition);
-  const missionWaypoints = useTelemetryStore((state) => state.missionWaypoints);
-  const currentWaypointSeq = useTelemetryStore((state) => state.currentWaypointSeq);
-  const imu = useTelemetryStore((state) => state.imu);
+  // The fast-changing telemetry (attitude, speeds, position, ...) is not React state here: the canvas is drawn from a
+  // requestAnimationFrame loop that reads the store, so a packet doesn't re-render this component (and its
+  // settings). Only what the markup needs, and the slow inputs, are subscribed.
   const statusMessages = useTelemetryStore((state) => state.statusMessages);
   const {
     formatSpeed,
@@ -248,11 +242,17 @@ export const HudWidget: React.FC = () => {
     };
   }, []);
 
-  useEffect(() => {
+  const dirtyRef = useRef(true);
+  // Any render (settings, size, units, failsafe flash) means the picture may have changed.
+  dirtyRef.current = true;
+  const drawRef = useRef<() => void>(() => {});
+  drawRef.current = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    const { attitude, vfr, position, navController, homePosition, missionWaypoints, currentWaypointSeq, imu, heartbeat, hasConnectedInSession } =
+      useTelemetryStore.getState();
 
     // Handle high DPI
     const dpr = dimensions.dpr || window.devicePixelRatio || 1;
@@ -260,9 +260,16 @@ export const HudWidget: React.FC = () => {
     const height = dimensions.height || canvas.clientHeight;
     if (width === 0 || height === 0) return;
 
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-    ctx.scale(dpr, dpr);
+    // Resizing the canvas reallocates its backing store (and wipes the context): only when the size changes.
+    const bw = Math.round(width * dpr);
+    const bh = Math.round(height * dpr);
+    if (canvas.width !== bw) canvas.width = bw;
+    if (canvas.height !== bh) canvas.height = bh;
+    // The context keeps its state between frames now, so each frame starts from a clean one (and the finally
+    // below puts it back, whatever path the drawing takes).
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    try {
 
     const cx = width / 2;
     const cy = height / 2;
@@ -1031,31 +1038,45 @@ export const HudWidget: React.FC = () => {
     }
 
     ctx.restore();
-  }, [
-    heartbeat,
-    hasConnectedInSession,
-    attitude,
-    vfr,
-    position,
-    navController,
-    homePosition,
-    missionWaypoints,
-    currentWaypointSeq,
-    imu,
-    unitSystem,
-    altitudeMode,
-    formatSpeed,
-    formatAltitude,
-    formatClimb,
-    formatDistance,
-    videoConfig.enabled,
-    videoConfig.url,
-    videoConfig.darken,
-    videoConfig.symbologyBrightness,
-    dimensions,
-    isFailsafe,
-    flashTick,
-  ]);
+    } finally {
+      ctx.restore();
+    }
+  };
+
+  // Draw when something changed, at most ~30 times a second: telemetry marks it dirty through a store subscription
+  // (no React render), and so does every render (above).
+  useEffect(() => {
+    const unsubscribe = useTelemetryStore.subscribe((st, prev) => {
+      if (
+        st.attitude !== prev.attitude ||
+        st.vfr !== prev.vfr ||
+        st.position !== prev.position ||
+        st.navController !== prev.navController ||
+        st.homePosition !== prev.homePosition ||
+        st.imu !== prev.imu ||
+        st.missionWaypoints !== prev.missionWaypoints ||
+        st.currentWaypointSeq !== prev.currentWaypointSeq ||
+        st.heartbeat !== prev.heartbeat ||
+        st.hasConnectedInSession !== prev.hasConnectedInSession
+      ) {
+        dirtyRef.current = true;
+      }
+    });
+    let raf = 0;
+    let last = 0;
+    const tick = (t: number) => {
+      raf = requestAnimationFrame(tick);
+      if (!dirtyRef.current || t - last < 32) return;
+      last = t;
+      dirtyRef.current = false;
+      drawRef.current();
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      unsubscribe();
+      cancelAnimationFrame(raf);
+    };
+  }, []);
 
   return (
     <Card className="h-full border-zinc-800 bg-zinc-950 shadow-lg overflow-hidden flex flex-col relative">

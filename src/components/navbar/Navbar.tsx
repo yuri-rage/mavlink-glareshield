@@ -9,7 +9,7 @@ import {
   sendTrackedCommand,
 } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
-import { useAudioAlertsStore } from '../../lib/audioAlerts';
+import { useAudioAlertsStore, type VoiceEngine } from '../../lib/audioAlerts';
 import { mavlinkConnection, isLoopbackWs, getWssHost, SERIAL_BAUD_RATES } from '../../mavlink/connection';
 import { getSerialApi, requestSerialDevice } from '../../mavlink/transport';
 import { Button } from '../ui/button';
@@ -61,6 +61,72 @@ function formatDurationClock(totalMs: number): string {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
+// The telemetry strip's pills, each subscribed to its own slice: a packet re-renders the pill it changes, not the
+// whole navbar. `active`: a vehicle heartbeat is current.
+const BatteryPill: React.FC<{ active: boolean }> = ({ active }) => {
+  const battery = useTelemetryStore((s) => s.battery);
+  const shown = active && battery.voltage > 0;
+  return (
+    <div className="flex items-center gap-1.5 shrink-0" title="Pack Voltage & Remaining Capacity">
+      <BatteryCharging
+        className={`h-3.5 w-3.5 shrink-0 ${
+          !shown ? 'text-zinc-500' : battery.remaining <= 15 ? 'text-red-400 animate-pulse' : battery.remaining <= 25 ? 'text-amber-400' : 'text-emerald-400'
+        }`}
+      />
+      <span className="text-zinc-400 font-sans font-bold uppercase text-[10px] md:text-[11px]">BAT</span>
+      <span
+        className={`font-bold ${!shown ? 'text-zinc-500' : battery.remaining <= 15 ? 'text-red-300' : battery.remaining <= 25 ? 'text-amber-300' : 'text-zinc-100'}`}
+      >
+        {shown ? `${battery.voltage.toFixed(1)}V · ${battery.remaining}%` : '--'}
+      </span>
+    </div>
+  );
+};
+
+const GpsPill: React.FC<{ active: boolean }> = ({ active }) => {
+  const fixType = useTelemetryStore((s) => s.gps.fixType);
+  const fixLabel = useTelemetryStore((s) => s.gps.fixLabel);
+  const satellites = useTelemetryStore((s) => s.gps.satellites);
+  return (
+    <div className="flex items-center gap-1.5 shrink-0" title="GNSS Fix & Visible Satellites">
+      <Satellite className={`h-3.5 w-3.5 shrink-0 ${!active ? 'text-zinc-500' : fixType >= 3 ? 'text-emerald-400' : 'text-amber-400'}`} />
+      <span className="text-zinc-400 font-sans font-bold uppercase text-[10px] md:text-[11px]">GPS</span>
+      <span className="font-bold text-zinc-100">{active ? `${fixLabel} (${satellites})` : '--'}</span>
+    </div>
+  );
+};
+
+const AltSpeedPill: React.FC<{ active: boolean; plane: boolean }> = ({ active, plane }) => {
+  const { formatAltitude, formatSpeed, altitudeMode } = useUnitsStore();
+  const altM = useTelemetryStore((s) => (altitudeMode === 'msl' ? s.position.alt : s.vfr.alt));
+  const speedMs = useTelemetryStore((s) => (plane ? s.vfr.airspeed : s.vfr.groundspeed));
+  return (
+    <div className="flex items-center gap-1.5 shrink-0" title="Active Altitude & Speed">
+      <span className="text-zinc-400 font-sans font-bold uppercase text-[10px] md:text-[11px]">{altitudeMode.toUpperCase()}</span>
+      <span className="font-bold text-sky-300">{active ? formatAltitude(altM).full : '--'}</span>
+      <span className="text-zinc-600">·</span>
+      <span className="font-bold text-emerald-300">{active ? formatSpeed(speedMs).full : '--'}</span>
+    </div>
+  );
+};
+
+const HomePill: React.FC<{ active: boolean }> = ({ active }) => {
+  const home = useTelemetryStore((s) => s.homePosition);
+  const formatHomeVector = useUnitsStore((s) => s.formatHomeVector);
+  return (
+    <div
+      className="flex items-center gap-1.5 shrink-0"
+      title={home.source !== 'none' ? `Home (${home.source.toUpperCase()}): ${home.lat.toFixed(5)}, ${home.lon.toFixed(5)}` : 'Home Position not yet received'}
+    >
+      <Home className={`h-3.5 w-3.5 shrink-0 ${home.source !== 'none' ? 'text-amber-400' : 'text-zinc-500'}`} />
+      <span className="text-zinc-400 font-sans font-bold uppercase text-[10px] md:text-[11px]">HOME</span>
+      <span className="font-bold text-zinc-100">
+        {active && home.distanceM !== null ? formatHomeVector(home.bearingDeg, home.distanceM) : home.source !== 'none' ? 'SET' : '--'}
+      </span>
+    </div>
+  );
+};
+
 export const Navbar: React.FC = () => {
   const {
     url,
@@ -94,15 +160,23 @@ export const Navbar: React.FC = () => {
         .filter(Boolean)
         .join(' · ')
     : '';
-  const battery = useTelemetryStore((state) => state.battery);
-  const gps = useTelemetryStore((state) => state.gps);
-  const vfr = useTelemetryStore((state) => state.vfr);
-  const position = useTelemetryStore((state) => state.position);
-  const homePosition = useTelemetryStore((state) => state.homePosition);
+  // The fast telemetry (battery, GPS, speeds, position, home vector) is shown by the small pills below, each
+  // subscribed on its own: a packet re-renders a pill, not this whole bar. Here only derived, slow-changing values.
   const sysStatus = useTelemetryStore((state) => state.sysStatus);
   const statusMessages = useTelemetryStore((state) => state.statusMessages);
-  const ekf = useTelemetryStore((state) => state.ekf);
-  const vibration = useTelemetryStore((state) => state.vibration);
+  // EKF and vibration as their verdicts and shown figures: re-rendered when those change, not on every report.
+  const ekfHealthy = useTelemetryStore((s) => (s.ekf.flags & 0x01) !== 0 && s.ekf.posHorizVariance < 0.8);
+  const ekfVarText = useTelemetryStore((s) => s.ekf.posHorizVariance.toFixed(2));
+  const vibeWarning = useTelemetryStore(
+    (s) =>
+      s.vibration.vibrationX > 30 ||
+      s.vibration.vibrationY > 30 ||
+      s.vibration.vibrationZ > 30 ||
+      s.vibration.clipping0 > 0 ||
+      s.vibration.clipping1 > 0 ||
+      s.vibration.clipping2 > 0
+  );
+  const vibeText = useTelemetryStore((s) => Math.max(s.vibration.vibrationX, s.vibration.vibrationY, s.vibration.vibrationZ).toFixed(1));
   const hasConnectedInSession = useTelemetryStore((state) => state.hasConnectedInSession);
   const armedStartedAt = useTelemetryStore((state) => state.armedStartedAt);
   const accumulatedArmedMs = useTelemetryStore((state) => state.accumulatedArmedMs);
@@ -115,15 +189,14 @@ export const Navbar: React.FC = () => {
     setSystem: setUnitSystem,
     altitudeMode,
     setAltitudeMode,
-    formatAltitude,
-    formatSpeed,
-    formatHomeVector,
   } = useUnitsStore();
   const {
     soundEnabled,
     voiceEnabled,
     waypointAnnounceEnabled,
     ttsStatus,
+    voiceEngine,
+    setVoiceEngine,
     ttsDownloadProgress,
     toggleSound,
     toggleVoice,
@@ -393,17 +466,6 @@ export const Navbar: React.FC = () => {
     (heartbeat.isArmed && armedStartedAt !== null ? Math.max(0, nowMs - armedStartedAt) : 0);
 
   const preArm = evaluatePreArmReadiness(sysStatus, statusMessages, heartbeat.isArmed);
-  const ekfHealthy = (ekf.flags & 0x01) !== 0 && ekf.posHorizVariance < 0.8;
-  const vibeWarning =
-    vibration.vibrationX > 30 ||
-    vibration.vibrationY > 30 ||
-    vibration.vibrationZ > 30 ||
-    vibration.clipping0 > 0 ||
-    vibration.clipping1 > 0 ||
-    vibration.clipping2 > 0;
-
-  const activeAltMeters = altitudeMode === 'msl' ? position.alt : vfr.alt;
-  const activeSpeedMs = vehicleCategory === 'plane' ? vfr.airspeed : vfr.groundspeed;
 
   return (
     <>
@@ -812,100 +874,19 @@ export const Navbar: React.FC = () => {
 
           <span className="text-zinc-700">|</span>
 
-          {/* Battery Pill */}
-          <div
-            className="flex items-center gap-1.5 shrink-0"
-            title="Pack Voltage & Remaining Capacity"
-          >
-            <BatteryCharging
-              className={`h-3.5 w-3.5 shrink-0 ${
-                !isHeartbeatActive || battery.voltage <= 0
-                  ? 'text-zinc-500'
-                  : battery.remaining <= 15
-                    ? 'text-red-400 animate-pulse'
-                    : battery.remaining <= 25
-                      ? 'text-amber-400'
-                      : 'text-emerald-400'
-              }`}
-            />
-            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px] md:text-[11px]">BAT</span>
-            <span
-              className={`font-bold ${
-                !isHeartbeatActive || battery.voltage <= 0
-                  ? 'text-zinc-500'
-                  : battery.remaining <= 15
-                    ? 'text-red-300'
-                    : battery.remaining <= 25
-                      ? 'text-amber-300'
-                      : 'text-zinc-100'
-              }`}
-            >
-              {isHeartbeatActive && battery.voltage > 0
-                ? `${battery.voltage.toFixed(1)}V · ${battery.remaining}%`
-                : '--'}
-            </span>
-          </div>
+          <BatteryPill active={isHeartbeatActive} />
 
           <span className="text-zinc-700">|</span>
 
-          {/* GNSS Pill */}
-          <div className="flex items-center gap-1.5 shrink-0" title="GNSS Fix & Visible Satellites">
-            <Satellite
-              className={`h-3.5 w-3.5 shrink-0 ${
-                !isHeartbeatActive
-                  ? 'text-zinc-500'
-                  : gps.fixType >= 3
-                    ? 'text-emerald-400'
-                    : 'text-amber-400'
-              }`}
-            />
-            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px] md:text-[11px]">GPS</span>
-            <span className="font-bold text-zinc-100">
-              {isHeartbeatActive ? `${gps.fixLabel} (${gps.satellites})` : '--'}
-            </span>
-          </div>
+          <GpsPill active={isHeartbeatActive} />
 
           <span className="text-zinc-700">|</span>
 
-          {/* Altitude & Speed Pill */}
-          <div className="flex items-center gap-1.5 shrink-0" title="Active Altitude & Speed">
-            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px] md:text-[11px]">
-              {altitudeMode.toUpperCase()}
-            </span>
-            <span className="font-bold text-sky-300">
-              {isHeartbeatActive ? formatAltitude(activeAltMeters).full : '--'}
-            </span>
-            <span className="text-zinc-600">·</span>
-            <span className="font-bold text-emerald-300">
-              {isHeartbeatActive ? formatSpeed(activeSpeedMs).full : '--'}
-            </span>
-          </div>
+          <AltSpeedPill active={isHeartbeatActive} plane={vehicleCategory === 'plane'} />
 
           <span className="text-zinc-700">|</span>
 
-          {/* Home Distance & Bearing Pill (Rank 1) */}
-          <div
-            className="flex items-center gap-1.5 shrink-0"
-            title={
-              homePosition.source !== 'none'
-                ? `Home (${homePosition.source.toUpperCase()}): ${homePosition.lat.toFixed(5)}, ${homePosition.lon.toFixed(5)}`
-                : 'Home Position not yet received'
-            }
-          >
-            <Home
-              className={`h-3.5 w-3.5 shrink-0 ${
-                homePosition.source !== 'none' ? 'text-amber-400' : 'text-zinc-500'
-              }`}
-            />
-            <span className="text-zinc-400 font-sans font-bold uppercase text-[10px] md:text-[11px]">HOME</span>
-            <span className="font-bold text-zinc-100">
-              {isHeartbeatActive && homePosition.distanceM !== null
-                ? formatHomeVector(homePosition.bearingDeg, homePosition.distanceM)
-                : homePosition.source !== 'none'
-                  ? 'SET'
-                  : '--'}
-            </span>
-          </div>
+          <HomePill active={isHeartbeatActive} />
 
           <span className="text-zinc-700 hidden sm:inline">|</span>
 
@@ -1282,7 +1263,9 @@ export const Navbar: React.FC = () => {
                   Voice Callouts
                 </div>
                 <div className="text-[10px] text-zinc-400 mt-0.5">
-                  {voiceEnabled && soundEnabled
+                  {voiceEnabled && soundEnabled && voiceEngine === 'browser'
+                    ? 'Device voice'
+                    : voiceEnabled && soundEnabled
                     ? ttsStatus === 'downloading'
                       ? `Downloading Betty (${ttsDownloadProgress}%)`
                       : ttsStatus === 'ready'
@@ -1291,6 +1274,19 @@ export const Navbar: React.FC = () => {
                     : 'Off'}
                 </div>
               </button>
+              <label className="col-span-full flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-2.5 py-1.5 text-[11px] text-zinc-300">
+                <span title="The neural voice downloads a ~60 MB model and uses some 150-250 MB of memory; the device voice uses the browser's own speech">
+                  Voice engine
+                </span>
+                <select
+                  value={voiceEngine}
+                  onChange={(e) => setVoiceEngine(e.target.value as VoiceEngine)}
+                  className="rounded border border-zinc-700 bg-zinc-950 px-1.5 py-0.5 text-[11px] text-zinc-100"
+                >
+                  <option value="neural">Neural (Betty, ~60 MB)</option>
+                  <option value="browser">Device voice (light)</option>
+                </select>
+              </label>
 
               <button
                 type="button"
@@ -1450,14 +1446,14 @@ export const Navbar: React.FC = () => {
                   label: 'EKF Nav',
                   ok: !isHeartbeatActive || ekfHealthy,
                   detail: isHeartbeatActive
-                    ? `Var ${ekf.posHorizVariance.toFixed(2)}`
+                    ? `Var ${ekfVarText}`
                     : '--',
                 },
                 {
                   label: 'Vibration',
                   ok: !vibeWarning,
                   detail: isHeartbeatActive
-                    ? `${Math.max(vibration.vibrationX, vibration.vibrationY, vibration.vibrationZ).toFixed(1)} m/s²`
+                    ? `${vibeText} m/s²`
                     : '--',
                 },
               ].map((item) => (
