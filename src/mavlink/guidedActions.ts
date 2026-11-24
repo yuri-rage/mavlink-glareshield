@@ -102,3 +102,65 @@ export function setHome(at: { lat: number; lon: number; altMslM: number } | null
     ? { command: MAV_CMD_DO_SET_HOME, frame: MAV_FRAME_GLOBAL, params: [0, 0, 0, 0, e7(at.lat), e7(at.lon), at.altMslM], label: `Set home (${at.lat.toFixed(5)}, ${at.lon.toFixed(5)})` }
     : { command: MAV_CMD_DO_SET_HOME, frame: MAV_FRAME_GLOBAL, params: [1, 0, 0, 0, 0, 0, 0], label: 'Set home to the vehicle position' };
 }
+
+// - Change speed: DO_CHANGE_SPEED, honoured only in AUTO and GUIDED on every vehicle (others fail it). Copter and
+//   Rover take a groundspeed (param1 1); Plane an airspeed (param1 0) between AIRSPEED_MIN and AIRSPEED_MAX
+//   (ARSPD_FBW_MIN/MAX before 4.6), -2 for its default (AIRSPEED_CRUISE). Plane's "groundspeed" type would rewrite
+//   its minimum groundspeed parameter instead, so it isn't used.
+// - Pause / resume: DO_PAUSE_CONTINUE (param1 0 pause, 1 resume), Copter only, in AUTO or GUIDED.
+
+export const MAV_CMD_DO_CHANGE_SPEED = 178;
+export const MAV_CMD_DO_PAUSE_CONTINUE = 193;
+const SPEED_TYPE_AIRSPEED = 0;
+const SPEED_TYPE_GROUNDSPEED = 1;
+
+export const speedModes = (modeName: string) => modeName === 'AUTO' || modeName === 'GUIDED';
+export const canChangeSpeed = (c: VehicleCategory) => c === 'plane' || c === 'copter' || c === 'rover';
+
+export interface SpeedPlan {
+  spec: CommandIntSpec;
+  /** "airspeed" or "groundspeed", for the card. */
+  kind: 'airspeed' | 'groundspeed';
+  /** A reason the vehicle will refuse it (the mode, Plane's limits), or null. */
+  warning: string | null;
+}
+
+/**
+ * Change speed to `speedMs` (m/s), or with `speedMs` null Plane's default airspeed. `limits` are Plane's airspeed
+ * minimum and maximum when known.
+ */
+export function changeSpeed(
+  category: VehicleCategory,
+  modeName: string,
+  speedMs: number | null,
+  limits: { min?: number; max?: number } = {},
+  fmt: (ms: number) => string = (v) => `${+v.toFixed(1)} m/s`
+): SpeedPlan | null {
+  if (!canChangeSpeed(category)) return null;
+  if (speedMs !== null && (!Number.isFinite(speedMs) || speedMs <= 0)) return null;
+  const plane = category === 'plane';
+  if (speedMs === null && !plane) return null;
+  const kind = plane ? 'airspeed' : 'groundspeed';
+  let warning: string | null = speedModes(modeName) ? null : `Only in AUTO or GUIDED: ${modeName || 'this mode'} will refuse it.`;
+  if (!warning && plane && speedMs !== null) {
+    if (limits.min !== undefined && speedMs < limits.min) warning = `Below the minimum airspeed (${fmt(limits.min)}): Plane will refuse it.`;
+    else if (limits.max !== undefined && speedMs > limits.max) warning = `Above the maximum airspeed (${fmt(limits.max)}): Plane will refuse it.`;
+  }
+  return {
+    spec: {
+      command: MAV_CMD_DO_CHANGE_SPEED,
+      frame: 0,
+      params: [plane ? SPEED_TYPE_AIRSPEED : SPEED_TYPE_GROUNDSPEED, speedMs ?? -2, -1, 0, 0, 0, 0],
+      label: speedMs === null ? 'Airspeed: back to default' : `Change ${kind} to ${fmt(speedMs)}`,
+    },
+    kind,
+    warning,
+  };
+}
+
+export const canPause = (c: VehicleCategory, modeName: string) => c === 'copter' && speedModes(modeName);
+
+/** Copter: pause (hold where it is) or resume the mission / guided target. */
+export function pauseContinue(pause: boolean): CommandIntSpec {
+  return { command: MAV_CMD_DO_PAUSE_CONTINUE, frame: 0, params: [pause ? 0 : 1, 0, 0, 0, 0, 0, 0], label: pause ? 'Pause' : 'Resume' };
+}
