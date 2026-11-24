@@ -45,14 +45,19 @@ export const RAW_SPEED: InputUnit = { unit: 'm/s', fromSi: IDENTITY, toSi: IDENT
 export const useLengthUnit = () => lengthUnit(useUnitsStore((s) => s.system));
 export const useSpeedUnit = () => speedUnit(useUnitsStore((s) => s.system));
 
+/** Whole units for a label: "100 m", "328 ft". */
+export function wholeLength(m: number, u: InputUnit): string {
+  return `${Math.round(u.fromSi(m))} ${u.unit}`;
+}
+
 /** What a mission command param's label says it holds: a length "(m)", a speed "(m/s)", or something else. */
 export function paramUnitKind(label: string): 'length' | 'speed' | null {
-  if (/\(m\/s\)/.test(label)) return 'speed';
-  if (/\(m\)/.test(label)) return 'length';
+  if (/\(m\/s[,)]/.test(label)) return 'speed';
+  if (/\(m[,)]/.test(label)) return 'length';
   return null;
 }
 
-/** The label with its unit replaced by the one shown: "Accept radius (m)" -> "Accept radius (ft)". */
+/** The label with its unit replaced by the one shown: "Accept radius (m)" -> "Accept radius (ft)", "(m, 0 stops)" -> "(ft, 0 stops)". */
 export function relabel(label: string, unit: string): string {
-  return label.replace(/\((m\/s|m)\)/, `(${unit})`);
+  return label.replace(/\((m\/s|m)(?=[,)])/, `(${unit}`);
 }

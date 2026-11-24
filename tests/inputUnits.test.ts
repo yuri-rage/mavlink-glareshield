@@ -19,6 +19,9 @@ check('raw: metres as stored', RAW_LENGTH.unit === 'm' && RAW_LENGTH.fromSi(5) =
 check('"Accept radius (m)" is a length', paramUnitKind('Accept radius (m)') === 'length');
 check('"Speed (m/s)" is a speed', paramUnitKind('Speed (m/s)') === 'speed');
 check('time, angle, % and plain labels are left alone', ['Hold (s)', 'Yaw (°)', 'Throttle (%, -1 no change)', 'Turns', 'Delay (s)'].every((l) => paramUnitKind(l) === null));
+check('"Distance (m, 0 stops)" is a length too', paramUnitKind('Distance (m, 0 stops)') === 'length');
+check('relabel keeps the rest: (ft, 0 stops)', relabel('Distance (m, 0 stops)', 'ft') === 'Distance (ft, 0 stops)', relabel('Distance (m, 0 stops)', 'ft'));
+check('"(ms)" (shutter time) is not metres', paramUnitKind('Shutter (ms)') === null);
 check('relabel: (m) to (ft), (m/s) to (kts)', relabel('Abort alt (m)', 'ft') === 'Abort alt (ft)' && relabel('Speed (m/s)', 'kts') === 'Speed (kts)');
 
 console.log(failures.length ? `\n${failures.length} input-unit check(s) FAILED` : '\nAll input-unit checks PASSED');

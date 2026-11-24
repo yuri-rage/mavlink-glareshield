@@ -34,5 +34,13 @@ check('another vehicle type starts over', useLastVehicleStore.getState().type ==
 param('WPNAV_RADIUS_M', 1.5);
 check('connected: plans with the live vehicle', planningVehicle().type === 2 && planningVehicle().params.WPNAV_RADIUS_M === 1.5, JSON.stringify(planningVehicle()));
 
+// A plane's WP_RADIUS still in the store when a rover connects: not the rover's.
+hb(0, false);
+param('WP_RADIUS', 90);
+hb(10); // rover
+check('connected: a value left by the previous vehicle is not used', planningVehicle().type === 10 && planningVehicle().params.WP_RADIUS === undefined, JSON.stringify(planningVehicle()));
+param('WP_RADIUS', 2);
+check('the rover\'s own WP_RADIUS once it sends it', planningVehicle().params.WP_RADIUS === 2, JSON.stringify(planningVehicle()));
+
 console.log(failures.length ? `\n${failures.length} last-vehicle check(s) FAILED` : '\nAll last-vehicle checks PASSED');
 if (failures.length) process.exit(1);

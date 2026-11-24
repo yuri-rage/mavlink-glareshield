@@ -339,7 +339,8 @@ export function destinationPoint(lat: number, lon: number, bearingDeg: number, d
   const d = distM / EARTH_RADIUS_M;
   const b = bearingDeg * rad;
   const p1 = lat * rad;
-  const p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(b));
+  // Clamped: rounding can carry the sine a hair past ±1 at the poles, and asin of that is NaN.
+  const p2 = Math.asin(Math.min(1, Math.max(-1, Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(b))));
   const l2 = lon * rad + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2));
   return { lat: p2 / rad, lon: ((((l2 / rad + 180) % 360) + 360) % 360) - 180 };
 }
@@ -358,7 +359,8 @@ export function insertWaypointAtBearing(
   fallbackAlt = DEFAULT_WAYPOINT_ALT
 ): { draft: MissionDraft; index: number } {
   const ref = draft.items[from];
-  if (!ref || (ref.x === 0 && ref.y === 0)) throw new RangeError(`Item ${from} has no position to measure from`);
+  // Home or an item with a location: a command without one (DELAY, CAMERA) keeps other numbers in x and y.
+  if (!ref || (from !== 0 && !cmdHasLocation(ref.command)) || (ref.x === 0 && ref.y === 0)) throw new RangeError(`Item ${from} has no position to measure from`);
   if (!Number.isFinite(bearingDeg)) throw new RangeError('Bearing must be a number');
   if (!Number.isFinite(distM) || distM <= 0) throw new RangeError('Distance must be more than 0');
   const p = destinationPoint(ref.x, ref.y, bearingDeg, distM);

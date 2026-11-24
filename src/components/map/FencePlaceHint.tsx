@@ -5,7 +5,7 @@ import React from 'react';
 import { useMissionPlanStore, type FenceDrawKind } from '../../store/missionPlanStore';
 import { DEFAULT_CIRCLE_RADIUS } from '../../mavlink/fenceDraft';
 import { finishFencePolygon } from './fenceCommit';
-import { useUnitsStore } from '../../store/unitsStore';
+import { useLengthUnit, wholeLength } from '../../lib/inputUnits';
 
 const KINDS: { kind: FenceDrawKind; label: string; title: string }[] = [
   { kind: 'polygon-inclusion', label: 'Incl. polygon', title: 'Click each vertex; the vehicle must stay inside' },
@@ -23,7 +23,7 @@ export const FencePlaceHint: React.FC = () => {
   const { setFenceDrawKind, setFenceDrawing } = useMissionPlanStore.getState();
   const n = drawing?.length ?? 0;
   // The default circle's radius, in the display units.
-  const r = useUnitsStore((s) => s.formatAltitude)(DEFAULT_CIRCLE_RADIUS).full;
+  const r = wholeLength(DEFAULT_CIRCLE_RADIUS, useLengthUnit());
   const polygon = kind === 'polygon-inclusion' || kind === 'polygon-exclusion';
 
   return (
