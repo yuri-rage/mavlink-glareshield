@@ -163,7 +163,7 @@ export function useFenceDraftLayer(
           const m = L.marker(ll(v), { icon: squareIcon(false), pane: HANDLES_PANE, draggable: true, autoPan: true, keyboard: false, title: `Vertex ${k + 1}: drag to move` });
           m.on('drag', () => {
             const p = m.getLatLng();
-            poly.setLatLngs(vertices.map((x, j) => (j === k ? [p.lat, p.lng] : ll(x))));
+            poly.setLatLngs(vertices.map((x, j) => (j === k ? ([p.lat, p.lng] as L.LatLngTuple) : ll(x))));
           });
           m.on('dragend', () => {
             const p = m.getLatLng();
