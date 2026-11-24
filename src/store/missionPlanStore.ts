@@ -1,7 +1,7 @@
-// Planning mode: the drafts being edited on the map (the mission, and the rally points as a second layer), each with
+// Planning mode: the drafts being edited on the map (the mission, the rally points and the fence as layers), each with
 // its undo history and the vehicle's version it started from. Drafts are saved in this browser so switching
 // dashboard tabs or reloading doesn't lose work. Nothing here talks to the vehicle: a draft only replaces the
-// vehicle's mission or rally points through an upload.
+// vehicle's mission, rally points or fence through an upload.
 
 import { create } from 'zustand';
 import {
@@ -14,6 +14,7 @@ import {
   type MissionDraft,
 } from '../mavlink/missionDraft';
 import { rallyDraftsEqual, type RallyDraft } from '../mavlink/rallyDraft';
+import { EMPTY_FENCE, fenceDraftsEqual, type FenceDraft } from '../mavlink/fenceDraft';
 
 const STORAGE_KEY = 'mavlink_glareshield_mission_draft';
 
@@ -21,7 +22,7 @@ const STORAGE_KEY = 'mavlink_glareshield_mission_draft';
 export type PlanTool = 'select' | 'add'; // 'add' is labelled Place
 
 /** Which draft the map and panel edit. */
-export type PlanLayer = 'mission' | 'rally';
+export type PlanLayer = 'mission' | 'rally' | 'fence';
 
 /** The rally point draft: the same shape of state as the mission's, kept apart. */
 export interface RallyLayerState {
@@ -30,6 +31,15 @@ export interface RallyLayerState {
   base: RallyDraft;
   selected: number | null;
   /** The vehicle's rally points changed after the draft started (and the draft has changes of its own). */
+  vehicleChanged: boolean;
+}
+
+/** The fence draft, like the rally layer; `selected` is a shape index. */
+export interface FenceLayerState {
+  history: History<FenceDraft>;
+  /** The vehicle's fence when planning started or last synced. */
+  base: FenceDraft;
+  selected: number | null;
   vehicleChanged: boolean;
 }
 
@@ -52,9 +62,10 @@ interface MissionPlanState {
   vehicleChanged: boolean;
   layer: PlanLayer;
   rally: RallyLayerState;
+  fence: FenceLayerState;
 
-  /** Turn planning on with `draft` (and `rally`), each also its base (no changes yet). */
-  start: (draft: MissionDraft, source: DraftSource, rally?: RallyDraft) => void;
+  /** Turn planning on with `draft` (and `rally`, `fence`), each also its base (no changes yet). */
+  start: (draft: MissionDraft, source: DraftSource, rally?: RallyDraft, fence?: FenceDraft) => void;
   /** Turn planning off and drop the draft. */
   stop: () => void;
   /** Apply an edit to the draft as one undo step. Edits throw on invalid input; the draft is then unchanged. */
@@ -88,6 +99,16 @@ interface MissionPlanState {
   setRallyVehicleChanged: (changed: boolean) => void;
   rallyRebase: (base: RallyDraft) => void;
   rallyUploaded: (readBack: RallyDraft) => void;
+
+  // The fence layer: the same operations, on the fence draft (selection is a shape index).
+  fenceEdit: (fn: (d: FenceDraft) => FenceDraft, select?: number | null) => void;
+  fenceReplace: (draft: FenceDraft) => boolean;
+  fenceResetToVehicle: (draft: FenceDraft) => void;
+  fenceSyncFromVehicle: (draft: FenceDraft) => void;
+  fenceSelect: (index: number | null) => void;
+  setFenceVehicleChanged: (changed: boolean) => void;
+  fenceRebase: (base: FenceDraft) => void;
+  fenceUploaded: (readBack: FenceDraft) => void;
 }
 
 /**
@@ -121,14 +142,25 @@ export function isRallyDirty(s: Pick<MissionPlanState, 'rally'>): boolean {
   return !rallyDraftsEqual(s.rally.history.present, s.rally.base);
 }
 
-/** Either draft has unsaved changes (for leaving planning, closing the tab, the header dot). */
-export function isAnyDirty(s: Pick<MissionPlanState, 'history' | 'base' | 'rally'>): boolean {
-  return isDraftDirty(s) || isRallyDirty(s);
+/** True when the fence draft differs from the fence it started from. */
+export function isFenceDirty(s: Pick<MissionPlanState, 'fence'>): boolean {
+  return !fenceDraftsEqual(s.fence.history.present, s.fence.base);
+}
+
+/** Any draft has unsaved changes (for leaving planning, closing the tab, the header dot). */
+export function isAnyDirty(s: Pick<MissionPlanState, 'history' | 'base' | 'rally' | 'fence'>): boolean {
+  return isDraftDirty(s) || isRallyDirty(s) || isFenceDirty(s);
 }
 
 const EMPTY: MissionDraft = { items: [] };
 const EMPTY_RALLY: RallyDraft = { points: [] };
 const rallyInit = (draft: RallyDraft = EMPTY_RALLY): RallyLayerState => ({
+  history: historyInit(draft),
+  base: draft,
+  selected: null,
+  vehicleChanged: false,
+});
+const fenceInit = (draft: FenceDraft = EMPTY_FENCE): FenceLayerState => ({
   history: historyInit(draft),
   base: draft,
   selected: null,
@@ -143,6 +175,8 @@ interface Saved {
   source: DraftSource;
   /** Absent in drafts saved before rally editing. */
   rally?: { present: RallyDraft; base: RallyDraft };
+  /** Absent in drafts saved before fence editing. */
+  fence?: { present: FenceDraft; base: FenceDraft };
 }
 
 function isDraft(v: any): v is MissionDraft {
@@ -157,6 +191,22 @@ function isRallyDraft(v: any): v is RallyDraft {
   );
 }
 
+function isFenceDraft(v: any): v is FenceDraft {
+  const pos = (p: any) => p && typeof p.lat === 'number' && typeof p.lon === 'number';
+  return (
+    Boolean(v) &&
+    Array.isArray(v.shapes) &&
+    (v.returnPoint === null || pos(v.returnPoint)) &&
+    v.shapes.every(
+      (sh: any) =>
+        sh &&
+        typeof sh.inclusion === 'boolean' &&
+        ((sh.kind === 'polygon' && Array.isArray(sh.vertices) && sh.vertices.every(pos)) ||
+          (sh.kind === 'circle' && pos(sh.center) && typeof sh.radius === 'number'))
+    )
+  );
+}
+
 function load(): Saved | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -164,7 +214,8 @@ function load(): Saved | null {
     const s = JSON.parse(raw);
     if (!s?.active || !isDraft(s.present) || !isDraft(s.base) || s.present.items.length === 0) return null;
     const rally = s.rally && isRallyDraft(s.rally.present) && isRallyDraft(s.rally.base) ? s.rally : undefined;
-    return { active: true, present: s.present, base: s.base, source: s.source ?? { kind: 'empty' }, rally };
+    const fence = s.fence && isFenceDraft(s.fence.present) && isFenceDraft(s.fence.base) ? s.fence : undefined;
+    return { active: true, present: s.present, base: s.base, source: s.source ?? { kind: 'empty' }, rally, fence };
   } catch {
     return null;
   }
@@ -182,6 +233,7 @@ function save(s: MissionPlanState) {
       base: s.base,
       source: s.source,
       rally: { present: s.rally.history.present, base: s.rally.base },
+      fence: { present: s.fence.history.present, base: s.fence.base },
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
   } catch {
@@ -204,8 +256,11 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   rally: restored?.rally
     ? { history: historyInit(restored.rally.present), base: restored.rally.base, selected: null, vehicleChanged: false }
     : rallyInit(),
+  fence: restored?.fence
+    ? { history: historyInit(restored.fence.present), base: restored.fence.base, selected: null, vehicleChanged: false }
+    : fenceInit(),
 
-  start: (draft, source, rally) =>
+  start: (draft, source, rally, fence) =>
     set({
       active: true,
       history: historyInit(draft),
@@ -216,6 +271,7 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
       vehicleChanged: false,
       layer: 'mission',
       rally: rallyInit(rally),
+      fence: fenceInit(fence),
     }),
 
   stop: () =>
@@ -229,6 +285,7 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
       vehicleChanged: false,
       layer: 'mission',
       rally: rallyInit(),
+      fence: fenceInit(),
     }),
 
   edit: (fn, select) => {
@@ -267,11 +324,16 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   },
 
   undo: () => {
-    const { uploading, layer, rally } = get();
+    const { uploading, layer, rally, fence } = get();
     if (uploading) return;
     if (layer === 'rally') {
       const h = historyUndo(rally.history);
       set({ rally: { ...rally, history: h, selected: fitSelection(rally.selected, h.present.points.length) } });
+      return;
+    }
+    if (layer === 'fence') {
+      const h = historyUndo(fence.history);
+      set({ fence: { ...fence, history: h, selected: fitSelection(fence.selected, h.present.shapes.length) } });
       return;
     }
     const h = historyUndo(get().history);
@@ -279,11 +341,16 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   },
 
   redo: () => {
-    const { uploading, layer, rally } = get();
+    const { uploading, layer, rally, fence } = get();
     if (uploading) return;
     if (layer === 'rally') {
       const h = historyRedo(rally.history);
       set({ rally: { ...rally, history: h, selected: fitSelection(rally.selected, h.present.points.length) } });
+      return;
+    }
+    if (layer === 'fence') {
+      const h = historyRedo(fence.history);
+      set({ fence: { ...fence, history: h, selected: fitSelection(fence.selected, h.present.shapes.length) } });
       return;
     }
     const h = historyRedo(get().history);
@@ -369,6 +436,51 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
     if (!active) return;
     set({ rally: { history: historyInit(readBack), base: readBack, selected: fitSelection(rally.selected, readBack.points.length), vehicleChanged: false } });
   },
+
+  fenceEdit: (fn, select) => {
+    const { fence, active, uploading } = get();
+    if (!active || uploading) return;
+    const next = fn(fence.history.present);
+    set({ fence: { ...fence, history: historyPush(fence.history, next), ...(select !== undefined ? { selected: select } : {}) } });
+  },
+
+  fenceReplace: (draft) => {
+    const { fence, active, uploading } = get();
+    if (!active || uploading) return false;
+    set({ fence: { ...fence, history: historyPush(fence.history, draft), selected: null } });
+    return true;
+  },
+
+  fenceResetToVehicle: (draft) => {
+    const { fence, active, uploading } = get();
+    if (!active || uploading) return;
+    set({ fence: { ...fence, history: historyPush(fence.history, draft), base: draft, selected: null, vehicleChanged: false } });
+  },
+
+  fenceSyncFromVehicle: (draft) => {
+    const { fence, active } = get();
+    if (!active) return;
+    set({ fence: { history: historyInit(draft), base: draft, selected: fitSelection(fence.selected, draft.shapes.length), vehicleChanged: false } });
+  },
+
+  fenceSelect: (index) => set({ fence: { ...get().fence, selected: index } }),
+
+  setFenceVehicleChanged: (changed) => {
+    const { fence } = get();
+    if (fence.vehicleChanged !== changed) set({ fence: { ...fence, vehicleChanged: changed } });
+  },
+
+  fenceRebase: (base) => {
+    const { fence, active } = get();
+    if (!active) return;
+    set({ fence: { ...fence, base, vehicleChanged: false } });
+  },
+
+  fenceUploaded: (readBack) => {
+    const { fence, active } = get();
+    if (!active) return;
+    set({ fence: { history: historyInit(readBack), base: readBack, selected: fitSelection(fence.selected, readBack.shapes.length), vehicleChanged: false } });
+  },
 }));
 
 // Save after every change. A draft is a few kB, and the map commits a drag only when it ends.
@@ -379,6 +491,8 @@ let lastSaved: {
   source: DraftSource;
   rallyPresent: RallyDraft;
   rallyBase: RallyDraft;
+  fencePresent: FenceDraft;
+  fenceBase: FenceDraft;
 } | null = null;
 useMissionPlanStore.subscribe((s) => {
   if (
@@ -388,7 +502,9 @@ useMissionPlanStore.subscribe((s) => {
     lastSaved.base === s.base &&
     lastSaved.source === s.source &&
     lastSaved.rallyPresent === s.rally.history.present &&
-    lastSaved.rallyBase === s.rally.base
+    lastSaved.rallyBase === s.rally.base &&
+    lastSaved.fencePresent === s.fence.history.present &&
+    lastSaved.fenceBase === s.fence.base
   ) {
     return;
   }
@@ -399,6 +515,8 @@ useMissionPlanStore.subscribe((s) => {
     source: s.source,
     rallyPresent: s.rally.history.present,
     rallyBase: s.rally.base,
+    fencePresent: s.fence.history.present,
+    fenceBase: s.fence.base,
   };
   save(s);
 });

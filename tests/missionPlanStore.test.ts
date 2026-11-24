@@ -118,6 +118,42 @@ check('replace when allowed reports success', S().replace(vehicle, { kind: 'file
   check('number field: not typed commits nothing even when the value moved', typedValue('35.0010000', '35.0020000', false) === null);
 }
 
+// Fence layer: its own draft, history, base and selection; undo/redo follow the active layer.
+{
+  const r = await import('../src/store/missionPlanStore.ts');
+  const fd = await import('../src/mavlink/fenceDraft.ts');
+  const fence = fd.addShape(fd.EMPTY_FENCE, fd.squareAt({ lat: 35, lon: -106 }, 200, true)).draft;
+  S().start(vehicle, { kind: 'vehicle' }, undefined, fence);
+  check('fence: starts clean with the vehicle fence', !r.isFenceDirty(S()) && S().fence.history.present.shapes.length === 1);
+  S().setLayer('fence');
+  S().fenceEdit((x) => fd.setRadius(fd.addShape(x, { kind: 'circle', inclusion: false, center: { lat: 35, lon: -106 }, radius: 20 }).draft, 1, 30), 1);
+  check('fence edit: dirty, selected, other layers untouched', r.isFenceDirty(S()) && S().fence.selected === 1 && !isDraftDirty(S()) && r.isAnyDirty(S()));
+  S().undo();
+  check('undo on the fence layer undoes the fence edit', !r.isFenceDirty(S()) && S().fence.selected === null);
+  S().redo();
+  check('redo on the fence layer', S().fence.history.present.shapes.length === 2);
+  S().setUploading(true);
+  const before = S().fence.history.present;
+  S().fenceEdit((x) => fd.removeShape(x, 0));
+  check('fence: edits locked while uploading', S().fence.history.present === before && S().fenceReplace(fence) === false);
+  S().setUploading(false);
+  const saved = JSON.parse(mem.get('mavlink_glareshield_mission_draft') ?? 'null');
+  check('saved: fence draft and base', saved?.fence?.present?.shapes?.length === 2 && saved?.fence?.base?.shapes?.length === 1);
+  const fresh = await import('../src/store/missionPlanStore.ts?fence=1' as string);
+  check('reload: fence draft restored, still dirty', fresh.useMissionPlanStore.getState().fence.history.present.shapes.length === 2 && fresh.isFenceDirty(fresh.useMissionPlanStore.getState()));
+  const old = JSON.parse(mem.get('mavlink_glareshield_mission_draft')!);
+  delete old.fence;
+  mem.set('mavlink_glareshield_mission_draft', JSON.stringify(old));
+  const fromOld = await import('../src/store/missionPlanStore.ts?fence=2' as string);
+  check('older saved draft (no fence) loads, fence layer empty and clean',
+    fromOld.useMissionPlanStore.getState().active && fromOld.useMissionPlanStore.getState().fence.history.present.shapes.length === 0 && !fromOld.isFenceDirty(fromOld.useMissionPlanStore.getState()));
+  S().fenceUploaded(fence);
+  check('fence uploaded: clean, fresh history', !r.isFenceDirty(S()) && S().fence.history.past.length === 0);
+  S().stop();
+  check('stop: fence layer cleared', S().fence.history.present.shapes.length === 0 && S().layer === 'mission');
+  S().start(vehicle, { kind: 'vehicle' });
+}
+
 // Rally layer: its own draft, history, base and selection; undo/redo follow the active layer.
 {
   const r = await import('../src/store/missionPlanStore.ts');

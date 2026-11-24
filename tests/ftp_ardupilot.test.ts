@@ -638,5 +638,42 @@ for (const loss of [0.1, 0.2]) {
   check('late CreateFile refusal: no duplicate create during the reset pause', ok && creates === 2, `${creates} creates: ${sim.requests.slice(0, 8).join(' ')}`);
 }
 
+// 16. Geofence: upload a fence draft, read it back and judge it; clear it; a failed read keeps the map's fence.
+{
+  const { missionManager } = await import('../src/mavlink/missionManager.ts');
+  const fd = await import('../src/mavlink/fenceDraft.ts');
+  const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
+  // Earlier sections call the low-level uploadSection directly, which leaves the transfer state set (the app's
+  // own paths reset it afterwards): reset it, or this upload is refused as "already in progress".
+  (missionManager as any).setStatus({ isUploading: false, isFetching: false, method: 'idle', uploadProgress: undefined });
+  let fence = fd.addShape(fd.EMPTY_FENCE, fd.squareAt({ lat: 37.7749, lon: -122.4194 }, 400, true)).draft;
+  fence = fd.addShape(fence, { kind: 'circle', inclusion: false, center: { lat: 37.775, lon: -122.419 }, radius: 25.5 }).draft;
+  fence = fd.setReturnPoint(fence, { lat: 37.7745, lon: -122.4198 });
+
+  new ArduPilotFtpSim().install();
+  const res = await missionManager.uploadFenceAndReadBack(fd.fenceDraftToItems(fence), 1, 1);
+  await sleep(50);
+  const v = fd.checkFenceReadBack(fence, res.readBack, res.readOk);
+  check('fence upload over MAVFTP: read back and verified', res.success && res.method === 'ftp' && res.readOk && v.status === 'verified', `${res.method} ${v.status} ${v.differences.join('; ')}`);
+
+  new ArduPilotFtpSim().install();
+  const cleared = await missionManager.uploadFenceAndReadBack([], 1, 1);
+  await sleep(50);
+  check('clearing the fence verifies', cleared.success && fd.checkFenceReadBack(fd.EMPTY_FENCE, cleared.readBack, cleared.readOk).status === 'verified',
+    `${cleared.method} readOk=${cleared.readOk} ${cleared.error ?? ''}`);
+
+  const realFetch = missionManager.fetchFence.bind(missionManager);
+  (missionManager as any).fetchFence = async () => {
+    missionManager.lastFenceReadOk = false;
+    return [];
+  };
+  new ArduPilotFtpSim().install();
+  const unread = await missionManager.uploadFenceAndReadBack(fd.fenceDraftToItems(fence), 1, 1);
+  await sleep(50);
+  (missionManager as any).fetchFence = realFetch;
+  check('fence read fails: unreadable, map keeps the uploaded fence',
+    unread.success && fd.checkFenceReadBack(fence, unread.readBack, unread.readOk).status === 'unreadable' && useTelemetryStore.getState().fencePoints.length === fd.fenceDraftToItems(fence).length);
+}
+
 console.log(failures.length ? `\n${failures.length} MAVFTP ArduPilot-sim check(s) FAILED` : '\nAll MAVFTP ArduPilot-sim checks PASSED');
 process.exit(failures.length ? 1 : 0);
