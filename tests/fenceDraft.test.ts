@@ -117,6 +117,34 @@ check('empty fence: warns it clears the vehicle\'s', has(f.validateFenceDraft(f.
   check('only exclusions: outside them is fine', !f.fenceBreached({ shapes: [base.shapes[1]], returnPoint: null }, { lat: 36, lon: -106 }));
 }
 
+// Breach reasons agree with the rule and name the zones
+{
+  const pts = [{ lat: 35.001, lon: -105.999 }, { lat: 35.0019, lon: -105.9981 }, { lat: 35.0003, lon: -105.9997 }, { lat: 36, lon: -106 }];
+  check('breach reasons agree with fenceBreached (both modes)', pts.every((p) => [false, true].every((u) => (f.fenceBreachReasons(base, p, { inclusionUnion: u }).length > 0) === f.fenceBreached(base, p, { inclusionUnion: u }))));
+  check('inside an exclusion zone: named', f.fenceBreachReasons(base, { lat: 35.001, lon: -105.999 }).some((r: string) => /inside exclusion polygon F2/.test(r)));
+  check('outside an inclusion zone: named', f.fenceBreachReasons(base, { lat: 35.0019, lon: -105.9981 }).some((r: string) => /outside inclusion zone F3/.test(r)));
+  check('safe position: no reasons', f.fenceBreachReasons(base, { lat: 35.0003, lon: -105.9997 }).length === 0);
+  const trap = f.addShape(base, { kind: 'circle', inclusion: false, center: { lat: 35.0003, lon: -105.9997 }, radius: 10 }).draft;
+  check('a new exclusion circle over the vehicle: breach', f.fenceBreachReasons(trap, { lat: 35.0003, lon: -105.9997 }).join() === 'inside exclusion circle F4');
+}
+{
+  const changed = f.fenceChanges(base, f.setReturnPoint(f.setRadius(f.addShape(base, f.squareAt({ lat: 35.01, lon: -106 }, 50, false)).draft, 2, 120), null));
+  check('changes listed in words', changed.join('; ') === 'F3 changed: inclusion circle; F4 added: exclusion polygon; return point removed', changed.join('; '));
+  check('no changes: empty', f.fenceChanges(base, base).length === 0);
+  check('fence action text: copter RTL, rover terminate, report only', f.fenceActionText('copter', 1) === 'RTL (or land)' && /TERMINATE/.test(f.fenceActionText('rover', 5)!) && f.fenceActionText('plane', 0) === null);
+}
+
+// Fencing on or off, as the upload check decides it
+{
+  const G = 1 << 20;
+  const st = (o: any) => f.fencingState({ sensorsPresent: 0, sensorsEnabled: 0, armed: true, ...o });
+  check('SYS_STATUS reports the fence: its enabled bit decides', st({ sensorsPresent: G, sensorsEnabled: G, fenceEnable: 0 }) === true && st({ sensorsPresent: G, sensorsEnabled: 0, fenceEnable: 1 }) === false);
+  check('fence enabled but none loaded yet (not present): FENCE_ENABLE says on', st({ sensorsPresent: 1, fenceEnable: 1, fenceAction: 1 }) === true);
+  check('report only: off', st({ fenceEnable: 1, fenceAction: 0 }) === false);
+  check('parameters unknown: unknown', st({}) === undefined);
+  check('auto-enable while armed: unknown', st({ fenceEnable: 0, fenceAutoEnable: 3 }) === undefined && st({ fenceEnable: 0, fenceAutoEnable: 3, armed: false }) === false);
+}
+
 // Comparison and read-back
 {
   const rb = f.fenceDraftToPoints(base);
