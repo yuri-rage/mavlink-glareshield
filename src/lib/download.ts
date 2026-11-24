@@ -5,8 +5,9 @@
  * start the download only after click() returns, and revoking first cancels it. The link is attached to the
  * page while clicked, which Firefox needs.
  */
-export function downloadFile(filename: string, content: string | Uint8Array, type = 'application/octet-stream'): void {
-  const url = URL.createObjectURL(new Blob([content as BlobPart], { type }));
+export function downloadFile(filename: string, content: string | Uint8Array | Blob, type = 'application/octet-stream'): void {
+  // A Blob (e.g. a File from the browser's file storage) is handed over as it is, not copied into memory.
+  const url = URL.createObjectURL(content instanceof Blob ? content : new Blob([content as BlobPart], { type }));
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
