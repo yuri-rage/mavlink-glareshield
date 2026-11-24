@@ -268,6 +268,8 @@ export function sanitizeWidgetDefinition(raw: CustomWidgetDefinition, opts: Sani
     delete w.panels;
   }
   if (raw.action !== undefined) w.action = sanitizeAction(raw.action);
+  // The set-clock action isn't a command: only a button sends it (a toggle or slider would wait for an ACK).
+  if (w.action?.special && w.displayType !== 'action-button') delete w.action.special;
   if (w.action && force) w.action = { ...w.action, confirmation: true };
   if (w.paramControl) {
     w.paramControl =

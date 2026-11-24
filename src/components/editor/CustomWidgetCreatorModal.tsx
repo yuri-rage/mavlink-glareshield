@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useDashboardStore } from '../../store/dashboardStore';
+import { GLOBAL_FRAMES } from '../widgets/custom/panelModel';
 import { Modal } from '../ui/modal';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -1483,6 +1484,8 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                       <option value={0}>Global, above sea level</option>
                       <option value={10}>Global, above terrain</option>
                       <option value={2}>None (params as numbers)</option>
+                      {/* A frame from an imported widget that isn't one of the above (e.g. a _INT variant). */}
+                      {![3, 0, 10, 2].includes(cmdFrame) && <option value={cmdFrame}>MAV_FRAME {cmdFrame}</option>}
                     </select>
                   </div>
                 )}
@@ -1490,7 +1493,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
             )}
             {!specialAction && sendAs === 'int' && (
               <p className="text-[10px] text-zinc-500 -mt-1">
-                {[0, 3, 10].includes(cmdFrame)
+                {GLOBAL_FRAMES.has(cmdFrame)
                   ? 'Param 5 and 6 are latitude and longitude in degrees (sent ×10⁷); param 7 is altitude (m).'
                   : 'Params 5 and 6 are sent as whole numbers (x, y); param 7 as is.'}
               </p>

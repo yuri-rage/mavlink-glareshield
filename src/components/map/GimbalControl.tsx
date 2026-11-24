@@ -14,6 +14,8 @@ import {
   MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW,
   MAV_CMD_DO_SET_ROI_LOCATION,
   MAV_CMD_DO_SET_ROI_NONE,
+  forwardYaw,
+  gimbalLimits,
   pitchYawParams,
   roiTurnsVehicle,
 } from '../../mavlink/gimbal';
@@ -44,12 +46,13 @@ export function useGimbalEnabled(): boolean {
   const mountTypes = useGimbalStore((s) => s.mountTypes);
   const info = useGimbalStore((s) => s.info);
   const attitude = useGimbalStore((s) => s.attitude);
+  const linked = useTelemetryStore((s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED');
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-  return gimbalEnabled({ mountTypes, info, attitude }, now);
+  return linked && gimbalEnabled({ mountTypes, info, attitude }, now);
 }
 
 export const GimbalControlBody: React.FC = () => {
@@ -58,23 +61,32 @@ export const GimbalControlBody: React.FC = () => {
   const yawLock = useGimbalStore((s) => s.yawLock);
   const roi = useGimbalStore((s) => s.roi);
   const { ack, send } = useSender();
-  const pitchMin = info?.pitchMin ?? -90;
-  const pitchMax = info?.pitchMax ?? 30;
   const canYaw = info ? (info.capFlags & GIMBAL_CAP.HAS_YAW_AXIS) !== 0 : true;
-  const yawMin = info?.yawMin ?? -180;
-  const yawMax = info?.yawMax ?? 180;
+  // Finite limits (NaN means unknown or unbounded); with yaw lock, yaw is a true heading over the whole circle.
+  const { pitchMin, pitchMax, yawMin, yawMax } = gimbalLimits(info, yawLock === true);
   const [pitch, setPitch] = useState(() => Math.round(attitude?.pitch ?? 0));
   const [yaw, setYaw] = useState(() => (canYaw ? Math.round(attitude && !attitude.earthFrame ? attitude.yaw : 0) : 0));
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
+  // Angles, neutral and retract take the gimbal off a target it was pointing at (ArduPilot leaves GPS-point mode):
+  // forget the target once the vehicle accepts. Changing only the yaw lock doesn't.
+  const clearRoi = () => useGimbalStore.getState().set({ roi: null });
   const point = (p: number, y: number, label: string) => {
     const { sys, comp } = target();
     const params = pitchYawParams({ deviceId: deviceId(), pitchDeg: clamp(p, pitchMin, pitchMax), yawDeg: canYaw ? clamp(y, yawMin, yawMax) : 0, yawLock: yawLock ?? false });
-    send(mavlinkConnection.getEncoder().createCommandLong(sys, comp, MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW, params), label);
+    send(mavlinkConnection.getEncoder().createCommandLong(sys, comp, MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW, params), label, clearRoi);
+  };
+  /** Forward / Down: along the vehicle (with yaw lock that's the vehicle's true heading, not north). */
+  const alongVehicle = (p: number, label: string) => {
+    const y = forwardYaw(yawLock === true, useTelemetryStore.getState().attitude.yawDeg);
+    setPitch(p);
+    setYaw(Math.round(y));
+    point(p, y, label);
   };
   const mode = (o: { retract?: boolean; neutral?: boolean; yawLock?: boolean }, label: string) => {
     const { sys, comp } = target();
-    send(mavlinkConnection.getEncoder().createCommandLong(sys, comp, MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW, pitchYawParams({ deviceId: deviceId(), ...o })), label);
+    const leavesTarget = Boolean(o.retract || o.neutral);
+    send(mavlinkConnection.getEncoder().createCommandLong(sys, comp, MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW, pitchYawParams({ deviceId: deviceId(), ...o })), label, leavesTarget ? clearRoi : undefined);
   };
   const stopRoi = () => {
     const { sys, comp } = target();
@@ -112,10 +124,10 @@ export const GimbalControlBody: React.FC = () => {
         <button type="button" className={`${BTN} col-span-3 border-sky-700 text-sky-300`} onClick={() => point(pitch, yaw, `Gimbal: pitch ${pitch}°, yaw ${yaw}°`)}>
           Point
         </button>
-        <button type="button" className={BTN} onClick={() => { setPitch(0); setYaw(0); point(0, 0, 'Gimbal: forward'); }}>
+        <button type="button" className={BTN} onClick={() => alongVehicle(0, 'Gimbal: forward')}>
           Forward
         </button>
-        <button type="button" className={BTN} disabled={pitchMin > -89} title={pitchMin > -89 ? `Pitch limit is ${Math.round(pitchMin)}°` : 'Straight down'} onClick={() => { setPitch(-90); setYaw(0); point(-90, 0, 'Gimbal: down'); }}>
+        <button type="button" className={BTN} disabled={pitchMin > -89} title={pitchMin > -89 ? `Pitch limit is ${Math.round(pitchMin)}°` : 'Straight down'} onClick={() => alongVehicle(-90, 'Gimbal: down')}>
           Down
         </button>
         <button type="button" className={BTN} disabled={!has(GIMBAL_CAP.HAS_NEUTRAL)} onClick={() => mode({ neutral: true }, 'Gimbal: neutral')}>

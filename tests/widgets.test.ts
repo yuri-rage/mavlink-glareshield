@@ -496,6 +496,8 @@ check('describeAck: timeout and not-sent are distinguished', describeAck({ comma
   const st = sanitizeWidgetDefinition({ id: 'b', name: 'B', category: 'control', displayType: 'action-button', action: { label: 'C', commandId: 0, params: [] as any, special: 'system-time' } });
   check('import: the system-time action kept; unknown specials dropped', st.action?.special === 'system-time' && sanitizeWidgetDefinition({ id: 'c', name: 'C', category: 'control', displayType: 'action-button', action: { label: 'C', commandId: 0, params: [] as any, special: 'rm -rf' as any } }).action?.special === undefined);
 
+  const tog = sanitizeWidgetDefinition({ id: 'd', name: 'D', category: 'control', displayType: 'toggle-switch', action: { label: 'C', commandId: 0, params: [] as any, special: 'system-time' } });
+  check('import: the clock action is dropped from a toggle (only buttons send it)', tog.action !== undefined && tog.action.special === undefined);
   check('presets: safety off and on are DO_SET_MODE with the safety flag (128), not the custom-mode flag', presets.findCommandPreset(176, [128, 0])?.key === 'safety-off' && presets.findCommandPreset(176, [128, 1])?.key === 'safety-on' && presets.findCommandPreset(176, [1, 0])?.key === 'set-mode');
   check('presets: ADS-B IDENT', presets.findCommandPreset(10001, [])?.key === 'adsb-ident');
   check('presets: the clock action only by its special, never by command 0', presets.findCommandPreset(0, [], 'button', 'system-time')?.key === 'system-time' && presets.findCommandPreset(0, [])?.key !== 'system-time');
