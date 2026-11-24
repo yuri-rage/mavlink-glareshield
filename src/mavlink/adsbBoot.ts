@@ -11,6 +11,7 @@ import { useTrafficStore } from '../store/trafficStore';
 import { useTelemetryStore } from '../store/telemetryStore';
 import { useUnitsStore } from '../store/unitsStore';
 import { useAudioAlertsStore, playAlertChime, speakCallout } from '../lib/audioAlerts';
+import { useAdsbSettingsStore } from '../store/adsbSettingsStore';
 
 mavlinkConnection.onPacket((p) => {
   if (p.messageId !== MAVLINK_MSG_ID.ADSB_VEHICLE) return;
@@ -48,9 +49,13 @@ function calloutText(t: Threat, squawk: number | null): string {
 
 const announced = new Map<number, number>();
 setInterval(() => {
+  const { warnings, thresholds } = useAdsbSettingsStore.getState();
   const own = ownForThreat(useTelemetryStore.getState().position);
-  if (!own) return;
-  const ranked = rankTraffic(Object.values(useTrafficStore.getState().aircraft), own);
+  if (!own || !warnings) {
+    announced.clear(); // turned back on, a threat already there is announced at once
+    return;
+  }
+  const ranked = rankTraffic(Object.values(useTrafficStore.getState().aircraft), own, thresholds);
   const toSay = trafficToAnnounce(
     ranked.map((r) => ({ icao: r.a.icao, level: r.t!.level })),
     announced,

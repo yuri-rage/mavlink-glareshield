@@ -7,6 +7,7 @@ import L from 'leaflet';
 import { useTrafficStore } from '../../store/trafficStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
+import { useAdsbSettingsStore } from '../../store/adsbSettingsStore';
 import {
   TRAFFIC_STALE_MS,
   emergencySquawk,
@@ -63,6 +64,8 @@ export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, re
   const aircraft = useTrafficStore((s) => s.aircraft);
   const position = useTelemetryStore((s) => s.position);
   const { formatAltitude, formatDistance, formatSpeed, formatClimb } = useUnitsStore();
+  const showOnMap = useAdsbSettingsStore((s) => s.showOnMap);
+  const thresholds = useAdsbSettingsStore((s) => s.thresholds);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -74,7 +77,8 @@ export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, re
     const map = mapRef.current;
     if (!map || !ready) return;
     const now = Date.now();
-    const ranked = rankTraffic(Object.values(aircraft), ownForThreat(position));
+    // Turned off in the View menu: no symbols (warnings are separate, in Settings).
+    const ranked = showOnMap ? rankTraffic(Object.values(aircraft), ownForThreat(position), thresholds) : [];
     const seen = new Set<number>();
     for (const { a, t } of ranked) {
       seen.add(a.icao);
@@ -98,7 +102,7 @@ export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, re
         markers.current.delete(icao);
       }
     }
-  }, [mapRef, ready, aircraft, position, formatAltitude, formatDistance, formatSpeed, formatClimb]);
+  }, [mapRef, ready, aircraft, position, formatAltitude, formatDistance, formatSpeed, formatClimb, showOnMap, thresholds]);
 
   useEffect(
     () => () => {

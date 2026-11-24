@@ -1,7 +1,9 @@
-// The map header's view menu: imagery, the full-width aspect ratio, fitting the view, and clearing the trace.
+// The map header's view menu: imagery, the full-width aspect ratio, layers (ADS-B traffic), fitting the view, and
+// clearing the trace.
 
 import React from 'react';
-import { Eraser, Layers, Maximize2 } from 'lucide-react';
+import { Eraser, Layers, Maximize2, Plane } from 'lucide-react';
+import { useAdsbSettingsStore } from '../../store/adsbSettingsStore';
 import { HeaderMenu, MenuItem, MenuSection } from './HeaderMenu';
 
 export type MapLayerType = 'satellite' | 'street';
@@ -24,7 +26,9 @@ const ASPECTS: { value: MapAspect; label: string }[] = [
   { value: '1:1', label: 'Square 1:1' },
 ];
 
-export const MapViewMenu: React.FC<MapViewMenuProps> = ({ layer, onLayer, aspect, onAspect, onFit, tracePoints, onClearTrace }) => (
+export const MapViewMenu: React.FC<MapViewMenuProps> = ({ layer, onLayer, aspect, onAspect, onFit, tracePoints, onClearTrace }) => {
+  const showTraffic = useAdsbSettingsStore((s) => s.showOnMap);
+  return (
   <HeaderMenu icon={<Layers className="h-3.5 w-3.5 text-sky-400" />} label="View" title="Map imagery, shape and view" widthClass="w-56">
     {(close) => {
       const run = (fn: () => void) => () => {
@@ -46,6 +50,15 @@ export const MapViewMenu: React.FC<MapViewMenuProps> = ({ layer, onLayer, aspect
             </>
           )}
 
+          <MenuSection label="Layers" />
+          <MenuItem
+            icon={<Plane className="h-3.5 w-3.5 text-sky-400" />}
+            label="ADS-B traffic"
+            detail={showTraffic ? 'shown' : 'hidden'}
+            checked={showTraffic}
+            onClick={run(() => useAdsbSettingsStore.getState().setShowOnMap(!showTraffic))}
+          />
+
           <MenuSection label="View" />
           <MenuItem
             icon={<Maximize2 className="h-3.5 w-3.5 text-sky-400" />}
@@ -63,4 +76,5 @@ export const MapViewMenu: React.FC<MapViewMenuProps> = ({ layer, onLayer, aspect
       );
     }}
   </HeaderMenu>
-);
+  );
+};

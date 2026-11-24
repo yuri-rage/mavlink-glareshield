@@ -5,7 +5,8 @@
  * Run: npx tsx tests/adsb.test.ts
  */
 export {};
-(globalThis as any).localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+const mem = new Map<string, string>();
+(globalThis as any).localStorage = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) };
 const { MavlinkParser, decodePayload } = await import('../src/mavlink/parser.ts');
 const a = await import('../src/mavlink/adsb.ts');
 const { useTrafficStore } = await import('../src/store/trafficStore.ts');
@@ -75,6 +76,35 @@ check('emergency squawks', a.emergencySquawk(7700) === 'emergency' && a.emergenc
   const mph = label(-30.48, 3);
   check('relative height: metres for km/h, feet for knots and mph', metric === '+50 m ↓' && kts === '+164 ft ↓' && mph === '−100 ft ↑', `${metric} / ${kts} / ${mph}`);
   check('vertical speed in the popup: the climb formatter (fpm when imperial)', useUnitsStore.getState().formatClimb(2.54).full === '+500 fpm');
+}
+
+// Configurable thresholds
+{
+  const own = { lat: 35, lon: -106, altMslM: 1700, velN: 0, velE: 0 };
+  const at = (dn: number, alt: number) => ({ ...t, lat: 35 + dn / 111195, lon: -106, headingDeg: null, speedMs: null, climbMs: null, altMslM: alt });
+  const th = { ...a.DEFAULT_THRESHOLDS, cautionRangeM: 5000, alertRangeM: 2000, alertVerticalM: 300 };
+  check('defaults: 2.5 km away is caution', a.assessThreat(at(2500, 1700), own).level === 'caution');
+  check('wider alert range: 1.5 km away is an alert', a.assessThreat(at(1500, 1700), own, th).level === 'alert' && a.assessThreat(at(1500, 1700), own).level === 'caution');
+  check('wider caution range: 4 km away is a caution', a.assessThreat(at(4000, 1700), own, th).level === 'caution' && a.assessThreat(at(4000, 1700), own).level === 'none');
+  check('larger alert vertical: 250 m above, 800 m away is an alert', a.assessThreat(at(800, 1950), own, th).level === 'alert' && a.assessThreat(at(800, 1950), own).level === 'caution');
+  const shortHorizon = { ...a.DEFAULT_THRESHOLDS, cpaHorizonS: 20 };
+  const head = { ...at(2500, 1720), headingDeg: 180, speedMs: 60 };
+  check('shorter look-ahead: closest approach in 42 s no longer alerts', a.assessThreat(head, own).level === 'alert' && a.assessThreat(head, own, shortHorizon).level === 'caution');
+
+  const { useAdsbSettingsStore, clampThresholds } = await import('../src/store/adsbSettingsStore.ts');
+  check('out-of-range values are clamped, not taken as zero', clampThresholds({ alertRangeM: 0, cautionRangeM: -5, cpaHorizonS: 99999 }).alertRangeM === 50 && clampThresholds({ cautionRangeM: -5 }).cautionRangeM === 50 && clampThresholds({ cpaHorizonS: 99999 }).cpaHorizonS === 600);
+  check('garbage keeps the default', clampThresholds({ alertRangeM: NaN }).alertRangeM === a.DEFAULT_THRESHOLDS.alertRangeM);
+  const st = useAdsbSettingsStore.getState();
+  st.setThresholds({ alertRangeM: 1500 });
+  st.setShowOnMap(false);
+  st.setWarnings(false);
+  const saved = JSON.parse(mem.get('mavlink_glareshield_adsb')!);
+  check('settings saved', saved.thresholds.alertRangeM === 1500 && saved.showOnMap === false && saved.warnings === false && saved.thresholds.cautionRangeM === 3000);
+  const fresh = await import('../src/store/adsbSettingsStore.ts?reload=1' as string);
+  const r = fresh.useAdsbSettingsStore.getState();
+  check('settings restored on reload', r.thresholds.alertRangeM === 1500 && !r.showOnMap && !r.warnings);
+  st.resetThresholds();
+  check('restore defaults', useAdsbSettingsStore.getState().thresholds.alertRangeM === 1000);
 }
 
 // Announcing

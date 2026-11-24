@@ -90,13 +90,25 @@ export interface Threat {
   cpaM: number | null;
 }
 
-export const CAUTION_RANGE_M = 3000;
-export const CAUTION_VERTICAL_M = 300;
-export const ALERT_RANGE_M = 1000;
-export const ALERT_VERTICAL_M = 150;
-/** Predicted to pass within this distance within this time: alert, wherever it is now. */
-export const CPA_ALERT_M = 500;
-export const CPA_HORIZON_S = 60;
+/** What makes an aircraft a caution or an alert (configurable in Settings; these are the defaults). */
+export interface TrafficThresholds {
+  cautionRangeM: number;
+  cautionVerticalM: number;
+  alertRangeM: number;
+  alertVerticalM: number;
+  /** Predicted to pass within cpaAlertM within cpaHorizonS (and within alertVerticalM then): alert, wherever it is now. */
+  cpaAlertM: number;
+  cpaHorizonS: number;
+}
+
+export const DEFAULT_THRESHOLDS: TrafficThresholds = {
+  cautionRangeM: 3000,
+  cautionVerticalM: 300,
+  alertRangeM: 1000,
+  alertVerticalM: 150,
+  cpaAlertM: 500,
+  cpaHorizonS: 60,
+};
 
 const R = 6371000;
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -113,7 +125,8 @@ function enOffset(a: { lat: number; lon: number }, b: { lat: number; lon: number
  */
 export function assessThreat(
   t: TrafficAircraft,
-  own: { lat: number; lon: number; altMslM: number | null; velN: number; velE: number; velUp?: number }
+  own: { lat: number; lon: number; altMslM: number | null; velN: number; velE: number; velUp?: number },
+  th: TrafficThresholds = DEFAULT_THRESHOLDS
 ): Threat {
   const { e, n } = enOffset(own, t);
   const distanceM = Math.hypot(e, n);
@@ -139,16 +152,16 @@ export function assessThreat(
     if (relAltM === null) return true;
     if (Math.abs(relAltM) <= limit) return true;
     // At closest approach, using both climb rates where known.
-    if (cpaS !== null && cpaS <= CPA_HORIZON_S) {
+    if (cpaS !== null && cpaS <= th.cpaHorizonS) {
       const relClimb = (t.climbMs ?? 0) - (own.velUp ?? 0);
       return Math.abs(relAltM + relClimb * cpaS) <= limit;
     }
     return false;
   };
   let level: ThreatLevel = 'none';
-  if (distanceM <= CAUTION_RANGE_M && vertWithin(CAUTION_VERTICAL_M)) level = 'caution';
-  const cpaAlert = cpaS !== null && cpaM !== null && cpaS <= CPA_HORIZON_S && cpaM <= CPA_ALERT_M && vertWithin(ALERT_VERTICAL_M);
-  if ((distanceM <= ALERT_RANGE_M && vertWithin(ALERT_VERTICAL_M)) || cpaAlert) level = 'alert';
+  if (distanceM <= th.cautionRangeM && vertWithin(th.cautionVerticalM)) level = 'caution';
+  const cpaAlert = cpaS !== null && cpaM !== null && cpaS <= th.cpaHorizonS && cpaM <= th.cpaAlertM && vertWithin(th.alertVerticalM);
+  if ((distanceM <= th.alertRangeM && vertWithin(th.alertVerticalM)) || cpaAlert) level = 'alert';
   return { level, distanceM, bearingDeg, relAltM, closing, cpaS, cpaM };
 }
 
@@ -186,10 +199,14 @@ export function ownForThreat(p: { lat: number; lon: number; alt: number; vx: num
 }
 
 /** Every aircraft with its threat, worst first (alert, caution, none; then nearest). */
-export function rankTraffic(aircraft: TrafficAircraft[], own: ReturnType<typeof ownForThreat>): { a: TrafficAircraft; t: Threat | null }[] {
+export function rankTraffic(
+  aircraft: TrafficAircraft[],
+  own: ReturnType<typeof ownForThreat>,
+  th: TrafficThresholds = DEFAULT_THRESHOLDS
+): { a: TrafficAircraft; t: Threat | null }[] {
   const order = { alert: 0, caution: 1, none: 2 };
   return aircraft
-    .map((a) => ({ a, t: own ? assessThreat(a, own) : null }))
+    .map((a) => ({ a, t: own ? assessThreat(a, own, th) : null }))
     .sort((x, y) => (x.t && y.t ? order[x.t.level] - order[y.t.level] || x.t.distanceM - y.t.distanceM : 0));
 }
 
