@@ -5,6 +5,18 @@ export type AltitudeMode = 'agl' | 'msl';
 
 const STORAGE_KEY_UNITS = 'mavlink_glareshield_unit_system';
 const STORAGE_KEY_ALT = 'mavlink_glareshield_alt_mode';
+const STORAGE_KEY_PARAM_UNITS = 'mavlink_glareshield_param_units';
+
+/** Mission command params in the editor: in the display units, or raw (as sent: m, m/s). */
+export type ParamUnits = 'user' | 'raw';
+
+function getStoredParamUnits(): ParamUnits {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY_PARAM_UNITS) === 'raw' ? 'raw' : 'user';
+  } catch {
+    return 'user';
+  }
+}
 
 function getStoredUnitSystem(): UnitSystem {
   try {
@@ -41,6 +53,8 @@ interface UnitsState {
   setSystem: (system: UnitSystem) => void;
   altitudeMode: AltitudeMode;
   setAltitudeMode: (mode: AltitudeMode) => void;
+  paramUnits: ParamUnits;
+  setParamUnits: (u: ParamUnits) => void;
   isImperial: () => boolean;
 
   // Formatters
@@ -55,6 +69,16 @@ interface UnitsState {
 export const useUnitsStore = create<UnitsState>((set, get) => ({
   system: getStoredUnitSystem(),
   altitudeMode: getStoredAltitudeMode(),
+  paramUnits: getStoredParamUnits(),
+
+  setParamUnits: (paramUnits: ParamUnits) => {
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(STORAGE_KEY_PARAM_UNITS, paramUnits);
+    } catch (e) {
+      console.warn('Failed to save param units:', e);
+    }
+    set({ paramUnits });
+  },
 
   setSystem: (system: UnitSystem) => {
     try {

@@ -19,7 +19,8 @@ import { useUnitsStore } from '../../store/unitsStore';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { downloadFile } from '../../lib/download';
 import { OPEN_ACCEPT } from './MissionMenu';
-import { FT_PER_M, ICON_BTN, INPUT, NumField, frameTag } from './planUi';
+import { ICON_BTN, INPUT, NumField, frameTag } from './planUi';
+import { useLengthUnit } from '../../lib/inputUnits';
 
 interface RallyPlanBodyProps {
   issues: RallyIssue[];
@@ -43,7 +44,7 @@ const PointEditor: React.FC<{
   apply: (fn: (d: RallyDraft) => RallyDraft, select?: number | null) => void;
 }> = ({ draft, index, issues, apply }) => {
   const p = draft.points[index];
-  const imperial = useUnitsStore((s) => s.system === 'mph' || s.system === 'kts');
+  const len = useLengthUnit();
   const del = useConfirmStep();
   const set = (patch: Partial<RallyItem>) => apply((d) => updateRallyPoint(d, index, patch));
   const frameKnown = ALTITUDE_FRAMES.some((f) => f.value === p.frame);
@@ -57,11 +58,11 @@ const PointEditor: React.FC<{
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         <NumField
-          label={`Altitude (${imperial ? 'ft' : 'm'})`}
+          label={`Altitude (${len.unit})`}
           title="ArduPilot keeps rally altitudes in whole metres"
-          value={imperial ? p.alt * FT_PER_M : p.alt}
+          value={len.fromSi(p.alt)}
           digits={0}
-          onCommit={(v) => set({ alt: imperial ? v / FT_PER_M : v })}
+          onCommit={(v) => set({ alt: len.toSi(v) })}
         />
         <label className="block min-w-0 space-y-0.5">
           <span className="block truncate text-[10px] text-zinc-500">Altitude frame</span>

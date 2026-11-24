@@ -5,12 +5,13 @@ import React from 'react';
 import { useMissionPlanStore, type FenceDrawKind } from '../../store/missionPlanStore';
 import { DEFAULT_CIRCLE_RADIUS } from '../../mavlink/fenceDraft';
 import { finishFencePolygon } from './fenceCommit';
+import { useUnitsStore } from '../../store/unitsStore';
 
 const KINDS: { kind: FenceDrawKind; label: string; title: string }[] = [
   { kind: 'polygon-inclusion', label: 'Incl. polygon', title: 'Click each vertex; the vehicle must stay inside' },
   { kind: 'polygon-exclusion', label: 'Excl. polygon', title: 'Click each vertex; the vehicle must stay outside' },
-  { kind: 'circle-inclusion', label: 'Incl. circle', title: `Click the centre (${DEFAULT_CIRCLE_RADIUS} m radius; drag its handle to resize)` },
-  { kind: 'circle-exclusion', label: 'Excl. circle', title: `Click the centre (${DEFAULT_CIRCLE_RADIUS} m radius; drag its handle to resize)` },
+  { kind: 'circle-inclusion', label: 'Incl. circle', title: 'Click the centre ({r} radius; drag its handle to resize)' },
+  { kind: 'circle-exclusion', label: 'Excl. circle', title: 'Click the centre ({r} radius; drag its handle to resize)' },
   { kind: 'return-point', label: 'Return point', title: 'Click to place (or move) the fence return point (used by ArduPlane)' },
 ];
 
@@ -21,6 +22,8 @@ export const FencePlaceHint: React.FC = () => {
   const drawing = useMissionPlanStore((s) => s.fenceDrawing);
   const { setFenceDrawKind, setFenceDrawing } = useMissionPlanStore.getState();
   const n = drawing?.length ?? 0;
+  // The default circle's radius, in the display units.
+  const r = useUnitsStore((s) => s.formatAltitude)(DEFAULT_CIRCLE_RADIUS).full;
   const polygon = kind === 'polygon-inclusion' || kind === 'polygon-exclusion';
 
   return (
@@ -30,7 +33,7 @@ export const FencePlaceHint: React.FC = () => {
           <button
             key={k.kind}
             type="button"
-            title={k.title}
+            title={k.title.replace('{r}', r)}
             aria-pressed={kind === k.kind}
             onClick={() => setFenceDrawKind(k.kind)}
             className={`${BTN} ${kind === k.kind ? 'bg-red-500 text-zinc-950' : 'text-zinc-300 hover:bg-zinc-800'}`}

@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MAV_FRAME } from '../../mavlink/missionDraft';
 
-export const FT_PER_M = 3.28084;
+export { FT_PER_M } from '../../lib/inputUnits';
 export const INPUT =
   'h-7 w-full rounded-md border border-zinc-700 bg-zinc-900 px-1.5 text-[11px] font-mono text-zinc-100 focus:outline-none focus:border-sky-500';
 export const ICON_BTN =
