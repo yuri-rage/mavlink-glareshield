@@ -197,10 +197,12 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
           </div>
         </CardContent>
       ) : (
-        <CardContent
-          className={`p-3 sm:p-4 space-y-3 flex-1 flex flex-col min-h-0 ${panelFills(definition.displayType) ? '' : 'justify-center'}`}
-        >
-          <WidgetPanel {...panels[0]} />
+        // In a pane, content taller than the pane scrolls inside the card. Centring uses my-auto on a wrapper, not
+        // justify-center, which would push overflowing content's top out of reach.
+        <CardContent className={`p-3 sm:p-4 flex-1 flex flex-col min-h-0 ${inPane ? 'overflow-y-auto' : ''}`}>
+          <div className={`space-y-3 flex flex-col ${panelFills(definition.displayType) ? 'flex-1 min-h-0' : 'my-auto'}`}>
+            <WidgetPanel {...panels[0]} />
+          </div>
         </CardContent>
       )}
     </Card>

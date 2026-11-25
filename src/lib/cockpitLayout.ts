@@ -177,7 +177,7 @@ function panelMinHeight(p: Pick<WidgetPanelDefinition, 'displayType' | 'widgetId
 function multiBarCount(group: string | undefined): number {
   if (!group) return 4;
   if (group.startsWith('rc-') || group.startsWith('servo-')) return 8;
-  if (group === 'vibration-xyz' || group === 'ekf-variances') return 3;
+  if (group === 'vibration-xyz') return 3;
   return 4;
 }
 
