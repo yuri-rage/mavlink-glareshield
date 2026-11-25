@@ -10,7 +10,8 @@ export interface TerrainIO {
   decodePng: (png: Blob) => Promise<Uint8ClampedArray>;
 }
 
-const CACHE_NAME = 'glareshield-terrain-v1';
+/** Terrain PNGs kept by the browser (offline maps download into it too). */
+export const CACHE_NAME = 'glareshield-terrain-v1';
 /** Decoded tiles kept in memory (256 x 256 floats, 256 KB each). */
 const MEMORY_TILES = 96;
 /** A tile that failed isn't asked for again for this long. */

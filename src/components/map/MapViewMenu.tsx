@@ -3,11 +3,13 @@
 
 import { useTelemetryStore } from '../../store/telemetryStore';
 import React from 'react';
-import { Eraser, Layers, Maximize2, Plane } from 'lucide-react';
+import { Eraser, HardDrive, Layers, Maximize2, Plane } from 'lucide-react';
+import { useOfflineMapStore } from '../../store/offlineMapStore';
 import { useAdsbSettingsStore } from '../../store/adsbSettingsStore';
 import { HeaderMenu, MenuItem, MenuSection } from './HeaderMenu';
 
-export type MapLayerType = 'satellite' | 'street';
+/** Built-in imagery, your own tile source, or an imported (MBTiles) set by its area id. */
+export type MapLayerType = 'satellite' | 'street' | 'custom' | `import:${string}`;
 export type MapAspect = '1:1' | '4:3' | '16:9';
 
 interface MapViewMenuProps {
@@ -18,6 +20,8 @@ interface MapViewMenuProps {
   onAspect?: (aspect: MapAspect) => void;
   onFit: () => void;
   onClearTrace: () => void;
+  /** Open the offline maps panel. */
+  onOffline: () => void;
 }
 
 const ASPECTS: { value: MapAspect; label: string }[] = [
@@ -43,8 +47,11 @@ const ClearTraceItem: React.FC<{ onClick: () => void }> = ({ onClick }) => {
   );
 };
 
-export const MapViewMenu: React.FC<MapViewMenuProps> = ({ layer, onLayer, aspect, onAspect, onFit, onClearTrace }) => {
+export const MapViewMenu: React.FC<MapViewMenuProps> = ({ layer, onLayer, aspect, onAspect, onFit, onClearTrace, onOffline }) => {
   const showTraffic = useAdsbSettingsStore((s) => s.showOnMap);
+  const customSource = useOfflineMapStore((s) => s.customSource);
+  const areas = useOfflineMapStore((s) => s.areas);
+  const imported = areas.filter((a) => a.kind === 'imported');
   return (
   <HeaderMenu icon={<Layers className="h-3.5 w-3.5 text-sky-400" />} label="View" title="Map imagery, shape and view" widthClass="w-56">
     {(close) => {
@@ -57,6 +64,11 @@ export const MapViewMenu: React.FC<MapViewMenuProps> = ({ layer, onLayer, aspect
           <MenuSection label="Imagery" first />
           <MenuItem label="Satellite" detail="Esri" checked={layer === 'satellite'} onClick={run(() => onLayer('satellite'))} />
           <MenuItem label="Street map" detail="OSM" checked={layer === 'street'} onClick={run(() => onLayer('street'))} />
+          {customSource && <MenuItem label={customSource.name} detail="yours" checked={layer === 'custom'} onClick={run(() => onLayer('custom'))} />}
+          {imported.map((a) => (
+            <MenuItem key={a.id} label={a.name} detail="offline" checked={layer === `import:${a.id}`} onClick={run(() => onLayer(`import:${a.id}`))} />
+          ))}
+          <MenuItem icon={<HardDrive className="h-3.5 w-3.5 text-sky-400" />} label="Offline maps…" onClick={run(onOffline)} />
 
           {aspect && onAspect && (
             <>
