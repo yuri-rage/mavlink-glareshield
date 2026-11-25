@@ -1,8 +1,8 @@
 {
   // Cloudflare Workers static-assets deployment of the Vite build (dist/).
-  // Workers Builds runs `npx wrangler deploy` for master and `npx wrangler versions upload` for other
-  // branches; without this file the second has no assets directory and fails. public/_headers is
-  // copied into dist/ and applied by Workers static assets as before.
+  // Production deploys run from .github/workflows/ci.yml after unit_tests, bridge_tests, and build pass
+  // (disable automatic production builds in Cloudflare Workers Builds so master isn't shipped untested).
+  // public/_headers is copied into dist/ and applied by Workers static assets.
   "name": "glareshield",
   "compatibility_date": "2026-11-01",
   "assets": {

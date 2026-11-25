@@ -31,7 +31,7 @@ const { packDatFile } = await import('../src/mavlink/missionFileParser.ts');
 
 const ACK = 128, NAK = 129;
 const ERR_FAIL = 1, ERR_FAIL_ERRNO = 2, ERR_EOF = 6, ERR_INVALID_SESSION = 4, ENOENT = 2;
-const TIMEOUT_MS = 300;
+const TIMEOUT_MS = 60;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ------------------------------------------------------------------------------------------------
@@ -220,7 +220,7 @@ function check(name: string, ok: boolean, detail = '') {
 async function upload(sim: ArduPilotFtpSim, data: Uint8Array, path = '@MISSION/mission.dat') {
   sim.install();
   const ok = await mavFtpClient.writeFile(1, 1, path, data, 239, TIMEOUT_MS);
-  await sleep(50);                                     // let any trailing Terminate land
+  await sleep(20);                                     // let any trailing Terminate land
   return ok;
 }
 
@@ -629,11 +629,12 @@ for (const loss of [0.1, 0.2]) {
 // 15. The refusal that starts a session reset arrives just before the create's own timeout (a slow link). The
 // pending timeout must be cancelled, or it fires during the 80 ms pause and sends a duplicate create.
 {
-  const sim = new ArduPilotFtpSim({ delayReply: (req) => (req.opcode === FTP_OPCODE.CreateFile ? TIMEOUT_MS - 40 : 0) });
+  const SLOW_TIMEOUT_MS = 200;
+  const sim = new ArduPilotFtpSim({ delayReply: (req) => (req.opcode === FTP_OPCODE.CreateFile ? SLOW_TIMEOUT_MS - 40 : 0) });
   sim.install();
   sim.fd = { mode: 'r', path: '@PARAM/param.pck', buf: new Uint8Array(10), len: 10 }; // left open: the first create is refused
-  const ok = await mavFtpClient.writeFile(1, 1, PATH, DATA, 239, TIMEOUT_MS);
-  await sleep(50);
+  const ok = await mavFtpClient.writeFile(1, 1, PATH, DATA, 239, SLOW_TIMEOUT_MS);
+  await sleep(20);
   const creates = sim.requests.filter((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)).length;
   check('late CreateFile refusal: no duplicate create during the reset pause', ok && creates === 2, `${creates} creates: ${sim.requests.slice(0, 8).join(' ')}`);
 }

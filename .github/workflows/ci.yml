@@ -1,7 +1,9 @@
 name: Test & Build
 
-# Deployment is handled by Cloudflare Workers Builds (the "glareshield" Worker's Git integration,
-# configured by wrangler.jsonc). This workflow only gates changes on the test suite and build.
+# Production Cloudflare Workers deployment is gated on all test and build jobs passing in this
+# workflow (using CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets, configured by wrangler.jsonc;
+# disable Cloudflare Workers Builds' automatic production deploys in the dashboard so master isn't shipped
+# before autotests finish).
 
 on:
   push:
@@ -14,10 +16,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 jobs:
-  test_and_build:
-    name: Test & Build
+  unit_tests:
+    name: Unit & Regression Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout code
@@ -26,32 +33,97 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
-      - name: Setup Python (bridge tests)
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit & regression tests
+        run: npm test
+
+  bridge_tests:
+    name: Bridge Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
-          cache-dependency-path: bridge/requirements.txt
+          cache-dependency-path: |
+            bridge/requirements.txt
+            bridge/requirements-test.txt
 
       - name: Install dependencies
-        run: |
-          npm ci
-          # pymavlink builds reference packets for the bridge UDP test (same version as the golden vectors).
-          pip install -r bridge/requirements.txt pymavlink==2.4.50
+        run: pip install -r bridge/requirements-test.txt
 
-      - name: Run unit & regression tests
-        run: |
-          npm test
-          npm run test:regressions
-          npm run test:ftp-sim
+      - name: Run bridge security checks
+        run: python3 tests/check_bridge_security.py
 
-      - name: Run bridge tests
-        run: |
-          npm run test:bridge-security
-          npm run test:bridge-udp
+      - name: Run bridge UDP reply-target checks
+        run: python3 tests/check_bridge_udp_target.py
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build production bundle
         run: npm run build
+
+      - name: Upload dist artifact
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/master'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy to Cloudflare
+    needs: [unit_tests, bridge_tests, build]
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4'
+          command: deploy
