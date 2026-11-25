@@ -1,4 +1,5 @@
 import { feedbackBadge, feedbackRing } from './commandFeedback';
+import { useInHeaderSlot } from '../dashboard/paneContext';
 import React, { useState, useEffect, useRef } from 'react';
 import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
@@ -37,6 +38,8 @@ import {
 } from 'lucide-react';
 
 export const ArmingModesWidget: React.FC = () => {
+  // Pinned above a Cockpit tab's panes: the Takeoff checklist floats over the panes instead of pushing them down.
+  const pinned = useInHeaderSlot();
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
   const commandFeedback = useTelemetryStore((state) => state.commandFeedback);
   const { isImperial } = useUnitsStore();
@@ -44,6 +47,13 @@ export const ArmingModesWidget: React.FC = () => {
   const [sliderValue, setSliderValue] = useState<number>(0);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [showTakeoffPanel, setShowTakeoffPanel] = useState<boolean>(false);
+  // The floating checklist closes on Escape too.
+  useEffect(() => {
+    if (!pinned || !showTakeoffPanel) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setShowTakeoffPanel(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pinned, showTakeoffPanel]);
   const [takeoffAltMeters, setTakeoffAltMeters] = useState<number>(10);
   const [autoSeqStep, setAutoSeqStep] = useState<string | null>(null);
   const [autoSeqError, setAutoSeqError] = useState<string | null>(null);
@@ -340,7 +350,7 @@ export const ArmingModesWidget: React.FC = () => {
     (category === 'plane' ? heartbeat.customMode === 20 : heartbeat.customMode === 9);
 
   return (
-    <Card className="border-sky-500/20 bg-zinc-950/90 shadow-xl overflow-hidden">
+    <Card className={`relative border-sky-500/20 bg-zinc-950/90 shadow-xl ${pinned ? 'overflow-visible' : 'overflow-hidden'}`}>
       <CardContent className="p-2 sm:p-2.5 space-y-2.5">
         {/* Top Control Bar: Arming Slider & 5 Quick Mode Buttons */}
         {/* The arm block takes a third on medium screens and a fixed width on large ones: on a wide screen the room
@@ -704,7 +714,15 @@ export const ArmingModesWidget: React.FC = () => {
 
         {/* Guided Takeoff Workflow Panel */}
         {showTakeoffPanel && category !== 'rover' && category !== 'sub' && (
-          <div className="bg-zinc-900/95 border border-sky-500/40 rounded-xl p-3 space-y-3 shadow-lg">
+          // Pinned above a Cockpit tab's panes, it floats below the bar over them (the panes keep their size); in a
+          // Flow tab, inline as before.
+          <div
+            role={pinned ? 'dialog' : undefined}
+            aria-label={pinned ? 'Guided takeoff' : undefined}
+            className={`bg-zinc-900/95 border border-sky-500/40 rounded-xl p-3 space-y-3 shadow-lg ${
+              pinned ? 'absolute inset-x-2 top-full z-30 mt-1.5 shadow-2xl backdrop-blur-sm sm:inset-x-2.5' : ''
+            }`}
+          >
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <PlaneTakeoff className="h-4 w-4 text-sky-400" />

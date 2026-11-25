@@ -31,6 +31,9 @@ st().removeWidgetFromActiveTab('w-glareshield');
 st().addWidgetToActiveTab('built-in-glareshield');
 const qa = hud().widgets[hud().widgets.length - 1].instanceId;
 check('quick actions added to a headerless Cockpit tab are pinned as its header', hud().cockpit?.header === qa);
+st().unplaceFromCockpit('tab-flight', qa);
+st().placeInCockpit('tab-flight', qa);
+check('hidden quick actions shown again are re-pinned as the header', hud().cockpit?.header === qa && !panesInOrder({ header: null, root: hud().cockpit!.root }).includes(qa));
 
 st().unplaceFromCockpit('tab-flight', 'w-gps');
 check('hidden: off the layout, still on the tab', !panesInOrder(hud().cockpit).includes('w-gps') && hud().widgets.some((w) => w.instanceId === 'w-gps'));
