@@ -1,4 +1,4 @@
-import { MAVLINK_MSG_ID, MAVLINK_MESSAGE_CRC_EXTRA, MAV_CMD, cmdHasLocation } from './messages';
+import { cmdHasLocation, MAV_CMD, MAVLINK_MESSAGE_CRC_EXTRA, MAVLINK_MSG_ID } from './messages';
 import { calculateCrc } from './parser';
 
 export interface MissionItemIntData {
@@ -22,7 +22,8 @@ export class MavlinkEncoder {
   private systemId: number;
   private componentId: number;
 
-  constructor(systemId = 255, componentId = 190) { // GCS default IDs (255 matches ArduPilot SYSID_MYGCS)
+  constructor(systemId = 255, componentId = 190) {
+    // GCS default IDs (255 matches ArduPilot SYSID_MYGCS)
     this.systemId = systemId;
     this.componentId = componentId;
   }
@@ -145,7 +146,13 @@ export class MavlinkEncoder {
   }
 
   /** TERRAIN_DATA: one 4 x 4 sub-grid of a terrain block (lat/lon 1e7 deg of the block's corner; heights in m). */
-  public createTerrainData(lat: number, lon: number, gridSpacing: number, gridbit: number, heights: number[]): Uint8Array {
+  public createTerrainData(
+    lat: number,
+    lon: number,
+    gridSpacing: number,
+    gridbit: number,
+    heights: number[]
+  ): Uint8Array {
     const payload = new Uint8Array(43);
     const view = new DataView(payload.buffer);
     view.setInt32(0, lat, true);
@@ -174,23 +181,28 @@ export class MavlinkEncoder {
     altM: number,
     frame = 3 // MAV_FRAME_GLOBAL_RELATIVE_ALT
   ): Uint8Array {
-    return this.createCommandInt(
-      targetSystem,
-      targetComponent,
-      MAV_CMD.DO_REPOSITION,
-      frame,
-      [-1, 1, 0, Number.NaN, latDeg * 1e7, lonDeg * 1e7, altM]
-    );
+    return this.createCommandInt(targetSystem, targetComponent, MAV_CMD.DO_REPOSITION, frame, [
+      -1,
+      1,
+      0,
+      Number.NaN,
+      latDeg * 1e7,
+      lonDeg * 1e7,
+      altM,
+    ]);
   }
 
   // Arm / Disarm vehicle
   public createArmDisarm(targetSystem = 1, targetComponent = 1, arm: boolean, force = false): Uint8Array {
-    return this.createCommandLong(
-      targetSystem,
-      targetComponent,
-      MAV_CMD.COMPONENT_ARM_DISARM,
-      [arm ? 1 : 0, force ? 21196 : 0, 0, 0, 0, 0, 0]
-    );
+    return this.createCommandLong(targetSystem, targetComponent, MAV_CMD.COMPONENT_ARM_DISARM, [
+      arm ? 1 : 0,
+      force ? 21196 : 0,
+      0,
+      0,
+      0,
+      0,
+      0,
+    ]);
   }
 
   // Set Flight Mode via MAV_CMD_DO_SET_MODE
@@ -210,12 +222,15 @@ export class MavlinkEncoder {
     messageId: number,
     intervalUs: number
   ): Uint8Array {
-    return this.createCommandLong(
-      targetSystem,
-      targetComponent,
-      MAV_CMD.SET_MESSAGE_INTERVAL,
-      [messageId, intervalUs, 0, 0, 0, 0, 0]
-    );
+    return this.createCommandLong(targetSystem, targetComponent, MAV_CMD.SET_MESSAGE_INTERVAL, [
+      messageId,
+      intervalUs,
+      0,
+      0,
+      0,
+      0,
+      0,
+    ]);
   }
 
   // Request Autopilot Version & Capabilities (msg 148)
@@ -230,41 +245,29 @@ export class MavlinkEncoder {
 
   // Request a single MAVLink message ID via MAV_CMD_REQUEST_MESSAGE (512)
   public createRequestMessage(targetSystem = 1, targetComponent = 1, messageId: number): Uint8Array {
-    return this.createCommandLong(
-      targetSystem,
-      targetComponent,
-      MAV_CMD.REQUEST_MESSAGE,
-      [messageId, 0, 0, 0, 0, 0, 0]
-    );
+    return this.createCommandLong(targetSystem, targetComponent, MAV_CMD.REQUEST_MESSAGE, [
+      messageId,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+    ]);
   }
 
   // Trigger ArduPilot pre-arm safety checks via MAV_CMD_RUN_PREARM_CHECKS (401)
   public createRunPrearmChecks(targetSystem = 1, targetComponent = 1): Uint8Array {
-    return this.createCommandLong(
-      targetSystem,
-      targetComponent,
-      MAV_CMD.RUN_PREARM_CHECKS,
-      [0, 0, 0, 0, 0, 0, 0]
-    );
+    return this.createCommandLong(targetSystem, targetComponent, MAV_CMD.RUN_PREARM_CHECKS, [0, 0, 0, 0, 0, 0, 0]);
   }
 
   // Request version banner via MAV_CMD_DO_SEND_BANNER (42428)
   public createRequestBanner(targetSystem = 1, targetComponent = 1): Uint8Array {
-    return this.createCommandLong(
-      targetSystem,
-      targetComponent,
-      MAV_CMD.DO_SEND_BANNER,
-      [0, 0, 0, 0, 0, 0, 0]
-    );
+    return this.createCommandLong(targetSystem, targetComponent, MAV_CMD.DO_SEND_BANNER, [0, 0, 0, 0, 0, 0, 0]);
   }
 
   // Request single parameter by index or ID
-  public createParamRequestRead(
-    targetSystem = 1,
-    targetComponent = 1,
-    paramIndex = -1,
-    paramId = ''
-  ): Uint8Array {
+  public createParamRequestRead(targetSystem = 1, targetComponent = 1, paramIndex = -1, paramId = ''): Uint8Array {
     const payload = new Uint8Array(20);
     const view = new DataView(payload.buffer);
     view.setInt16(0, paramIndex, true);
@@ -297,7 +300,13 @@ export class MavlinkEncoder {
   }
 
   /** LOG_REQUEST_DATA: stream `count` bytes of log `id` from `ofs` as LOG_DATA (90 bytes each). */
-  public createLogRequestData(targetSystem: number, targetComponent: number, id: number, ofs: number, count: number): Uint8Array {
+  public createLogRequestData(
+    targetSystem: number,
+    targetComponent: number,
+    id: number,
+    ofs: number,
+    count: number
+  ): Uint8Array {
     const payload = new Uint8Array(12);
     const view = new DataView(payload.buffer);
     view.setUint32(0, ofs, true);

@@ -6,10 +6,10 @@
 // creator offers as bindable fields.
 
 import { mavlinkConnection } from '../mavlink/connection';
-import { getActiveSystemId, onActiveVehicleChange } from '../mavlink/vehicleRoster';
-import { decodePacket, type MavlinkPacket } from '../mavlink/parser';
 import { MAVLINK_MSG_ID } from '../mavlink/messages';
+import { decodePacket, type MavlinkPacket } from '../mavlink/parser';
 import { pidAxisMessageName } from '../mavlink/pidTuning';
+import { getActiveSystemId, onActiveVehicleChange } from '../mavlink/vehicleRoster';
 import { pidTuningRecorder } from './pidTuningRecorder';
 
 const MAV_TYPE_GCS = 6;
@@ -84,7 +84,12 @@ export function recordPacket(packet: MavlinkPacket, now = Date.now()): void {
     const type = packet.payload[4];
     // The active vehicle's heartbeat (vehicleRoster): another vehicle on the link isn't the one shown.
     const active = getActiveSystemId();
-    if (autopilot !== MAV_AUTOPILOT_INVALID && type !== MAV_TYPE_GCS && packet.componentId === 1 && (active === null || packet.systemId === active)) {
+    if (
+      autopilot !== MAV_AUTOPILOT_INVALID &&
+      type !== MAV_TYPE_GCS &&
+      packet.componentId === 1 &&
+      (active === null || packet.systemId === active)
+    ) {
       if (vehicleType !== undefined && vehicleType !== type) {
         pidTuningRecorder.clear();
       }
@@ -146,7 +151,10 @@ export function recordPacket(packet: MavlinkPacket, now = Date.now()): void {
 
 /** Strip the "(scaled)" display suffix used by the RC / servo pseudo-messages. */
 export function baseMessageName(messageName: string): string {
-  return messageName.replace(/\s*\(scaled\)\s*$/i, '').trim().toUpperCase();
+  return messageName
+    .replace(/\s*\(scaled\)\s*$/i, '')
+    .trim()
+    .toUpperCase();
 }
 
 function getCachedMessage(messageName: string): CachedMessage | undefined {

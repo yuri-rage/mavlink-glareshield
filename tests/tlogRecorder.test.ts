@@ -43,7 +43,16 @@ const heartbeat = (sysId = 1, armed = false, type = 2) => {
 const attitude = (upMs: number, sysId = 1) => {
   const payload = new Uint8Array(28);
   new DataView(payload.buffer).setUint32(0, upMs, true);
-  return { version: 2, sequence: 0, systemId: sysId, componentId: 1, messageId: 30, payload, crc: 0, raw: frame } as any;
+  return {
+    version: 2,
+    sequence: 0,
+    systemId: sysId,
+    componentId: 1,
+    messageId: 30,
+    payload,
+    crc: 0,
+    raw: frame,
+  } as any;
 };
 const other = () => ({ ...heartbeat(), messageId: 74, payload: new Uint8Array(4) }) as any;
 
@@ -54,7 +63,8 @@ async function connectAndHear(rec: any, sysId = 1, upMs = 600_000, armed = false
   rec.onReceived(attitude(upMs, sysId));
   await sleep(60);
 }
-const records = (storage: any, name: string | null) => (name ? readTlog(storage.data.get(name) ?? new Uint8Array()) : []);
+const records = (storage: any, name: string | null) =>
+  name ? readTlog(storage.data.get(name) ?? new Uint8Array()) : [];
 
 const storage = createMemoryTlogStorage();
 useTlogStore.setState({ enabled: true, capMb: 2048 });
@@ -66,8 +76,16 @@ const first = useTlogStore.getState().active;
 rec1.onSent(new Uint8Array([...enc.createHeartbeat(), ...enc.createParamRequestList(1, 1)]));
 await sleep(40);
 let rs = records(storage, first);
-check('new log once the vehicle is heard', useTlogStore.getState().phase === 'recording' && Boolean(first), String(first));
-check('held frames written first, then sent frames, each its own record', rs.length === 5 && rs.every((r) => r.timeUs === clockMs * 1000), `${rs.length} records`);
+check(
+  'new log once the vehicle is heard',
+  useTlogStore.getState().phase === 'recording' && Boolean(first),
+  String(first)
+);
+check(
+  'held frames written first, then sent frames, each its own record',
+  rs.length === 5 && rs.every((r) => r.timeUs === clockMs * 1000),
+  `${rs.length} records`
+);
 check('index: vehicle, open', loadTlogIndex()[first!]?.sysId === 1 && loadTlogIndex()[first!]?.closed === false);
 
 // 2. Page reload a minute later, same vehicle, same power-up: a new recorder continues the same file.
@@ -75,7 +93,11 @@ clockMs += 60_000;
 const before = storage.data.get(first!)!.length;
 const rec2 = new TlogRecorder(deps(storage));
 await connectAndHear(rec2, 1, 660_000);
-check('reload a minute later: same file continued', useTlogStore.getState().active === first && storage.data.get(first!)!.length > before, String(useTlogStore.getState().decision));
+check(
+  'reload a minute later: same file continued',
+  useTlogStore.getState().active === first && storage.data.get(first!)!.length > before,
+  String(useTlogStore.getState().decision)
+);
 
 // 3. Link dropped and back (not a disconnect): still the same file.
 rec2.onStatus('disconnected', false);
@@ -91,7 +113,11 @@ check('disconnect closes the log', loadTlogIndex()[first!]?.closed === true && u
 clockMs += 5_000;
 await connectAndHear(rec2, 1, 675_000);
 const second = useTlogStore.getState().active;
-check('reconnect after a disconnect: new file', Boolean(second) && second !== first, String(useTlogStore.getState().decision));
+check(
+  'reconnect after a disconnect: new file',
+  Boolean(second) && second !== first,
+  String(useTlogStore.getState().decision)
+);
 
 // 5. Reload, but the vehicle rebooted meanwhile: new file.
 clockMs += 30_000;
@@ -105,7 +131,11 @@ clockMs += 20 * 60_000;
 const upNow = 20_000 + 20 * 60_000 + 1000;
 const rec4 = new TlogRecorder(deps(storage));
 await connectAndHear(rec4, 1, upNow, true);
-check('20 min later, armed, same power-up: continued', useTlogStore.getState().active === third, String(useTlogStore.getState().decision));
+check(
+  '20 min later, armed, same power-up: continued',
+  useTlogStore.getState().active === third,
+  String(useTlogStore.getState().decision)
+);
 rec4.onStatus('disconnected', false);
 await sleep(20);
 
@@ -133,8 +163,14 @@ check('logging on again: recording', useTlogStore.getState().phase === 'recordin
   useTlogStore.setState({ capMb: 0.0001 });
   await (rec4 as any).enqueue(() => (rec4 as any).prune());
   const left = Object.keys(loadTlogIndex());
-  check('over the cap: oldest unkept deleted, kept and active stay', left.includes(first!) && left.includes(useTlogStore.getState().active!) && left.length < names.length && useTlogStore.getState().overCap,
-    `${names.length} → ${left.length}`);
+  check(
+    'over the cap: oldest unkept deleted, kept and active stay',
+    left.includes(first!) &&
+      left.includes(useTlogStore.getState().active!) &&
+      left.length < names.length &&
+      useTlogStore.getState().overCap,
+    `${names.length} → ${left.length}`
+  );
   useTlogStore.setState({ capMb: 2048 });
 }
 
@@ -165,9 +201,16 @@ check('logging on again: recording', useTlogStore.getState().phase === 'recordin
   rec.onReceived(attitude(2_100));
   await sleep(60);
   const b = useTlogStore.getState().active;
-  check('vehicle rebooted with the link up: old log closed, new one started', Boolean(b) && b !== a && loadTlogIndex()[a!]?.closed === true, `${a} → ${b}`);
-  check('after the reboot, every new frame is in the new log, none in the old', records(st, a).length === aBefore && records(st, b).length === 3,
-    `old ${aBefore} → ${records(st, a).length}, new ${records(st, b).length}`);
+  check(
+    'vehicle rebooted with the link up: old log closed, new one started',
+    Boolean(b) && b !== a && loadTlogIndex()[a!]?.closed === true,
+    `${a} → ${b}`
+  );
+  check(
+    'after the reboot, every new frame is in the new log, none in the old',
+    records(st, a).length === aBefore && records(st, b).length === 3,
+    `old ${aBefore} → ${records(st, a).length}, new ${records(st, b).length}`
+  );
   const bBefore = records(st, b).length;
   // Swap: vehicle 1 goes silent, vehicle 3 appears.
   clockMs += 8_000;
@@ -175,9 +218,16 @@ check('logging on again: recording', useTlogStore.getState().phase === 'recordin
   rec.onReceived(attitude(50_000, 3));
   await sleep(60);
   const c = useTlogStore.getState().active;
-  check('vehicle swapped with the link up: new log for the new vehicle', Boolean(c) && c !== b && loadTlogIndex()[c!]?.sysId === 3, String(c));
-  check('after the swap, the new vehicle\'s frames are in its log, none in the old', records(st, b).length === bBefore && records(st, c).length === 2,
-    `old ${bBefore} → ${records(st, b).length}, new ${records(st, c).length}`);
+  check(
+    'vehicle swapped with the link up: new log for the new vehicle',
+    Boolean(c) && c !== b && loadTlogIndex()[c!]?.sysId === 3,
+    String(c)
+  );
+  check(
+    "after the swap, the new vehicle's frames are in its log, none in the old",
+    records(st, b).length === bBefore && records(st, c).length === 2,
+    `old ${bBefore} → ${records(st, b).length}, new ${records(st, c).length}`
+  );
 
   // Dropped link, then a different vehicle (the old file is still open when the new one is chosen).
   const cBefore = records(st, c).length;
@@ -190,8 +240,11 @@ check('logging on again: recording', useTlogStore.getState().phase === 'recordin
   rec.onReceived(attitude(9_000, 4));
   await sleep(60);
   const d4 = useTlogStore.getState().active;
-  check('dropped link, then another vehicle: its frames in its own new log, none in the old', d4 !== c && records(st, c).length === cBefore && records(st, d4).length === 3,
-    `old ${cBefore} → ${records(st, c).length}, new ${records(st, d4).length}`);
+  check(
+    'dropped link, then another vehicle: its frames in its own new log, none in the old',
+    d4 !== c && records(st, c).length === cBefore && records(st, d4).length === 3,
+    `old ${cBefore} → ${records(st, c).length}, new ${records(st, d4).length}`
+  );
 
   // Lowering the cap deletes now.
   const before = Object.keys(loadTlogIndex()).length;
@@ -208,7 +261,10 @@ check('logging on again: recording', useTlogStore.getState().phase === 'recordin
   check('page hide records the last write time at once', loadTlogIndex()[d4!]?.lastWriteMs === clockMs);
 
   const logs = useTlogStore.getState().logs;
-  check('the UI list holds copies, not the recorder\'s objects', logs.length > 0 && logs.every((l) => (rec as any).index[l.name] !== l));
+  check(
+    "the UI list holds copies, not the recorder's objects",
+    logs.length > 0 && logs.every((l) => (rec as any).index[l.name] !== l)
+  );
 }
 
 // 9. Storage full: recording stops and says so.
@@ -220,8 +276,14 @@ check('logging on again: recording', useTlogStore.getState().phase === 'recordin
   for (let i = 0; i < 20; i++) rec.onReceived(other());
   await sleep(60);
   const st = useTlogStore.getState();
-  check('storage full: stopped, with the reason', st.phase === 'stopped' && /full/.test(st.error ?? ''), st.error ?? st.phase);
+  check(
+    'storage full: stopped, with the reason',
+    st.phase === 'stopped' && /full/.test(st.error ?? ''),
+    st.error ?? st.phase
+  );
 }
 
-console.log(failures.length ? `\n${failures.length} tlog recorder check(s) FAILED` : '\nAll tlog recorder checks PASSED');
+console.log(
+  failures.length ? `\n${failures.length} tlog recorder check(s) FAILED` : '\nAll tlog recorder checks PASSED'
+);
 process.exit(failures.length ? 1 : 0);

@@ -3,13 +3,28 @@
 // Drawing and warning are separate on purpose: hiding the symbols to declutter the map doesn't silence warnings.
 
 import { create } from 'zustand';
+
 import { DEFAULT_THRESHOLDS, type TrafficThresholds } from '../mavlink/adsb';
 
 const KEY = 'mavlink_glareshield_adsb';
 
 /** Lower bounds, so a typo can't turn the checks off or make every aircraft an alert by accident. */
-const MIN: TrafficThresholds = { cautionRangeM: 50, cautionVerticalM: 10, alertRangeM: 50, alertVerticalM: 10, cpaAlertM: 10, cpaHorizonS: 5 };
-const MAX: TrafficThresholds = { cautionRangeM: 100_000, cautionVerticalM: 10_000, alertRangeM: 100_000, alertVerticalM: 10_000, cpaAlertM: 20_000, cpaHorizonS: 600 };
+const MIN: TrafficThresholds = {
+  cautionRangeM: 50,
+  cautionVerticalM: 10,
+  alertRangeM: 50,
+  alertVerticalM: 10,
+  cpaAlertM: 10,
+  cpaHorizonS: 5,
+};
+const MAX: TrafficThresholds = {
+  cautionRangeM: 100_000,
+  cautionVerticalM: 10_000,
+  alertRangeM: 100_000,
+  alertVerticalM: 10_000,
+  cpaAlertM: 20_000,
+  cpaHorizonS: 600,
+};
 
 export function clampThresholds(t: Partial<TrafficThresholds>): TrafficThresholds {
   const out = { ...DEFAULT_THRESHOLDS };
@@ -30,7 +45,11 @@ function load(): Saved {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
     if (s && typeof s === 'object') {
-      return { showOnMap: s.showOnMap !== false, warnings: s.warnings !== false, thresholds: clampThresholds(s.thresholds ?? {}) };
+      return {
+        showOnMap: s.showOnMap !== false,
+        warnings: s.warnings !== false,
+        thresholds: clampThresholds(s.thresholds ?? {}),
+      };
     }
   } catch {
     // Unreadable: defaults.

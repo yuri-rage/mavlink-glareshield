@@ -1,9 +1,10 @@
 // Mission waypoint navigation shared by the Waypoint Control widget and the map's mission footer.
 
 import { useEffect, useState } from 'react';
-import { useTelemetryStore, setMissionCurrentWaypoint, type CommandAckInfo } from '../store/telemetryStore';
-import { speakCallout } from './audioAlerts';
+
 import { getVehicleCategory } from '../mavlink/messages';
+import { setMissionCurrentWaypoint, useTelemetryStore, type CommandAckInfo } from '../store/telemetryStore';
+import { speakCallout } from './audioAlerts';
 
 /** "11s", "2m 05s", "1h 04m"; '--' when unknown or not moving. */
 export function formatEta(distanceM: number, groundspeedMs: number): string {

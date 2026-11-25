@@ -2,19 +2,19 @@
 // Imported JSON is untrusted: unknown types fall back to safe defaults, malformed values are dropped, and every
 // command or parameter write is forced to ask for confirmation.
 
-import { builtinPanelId } from './builtinWidgets';
 import type {
   CustomWidgetDefinition,
   MultiBarGroupType,
   PanelDisplayType,
   WidgetAction,
-  WidgetPanelDefinition,
   WidgetChartConfig,
   WidgetDataBinding,
   WidgetDisplayType,
   WidgetGaugeConfig,
+  WidgetPanelDefinition,
   WidgetParamControl,
 } from '../types/widget';
+import { builtinPanelId } from './builtinWidgets';
 
 export const VALID_DISPLAY_TYPES = new Set<WidgetDisplayType>([
   'stat-card',
@@ -145,7 +145,12 @@ function sanitizeAction(raw: unknown): WidgetAction | undefined {
   if (commandId === undefined) return undefined;
   const src = Array.isArray(a.params) ? a.params : [];
   const params = Array.from({ length: 7 }, (_, i) => finite(src[i]) ?? 0) as WidgetAction['params'];
-  const out: WidgetAction = { label: text(a.label) ?? '', commandId: Math.round(commandId), params, confirmation: a.confirmation === true };
+  const out: WidgetAction = {
+    label: text(a.label) ?? '',
+    commandId: Math.round(commandId),
+    params,
+    confirmation: a.confirmation === true,
+  };
   if (a.send === 'int') {
     out.send = 'int';
     const frame = finite(a.frame);
@@ -171,7 +176,10 @@ function sanitizePanel(raw: unknown, opts: SanitizeOptions): WidgetPanelDefiniti
   }
   // A panel is cleaned exactly as a widget would be; composites can't nest.
   const type = r.displayType === 'composite' ? 'stat-card' : (r.displayType as WidgetDisplayType);
-  const clean = sanitizeWidgetDefinition({ ...(r as object), id: 'panel', name: 'panel', category: 'custom', displayType: type } as CustomWidgetDefinition, opts);
+  const clean = sanitizeWidgetDefinition(
+    { ...(r as object), id: 'panel', name: 'panel', category: 'custom', displayType: type } as CustomWidgetDefinition,
+    opts
+  );
   const out: WidgetPanelDefinition = { displayType: clean.displayType as PanelDisplayType };
   const title = text(r.title, 40);
   if (title) out.title = title;
@@ -179,8 +187,21 @@ function sanitizePanel(raw: unknown, opts: SanitizeOptions): WidgetPanelDefiniti
   if (span !== undefined) out.span = Math.max(1, Math.min(12, Math.round(span)));
   const description = text(r.description, 200);
   if (description) out.description = description;
-  if (typeof r.colorScheme === 'string' && COLOR_SCHEMES.has(r.colorScheme)) out.colorScheme = r.colorScheme as WidgetPanelDefinition['colorScheme'];
-  for (const key of ['binding', 'bindings', 'action', 'paramControl', 'paramSet', 'multiBarConfig', 'gauge', 'chart', 'feedback', 'stateThreshold', 'staleAfterSec'] as const) {
+  if (typeof r.colorScheme === 'string' && COLOR_SCHEMES.has(r.colorScheme))
+    out.colorScheme = r.colorScheme as WidgetPanelDefinition['colorScheme'];
+  for (const key of [
+    'binding',
+    'bindings',
+    'action',
+    'paramControl',
+    'paramSet',
+    'multiBarConfig',
+    'gauge',
+    'chart',
+    'feedback',
+    'stateThreshold',
+    'staleAfterSec',
+  ] as const) {
     if (clean[key] !== undefined) (out as unknown as Record<string, unknown>)[key] = clean[key];
   }
   return out;
@@ -226,7 +247,10 @@ function sanitizeParamControlFields(pc: WidgetParamControl): WidgetParamControl 
     const opts = Array.isArray(raw)
       ? (raw as unknown[])
           .filter((o): o is { label: unknown; value: unknown } => Boolean(o) && typeof o === 'object')
-          .map((o) => ({ label: typeof o.label === 'string' ? o.label : String(o.label ?? ''), value: finite(o.value) }))
+          .map((o) => ({
+            label: typeof o.label === 'string' ? o.label : String(o.label ?? ''),
+            value: finite(o.value),
+          }))
           .filter((o): o is { label: string; value: number } => o.value !== undefined)
       : [];
     if (opts.length > 0) out.options = opts;
@@ -235,12 +259,16 @@ function sanitizeParamControlFields(pc: WidgetParamControl): WidgetParamControl 
   return out;
 }
 
-export function sanitizeWidgetDefinition(raw: CustomWidgetDefinition, opts: SanitizeOptions = {}): CustomWidgetDefinition {
+export function sanitizeWidgetDefinition(
+  raw: CustomWidgetDefinition,
+  opts: SanitizeOptions = {}
+): CustomWidgetDefinition {
   const force = opts.forceConfirmation !== false;
   const w: CustomWidgetDefinition = { ...raw };
   if (!VALID_DISPLAY_TYPES.has(w.displayType)) w.displayType = 'stat-card';
   // An unknown scheme has no styles: the card would fail to render.
-  if (w.colorScheme !== undefined && !(typeof w.colorScheme === 'string' && COLOR_SCHEMES.has(w.colorScheme))) delete w.colorScheme;
+  if (w.colorScheme !== undefined && !(typeof w.colorScheme === 'string' && COLOR_SCHEMES.has(w.colorScheme)))
+    delete w.colorScheme;
   if (w.displayType === 'multi-bar' && (!w.multiBarConfig || !VALID_MULTI_BAR_GROUPS.has(w.multiBarConfig.group))) {
     w.multiBarConfig = { group: 'rc-8' };
   }
@@ -263,7 +291,9 @@ export function sanitizeWidgetDefinition(raw: CustomWidgetDefinition, opts: Sani
   }
   if (w.displayType === 'composite') {
     const panels = Array.isArray(raw.panels) ? raw.panels.slice(0, MAX_PANELS) : [];
-    w.panels = capCompositeBindings(panels.map((p) => sanitizePanel(p, opts)).filter((p): p is WidgetPanelDefinition => Boolean(p)));
+    w.panels = capCompositeBindings(
+      panels.map((p) => sanitizePanel(p, opts)).filter((p): p is WidgetPanelDefinition => Boolean(p))
+    );
   } else if ('panels' in w) {
     delete w.panels;
   }
@@ -274,7 +304,10 @@ export function sanitizeWidgetDefinition(raw: CustomWidgetDefinition, opts: Sani
   if (w.paramControl) {
     w.paramControl =
       typeof w.paramControl === 'object' && typeof w.paramControl.paramId === 'string'
-        ? sanitizeParamControlFields({ ...w.paramControl, confirmation: force ? true : w.paramControl.confirmation !== false })
+        ? sanitizeParamControlFields({
+            ...w.paramControl,
+            confirmation: force ? true : w.paramControl.confirmation !== false,
+          })
         : undefined;
   }
   if (raw.paramSet !== undefined) {

@@ -3,8 +3,23 @@
 // vertices and whole shapes are moved there by dragging, or typed in here (a polygon's vertex list expands).
 
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, Download, FolderOpen, RotateCcw, Trash2, Upload, X, XCircle } from 'lucide-react';
-import { missionFileStem, toQgcWpl } from '../../mavlink/missionFileWriter';
+
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  FolderOpen,
+  RotateCcw,
+  Trash2,
+  Upload,
+  X,
+  XCircle,
+} from 'lucide-react';
+
+import { downloadFile } from '../../lib/download';
+import { useLengthUnit } from '../../lib/inputUnits';
+import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import {
   FENCE_PARAMS,
   fenceDraftToItems,
@@ -19,16 +34,14 @@ import {
   type FenceDraft,
   type FenceIssue,
 } from '../../mavlink/fenceDraft';
-import { isFenceDirty, useMissionPlanStore } from '../../store/missionPlanStore';
+import { missionFileStem, toQgcWpl } from '../../mavlink/missionFileWriter';
 import { paramManager } from '../../mavlink/paramManager';
+import { isFenceDirty, useMissionPlanStore } from '../../store/missionPlanStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
-import { useConfirmStep } from '../../lib/useWaypointNavigation';
-import { downloadFile } from '../../lib/download';
+import { FenceControlBody } from './FenceControl';
 import { OPEN_ACCEPT } from './MissionMenu';
 import { ICON_BTN, NumField } from './planUi';
-import { useLengthUnit } from '../../lib/inputUnits';
-import { FenceControlBody } from './FenceControl';
 
 interface FencePlanBodyProps {
   issues: FenceIssue[];
@@ -50,8 +63,15 @@ function IssueList({ issues }: { issues: FenceIssue[] }) {
   return (
     <ul className="space-y-0.5">
       {issues.map((iss, k) => (
-        <li key={k} className={`flex gap-1 text-[10px] leading-snug ${iss.severity === 'error' ? 'text-red-300' : 'text-amber-300'}`}>
-          {iss.severity === 'error' ? <XCircle className="mt-px h-3 w-3 shrink-0" /> : <AlertTriangle className="mt-px h-3 w-3 shrink-0" />}
+        <li
+          key={k}
+          className={`flex gap-1 text-[10px] leading-snug ${iss.severity === 'error' ? 'text-red-300' : 'text-amber-300'}`}
+        >
+          {iss.severity === 'error' ? (
+            <XCircle className="mt-px h-3 w-3 shrink-0" />
+          ) : (
+            <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+          )}
           {iss.message}
         </li>
       ))}
@@ -91,7 +111,12 @@ const ShapeEditor: React.FC<{
         ))}
       </div>
       <div className="grid grid-cols-2 gap-1.5">
-        <NumField label={shape.kind === 'circle' ? 'Centre lat' : 'Centre lat (moves all)'} value={centre.lat} digits={7} onCommit={(v) => moveTo(v, centre.lon)} />
+        <NumField
+          label={shape.kind === 'circle' ? 'Centre lat' : 'Centre lat (moves all)'}
+          value={centre.lat}
+          digits={7}
+          onCommit={(v) => moveTo(v, centre.lon)}
+        />
         <NumField label="Centre lon" value={centre.lon} digits={7} onCommit={(v) => moveTo(centre.lat, v)} />
       </div>
       {shape.kind === 'circle' ? (
@@ -119,14 +144,26 @@ const ShapeEditor: React.FC<{
                 <li key={k} className="flex items-end gap-1">
                   <span className="w-6 shrink-0 pb-1.5 font-mono text-[10px] font-bold text-zinc-400">V{k + 1}</span>
                   <div className="grid min-w-0 flex-1 grid-cols-2 gap-1">
-                    <NumField label="Lat" value={v.lat} digits={7} onCommit={(lat) => apply((d) => moveVertex(d, index, k, { lat, lon: v.lon }))} />
-                    <NumField label="Lon" value={v.lon} digits={7} onCommit={(lon) => apply((d) => moveVertex(d, index, k, { lat: v.lat, lon }))} />
+                    <NumField
+                      label="Lat"
+                      value={v.lat}
+                      digits={7}
+                      onCommit={(lat) => apply((d) => moveVertex(d, index, k, { lat, lon: v.lon }))}
+                    />
+                    <NumField
+                      label="Lon"
+                      value={v.lon}
+                      digits={7}
+                      onCommit={(lon) => apply((d) => moveVertex(d, index, k, { lat: v.lat, lon }))}
+                    />
                   </div>
                   <button
                     type="button"
                     disabled={shape.vertices.length <= 3}
                     onClick={() => apply((d) => removeVertex(d, index, k))}
-                    title={shape.vertices.length <= 3 ? 'A polygon needs at least 3 vertices' : `Delete vertex ${k + 1}`}
+                    title={
+                      shape.vertices.length <= 3 ? 'A polygon needs at least 3 vertices' : `Delete vertex ${k + 1}`
+                    }
                     aria-label={`Delete vertex ${k + 1}`}
                     className="mb-0.5 h-7 shrink-0 rounded-md border border-zinc-700 px-1 text-zinc-400 hover:text-red-300 disabled:opacity-30"
                   >
@@ -137,8 +174,8 @@ const ShapeEditor: React.FC<{
             </ol>
           )}
           <div className="text-[10px] leading-snug text-zinc-500">
-            On the map: drag a vertex to move it, click a <b className="text-zinc-300">+</b> to add one, right-click a vertex
-            to delete it; drag the centre handle to move the whole polygon.
+            On the map: drag a vertex to move it, click a <b className="text-zinc-300">+</b> to add one, right-click a
+            vertex to delete it; drag the centre handle to move the whole polygon.
           </div>
         </div>
       )}
@@ -259,9 +296,7 @@ export const FencePlanBody: React.FC<FencePlanBodyProps> = ({
           const own = issuesAt(i);
           const isSel = selected === i;
           const summary =
-            shape.kind === 'circle'
-              ? `r ${formatDistance(shape.radius).full}`
-              : `${shape.vertices.length} vertices`;
+            shape.kind === 'circle' ? `r ${formatDistance(shape.radius).full}` : `${shape.vertices.length} vertices`;
           return (
             <div key={i} data-shape={i} className={`border-b border-zinc-800/70 ${isSel ? 'bg-red-950/30' : ''}`}>
               <button
@@ -272,7 +307,11 @@ export const FencePlanBody: React.FC<FencePlanBodyProps> = ({
                 }}
                 className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-zinc-900"
               >
-                <span className={`w-6 shrink-0 text-right font-mono text-[10px] font-bold ${isSel ? 'text-sky-300' : 'text-red-300'}`}>F{i + 1}</span>
+                <span
+                  className={`w-6 shrink-0 text-right font-mono text-[10px] font-bold ${isSel ? 'text-sky-300' : 'text-red-300'}`}
+                >
+                  F{i + 1}
+                </span>
                 <span className="shrink-0 text-[10px] font-bold text-zinc-200">
                   {shape.inclusion ? 'Incl.' : 'Excl.'} {shape.kind}
                 </span>
@@ -289,7 +328,10 @@ export const FencePlanBody: React.FC<FencePlanBodyProps> = ({
         })}
 
         {/* The return point: ArduPlane flies to it on a fence breach; Copter and Rover don't use it. */}
-        <div className="space-y-1.5 border-b border-zinc-800/70 px-2 py-1.5" title="ArduPlane flies to the return point on a fence breach; Copter and Rover don't use it">
+        <div
+          className="space-y-1.5 border-b border-zinc-800/70 px-2 py-1.5"
+          title="ArduPlane flies to the return point on a fence breach; Copter and Rover don't use it"
+        >
           <div className="flex items-center gap-1.5">
             <span className="w-6 shrink-0 text-right font-mono text-[10px] font-bold text-red-300">RP</span>
             <button
@@ -298,18 +340,35 @@ export const FencePlanBody: React.FC<FencePlanBodyProps> = ({
               onClick={() => onFocusShape(-2)}
               className="min-w-0 flex-1 truncate text-left text-[10px] text-zinc-300 disabled:text-zinc-500"
             >
-              {rp ? `Return point · ${rp.lat.toFixed(5)}, ${rp.lon.toFixed(5)}` : 'No return point (Place it, or right-click the map)'}
+              {rp
+                ? `Return point · ${rp.lat.toFixed(5)}, ${rp.lon.toFixed(5)}`
+                : 'No return point (Place it, or right-click the map)'}
             </button>
             {rp && (
-              <button type="button" className={ICON_BTN} title="Remove the return point" onClick={() => apply((d) => setReturnPoint(d, null))}>
+              <button
+                type="button"
+                className={ICON_BTN}
+                title="Remove the return point"
+                onClick={() => apply((d) => setReturnPoint(d, null))}
+              >
                 <Trash2 className="h-3.5 w-3.5 text-red-300" />
               </button>
             )}
           </div>
           {rp && (
             <div className="grid grid-cols-2 gap-1.5">
-              <NumField label="Latitude" value={rp.lat} digits={7} onCommit={(v) => apply((d) => setReturnPoint(d, { lat: v, lon: rp.lon }))} />
-              <NumField label="Longitude" value={rp.lon} digits={7} onCommit={(v) => apply((d) => setReturnPoint(d, { lat: rp.lat, lon: v }))} />
+              <NumField
+                label="Latitude"
+                value={rp.lat}
+                digits={7}
+                onCommit={(v) => apply((d) => setReturnPoint(d, { lat: v, lon: rp.lon }))}
+              />
+              <NumField
+                label="Longitude"
+                value={rp.lon}
+                digits={7}
+                onCommit={(v) => apply((d) => setReturnPoint(d, { lat: rp.lat, lon: v }))}
+              />
             </div>
           )}
           <IssueList issues={issuesAt(-2)} />
@@ -339,11 +398,22 @@ export const FencePlanBody: React.FC<FencePlanBodyProps> = ({
             type="button"
             className={ICON_BTN}
             title="Save fence draft to a .waypoints file"
-            onClick={() => downloadFile(`${missionFileStem(systemId)}-fence-draft.waypoints`, toQgcWpl(fenceDraftToItems(draft)), 'text/plain')}
+            onClick={() =>
+              downloadFile(
+                `${missionFileStem(systemId)}-fence-draft.waypoints`,
+                toQgcWpl(fenceDraftToItems(draft)),
+                'text/plain'
+              )
+            }
           >
             <Download className="h-3.5 w-3.5" />
           </button>
-          <button type="button" className={ICON_BTN} title="Open a file into the drafts" onClick={() => fileRef.current?.click()}>
+          <button
+            type="button"
+            className={ICON_BTN}
+            title="Open a file into the drafts"
+            onClick={() => fileRef.current?.click()}
+          >
             <FolderOpen className="h-3.5 w-3.5" />
           </button>
           <input
@@ -367,7 +437,9 @@ export const FencePlanBody: React.FC<FencePlanBodyProps> = ({
               onResetToVehicle();
             }}
             className={`inline-flex h-7 items-center gap-1 rounded-md border px-1.5 text-[10px] font-bold disabled:opacity-35 ${
-              resetConfirm.armed ? 'border-red-500 bg-red-600 text-white' : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
+              resetConfirm.armed
+                ? 'border-red-500 bg-red-600 text-white'
+                : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
             }`}
           >
             <RotateCcw className="h-3 w-3" />

@@ -127,14 +127,19 @@ export function parseQgcWplText(text: string): MissionItemIntData[] {
  * Parses a QGroundControl Plan JSON format.
  * Expands ComplexItems (e.g. Survey, Corridor Scan) and validates that no waypoint defaults to (0, 0).
  */
-export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; items: MissionItemIntData[]; sections?: PlanSectionData[] } | null {
+export function parseQgcPlanJson(
+  jsonStr: string
+): { type: MissionFileType; items: MissionItemIntData[]; sections?: PlanSectionData[] } | null {
   try {
     const obj = JSON.parse(jsonStr);
     const sections: PlanSectionData[] = [];
 
     // Helper: Expand QGC ComplexItems (Survey, Corridor Scan, etc.)
     const expandItem = (rawItem: any): any[] => {
-      if (rawItem.type === 'ComplexItem' && (rawItem.complexItemType === 'fwLandingPattern' || rawItem.complexItemType === 'vtolLandingPattern')) {
+      if (
+        rawItem.type === 'ComplexItem' &&
+        (rawItem.complexItemType === 'fwLandingPattern' || rawItem.complexItemType === 'vtolLandingPattern')
+      ) {
         const rel = rawItem.altitudesAreRelative !== false;
         const frame = rel ? 3 : 0;
         const ap = rawItem.landingApproachCoordinate ?? rawItem.loiterCoordinate;
@@ -147,15 +152,44 @@ export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; item
         if (rawItem.stopTakingVideo !== false && rawItem.stopVideoPhotos !== false && rawItem.stopVideo !== false) {
           out.push({ command: 2501, frame: 2, autoContinue: true, params: [0, 0, 0, 0, 0, 0, 0] });
         }
-        if (rawItem.useDoChangeSpeed) out.push({ command: 178, frame: 2, autoContinue: true, params: [0, rawItem.finalApproachSpeed, -1, 0, 0, 0, 0] });
-        out.push(rawItem.useLoiterToAlt !== false
-          ? { command: 31, frame, autoContinue: true, params: [1, (rawItem.loiterClockwise === false ? -1 : 1) * rawItem.loiterRadius, 0, 1, ap[0], ap[1], ap[2]] }
-          : { command: 16, frame, autoContinue: true, params: [0, 0, 0, null, ap[0], ap[1], ap[2]] });
-        out.push({ command: rawItem.complexItemType === 'vtolLandingPattern' ? 85 : 21, frame, autoContinue: true, params: [0, 0, 0, null, ld[0], ld[1], ld[2] ?? 0] });
+        if (rawItem.useDoChangeSpeed)
+          out.push({
+            command: 178,
+            frame: 2,
+            autoContinue: true,
+            params: [0, rawItem.finalApproachSpeed, -1, 0, 0, 0, 0],
+          });
+        out.push(
+          rawItem.useLoiterToAlt !== false
+            ? {
+                command: 31,
+                frame,
+                autoContinue: true,
+                params: [
+                  1,
+                  (rawItem.loiterClockwise === false ? -1 : 1) * rawItem.loiterRadius,
+                  0,
+                  1,
+                  ap[0],
+                  ap[1],
+                  ap[2],
+                ],
+              }
+            : { command: 16, frame, autoContinue: true, params: [0, 0, 0, null, ap[0], ap[1], ap[2]] }
+        );
+        out.push({
+          command: rawItem.complexItemType === 'vtolLandingPattern' ? 85 : 21,
+          frame,
+          autoContinue: true,
+          params: [0, 0, 0, null, ld[0], ld[1], ld[2] ?? 0],
+        });
         return out;
       }
       if (rawItem.type === 'ComplexItem') {
-        if (Array.isArray(rawItem.TransectStyleComplexItem?.Items) && rawItem.TransectStyleComplexItem.Items.length > 0) {
+        if (
+          Array.isArray(rawItem.TransectStyleComplexItem?.Items) &&
+          rawItem.TransectStyleComplexItem.Items.length > 0
+        ) {
           return rawItem.TransectStyleComplexItem.Items;
         }
         if (Array.isArray(rawItem.Items) && rawItem.Items.length > 0) {
@@ -221,7 +255,9 @@ export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; item
 
           // Never default coordinates to (0, 0) for commands that have a location!
           if ((cmd === 16 || cmd === 82) && x === 0 && y === 0) {
-            throw new Error(`Waypoint ${seq} (command ${cmd}) has invalid coordinates (0, 0) [Gulf of Guinea]. Upload rejected for vehicle safety.`);
+            throw new Error(
+              `Waypoint ${seq} (command ${cmd}) has invalid coordinates (0, 0) [Gulf of Guinea]. Upload rejected for vehicle safety.`
+            );
           }
 
           missionItems.push({
@@ -282,9 +318,12 @@ export function parseQgcPlanJson(jsonStr: string): { type: MissionFileType; item
           const inclusion = circ.inclusion !== false;
           const cmd = inclusion ? 5003 : 5004;
           // Correctly read circle radius from circ.circle.radius (fallback to circ.radius)
-          const radius = typeof circ.circle?.radius === 'number'
-            ? circ.circle.radius
-            : (typeof circ.radius === 'number' ? circ.radius : 50);
+          const radius =
+            typeof circ.circle?.radius === 'number'
+              ? circ.circle.radius
+              : typeof circ.radius === 'number'
+                ? circ.radius
+                : 50;
 
           fenceItems.push({
             seq: fenceSeq++,
@@ -501,7 +540,8 @@ export function parseDroppedMissionFile(filename: string, buffer: Uint8Array): P
   if (text.trim().startsWith('{')) {
     const planResult = parseQgcPlanJson(text);
     if (planResult && planResult.items.length > 0) {
-      const missionType = planResult.type === 'mission' || planResult.type === 'plan' ? 0 : planResult.type === 'fence' ? 1 : 2;
+      const missionType =
+        planResult.type === 'mission' || planResult.type === 'plan' ? 0 : planResult.type === 'fence' ? 1 : 2;
       return {
         type: planResult.type,
         missionType,

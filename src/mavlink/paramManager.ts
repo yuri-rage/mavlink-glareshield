@@ -1,9 +1,9 @@
-import { mavlinkConnection } from './connection';
-import { getActiveSystemId, onActiveVehicleChange } from './vehicleRoster';
-import { mavFtpClient } from './ftp';
 import { useTelemetryStore } from '../store/telemetryStore';
+import { mavlinkConnection } from './connection';
+import { mavFtpClient } from './ftp';
 import { MAVLINK_MSG_ID } from './messages';
 import { decodePayload, MavlinkPacket } from './parser';
+import { getActiveSystemId, onActiveVehicleChange } from './vehicleRoster';
 
 export interface ParamManagerStatus {
   isFetching: boolean;
@@ -74,7 +74,13 @@ export class ParamManager {
       }
       const hasValues = Object.keys(useTelemetryStore.getState().parameters).length > 0;
       if (this.status.paramCount > 0 || this.status.isFetching || hasValues) {
-        this.setStatus({ isFetching: false, method: 'idle', paramCount: 0, fromPreviousConnection: hasValues, listComplete: false });
+        this.setStatus({
+          isFetching: false,
+          method: 'idle',
+          paramCount: 0,
+          fromPreviousConnection: hasValues,
+          listComplete: false,
+        });
       }
     });
   }
@@ -98,7 +104,15 @@ export class ParamManager {
     this.legacyIndices.clear();
     this.legacyExpected = 0;
     useTelemetryStore.setState({ parameters: {} });
-    this.setStatus({ isFetching: false, method: 'idle', paramCount: 0, hasDefaults: false, fromPreviousConnection: false, listComplete: false, message: undefined });
+    this.setStatus({
+      isFetching: false,
+      method: 'idle',
+      paramCount: 0,
+      hasDefaults: false,
+      fromPreviousConnection: false,
+      listComplete: false,
+      message: undefined,
+    });
   }
 
   /** The current status (what's under way). */
@@ -149,7 +163,9 @@ export class ParamManager {
     }
 
     this.legacyRetries++;
-    console.log(`[ParamManager] Re-requesting ${missing.length} missing params via PARAM_REQUEST_READ (attempt ${this.legacyRetries})...`);
+    console.log(
+      `[ParamManager] Re-requesting ${missing.length} missing params via PARAM_REQUEST_READ (attempt ${this.legacyRetries})...`
+    );
     this.setStatus({
       message: `Filling gaps: requesting ${missing.length} missing params...`,
     });
@@ -179,7 +195,8 @@ export class ParamManager {
     if (active !== null && packet.systemId !== active) return;
     const type = packet.payload[4];
     const autopilot = packet.payload[5];
-    if (packet.componentId !== 1 || autopilot === 8 /* MAV_AUTOPILOT_INVALID */ || type === 6 /* MAV_TYPE_GCS */) return;
+    if (packet.componentId !== 1 || autopilot === 8 /* MAV_AUTOPILOT_INVALID */ || type === 6 /* MAV_TYPE_GCS */)
+      return;
     const key = `${packet.systemId}/${type}`;
     const now = Date.now();
     if (key === this.listOwner) this.ownerSeenAt = now;
@@ -190,7 +207,14 @@ export class ParamManager {
       this.defaults.clear();
       this.singleReads.clear();
       useTelemetryStore.setState({ parameters: {} });
-      this.setStatus({ isFetching: false, method: 'idle', paramCount: 0, hasDefaults: false, fromPreviousConnection: false, message: undefined });
+      this.setStatus({
+        isFetching: false,
+        method: 'idle',
+        paramCount: 0,
+        hasDefaults: false,
+        fromPreviousConnection: false,
+        message: undefined,
+      });
       return;
     }
     if (this.status.fromPreviousConnection && mavlinkConnection.getStatus() === 'connected') {
@@ -314,7 +338,15 @@ export class ParamManager {
     this.singleReads.clear();
     this.listOwner = this.currentVehicleKey();
     this.ownerSeenAt = Date.now();
-    this.setStatus({ isFetching: false, method, paramCount: count, hasDefaults, message, fromPreviousConnection: false, listComplete: true });
+    this.setStatus({
+      isFetching: false,
+      method,
+      paramCount: count,
+      hasDefaults,
+      message,
+      fromPreviousConnection: false,
+      listComplete: true,
+    });
     return hasDefaults;
   }
 
@@ -329,7 +361,12 @@ export class ParamManager {
       const unpacked = this.unpackParamPck(pckData);
       if (!unpacked || Object.keys(unpacked).length === 0) return false;
       const count = Object.keys(unpacked).length;
-      this.applyFullList(unpacked, 'ftp', `Loaded ${count} params via MAVFTP in ${((Date.now() - startTime) / 1000).toFixed(1)}s`, sysId);
+      this.applyFullList(
+        unpacked,
+        'ftp',
+        `Loaded ${count} params via MAVFTP in ${((Date.now() - startTime) / 1000).toFixed(1)}s`,
+        sysId
+      );
       return true;
     } catch {
       // MAVFTP unavailable: single reads still work via PARAM_VALUE, without defaults.
@@ -383,7 +420,12 @@ export class ParamManager {
     // A background read of the same file is already under way: wait for it instead of downloading it twice.
     // Cancel aborts it (MAVFTP abort) like a normal download.
     if (this.backgroundLoad) {
-      this.setStatus({ isFetching: true, listComplete: false, method: 'ftp', message: 'Downloading params via MAVFTP…' });
+      this.setStatus({
+        isFetching: true,
+        listComplete: false,
+        method: 'ftp',
+        message: 'Downloading params via MAVFTP…',
+      });
       const loaded = await this.backgroundLoad;
       if (loaded || this.isCancelled) return; // loaded, or the user cancelled while waiting
       this.setStatus({ isFetching: false, method: 'idle' });
@@ -397,7 +439,8 @@ export class ParamManager {
     const fallbackPath = withDefaults ? '@PARAM/param.pck' : '@PARAM/param.pck?withdefaults=1';
 
     this.setStatus({
-      isFetching: true, listComplete: false,
+      isFetching: true,
+      listComplete: false,
       method: 'ftp',
       message: `Connecting to MAVFTP (${primaryPath})...`,
     });
@@ -439,7 +482,9 @@ export class ParamManager {
           const count = Object.keys(unpacked).length;
           const duration = Date.now() - startTime;
           const hasDefaults = Object.values(unpacked).some((p) => p.defaultValue !== undefined);
-          console.log(`[ParamManager] Successfully unpacked ${count} parameters via MAVFTP (hasDefaults=${hasDefaults}) in ${duration}ms!`);
+          console.log(
+            `[ParamManager] Successfully unpacked ${count} parameters via MAVFTP (hasDefaults=${hasDefaults}) in ${duration}ms!`
+          );
           this.applyFullList(
             unpacked,
             'ftp',
@@ -467,7 +512,8 @@ export class ParamManager {
     this.legacyIndices.clear();
     this.legacyRetries = 0;
     this.setStatus({
-      isFetching: true, listComplete: false,
+      isFetching: true,
+      listComplete: false,
       method: 'legacy',
       message: 'Requesting parameters via PARAM_REQUEST_LIST...',
     });

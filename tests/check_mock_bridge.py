@@ -15,6 +15,7 @@ Usage:
 
 Exits 0 if every check passes, 1 otherwise.
 """
+
 import argparse
 import asyncio
 import os
@@ -137,8 +138,11 @@ def main():
     if not url:
         port = free_port()
         url = f"ws://127.0.0.1:{port}"
-        proc = subprocess.Popen([sys.executable, BRIDGE, "--mock", "--host", "127.0.0.1", "--port", str(port)],
-                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(
+            [sys.executable, BRIDGE, "--mock", "--host", "127.0.0.1", "--port", str(port)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
         for _ in range(50):  # wait up to ~5 s for the server to accept connections
             try:
                 socket.create_connection(("127.0.0.1", port), timeout=0.1).close()
@@ -192,6 +196,7 @@ def _summary(m, label):
     words = set(label.replace("/", " ").replace("[", " ").replace("(", " ").split())
     picked = {k: v for k, v in d.items() if k in words}
     return ", ".join(f"{k}={v}" for k, v in (picked or d).items())
+
 
 if __name__ == "__main__":
     main()

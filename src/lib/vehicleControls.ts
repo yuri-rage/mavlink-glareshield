@@ -48,7 +48,10 @@ export interface ProfileControl {
  * Everything in a profile that can act on the vehicle: its custom widgets (composites included), and the
  * built-in widgets with controls placed on its tabs.
  */
-export function profileVehicleControls(profile: { customWidgets?: CustomWidgetDefinition[]; tabs?: DashboardTab[] }): ProfileControl[] {
+export function profileVehicleControls(profile: {
+  customWidgets?: CustomWidgetDefinition[];
+  tabs?: DashboardTab[];
+}): ProfileControl[] {
   const out: ProfileControl[] = [];
   for (const w of profile.customWidgets ?? []) {
     const controls = widgetVehicleControls(w);

@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+
 import clsx from 'clsx';
+
 import { MjpegFrameExtractor, reconnectDelayMs } from '../../lib/mjpeg';
 import { WhepSession } from '../../lib/whep';
 
@@ -40,7 +42,16 @@ const corsBlocked = new Set<string>();
 /** WHEP: a disconnected peer connection that hasn't recovered after this long is reconnected. */
 const WHEP_DISCONNECT_GRACE_MS = 4000;
 
-export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, token, fit, opacity, snapshotIntervalMs, reconnectKey, onStatus }) => {
+export const CameraFeed: React.FC<CameraFeedProps> = ({
+  url,
+  type,
+  token,
+  fit,
+  opacity,
+  snapshotIntervalMs,
+  reconnectKey,
+  onStatus,
+}) => {
   const imgRef = useRef<HTMLImageElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [imgSrc, setImgSrc] = useState('');
@@ -170,7 +181,8 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, token, fit, o
       if (probeTimer) clearInterval(probeTimer);
       cleanupImg?.();
       if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl);
-      if (imgRef.current && lastObjectUrl && imgRef.current.src === lastObjectUrl) imgRef.current.removeAttribute('src');
+      if (imgRef.current && lastObjectUrl && imgRef.current.src === lastObjectUrl)
+        imgRef.current.removeAttribute('src');
       setImgSrc('');
     };
   }, [type, url, reconnectKey]);
@@ -229,7 +241,11 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, token, fit, o
     const retry = (reason: string) => {
       if (retryTimer) return;
       const delay = reconnectDelayMs(attempt++);
-      statusRef.current({ state: 'reconnecting', method: 'video', detail: `${reason}; retrying in ${Math.round(delay / 1000)} s` });
+      statusRef.current({
+        state: 'reconnecting',
+        method: 'video',
+        detail: `${reason}; retrying in ${Math.round(delay / 1000)} s`,
+      });
       retryTimer = setTimeout(() => {
         retryTimer = null;
         load();
@@ -312,7 +328,11 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, token, fit, o
       lastFrames = -1;
       clearDisconnect();
       const old = session;
-      session = new WhepSession(url, { fetch: window.fetch.bind(window), createPeerConnection: (c) => new RTCPeerConnection(c) }, { token: token || undefined });
+      session = new WhepSession(
+        url,
+        { fetch: window.fetch.bind(window), createPeerConnection: (c) => new RTCPeerConnection(c) },
+        { token: token || undefined }
+      );
       void old?.stop();
       const mine = session;
       report({ state: attempt === 0 ? 'connecting' : 'reconnecting', method: 'whep' });
@@ -320,7 +340,8 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, token, fit, o
         const stream = await mine.start((state) => {
           if (cancelled || mine !== session) return;
           // Closed by the far end (the server ended the session: its source stopped), or failed: connect again.
-          if (state === 'failed' || state === 'closed') retry(state === 'closed' ? 'session ended' : 'connection failed');
+          if (state === 'failed' || state === 'closed')
+            retry(state === 'closed' ? 'session ended' : 'connection failed');
           else if (state === 'disconnected') {
             disconnectTimer ??= setTimeout(() => {
               disconnectTimer = null;
@@ -336,7 +357,8 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, token, fit, o
         lastFrames = -1;
         attached = true;
         // The server ending the video (its source gone) ends the stream: connect again. (The audio is muted anyway.)
-        for (const track of stream.getVideoTracks()) track.addEventListener('ended', () => mine === session && retry('stream ended'));
+        for (const track of stream.getVideoTracks())
+          track.addEventListener('ended', () => mine === session && retry('stream ended'));
         video.srcObject = stream;
         void video.play().catch(() => {});
       } catch (e) {

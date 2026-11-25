@@ -64,9 +64,7 @@ class Peer:
         self.mav_type, self.autopilot = mav_type, autopilot
 
     def heartbeat(self) -> bytes:
-        return self.mav.heartbeat_encode(self.mav_type, self.autopilot, 0, 0, 4).pack(
-            self.mav
-        )
+        return self.mav.heartbeat_encode(self.mav_type, self.autopilot, 0, 0, 4).pack(self.mav)
 
     def send(self, data: bytes, port: int) -> None:
         self.sock.sendto(data, ("127.0.0.1", port))
@@ -90,18 +88,14 @@ class Peer:
 
 async def main(udp_port: int, ws_port: int) -> None:
     glareshield = mav.MAVLink(None, srcSystem=255, srcComponent=190)
-    arm = glareshield.command_long_encode(1, 1, 400, 0, 1, 0, 0, 0, 0, 0, 0).pack(
-        glareshield
-    )
+    arm = glareshield.command_long_encode(1, 1, 400, 0, 1, 0, 0, 0, 0, 0, 0).pack(glareshield)
     vehicle = Peer(1, 1, mav.MAV_TYPE_QUADROTOR, mav.MAV_AUTOPILOT_ARDUPILOTMEGA)
     mp = Peer(255, 190, mav.MAV_TYPE_GCS, mav.MAV_AUTOPILOT_INVALID)  # Mission Planner
     # RTK base station (dock-of-the-base): broadcasts an ONBOARD_CONTROLLER heartbeat on the same port
     base = Peer(250, 191, mav.MAV_TYPE_ONBOARD_CONTROLLER, mav.MAV_AUTOPILOT_INVALID)
     mp_params = mp.mav.param_request_list_encode(1, 1).pack(mp.mav)
 
-    async with websockets.connect(
-        f"ws://127.0.0.1:{ws_port}", origin="http://localhost:3000"
-    ) as ws:
+    async with websockets.connect(f"ws://127.0.0.1:{ws_port}", origin="http://localhost:3000") as ws:
 
         async def send_cmd_and_count() -> tuple[int, int]:
             vehicle.drain()
@@ -179,9 +173,7 @@ async def main(udp_port: int, ws_port: int) -> None:
 
         # 6. A second vehicle on the same port: both receive Glareshield's traffic, MP still nothing
         vehicle2 = Peer(2, 1, mav.MAV_TYPE_GROUND_ROVER, mav.MAV_AUTOPILOT_ARDUPILOTMEGA)
-        arm2 = glareshield.command_long_encode(2, 1, 400, 0, 1, 0, 0, 0, 0, 0, 0).pack(
-            glareshield
-        )
+        arm2 = glareshield.command_long_encode(2, 1, 400, 0, 1, 0, 0, 0, 0, 0, 0).pack(glareshield)
         vehicle.send(vehicle.heartbeat(), udp_port)
         vehicle2.send(vehicle2.heartbeat(), udp_port)
         mp.send(mp.heartbeat(), udp_port)
@@ -239,25 +231,21 @@ def check_frame_parser() -> None:
         return
 
     v2 = mav.MAVLink(None, srcSystem=7, srcComponent=1)
-    hb2 = v2.heartbeat_encode(
-        mav.MAV_TYPE_FIXED_WING, mav.MAV_AUTOPILOT_ARDUPILOTMEGA, 0, 0, 4
-    ).pack(v2)
+    hb2 = v2.heartbeat_encode(mav.MAV_TYPE_FIXED_WING, mav.MAV_AUTOPILOT_ARDUPILOTMEGA, 0, 0, 4).pack(v2)
     att = v2.attitude_encode(1, 0.1, 0.2, 0.3, 0, 0, 0).pack(v2)
     signed = mav.MAVLink(None, srcSystem=9, srcComponent=1)
     signed.signing.secret_key = bytes(32)
     signed.signing.link_id = 0
     signed.signing.timestamp = 1
     signed.signing.sign_outgoing = True
-    hb_signed = signed.heartbeat_encode(
-        mav.MAV_TYPE_GROUND_ROVER, mav.MAV_AUTOPILOT_ARDUPILOTMEGA, 0, 0, 4
-    ).pack(signed)
+    hb_signed = signed.heartbeat_encode(mav.MAV_TYPE_GROUND_ROVER, mav.MAV_AUTOPILOT_ARDUPILOTMEGA, 0, 0, 4).pack(
+        signed
+    )
     os.environ["MAVLINK20"] = ""
     from pymavlink.dialects.v10 import ardupilotmega as mav1
 
     v1 = mav1.MAVLink(None, srcSystem=3, srcComponent=1)
-    hb1 = v1.heartbeat_encode(
-        mav1.MAV_TYPE_GCS, mav1.MAV_AUTOPILOT_INVALID, 0, 0, 4
-    ).pack(v1)
+    hb1 = v1.heartbeat_encode(mav1.MAV_TYPE_GCS, mav1.MAV_AUTOPILOT_INVALID, 0, 0, 4).pack(v1)
 
     got = BridgeServer.mavlink_sources(hb2 + att + hb_signed + hb1)
     expected = [
@@ -296,19 +284,11 @@ if __name__ == "__main__":
             except OSError:
                 time.sleep(0.1)
         else:
-            err = (
-                proc.stderr.read().decode(errors="replace")[-500:]
-                if proc.stderr
-                else ""
-            )
+            err = proc.stderr.read().decode(errors="replace")[-500:] if proc.stderr else ""
             sys.exit(f"bridge did not start: {err}")
         asyncio.run(main(udp_port, ws_port))
     finally:
         proc.terminate()
         proc.wait(timeout=5)
-    print(
-        f"\n{len(failures)} UDP reply-target check(s) FAILED"
-        if failures
-        else "\nAll UDP reply-target checks PASSED"
-    )
+    print(f"\n{len(failures)} UDP reply-target check(s) FAILED" if failures else "\nAll UDP reply-target checks PASSED")
     sys.exit(1 if failures else 0)

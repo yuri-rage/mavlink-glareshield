@@ -4,8 +4,8 @@
 // panels plus a header, border and badges. The card reads every panel's bindings on one clock (useBindingReadings)
 // and hands each panel its share, so the functions here are what both levels agree on.
 
-import type { CommandAckInfo } from '../../../store/telemetryStore';
-import type { CustomWidgetDefinition, MultiBarGroupType, WidgetDataBinding, WidgetDisplayType } from '../../../types/widget';
+import { baseMessageName } from '../../../lib/messageCache';
+import { MAX_PANELS } from '../../../lib/widgetValidation';
 import {
   evaluateAlert,
   getAllBindings,
@@ -16,13 +16,18 @@ import {
   type BindingReading,
   type UnitSystem,
 } from '../../../lib/widgetValues';
-import { baseMessageName } from '../../../lib/messageCache';
-import { MAX_PANELS } from '../../../lib/widgetValidation';
 import { MAVLINK_MSG_ID } from '../../../mavlink/messages';
-import type { ColorScheme } from './palette';
-import type { ParamMeta } from '../../../mavlink/paramMetadata';
 import { sortedValueOptions } from '../../../mavlink/paramBits';
-import type { WidgetParamControl } from '../../../types/widget';
+import type { ParamMeta } from '../../../mavlink/paramMetadata';
+import type { CommandAckInfo } from '../../../store/telemetryStore';
+import type {
+  CustomWidgetDefinition,
+  MultiBarGroupType,
+  WidgetDataBinding,
+  WidgetDisplayType,
+  WidgetParamControl,
+} from '../../../types/widget';
+import type { ColorScheme } from './palette';
 
 export const TELEMETRY_TYPES: ReadonlySet<WidgetDisplayType> = new Set<WidgetDisplayType>([
   'stat-card',
@@ -43,7 +48,6 @@ export const MULTI_VALUE_TYPES: ReadonlySet<WidgetDisplayType> = new Set<WidgetD
   'gauge-linear',
   'compass-rose',
 ]);
-
 
 /**
  * The panels a card draws, each as a stand-alone definition: a composite card's panels with the card's name, colour
@@ -105,7 +109,7 @@ export function followsRelayStatus(def: CustomWidgetDefinition): boolean {
 
 /** A toggle's feedback is "on" above this: the configured threshold, or 0 for a relay bit. */
 export function feedbackThreshold(def: CustomWidgetDefinition): number {
-  return followsRelayStatus(def) ? 0 : def.stateThreshold ?? 0;
+  return followsRelayStatus(def) ? 0 : (def.stateThreshold ?? 0);
 }
 
 export function isMultiGauge(def: CustomWidgetDefinition): boolean {
@@ -117,7 +121,10 @@ export function seriesLabel(binding: WidgetDataBinding): string {
 }
 
 /** Binding with min/max/thresholds converted from base units to display units. */
-export function displayBinding(binding: WidgetDataBinding | undefined, system: UnitSystem): WidgetDataBinding | undefined {
+export function displayBinding(
+  binding: WidgetDataBinding | undefined,
+  system: UnitSystem
+): WidgetDataBinding | undefined {
   if (!binding) return undefined;
   const conv = (v: number | undefined) => (v === undefined ? undefined : toDisplayUnits(v, binding, system));
   return {
@@ -139,7 +146,11 @@ export function gaugeLevels(bindings: WidgetDataBinding[], readings: BindingRead
 }
 
 /** A panel's alert: the worst gauge of a multiple-gauge panel, otherwise its primary value against its thresholds. */
-export function panelAlert(def: CustomWidgetDefinition, bindings: WidgetDataBinding[], readings: BindingReading[]): AlertState {
+export function panelAlert(
+  def: CustomWidgetDefinition,
+  bindings: WidgetDataBinding[],
+  readings: BindingReading[]
+): AlertState {
   if (isMultiGauge(def)) return worstAlert(gaugeLevels(bindings, readings));
   return evaluateAlert(readings[0]?.base ?? null, def.binding);
 }
@@ -315,24 +326,82 @@ export function extractMultiBarItems(group: MultiBarGroupType, state: any): Mult
     case 'vibration-xyz': {
       const v = state.vibration ?? { vibrationX: 0, vibrationY: 0, vibrationZ: 0 };
       return [
-        { label: 'Vibe X', value: Number((v.vibrationX ?? 0).toFixed(1)), min: 0, max: 60, unit: 'm/s²', warnAbove: 30, critAbove: 60 },
-        { label: 'Vibe Y', value: Number((v.vibrationY ?? 0).toFixed(1)), min: 0, max: 60, unit: 'm/s²', warnAbove: 30, critAbove: 60 },
-        { label: 'Vibe Z', value: Number((v.vibrationZ ?? 0).toFixed(1)), min: 0, max: 60, unit: 'm/s²', warnAbove: 30, critAbove: 60 },
+        {
+          label: 'Vibe X',
+          value: Number((v.vibrationX ?? 0).toFixed(1)),
+          min: 0,
+          max: 60,
+          unit: 'm/s²',
+          warnAbove: 30,
+          critAbove: 60,
+        },
+        {
+          label: 'Vibe Y',
+          value: Number((v.vibrationY ?? 0).toFixed(1)),
+          min: 0,
+          max: 60,
+          unit: 'm/s²',
+          warnAbove: 30,
+          critAbove: 60,
+        },
+        {
+          label: 'Vibe Z',
+          value: Number((v.vibrationZ ?? 0).toFixed(1)),
+          min: 0,
+          max: 60,
+          unit: 'm/s²',
+          warnAbove: 30,
+          critAbove: 60,
+        },
       ];
     }
     case 'ekf-variances': {
       const e = state.ekf ?? {};
       return [
-        { label: 'Vel', value: Number((e.velocityVariance ?? 0).toFixed(2)), min: 0, max: 1.0, unit: '', warnAbove: 0.5, critAbove: 0.8 },
-        { label: 'Pos H', value: Number((e.posHorizVariance ?? 0).toFixed(2)), min: 0, max: 1.0, unit: '', warnAbove: 0.5, critAbove: 0.8 },
-        { label: 'Pos V', value: Number((e.posVertVariance ?? 0).toFixed(2)), min: 0, max: 1.0, unit: '', warnAbove: 0.5, critAbove: 0.8 },
-        { label: 'Mag', value: Number((e.compassVariance ?? 0).toFixed(2)), min: 0, max: 1.0, unit: '', warnAbove: 0.5, critAbove: 0.8 },
+        {
+          label: 'Vel',
+          value: Number((e.velocityVariance ?? 0).toFixed(2)),
+          min: 0,
+          max: 1.0,
+          unit: '',
+          warnAbove: 0.5,
+          critAbove: 0.8,
+        },
+        {
+          label: 'Pos H',
+          value: Number((e.posHorizVariance ?? 0).toFixed(2)),
+          min: 0,
+          max: 1.0,
+          unit: '',
+          warnAbove: 0.5,
+          critAbove: 0.8,
+        },
+        {
+          label: 'Pos V',
+          value: Number((e.posVertVariance ?? 0).toFixed(2)),
+          min: 0,
+          max: 1.0,
+          unit: '',
+          warnAbove: 0.5,
+          critAbove: 0.8,
+        },
+        {
+          label: 'Mag',
+          value: Number((e.compassVariance ?? 0).toFixed(2)),
+          min: 0,
+          max: 1.0,
+          unit: '',
+          warnAbove: 0.5,
+          critAbove: 0.8,
+        },
       ];
     }
     case 'battery-cells': {
       const cells: number[] = state.battery?.cellVoltages ?? [];
       if (cells.length === 0) {
-        return [{ label: 'Pack V', value: Number((state.battery?.voltage ?? 0).toFixed(2)), min: 10, max: 25.2, unit: 'V' }];
+        return [
+          { label: 'Pack V', value: Number((state.battery?.voltage ?? 0).toFixed(2)), min: 10, max: 25.2, unit: 'V' },
+        ];
       }
       return cells.map((cv, i) => ({
         label: `C${i + 1}`,
@@ -350,7 +419,11 @@ export function extractMultiBarItems(group: MultiBarGroupType, state: any): Mult
 /** ESCs to show: as many as report (4, 8 or 12). */
 const escCount = (state: { esc?: { count?: number } }) => Math.min(12, Math.max(4, state.esc?.count ?? 4));
 
-const ESC_BLOCKS = [MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4, MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8, MAVLINK_MSG_ID.ESC_TELEMETRY_9_TO_12];
+const ESC_BLOCKS = [
+  MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4,
+  MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8,
+  MAVLINK_MSG_ID.ESC_TELEMETRY_9_TO_12,
+];
 
 /** The messages each multi-bar group needs (ESC groups: every block; the vehicle sends only those it has). */
 const MULTI_BAR_MSG_ID: Record<MultiBarGroupType, number | number[]> = {
@@ -474,7 +547,10 @@ export function sliderParams(commandId: number, params: readonly number[], value
  * A param-control's settings with the gaps filled from the parameter's metadata. Settings written in the widget
  * always win; named values become the dropdown only when the widget lists no options of its own.
  */
-export function effectiveParamControl(control: WidgetParamControl | undefined, meta: ParamMeta | null): WidgetParamControl {
+export function effectiveParamControl(
+  control: WidgetParamControl | undefined,
+  meta: ParamMeta | null
+): WidgetParamControl {
   const c: WidgetParamControl = { ...(control ?? { paramId: '' }) };
   if (!meta) return c;
   if (c.min === undefined && meta.min !== undefined) c.min = meta.min;

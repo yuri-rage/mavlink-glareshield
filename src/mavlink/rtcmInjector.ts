@@ -1,6 +1,6 @@
-import { mavlinkConnection } from './connection';
-import { useTelemetryStore } from '../store/telemetryStore';
 import { useConnectionStore } from '../store/connectionStore';
+import { useTelemetryStore } from '../store/telemetryStore';
+import { mavlinkConnection } from './connection';
 
 export interface NtripConfig {
   host: string;
@@ -137,10 +137,7 @@ function ecefToWgs84(x: number, y: number, z: number): { lat: number; lon: numbe
   const sinTheta = Math.sin(theta);
   const cosTheta = Math.cos(theta);
 
-  const lat = Math.atan2(
-    z + ep2 * b * sinTheta * sinTheta * sinTheta,
-    p - e2 * a * cosTheta * cosTheta * cosTheta
-  );
+  const lat = Math.atan2(z + ep2 * b * sinTheta * sinTheta * sinTheta, p - e2 * a * cosTheta * cosTheta * cosTheta);
   const lon = Math.atan2(y, x);
 
   const sinLat = Math.sin(lat);
@@ -482,7 +479,9 @@ export class RtcmInjector {
    */
   public async connectSerial(baudRate = 115200) {
     if (typeof navigator === 'undefined' || !('serial' in navigator)) {
-      throw new Error('Web Serial API is not supported in this browser. Please use Chrome, Edge, or connect via NTRIP Caster.');
+      throw new Error(
+        'Web Serial API is not supported in this browser. Please use Chrome, Edge, or connect via NTRIP Caster.'
+      );
     }
 
     await this.disconnect();
@@ -560,7 +559,9 @@ export class RtcmInjector {
           // Send NTRIP authorization headers if supported by WebSocket proxy
           if (config.username || config.password) {
             const auth = btoa(`${config.username || ''}:${config.password || ''}`);
-            socket.send(`GET /${mountpoint} HTTP/1.0\r\nUser-Agent: NTRIP MavlinkGlareshield/1.0\r\nAuthorization: Basic ${auth}\r\n\r\n`);
+            socket.send(
+              `GET /${mountpoint} HTTP/1.0\r\nUser-Agent: NTRIP MavlinkGlareshield/1.0\r\nAuthorization: Basic ${auth}\r\n\r\n`
+            );
           }
 
           // Start GGA feedback loop if enabled
@@ -601,7 +602,8 @@ export class RtcmInjector {
         // production build the request would carry the caster credentials to the site's host, and an SPA host answers
         // any unknown path with index.html (200), which would then be read as the RTCM stream.
         const devProxy = Boolean(import.meta.env?.DEV);
-        const proxyUrl = `/api/ntrip-stream?host=${encodeURIComponent(host)}&port=${port}&mountpoint=${encodeURIComponent(mountpoint)}` +
+        const proxyUrl =
+          `/api/ntrip-stream?host=${encodeURIComponent(host)}&port=${port}&mountpoint=${encodeURIComponent(mountpoint)}` +
           (config.username ? `&username=${encodeURIComponent(config.username)}` : '') +
           (config.password ? `&password=${encodeURIComponent(config.password)}` : '');
 
@@ -658,7 +660,9 @@ export class RtcmInjector {
 
         if (!response || !response.ok) {
           const errText = response ? await response.text().catch(() => '') : '';
-          throw new Error(`Caster connection failed (${response?.status || 'Error'}): ${errText || response?.statusText || 'Unknown error'}`);
+          throw new Error(
+            `Caster connection failed (${response?.status || 'Error'}): ${errText || response?.statusText || 'Unknown error'}`
+          );
         }
 
         this.updateState({ status: 'connected', source: 'ntrip' });

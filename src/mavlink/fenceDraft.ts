@@ -11,8 +11,8 @@
 //   FENCE_OPTIONS bit 1 (union of inclusion areas) is set.
 // - A new fence takes effect at once: a vehicle armed with fencing on that is outside it takes its fence action.
 
-import type { MissionItemIntData } from './encoder';
 import type { FencePoint } from '../store/telemetryStore';
+import type { MissionItemIntData } from './encoder';
 
 export const CMD_FENCE_RETURN_POINT = 5000;
 export const CMD_FENCE_POLYGON_INCLUSION = 5001;
@@ -39,7 +39,6 @@ export interface FenceDraft {
   returnPoint: LatLon | null;
 }
 
-
 export const EMPTY_FENCE: FenceDraft = { shapes: [], returnPoint: null };
 
 const finite = (v: unknown, d = 0): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -59,7 +58,11 @@ export function fenceDraftFromItems(items: MissionItemIntData[]): FenceDraft {
   let current: { command: number; count: number; vertices: LatLon[] } | null = null;
   const flush = () => {
     if (current && current.vertices.length > 0) {
-      shapes.push({ kind: 'polygon', inclusion: current.command === CMD_FENCE_POLYGON_INCLUSION, vertices: current.vertices });
+      shapes.push({
+        kind: 'polygon',
+        inclusion: current.command === CMD_FENCE_POLYGON_INCLUSION,
+        vertices: current.vertices,
+      });
     }
     current = null;
   };
@@ -77,7 +80,12 @@ export function fenceDraftFromItems(items: MissionItemIntData[]): FenceDraft {
     }
     flush();
     if (it.command === CMD_FENCE_CIRCLE_INCLUSION || it.command === CMD_FENCE_CIRCLE_EXCLUSION) {
-      shapes.push({ kind: 'circle', inclusion: it.command === CMD_FENCE_CIRCLE_INCLUSION, center: at, radius: finite(it.param1) });
+      shapes.push({
+        kind: 'circle',
+        inclusion: it.command === CMD_FENCE_CIRCLE_INCLUSION,
+        center: at,
+        radius: finite(it.param1),
+      });
     } else if (it.command === CMD_FENCE_RETURN_POINT) {
       returnPoint = at;
     }
@@ -96,7 +104,12 @@ export function fenceDraftFromPoints(points: FencePoint[]): FenceDraft {
       y: p.lon,
       z: p.alt ?? 0,
       // Polygons carry their vertex count in param1, circles their radius.
-      param1: p.param1 ?? (p.command === CMD_FENCE_CIRCLE_INCLUSION || p.command === CMD_FENCE_CIRCLE_EXCLUSION ? p.radius : p.vertexCount) ?? 0,
+      param1:
+        p.param1 ??
+        (p.command === CMD_FENCE_CIRCLE_INCLUSION || p.command === CMD_FENCE_CIRCLE_EXCLUSION
+          ? p.radius
+          : p.vertexCount) ??
+        0,
     }))
   );
 }
@@ -145,7 +158,9 @@ export function fenceDraftToPoints(draft: FenceDraft): FencePoint[] {
       param1: it.param1,
       ...(circle ? { radius: it.param1 } : {}),
       ...(polygon ? { vertexCount: it.param1 } : {}),
-      ...(circle || polygon ? { inclusion: it.command === CMD_FENCE_POLYGON_INCLUSION || it.command === CMD_FENCE_CIRCLE_INCLUSION } : {}),
+      ...(circle || polygon
+        ? { inclusion: it.command === CMD_FENCE_POLYGON_INCLUSION || it.command === CMD_FENCE_CIRCLE_INCLUSION }
+        : {}),
     };
   });
 }
@@ -167,7 +182,10 @@ export function distanceM(a: LatLon, b: LatLon): number {
 /** The point at `distance` m along `bearingDeg` from `from`, for a circle's radius handle. */
 export function offsetPoint(from: LatLon, distance: number, bearingDeg: number): LatLon {
   const b = (bearingDeg * Math.PI) / 180;
-  return { lat: from.lat + (distance * Math.cos(b)) / M_PER_DEG_LAT, lon: from.lon + (distance * Math.sin(b)) / mPerDegLon(from.lat) };
+  return {
+    lat: from.lat + (distance * Math.cos(b)) / M_PER_DEG_LAT,
+    lon: from.lon + (distance * Math.sin(b)) / mPerDegLon(from.lat),
+  };
 }
 
 /** Ray-casting point-in-polygon, as ArduPilot's Polygon_outside does (on lat/lon). */
@@ -176,7 +194,8 @@ export function insidePolygon(p: LatLon, vertices: LatLon[]): boolean {
   for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
     const a = vertices[i];
     const b = vertices[j];
-    if (a.lat > p.lat !== b.lat > p.lat && p.lon < ((b.lon - a.lon) * (p.lat - a.lat)) / (b.lat - a.lat) + a.lon) inside = !inside;
+    if (a.lat > p.lat !== b.lat > p.lat && p.lon < ((b.lon - a.lon) * (p.lat - a.lat)) / (b.lat - a.lat) + a.lon)
+      inside = !inside;
   }
   return inside;
 }
@@ -231,7 +250,10 @@ export function fenceBreached(draft: FenceDraft, p: LatLon, opts: { inclusionUni
   let inclusions = 0;
   let outsideInclusions = 0;
   for (const s of draft.shapes) {
-    const inside = s.kind === 'polygon' ? s.vertices.length >= 3 && insidePolygon(p, s.vertices) : distanceM(p, s.center) <= s.radius;
+    const inside =
+      s.kind === 'polygon'
+        ? s.vertices.length >= 3 && insidePolygon(p, s.vertices)
+        : distanceM(p, s.center) <= s.radius;
     if (s.inclusion) {
       inclusions++;
       if (!inside) outsideInclusions++;
@@ -252,7 +274,10 @@ export function fenceBreachReasons(draft: FenceDraft, p: LatLon, opts: { inclusi
   const outside: number[] = [];
   let inclusions = 0;
   draft.shapes.forEach((s, i) => {
-    const inside = s.kind === 'polygon' ? s.vertices.length >= 3 && insidePolygon(p, s.vertices) : distanceM(p, s.center) <= s.radius;
+    const inside =
+      s.kind === 'polygon'
+        ? s.vertices.length >= 3 && insidePolygon(p, s.vertices)
+        : distanceM(p, s.center) <= s.radius;
     if (s.inclusion) {
       inclusions++;
       if (!inside) outside.push(i);
@@ -262,7 +287,8 @@ export function fenceBreachReasons(draft: FenceDraft, p: LatLon, opts: { inclusi
   });
   const names = (list: number[]) => list.map((i) => `F${i + 1}`).join(', ');
   if (opts.inclusionUnion) {
-    if (inclusions > 0 && outside.length === inclusions) reasons.push(`outside every inclusion zone (${names(outside)})`);
+    if (inclusions > 0 && outside.length === inclusions)
+      reasons.push(`outside every inclusion zone (${names(outside)})`);
   } else if (outside.length > 0) {
     reasons.push(`outside inclusion zone${outside.length === 1 ? '' : 's'} ${names(outside)}`);
   }
@@ -285,7 +311,12 @@ export function fenceChanges(vehicle: FenceDraft, draft: FenceDraft): string[] {
   }
   if (!vehicle.returnPoint && draft.returnPoint) out.push('return point added');
   else if (vehicle.returnPoint && !draft.returnPoint) out.push('return point removed');
-  else if (vehicle.returnPoint && draft.returnPoint && compareFenceDrafts({ shapes: [], returnPoint: vehicle.returnPoint }, { shapes: [], returnPoint: draft.returnPoint }).length > 0) {
+  else if (
+    vehicle.returnPoint &&
+    draft.returnPoint &&
+    compareFenceDrafts({ shapes: [], returnPoint: vehicle.returnPoint }, { shapes: [], returnPoint: draft.returnPoint })
+      .length > 0
+  ) {
     out.push('return point moved');
   }
   return out;
@@ -300,9 +331,27 @@ export function fenceActionText(category: string, action: number | undefined): s
   const a = Math.round(action);
   if (a === 0) return null;
   const table: Record<string, Record<number, string>> = {
-    copter: { 1: 'RTL (or land)', 2: 'land', 3: 'SmartRTL (or RTL, or land)', 4: 'brake (or land)', 5: 'SmartRTL (or land)' },
-    rover: { 1: 'RTL (or hold)', 2: 'hold', 3: 'SmartRTL (or RTL, or hold)', 4: 'SmartRTL (or hold)', 5: 'TERMINATE (disarm)', 6: 'loiter (or hold)' },
-    plane: { 1: 'RTL (to the fence return point if set)', 6: 'switch to Guided (to the fence return point if set)', 7: 'switch to Guided, throttle passed through', 8: 'AUTOLAND if possible, else RTL' },
+    copter: {
+      1: 'RTL (or land)',
+      2: 'land',
+      3: 'SmartRTL (or RTL, or land)',
+      4: 'brake (or land)',
+      5: 'SmartRTL (or land)',
+    },
+    rover: {
+      1: 'RTL (or hold)',
+      2: 'hold',
+      3: 'SmartRTL (or RTL, or hold)',
+      4: 'SmartRTL (or hold)',
+      5: 'TERMINATE (disarm)',
+      6: 'loiter (or hold)',
+    },
+    plane: {
+      1: 'RTL (to the fence return point if set)',
+      6: 'switch to Guided (to the fence return point if set)',
+      7: 'switch to Guided, throttle passed through',
+      8: 'AUTOLAND if possible, else RTL',
+    },
   };
   return table[category]?.[a] ?? `take fence action ${a}`;
 }
@@ -343,7 +392,8 @@ export function fencingState(v: {
 
 function assertShape(draft: FenceDraft, s: number, kind?: FenceShape['kind']): FenceShape {
   const shape = draft.shapes[s];
-  if (!shape || (kind && shape.kind !== kind)) throw new RangeError(`Fence shape ${s} doesn't exist${kind ? ` as a ${kind}` : ''}`);
+  if (!shape || (kind && shape.kind !== kind))
+    throw new RangeError(`Fence shape ${s} doesn't exist${kind ? ` as a ${kind}` : ''}`);
   return shape;
 }
 const withShape = (draft: FenceDraft, s: number, shape: FenceShape): FenceDraft => ({
@@ -373,7 +423,12 @@ export function moveVertex(draft: FenceDraft, s: number, v: number, at: LatLon):
 }
 
 /** Insert a vertex after vertex `after` (on the edge from it to the next). Returns the new vertex's index. */
-export function insertVertex(draft: FenceDraft, s: number, after: number, at: LatLon): { draft: FenceDraft; index: number } {
+export function insertVertex(
+  draft: FenceDraft,
+  s: number,
+  after: number,
+  at: LatLon
+): { draft: FenceDraft; index: number } {
   const shape = assertShape(draft, s, 'polygon') as Extract<FenceShape, { kind: 'polygon' }>;
   if (!shape.vertices[after]) throw new RangeError(`Vertex ${after} doesn't exist`);
   const vertices = [...shape.vertices];
@@ -420,7 +475,12 @@ export function squareAt(at: LatLon, sizeM: number, inclusion: boolean): FenceSh
   return {
     kind: 'polygon',
     inclusion,
-    vertices: [offsetPoint(offsetPoint(at, h, 0), h, 270), offsetPoint(offsetPoint(at, h, 0), h, 90), offsetPoint(offsetPoint(at, h, 180), h, 90), offsetPoint(offsetPoint(at, h, 180), h, 270)],
+    vertices: [
+      offsetPoint(offsetPoint(at, h, 0), h, 270),
+      offsetPoint(offsetPoint(at, h, 0), h, 90),
+      offsetPoint(offsetPoint(at, h, 180), h, 90),
+      offsetPoint(offsetPoint(at, h, 180), h, 270),
+    ],
   };
 }
 
@@ -444,7 +504,12 @@ export interface FenceCheckContext {
   inclusionUnion?: boolean;
 }
 
-const validPos = (p: LatLon) => Number.isFinite(p.lat) && Number.isFinite(p.lon) && Math.abs(p.lat) <= 90 && Math.abs(p.lon) <= 180 && (p.lat !== 0 || p.lon !== 0);
+const validPos = (p: LatLon) =>
+  Number.isFinite(p.lat) &&
+  Number.isFinite(p.lon) &&
+  Math.abs(p.lat) <= 90 &&
+  Math.abs(p.lon) <= 180 &&
+  (p.lat !== 0 || p.lon !== 0);
 
 /** Problems to fix (errors: the vehicle would reject the fence or misjudge it) or check (warnings). */
 export function validateFenceDraft(draft: FenceDraft, ctx: FenceCheckContext = {}): FenceIssue[] {
@@ -458,7 +523,8 @@ export function validateFenceDraft(draft: FenceDraft, ctx: FenceCheckContext = {
     if (s.kind === 'polygon') {
       if (s.vertices.length < 3) err(i, `A polygon needs at least 3 vertices (has ${s.vertices.length}).`);
       if (!s.vertices.every(validPos)) err(i, 'A vertex has no valid position.');
-      else if (selfIntersects(s.vertices)) err(i, 'The polygon crosses itself: the vehicle would misjudge inside and outside.');
+      else if (selfIntersects(s.vertices))
+        err(i, 'The polygon crosses itself: the vehicle would misjudge inside and outside.');
       if (s.vertices.length > 255) err(i, 'A polygon can have at most 255 vertices.');
     } else {
       if (!validPos(s.center)) err(i, 'The circle has no valid centre.');
@@ -477,7 +543,8 @@ export function validateFenceDraft(draft: FenceDraft, ctx: FenceCheckContext = {
     if (ctx.fenceType !== undefined && (ctx.fenceType & 4) === 0) {
       warn(-1, 'FENCE_TYPE does not include polygons and circles (bit 2): this fence is stored but not enforced.');
     }
-    if (ctx.fenceEnable === 0) warn(-1, 'Fencing is off (FENCE_ENABLE = 0): this fence is stored but not enforced until enabled.');
+    if (ctx.fenceEnable === 0)
+      warn(-1, 'Fencing is off (FENCE_ENABLE = 0): this fence is stored but not enforced until enabled.');
   }
   return issues;
 }
@@ -498,11 +565,14 @@ export function compareFenceDrafts(a: FenceDraft, b: FenceDraft): string[] {
     const q = b.shapes[i];
     const name = `shape ${i + 1}`;
     if (p.kind !== q.kind || p.inclusion !== q.inclusion) {
-      out.push(`${name}: ${p.inclusion ? 'inclusion' : 'exclusion'} ${p.kind} vs ${q.inclusion ? 'inclusion' : 'exclusion'} ${q.kind}`);
+      out.push(
+        `${name}: ${p.inclusion ? 'inclusion' : 'exclusion'} ${p.kind} vs ${q.inclusion ? 'inclusion' : 'exclusion'} ${q.kind}`
+      );
       continue;
     }
     if (p.kind === 'polygon' && q.kind === 'polygon') {
-      if (p.vertices.length !== q.vertices.length) out.push(`${name}: ${p.vertices.length} vertices vs ${q.vertices.length}`);
+      if (p.vertices.length !== q.vertices.length)
+        out.push(`${name}: ${p.vertices.length} vertices vs ${q.vertices.length}`);
       else if (!p.vertices.every((v, k) => samePos(v, q.vertices[k]))) out.push(`${name}: a vertex differs`);
     } else if (p.kind === 'circle' && q.kind === 'circle') {
       if (!samePos(p.center, q.center)) out.push(`${name}: centre differs`);
@@ -529,6 +599,11 @@ export function checkFenceReadBack(uploaded: FenceDraft, readBack: FencePoint[],
   const vehicle = fenceDraftFromPoints(readBack);
   const differences = compareFenceDrafts(uploaded, vehicle);
   const sentSomething = uploaded.shapes.length > 0 || !!uploaded.returnPoint;
-  const status = !readOk || (readBack.length === 0 && sentSomething) ? 'unreadable' : differences.length > 0 ? 'mismatch' : 'verified';
+  const status =
+    !readOk || (readBack.length === 0 && sentSomething)
+      ? 'unreadable'
+      : differences.length > 0
+        ? 'mismatch'
+        : 'verified';
   return { status, vehicle, differences };
 }

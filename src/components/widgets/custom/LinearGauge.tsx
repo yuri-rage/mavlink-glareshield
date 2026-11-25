@@ -1,6 +1,7 @@
 import React from 'react';
-import type { WidgetDataBinding, WidgetGaugeConfig } from '../../../types/widget';
+
 import { clamp, niceStep, niceTicks, stepDecimals, thresholdZones } from '../../../lib/gaugeGeometry';
+import type { WidgetDataBinding, WidgetGaugeConfig } from '../../../types/widget';
 import { ZONE_HEX } from './palette';
 
 export interface LinearGaugeProps {
@@ -48,13 +49,15 @@ export const LinearGauge: React.FC<LinearGaugeProps> = ({
 
   return (
     <div className={`${compact ? 'space-y-0.5' : 'space-y-1.5'} transition-opacity ${dimmed ? 'opacity-40' : ''}`}>
-      <div className="flex justify-between items-baseline font-mono gap-2 min-w-0">
-        {label && <span className="text-xs text-zinc-400 font-semibold truncate">{label}</span>}
-        <span className={`${compact ? 'text-sm' : 'text-2xl'} font-bold ${valueClass} ${label ? 'ml-auto' : ''} whitespace-nowrap`}>
+      <div className="flex min-w-0 items-baseline justify-between gap-2 font-mono">
+        {label && <span className="truncate text-xs font-semibold text-zinc-400">{label}</span>}
+        <span
+          className={`${compact ? 'text-sm' : 'text-2xl'} font-bold ${valueClass} ${label ? 'ml-auto' : ''} whitespace-nowrap`}
+        >
           {text} <span className={`${compact ? 'text-[11px]' : 'text-xs'} font-normal text-zinc-400`}>{unit}</span>
         </span>
         {secondary && (
-          <span className="text-[10px] font-mono truncate" style={{ color: '#d946ef' }}>
+          <span className="truncate font-mono text-[10px]" style={{ color: '#d946ef' }}>
             ▼ {secondary.label} {secondary.text}
           </span>
         )}
@@ -62,18 +65,20 @@ export const LinearGauge: React.FC<LinearGaugeProps> = ({
       <div className={`relative ${secondary ? 'pt-2' : ''}`}>
         {secondary?.value !== null && secondary?.value !== undefined && (
           <div
-            className="absolute top-0 -translate-x-1/2 w-0 h-0 border-x-[5px] border-x-transparent border-t-[7px]"
+            className="absolute top-0 h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[7px] border-x-transparent"
             style={{ left: `${at(secondary.value)}%`, borderTopColor: '#d946ef' }}
           />
         )}
-        <div className={`w-full bg-zinc-900 ${compact ? 'h-2.5' : 'h-3'} rounded-full overflow-hidden border border-zinc-800 relative`}>
+        <div
+          className={`w-full bg-zinc-900 ${compact ? 'h-2.5' : 'h-3'} relative overflow-hidden rounded-full border border-zinc-800`}
+        >
           {value !== null && (
             <div
-              className="absolute top-0 bottom-0 transition-[left,width] duration-150"
+              className="absolute bottom-0 top-0 transition-[left,width] duration-150"
               style={{ left: `${Math.min(origin, pct)}%`, width: `${Math.abs(pct - origin)}%`, background: accent }}
             />
           )}
-          {origin > 0 && <div className="absolute top-0 bottom-0 w-px bg-zinc-500" style={{ left: `${origin}%` }} />}
+          {origin > 0 && <div className="absolute bottom-0 top-0 w-px bg-zinc-500" style={{ left: `${origin}%` }} />}
           {zones.map((z) => (
             <div
               key={`${z.level}-${z.from}`}
@@ -87,7 +92,7 @@ export const LinearGauge: React.FC<LinearGaugeProps> = ({
             />
           ))}
         </div>
-        <div className="relative h-4 mt-0.5 text-[10px] font-mono text-zinc-500">
+        <div className="relative mt-0.5 h-4 font-mono text-[10px] text-zinc-500">
           {ticks.map((t, i) => (
             <span
               key={t}

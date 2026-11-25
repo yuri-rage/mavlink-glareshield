@@ -37,26 +37,51 @@ const run = async (name: string, action: any, params: number[]) => {
   const info = await sendTrackedCommand(actionPacket(enc, sys, 1, action, params), { label: name });
   return info.result;
 };
-const texts = () => st().statusMessages.slice(-6).map((m: any) => m.text).join(' | ');
+const texts = () =>
+  st()
+    .statusMessages.slice(-6)
+    .map((m: any) => m.text)
+    .join(' | ');
 
 // In ALT_HOLD first: a wrong safety flag (custom mode) with P2 0 would switch to mode 0, STABILIZE.
 mavlinkConnection.send(enc.createSetMode(sys, 1, 2));
 for (let i = 0; i < 50 && st().heartbeat.modeName !== 'ALT_HOLD'; i++) await sleep(200);
-check('safety on (DO_SET_MODE, safety flag 128, P2 1): accepted', (await run('safety on', preset('safety-on'), preset('safety-on').params)) === 0);
-check('safety off (P2 0): accepted', (await run('safety off', preset('safety-off'), preset('safety-off').params)) === 0);
+check(
+  'safety on (DO_SET_MODE, safety flag 128, P2 1): accepted',
+  (await run('safety on', preset('safety-on'), preset('safety-on').params)) === 0
+);
+check(
+  'safety off (P2 0): accepted',
+  (await run('safety off', preset('safety-off'), preset('safety-off').params)) === 0
+);
 await sleep(1500);
-check('the safety presets don\'t change the flight mode (still ALT_HOLD)', st().heartbeat.modeName === 'ALT_HOLD', st().heartbeat.modeName);
+check(
+  "the safety presets don't change the flight mode (still ALT_HOLD)",
+  st().heartbeat.modeName === 'ALT_HOLD',
+  st().heartbeat.modeName
+);
 const ident = await run('ident', preset('adsb-ident'), preset('adsb-ident').params);
-check('ADS-B IDENT reaches the ADS-B library (accepted, or failed for want of a healthy transponder)', ident === 0 || ident === 4, `result ${ident}`);
+check(
+  'ADS-B IDENT reaches the ADS-B library (accepted, or failed for want of a healthy transponder)',
+  ident === 0 || ident === 4,
+  `result ${ident}`
+);
 // COMMAND_INT in a global frame: DO_SET_HOME at a given place (P1 0 = use the given location).
 const home = await run('set home', { commandId: 179, send: 'int', frame: 0 }, [0, 0, 0, 0, 35.001, -106.002, 1601]);
 await sleep(1500);
 mavlinkConnection.send(enc.createRequestMessage(sys, 1, 242));
 await sleep(1500);
 const h = st().homePosition;
-check('COMMAND_INT, global frame: DO_SET_HOME accepted and home moved there', home === 0 && Math.abs(h.lat - 35.001) < 1e-6 && Math.abs(h.lon + 106.002) < 1e-6, `result ${home}, home ${h.lat}, ${h.lon}`);
+check(
+  'COMMAND_INT, global frame: DO_SET_HOME accepted and home moved there',
+  home === 0 && Math.abs(h.lat - 35.001) < 1e-6 && Math.abs(h.lon + 106.002) < 1e-6,
+  `result ${home}, home ${h.lat}, ${h.lon}`
+);
 // COMMAND_INT without a frame: a non-position command (REQUEST_MESSAGE for HOME_POSITION).
-check('COMMAND_INT, no frame: REQUEST_MESSAGE accepted', (await run('request', { commandId: 512, send: 'int', frame: 2 }, [242, 0, 0, 0, 0, 0, 0])) === 0);
+check(
+  'COMMAND_INT, no frame: REQUEST_MESSAGE accepted',
+  (await run('request', { commandId: 512, send: 'int', frame: 2 }, [242, 0, 0, 0, 0, 0, 0])) === 0
+);
 // SYSTEM_TIME: not acknowledged; just check it goes out without disturbing the link.
 mavlinkConnection.send(actionPacket(enc, sys, 1, { commandId: 0, special: 'system-time' }, [0, 0, 0, 0, 0, 0, 0]));
 await sleep(1500);

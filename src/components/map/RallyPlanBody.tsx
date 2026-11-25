@@ -2,7 +2,12 @@
 // own actions (upload, save to file, reset). Points are added on the map (Place, or right-click).
 
 import React, { useEffect, useRef } from 'react';
+
 import { AlertTriangle, Download, FolderOpen, RotateCcw, Trash2, Upload, XCircle } from 'lucide-react';
+
+import { downloadFile } from '../../lib/download';
+import { useLengthUnit } from '../../lib/inputUnits';
+import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { ALTITUDE_FRAMES } from '../../mavlink/missionCommands';
 import { missionFileStem, toQgcWpl } from '../../mavlink/missionFileWriter';
 import {
@@ -16,11 +21,8 @@ import {
 import { isRallyDirty, useMissionPlanStore } from '../../store/missionPlanStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
-import { useConfirmStep } from '../../lib/useWaypointNavigation';
-import { downloadFile } from '../../lib/download';
 import { OPEN_ACCEPT } from './MissionMenu';
-import { ICON_BTN, INPUT, NumField, frameTag } from './planUi';
-import { useLengthUnit } from '../../lib/inputUnits';
+import { frameTag, ICON_BTN, INPUT, NumField } from './planUi';
 
 interface RallyPlanBodyProps {
   issues: RallyIssue[];
@@ -80,8 +82,15 @@ const PointEditor: React.FC<{
       {issues.length > 0 && (
         <ul className="space-y-0.5">
           {issues.map((iss, k) => (
-            <li key={k} className={`flex gap-1 text-[10px] leading-snug ${iss.severity === 'error' ? 'text-red-300' : 'text-amber-300'}`}>
-              {iss.severity === 'error' ? <XCircle className="mt-px h-3 w-3 shrink-0" /> : <AlertTriangle className="mt-px h-3 w-3 shrink-0" />}
+            <li
+              key={k}
+              className={`flex gap-1 text-[10px] leading-snug ${iss.severity === 'error' ? 'text-red-300' : 'text-amber-300'}`}
+            >
+              {iss.severity === 'error' ? (
+                <XCircle className="mt-px h-3 w-3 shrink-0" />
+              ) : (
+                <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+              )}
               {iss.message}
             </li>
           ))}
@@ -211,7 +220,11 @@ export const RallyPlanBody: React.FC<RallyPlanBodyProps> = ({
                 }}
                 className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-zinc-900"
               >
-                <span className={`w-6 shrink-0 text-right font-mono text-[10px] font-bold ${isSel ? 'text-sky-300' : 'text-fuchsia-300'}`}>R{i + 1}</span>
+                <span
+                  className={`w-6 shrink-0 text-right font-mono text-[10px] font-bold ${isSel ? 'text-sky-300' : 'text-fuchsia-300'}`}
+                >
+                  R{i + 1}
+                </span>
                 <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-zinc-400">
                   {formatAltitude(p.alt).full} {frameTag(p.frame)} · {p.lat.toFixed(5)}, {p.lon.toFixed(5)}
                 </span>
@@ -246,11 +259,22 @@ export const RallyPlanBody: React.FC<RallyPlanBodyProps> = ({
             type="button"
             className={ICON_BTN}
             title="Save rally draft to a .waypoints file"
-            onClick={() => downloadFile(`${missionFileStem(systemId)}-rally-draft.waypoints`, toQgcWpl(rallyDraftToItems(draft)), 'text/plain')}
+            onClick={() =>
+              downloadFile(
+                `${missionFileStem(systemId)}-rally-draft.waypoints`,
+                toQgcWpl(rallyDraftToItems(draft)),
+                'text/plain'
+              )
+            }
           >
             <Download className="h-3.5 w-3.5" />
           </button>
-          <button type="button" className={ICON_BTN} title="Open a file into the drafts" onClick={() => fileRef.current?.click()}>
+          <button
+            type="button"
+            className={ICON_BTN}
+            title="Open a file into the drafts"
+            onClick={() => fileRef.current?.click()}
+          >
             <FolderOpen className="h-3.5 w-3.5" />
           </button>
           <input
@@ -274,7 +298,9 @@ export const RallyPlanBody: React.FC<RallyPlanBodyProps> = ({
               onResetToVehicle();
             }}
             className={`inline-flex h-7 items-center gap-1 rounded-md border px-1.5 text-[10px] font-bold disabled:opacity-35 ${
-              resetConfirm.armed ? 'border-red-500 bg-red-600 text-white' : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
+              resetConfirm.armed
+                ? 'border-red-500 bg-red-600 text-white'
+                : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
             }`}
           >
             <RotateCcw className="h-3 w-3" />

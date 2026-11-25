@@ -7,8 +7,12 @@
 // can't act on a renumbered item.
 
 import React, { useEffect, useRef, useState } from 'react';
+
 import { Compass, MapPinPlus, Plus, Repeat, Square, Trash2 } from 'lucide-react';
+
 import { useLengthUnit, wholeLength } from '../../lib/inputUnits';
+import { addShape, removeShape, removeVertex, setInclusion, setReturnPoint, squareAt } from '../../mavlink/fenceDraft';
+import { missionCommandInfo } from '../../mavlink/missionCommands';
 import {
   insertWaypointAfter,
   insertWaypointAtBearing,
@@ -18,12 +22,10 @@ import {
   removeItems,
   type MissionDraft,
 } from '../../mavlink/missionDraft';
-import { missionCommandInfo } from '../../mavlink/missionCommands';
-import { useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
 import { addRallyPoint, removeRallyPoint, type RallyDraft } from '../../mavlink/rallyDraft';
-import { drawablePosition } from './useDraftLayer';
-import { addShape, removeShape, removeVertex, setInclusion, setReturnPoint, squareAt } from '../../mavlink/fenceDraft';
+import { useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
 import { commitFence } from './fenceCommit';
+import { drawablePosition } from './useDraftLayer';
 
 export type PlanMenuTarget =
   | { kind: 'item'; layer: PlanLayer; index: number; x: number; y: number }
@@ -85,11 +87,17 @@ let lastBearingRange: { bearing: string; distanceM: number | null } = { bearing:
  * Bearing (degrees true) and distance (the user's units) from item `from`; adds a waypoint there after item
  * `after` (null: at the end) and selects it.
  */
-const BearingRangeForm: React.FC<{ from: number; after: number | null; onDone: () => void }> = ({ from, after, onDone }) => {
+const BearingRangeForm: React.FC<{ from: number; after: number | null; onDone: () => void }> = ({
+  from,
+  after,
+  onDone,
+}) => {
   const len = useLengthUnit();
   const [bearing, setBearing] = useState(lastBearingRange.bearing);
   const [distance, setDistance] = useState(() =>
-    lastBearingRange.distanceM === null ? '' : String(Number(len.fromSi(lastBearingRange.distanceM).toFixed(len.digits)))
+    lastBearingRange.distanceM === null
+      ? ''
+      : String(Number(len.fromSi(lastBearingRange.distanceM).toFixed(len.digits)))
   );
   const b = Number(bearing);
   const dist = Number(distance);
@@ -101,7 +109,8 @@ const BearingRangeForm: React.FC<{ from: number; after: number | null; onDone: (
     commit((d) => insertWaypointAtBearing(d, from, ((b % 360) + 360) % 360, distM, after));
     onDone();
   };
-  const field = 'h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-1.5 font-mono text-[11px] text-zinc-100';
+  const field =
+    'h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-1.5 font-mono text-[11px] text-zinc-100';
   return (
     <form
       className="space-y-1.5 px-2 pb-1.5 pt-1"
@@ -113,11 +122,24 @@ const BearingRangeForm: React.FC<{ from: number; after: number | null; onDone: (
       <div className="grid grid-cols-2 gap-1.5">
         <label className="text-[10px] text-zinc-400">
           Bearing (°T)
-          <input autoFocus inputMode="decimal" value={bearing} onChange={(e) => setBearing(e.target.value)} className={field} aria-label="Bearing in degrees true" />
+          <input
+            autoFocus
+            inputMode="decimal"
+            value={bearing}
+            onChange={(e) => setBearing(e.target.value)}
+            className={field}
+            aria-label="Bearing in degrees true"
+          />
         </label>
         <label className="text-[10px] text-zinc-400">
           Distance ({len.unit})
-          <input inputMode="decimal" value={distance} onChange={(e) => setDistance(e.target.value)} className={field} aria-label="Distance" />
+          <input
+            inputMode="decimal"
+            value={distance}
+            onChange={(e) => setDistance(e.target.value)}
+            className={field}
+            aria-label="Distance"
+          />
         </label>
       </div>
       <button
@@ -132,7 +154,8 @@ const BearingRangeForm: React.FC<{ from: number; after: number | null; onDone: (
   );
 };
 
-const ITEM = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800';
+const ITEM =
+  'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] text-zinc-200 hover:bg-zinc-800';
 
 export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, onClose }) => {
   const draft = useMissionPlanStore((s) => s.history.present);
@@ -145,7 +168,8 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
   const menuLen = useLengthUnit();
   // An item menu whose item is gone (or is home) has nothing to show: close it rather than leave an invisible menu
   // that still swallows the next click.
-  const fenceShape = target.kind === 'fence-shape' || target.kind === 'fence-vertex' ? fence.shapes[target.shape] : undefined;
+  const fenceShape =
+    target.kind === 'fence-shape' || target.kind === 'fence-vertex' ? fence.shapes[target.shape] : undefined;
   const missing =
     (target.kind === 'item' &&
       (target.layer === 'rally' ? !rally.points[target.index] : target.index < 0 || !draft.items[target.index])) ||
@@ -216,7 +240,11 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
     body = (
       <>
         <div className="px-2 pb-1 pt-0.5 font-mono text-[10px] font-bold text-red-300">{shapeName(i)}</div>
-        <button type="button" className={ITEM} onClick={run(() => commitFence((d) => ({ draft: setInclusion(d, i, !sh.inclusion), index: i })))}>
+        <button
+          type="button"
+          className={ITEM}
+          onClick={run(() => commitFence((d) => ({ draft: setInclusion(d, i, !sh.inclusion), index: i })))}
+        >
           <Repeat className="h-3.5 w-3.5 text-red-400" />
           Make {sh.inclusion ? 'exclusion' : 'inclusion'}
         </button>
@@ -248,7 +276,11 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
           <Trash2 className="h-3.5 w-3.5" />
           Delete vertex
         </button>
-        <button type="button" className={DELETE} onClick={run(() => commitFence((d) => ({ draft: removeShape(d, i), index: null })))}>
+        <button
+          type="button"
+          className={DELETE}
+          onClick={run(() => commitFence((d) => ({ draft: removeShape(d, i), index: null })))}
+        >
           <Trash2 className="h-3.5 w-3.5" />
           Delete polygon
         </button>
@@ -256,7 +288,11 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
     );
   } else if (target.kind === 'fence-return') {
     body = (
-      <button type="button" className={DELETE} onClick={run(() => commitFence((d) => ({ draft: setReturnPoint(d, null), index: null })))}>
+      <button
+        type="button"
+        className={DELETE}
+        onClick={run(() => commitFence((d) => ({ draft: setReturnPoint(d, null), index: null })))}
+      >
         <Trash2 className="h-3.5 w-3.5" />
         Remove return point
       </button>
@@ -265,7 +301,11 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
     const at = { lat: target.lat, lon: target.lon };
     body = (
       <>
-        <button type="button" className={ITEM} onClick={run(() => commitFence((d) => ({ draft: setReturnPoint(d, at), index: null })))}>
+        <button
+          type="button"
+          className={ITEM}
+          onClick={run(() => commitFence((d) => ({ draft: setReturnPoint(d, at), index: null })))}
+        >
           <MapPinPlus className="h-3.5 w-3.5 text-red-400" />
           {fence.returnPoint ? 'Move return point here' : 'Place return point here'}
         </button>
@@ -326,7 +366,9 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
       >
         <MapPinPlus className="h-3.5 w-3.5 text-amber-400" />
         Place waypoint here
-        <span className="ml-auto pl-2 text-[10px] text-zinc-500">after {selected !== null && selected >= 1 ? `#${selected}` : 'last'}</span>
+        <span className="ml-auto pl-2 text-[10px] text-zinc-500">
+          after {selected !== null && selected >= 1 ? `#${selected}` : 'last'}
+        </span>
       </button>
     );
   } else if (target.index === 0) {
@@ -363,7 +405,9 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
           <button
             type="button"
             className={ITEM}
-            onClick={run(() => commit((d) => insertWaypointBefore(d, i, (prev.lat + here.lat) / 2, (prev.lon + here.lon) / 2)))}
+            onClick={run(() =>
+              commit((d) => insertWaypointBefore(d, i, (prev.lat + here.lat) / 2, (prev.lon + here.lon) / 2))
+            )}
           >
             <Plus className="h-3.5 w-3.5 text-amber-400" />
             Insert waypoint before
@@ -384,7 +428,10 @@ export const PlanContextMenu: React.FC<PlanContextMenuProps> = ({ target, area, 
           onClick={run(() =>
             commit((d) => {
               const next = removeItems(d, [i]);
-              return { draft: next, index: i < next.items.length ? i : next.items.length > 1 ? next.items.length - 1 : null };
+              return {
+                draft: next,
+                index: i < next.items.length ? i : next.items.length > 1 ? next.items.length - 1 : null,
+              };
             })
           )}
         >

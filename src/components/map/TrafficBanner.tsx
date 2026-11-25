@@ -2,12 +2,14 @@
 // Nothing shows when no traffic is a caution or alert. Clicking centres the map on the aircraft.
 
 import React, { useEffect, useState } from 'react';
+
 import { Plane } from 'lucide-react';
-import { useTrafficStore } from '../../store/trafficStore';
-import { useTelemetryStore } from '../../store/telemetryStore';
-import { useUnitsStore } from '../../store/unitsStore';
-import { useAdsbSettingsStore } from '../../store/adsbSettingsStore';
+
 import { compassPoint, emergencySquawk, icaoHex, ownForThreat, rankTraffic, relAltText } from '../../mavlink/adsb';
+import { useAdsbSettingsStore } from '../../store/adsbSettingsStore';
+import { useTelemetryStore } from '../../store/telemetryStore';
+import { useTrafficStore } from '../../store/trafficStore';
+import { useUnitsStore } from '../../store/unitsStore';
 
 export const TrafficBanner: React.FC<{ onFocus: (lat: number, lon: number) => void }> = ({ onFocus }) => {
   const aircraft = useTrafficStore((s) => s.aircraft);
@@ -23,7 +25,9 @@ export const TrafficBanner: React.FC<{ onFocus: (lat: number, lon: number) => vo
   }, []);
 
   if (!warnings) return null;
-  const ranked = rankTraffic(Object.values(aircraft), ownForThreat(position), thresholds).filter((r) => r.t && r.t.level !== 'none');
+  const ranked = rankTraffic(Object.values(aircraft), ownForThreat(position), thresholds).filter(
+    (r) => r.t && r.t.level !== 'none'
+  );
   if (ranked.length === 0) return null;
   const { a, t } = ranked[0];
   const alert = t!.level === 'alert';
@@ -34,7 +38,9 @@ export const TrafficBanner: React.FC<{ onFocus: (lat: number, lon: number) => vo
       onClick={() => onFocus(a.lat, a.lon)}
       role="alert"
       className={`pointer-events-auto inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-left font-mono text-[11px] font-bold shadow-md ${
-        alert ? 'animate-pulse border-red-500 bg-red-600 text-white' : 'border-amber-500/60 bg-amber-950/90 text-amber-200'
+        alert
+          ? 'animate-pulse border-red-500 bg-red-600 text-white'
+          : 'border-amber-500/60 bg-amber-950/90 text-amber-200'
       }`}
       title="Show on the map"
     >

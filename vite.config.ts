@@ -1,8 +1,10 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import path from 'path';
-import net from 'net';
 import fs from 'fs';
+import net from 'net';
+import path from 'path';
+
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
+
 import { readBuildInfo } from './scripts/buildInfo.mjs';
 
 /** This build's identity (scripts/buildInfo.mjs): shown in the app, in dist/version.json, and in the worker. */
@@ -185,7 +187,7 @@ function ntripProxyPlugin() {
                 'Content-Type': 'application/octet-stream',
                 'Access-Control-Allow-Origin': corsOrigin,
                 'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
+                Connection: 'keep-alive',
               });
 
               const bodyRemaining = headerBuf.slice(splitAt);

@@ -2,23 +2,25 @@
 // active one falls silent, and the confirmation of a switch. See mavlink/vehicleRoster.ts for the rules.
 
 import React, { useEffect, useRef, useState } from 'react';
+
 import { ArrowLeftRight, ChevronDown, Radio } from 'lucide-react';
+
+import { logManager } from '../../mavlink/logManager';
+import { getVehicleCategoryLabel } from '../../mavlink/messages';
+import { missionManager } from '../../mavlink/missionManager';
+import { paramManager } from '../../mavlink/paramManager';
 import {
   dismissTakeoverOffer,
   requestVehicleSwitch,
+  SILENT_MS,
   switchToVehicle,
   useVehicleRosterStore,
-  SILENT_MS,
   type RosterVehicle,
 } from '../../mavlink/vehicleRoster';
-import { getVehicleCategoryLabel } from '../../mavlink/messages';
+import { isAnyDirty, useMissionPlanStore } from '../../store/missionPlanStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
-import { missionManager } from '../../mavlink/missionManager';
-import { paramManager } from '../../mavlink/paramManager';
-import { logManager } from '../../mavlink/logManager';
 import { Button } from '../ui/button';
-import { isAnyDirty, useMissionPlanStore } from '../../store/missionPlanStore';
 
 /** Re-render every second while `on` (ages of last contact); idle otherwise. */
 function useTick(on: boolean, ms = 1000) {
@@ -38,7 +40,8 @@ function age(ms: number): string {
 /** One line about a listed vehicle: type, mode, armed, height, battery, last heard. */
 export function vehicleSummary(v: RosterVehicle, now: number, imperial: boolean): string {
   const parts = [getVehicleCategoryLabel(v.type), v.modeName, v.armed ? 'ARMED' : 'disarmed'];
-  if (v.relAlt !== undefined) parts.push(imperial ? `${Math.round(v.relAlt * 3.28084)} ft` : `${Math.round(v.relAlt)} m`);
+  if (v.relAlt !== undefined)
+    parts.push(imperial ? `${Math.round(v.relAlt * 3.28084)} ft` : `${Math.round(v.relAlt)} m`);
   if (v.battery !== undefined) parts.push(`${v.battery}%`);
   const quiet = now - v.lastHeard;
   if (quiet > 3000) parts.push(`heard ${age(quiet)} ago`);
@@ -68,8 +71,10 @@ export const VehiclePicker: React.FC = () => {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`h-7 px-2 rounded-lg border text-xs font-mono font-bold flex items-center gap-1 ${
-          open ? 'border-sky-400 bg-sky-950/80 text-sky-200' : 'border-violet-500/60 bg-violet-950/50 text-violet-200 hover:brightness-110'
+        className={`flex h-7 items-center gap-1 rounded-lg border px-2 font-mono text-xs font-bold ${
+          open
+            ? 'border-sky-400 bg-sky-950/80 text-sky-200'
+            : 'border-violet-500/60 bg-violet-950/50 text-violet-200 hover:brightness-110'
         }`}
         title={`Commanding vehicle ${active} of ${list.length} on the link: click to switch`}
         aria-label={`Vehicle ${active}: switch vehicle`}
@@ -80,8 +85,10 @@ export const VehiclePicker: React.FC = () => {
         <ChevronDown className="h-3.5 w-3.5 opacity-60" />
       </button>
       {open && (
-        <div className="absolute left-0 mt-2 w-72 rounded-xl bg-zinc-900/95 border border-zinc-700/80 shadow-2xl backdrop-blur-md p-2 z-50">
-          <div className="px-2 pb-1.5 mb-1.5 border-b border-zinc-800 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Vehicles on the link</div>
+        <div className="absolute left-0 z-50 mt-2 w-72 rounded-xl border border-zinc-700/80 bg-zinc-900/95 p-2 shadow-2xl backdrop-blur-md">
+          <div className="mb-1.5 border-b border-zinc-800 px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+            Vehicles on the link
+          </div>
           {list.map((v) => {
             const isActive = v.sysId === active;
             const silent = now - v.lastHeard > SILENT_MS;
@@ -94,15 +101,21 @@ export const VehiclePicker: React.FC = () => {
                   setOpen(false);
                   requestVehicleSwitch(v.sysId);
                 }}
-                className={`w-full text-left rounded-lg px-2 py-1.5 text-xs flex flex-col gap-0.5 ${isActive ? 'bg-sky-500/15 cursor-default' : 'hover:bg-zinc-800'}`}
+                className={`flex w-full flex-col gap-0.5 rounded-lg px-2 py-1.5 text-left text-xs ${isActive ? 'cursor-default bg-sky-500/15' : 'hover:bg-zinc-800'}`}
               >
                 <span className="flex items-center justify-between">
-                  <span className={`font-mono font-bold ${isActive ? 'text-sky-300' : 'text-zinc-200'}`}>SYS {v.sysId}</span>
-                  <span className={`text-[10px] font-bold ${isActive ? 'text-sky-300' : silent ? 'text-red-300' : 'text-zinc-500'}`}>
+                  <span className={`font-mono font-bold ${isActive ? 'text-sky-300' : 'text-zinc-200'}`}>
+                    SYS {v.sysId}
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold ${isActive ? 'text-sky-300' : silent ? 'text-red-300' : 'text-zinc-500'}`}
+                  >
                     {isActive ? 'COMMANDING' : silent ? 'SILENT' : 'switch to'}
                   </span>
                 </span>
-                <span className={`text-[11px] ${v.armed ? 'text-amber-200' : 'text-zinc-400'}`}>{vehicleSummary(v, now, imperial)}</span>
+                <span className={`text-[11px] ${v.armed ? 'text-amber-200' : 'text-zinc-400'}`}>
+                  {vehicleSummary(v, now, imperial)}
+                </span>
               </button>
             );
           })}
@@ -122,19 +135,34 @@ export const TakeoverBanner: React.FC = () => {
   const old = vehicles[active];
   const other = vehicles[offer];
   return (
-    <div role="alert" className="bg-violet-950/90 border-t border-violet-500/60 px-3 sm:px-6 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-violet-100">
-      <span className="flex items-center gap-2 min-w-0">
-        <ArrowLeftRight className="h-4 w-4 text-violet-300 shrink-0" />
+    <div
+      role="alert"
+      className="flex flex-wrap items-center justify-between gap-2 border-t border-violet-500/60 bg-violet-950/90 px-3 py-1.5 text-xs text-violet-100 sm:px-6"
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        <ArrowLeftRight className="h-4 w-4 shrink-0 text-violet-300" />
         <span>
-          <strong>Vehicle {active}</strong> silent{old ? ` for ${age(Date.now() - old.lastHeard)}` : ''}; <strong>vehicle {offer}</strong> is on the link
-          {other ? ` (${other.modeName}${other.armed ? ', ARMED' : ''})` : ''}. The controls still command vehicle {active}.
+          <strong>Vehicle {active}</strong> silent{old ? ` for ${age(Date.now() - old.lastHeard)}` : ''};{' '}
+          <strong>vehicle {offer}</strong> is on the link
+          {other ? ` (${other.modeName}${other.armed ? ', ARMED' : ''})` : ''}. The controls still command vehicle{' '}
+          {active}.
         </span>
       </span>
-      <span className="flex items-center gap-1.5 shrink-0">
-        <Button size="sm" variant="outline" className="h-6 px-2.5 text-[11px] font-bold border-violet-400/60 bg-violet-900/50 text-white hover:bg-violet-800" onClick={() => requestVehicleSwitch(offer)}>
+      <span className="flex shrink-0 items-center gap-1.5">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 border-violet-400/60 bg-violet-900/50 px-2.5 text-[11px] font-bold text-white hover:bg-violet-800"
+          onClick={() => requestVehicleSwitch(offer)}
+        >
           Switch to {offer}
         </Button>
-        <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px] text-violet-200" onClick={dismissTakeoverOffer}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 px-2 text-[11px] text-violet-200"
+          onClick={dismissTakeoverOffer}
+        >
           Keep waiting
         </Button>
       </span>
@@ -146,7 +174,10 @@ export const TakeoverBanner: React.FC = () => {
 function switchConsequences(): string[] {
   const out: string[] = [];
   const hb = useTelemetryStore.getState().heartbeat;
-  if (hb.isArmed) out.push(`Vehicle ${hb.systemId} is ARMED (${hb.modeName}). It carries on in that mode, with nothing from here commanding it.`);
+  if (hb.isArmed)
+    out.push(
+      `Vehicle ${hb.systemId} is ARMED (${hb.modeName}). It carries on in that mode, with nothing from here commanding it.`
+    );
   const m = missionManager.getStatus();
   if (m.isUploading) out.push('A mission upload is under way: it stops, and the old vehicle may hold part of it.');
   else if (m.isFetching) out.push('A mission download is under way: it stops.');
@@ -187,14 +218,19 @@ export const VehicleSwitchDialog: React.FC = () => {
   if (pending === null || !reasons) return null;
   const cancel = () => useVehicleRosterStore.setState({ pendingSwitch: null });
   return (
-    <div className="fixed inset-0 z-[1100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Switch vehicle">
-      <div className="bg-zinc-950 border border-amber-500/50 rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
-        <div className="px-4 py-3 bg-amber-950/40 border-b border-amber-500/30 text-sm font-bold text-amber-200 flex items-center gap-2">
+    <div
+      className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Switch vehicle"
+    >
+      <div className="w-full max-w-md overflow-hidden rounded-xl border border-amber-500/50 bg-zinc-950 shadow-2xl">
+        <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-950/40 px-4 py-3 text-sm font-bold text-amber-200">
           <ArrowLeftRight className="h-4 w-4" />
           Switch from vehicle {active} to vehicle {pending}?
         </div>
-        <div className="p-4 space-y-2 text-xs text-zinc-300">
-          <ul className="list-disc pl-4 space-y-1">
+        <div className="space-y-2 p-4 text-xs text-zinc-300">
+          <ul className="list-disc space-y-1 pl-4">
             {reasons.map((r) => (
               <li key={r}>{r}</li>
             ))}
@@ -205,15 +241,19 @@ export const VehicleSwitchDialog: React.FC = () => {
             </p>
           )}
           <p className="text-zinc-400">
-            Every control then commands vehicle {pending}. Its parameters and home are read afresh; download its mission to
-            see it.
+            Every control then commands vehicle {pending}. Its parameters and home are read afresh; download its mission
+            to see it.
           </p>
         </div>
-        <div className="px-4 py-3 bg-zinc-900 border-t border-zinc-800 flex justify-end gap-2">
+        <div className="flex justify-end gap-2 border-t border-zinc-800 bg-zinc-900 px-4 py-3">
           <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={cancel}>
             Stay on vehicle {active}
           </Button>
-          <Button size="sm" className="h-8 text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white" onClick={() => switchToVehicle(pending)}>
+          <Button
+            size="sm"
+            className="h-8 bg-amber-600 text-xs font-bold text-white hover:bg-amber-500"
+            onClick={() => switchToVehicle(pending)}
+          >
             Switch to vehicle {pending}
           </Button>
         </div>

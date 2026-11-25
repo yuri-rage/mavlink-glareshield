@@ -1,12 +1,14 @@
 // The panel list of a composite widget in the creator: choose the panel to edit, reorder, size and remove panels.
 
 import React from 'react';
-import type { PanelDisplayType, WidgetPanelDefinition } from '../../types/widget';
+
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
+
+import { BUILTIN_PANELS, builtinPanelId } from '../../lib/builtinWidgets';
+import { MAX_COMPOSITE_BINDINGS, MAX_PANELS } from '../../lib/widgetValidation';
+import type { PanelDisplayType, WidgetPanelDefinition } from '../../types/widget';
 import { Button } from '../ui/button';
 import { panelIcon } from '../widgets/custom/WidgetPanel';
-import { MAX_COMPOSITE_BINDINGS, MAX_PANELS } from '../../lib/widgetValidation';
-import { BUILTIN_PANELS, builtinPanelId } from '../../lib/builtinWidgets';
 
 /** What a panel is, for the list: a built-in widget's name, otherwise the display type. */
 function panelKind(p: WidgetPanelDefinition): string {
@@ -33,7 +35,8 @@ export const PANEL_TYPE_OPTIONS: { value: PanelDisplayType; label: string }[] = 
   { value: 'builtin', label: 'Built-in Widget (GPS, Battery, HUD, Map…)' },
 ];
 
-const shortTypeName = (t: PanelDisplayType) => PANEL_TYPE_OPTIONS.find((o) => o.value === t)?.label.replace(/\s*\(.*$/, '') ?? t;
+const shortTypeName = (t: PanelDisplayType) =>
+  PANEL_TYPE_OPTIONS.find((o) => o.value === t)?.label.replace(/\s*\(.*$/, '') ?? t;
 
 /** Panel widths offered, in twelfths of the card. */
 export const SPAN_OPTIONS = [
@@ -60,17 +63,25 @@ interface CompositePanelListProps {
   onSpan: (index: number, span: number) => void;
 }
 
-export const CompositePanelList: React.FC<CompositePanelListProps> = ({ panels, selected, onSelect, onAdd, onMove, onRemove, onSpan }) => {
+export const CompositePanelList: React.FC<CompositePanelListProps> = ({
+  panels,
+  selected,
+  onSelect,
+  onAdd,
+  onMove,
+  onRemove,
+  onSpan,
+}) => {
   const values = panels.reduce((n, p) => n + panelValueCount(p), 0);
   return (
-    <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2.5">
+    <div className="space-y-2.5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
       <div className="flex items-center justify-between gap-2">
         <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400">Panels</h4>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="h-7 text-[11px] gap-1 border-zinc-700"
+          className="h-7 gap-1 border-zinc-700 text-[11px]"
           onClick={onAdd}
           disabled={panels.length >= MAX_PANELS}
           title={panels.length >= MAX_PANELS ? `A composite widget holds at most ${MAX_PANELS} panels` : 'Add a panel'}
@@ -79,9 +90,9 @@ export const CompositePanelList: React.FC<CompositePanelListProps> = ({ panels, 
           Add panel
         </Button>
       </div>
-      <p className="text-[10px] text-zinc-500 -mt-1">
-        Panels fill the card left to right, wrapping when a row is full. On narrow cards each panel takes a full row. Choose a
-        panel to edit it below.
+      <p className="-mt-1 text-[10px] text-zinc-500">
+        Panels fill the card left to right, wrapping when a row is full. On narrow cards each panel takes a full row.
+        Choose a panel to edit it below.
       </p>
       <ol className="space-y-1">
         {panels.map((p, i) => {
@@ -97,16 +108,18 @@ export const CompositePanelList: React.FC<CompositePanelListProps> = ({ panels, 
               <button
                 type="button"
                 onClick={() => onSelect(i)}
-                className="flex-1 min-w-0 flex items-center gap-1.5 text-left text-xs py-0.5"
+                className="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-left text-xs"
                 aria-current={active ? 'true' : undefined}
                 title="Edit this panel"
               >
-                <span className="text-[10px] font-mono text-zinc-500 w-4 shrink-0">{i + 1}</span>
+                <span className="w-4 shrink-0 font-mono text-[10px] text-zinc-500">{i + 1}</span>
                 <Icon className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-sky-400' : 'text-zinc-500'}`} />
-                <span className={`truncate ${active ? 'text-zinc-100 font-semibold' : 'text-zinc-300'}`}>
+                <span className={`truncate ${active ? 'font-semibold text-zinc-100' : 'text-zinc-300'}`}>
                   {p.title?.trim() || panelKind(p)}
                 </span>
-                {p.title?.trim() && <span className="text-[10px] text-zinc-500 truncate hidden sm:inline">{panelKind(p)}</span>}
+                {p.title?.trim() && (
+                  <span className="hidden truncate text-[10px] text-zinc-500 sm:inline">{panelKind(p)}</span>
+                )}
               </button>
               <select
                 value={p.span ?? 12}
@@ -124,7 +137,7 @@ export const CompositePanelList: React.FC<CompositePanelListProps> = ({ panels, 
                 type="button"
                 onClick={() => onMove(i, -1)}
                 disabled={i === 0}
-                className="h-7 w-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
+                className="flex h-7 w-6 items-center justify-center rounded text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
                 aria-label={`Move panel ${i + 1} up`}
               >
                 <ArrowUp className="h-3.5 w-3.5" />
@@ -133,7 +146,7 @@ export const CompositePanelList: React.FC<CompositePanelListProps> = ({ panels, 
                 type="button"
                 onClick={() => onMove(i, 1)}
                 disabled={i === panels.length - 1}
-                className="h-7 w-6 flex items-center justify-center rounded text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
+                className="flex h-7 w-6 items-center justify-center rounded text-zinc-400 hover:text-zinc-100 disabled:opacity-30"
                 aria-label={`Move panel ${i + 1} down`}
               >
                 <ArrowDown className="h-3.5 w-3.5" />
@@ -142,7 +155,7 @@ export const CompositePanelList: React.FC<CompositePanelListProps> = ({ panels, 
                 type="button"
                 onClick={() => onRemove(i)}
                 disabled={panels.length <= 1}
-                className="h-7 w-6 flex items-center justify-center rounded text-zinc-400 hover:text-red-400 disabled:opacity-30"
+                className="flex h-7 w-6 items-center justify-center rounded text-zinc-400 hover:text-red-400 disabled:opacity-30"
                 aria-label={`Remove panel ${i + 1}`}
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -151,7 +164,9 @@ export const CompositePanelList: React.FC<CompositePanelListProps> = ({ panels, 
           );
         })}
       </ol>
-      <p className={`text-[10px] ${values > MAX_COMPOSITE_BINDINGS ? 'text-amber-400 font-semibold' : 'text-zinc-500'}`}>
+      <p
+        className={`text-[10px] ${values > MAX_COMPOSITE_BINDINGS ? 'font-semibold text-amber-400' : 'text-zinc-500'}`}
+      >
         {panels.length} of {MAX_PANELS} panels · {values} of {MAX_COMPOSITE_BINDINGS} values
         {values > MAX_COMPOSITE_BINDINGS ? ' — remove some values to save' : ''}
       </p>

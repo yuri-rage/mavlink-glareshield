@@ -1,13 +1,49 @@
+// 14. Test formatParamValue formatting & truncation
+import { formatParamValue } from '../src/components/widgets/ParametersWidget.tsx';
+// 19. Test Extended Telemetry Store Slices, Custom Widget Value Extraction & Dashboard Reordering
+import { readBinding, scalePwmToUnitRange } from '../src/lib/widgetValues.ts';
+// 27. Test MissionManager uploadFile with MAVFTP failure and item-by-item fallback
+import { mavlinkConnection } from '../src/mavlink/connection.ts';
 import { MavlinkEncoder } from '../src/mavlink/encoder.ts';
-import { MavlinkParser, decodePayload } from '../src/mavlink/parser.ts';
+// 6. Test MAVFTP (Msg 110) Packet Packing & Parsing
+
+// 12. Test Fetch Cancellation and Abort Mechanisms
+import { FTP_OPCODE, mavFtpClient, packFtpMessage, parseFtpPayload } from '../src/mavlink/ftp.ts';
+// 16. Test Firmware Version Extraction & Telemetry Store Integration
+
+// Test Action button confirmation prompt displays underlying MAV_CMD name
+
+// 29. Test cmdHasLocation, QGC ComplexItem expansion, RTCM tail fragments, and speed safety
 import {
-  MAVLINK_MSG_ID,
-  getVehicleCategory,
-  getVehicleModeName,
-  getVehicleFlightModes,
+  cmdHasLocation,
+  extractFirmwareVersion,
   getAllVehicleFlightModes,
+  getMavCmdName as getCmdNameCheck,
+  getVehicleCategory,
+  getVehicleFlightModes,
+  getVehicleModeName,
   MAV_TYPE,
+  MAVLINK_MSG_ID,
 } from '../src/mavlink/messages.ts';
+// 25. Test Mission File Packing, Parsing, and Drop Handling
+import { packDatFile, parseDroppedMissionFile } from '../src/mavlink/missionFileParser.ts';
+import { groupFencePolygons, missionManager } from '../src/mavlink/missionManager.ts';
+import { paramManager } from '../src/mavlink/paramManager.ts';
+import { decodePayload, MavlinkParser } from '../src/mavlink/parser.ts';
+// 28. Test RTCM3 Stream Parser, CRC24Q, NMEA GGA Generator, and MAVLink Injection
+import {
+  calculateCrc24q,
+  extractRtcm1005Arp,
+  generateNmeaGga,
+  RtcmFrameParser,
+  rtcmInjector,
+} from '../src/mavlink/rtcmInjector.ts';
+import { useConnectionStore } from '../src/store/connectionStore.ts';
+import { useDashboardStore } from '../src/store/dashboardStore.ts';
+// 11. Test TelemetryStore MISSION_ITEM_INT Isolation by mission_type
+import { useTelemetryStore } from '../src/store/telemetryStore.ts';
+// 15. Test 4-Way Unit System (m/s / kmh / mph / kts) and Altitude Mode (AGL / MSL)
+import { useUnitsStore } from '../src/store/unitsStore.ts';
 
 const encoder = new MavlinkEncoder(255, 190);
 const parser = new MavlinkParser();
@@ -133,11 +169,6 @@ if (parsedItem.length === 1 && parsedItem[0].messageId === MAVLINK_MSG_ID.MISSIO
   process.exit(1);
 }
 
-// 6. Test MAVFTP (Msg 110) Packet Packing & Parsing
-import { packFtpMessage, parseFtpPayload, FTP_OPCODE } from '../src/mavlink/ftp.ts';
-import { paramManager } from '../src/mavlink/paramManager.ts';
-import { missionManager, groupFencePolygons } from '../src/mavlink/missionManager.ts';
-
 const fnameBytes = new TextEncoder().encode('@PARAM/param.pck');
 const testFtpMsg = packFtpMessage(1, 1, 42, 1, FTP_OPCODE.OpenFileRO, fnameBytes.length, 0, fnameBytes);
 const parsedFtpPackets = parser.parse(testFtpMsg);
@@ -243,7 +274,9 @@ if (
   unpackedWithDefaults['WP_SPEED']?.value === 100 &&
   unpackedWithDefaults['WP_SPEED']?.defaultValue === 100
 ) {
-  console.log('param.pck with defaults (0x671c) unpacked successfully: WP_RADIUS = 0 (default: 50), WP_SPEED = 100 (default: 100)');
+  console.log(
+    'param.pck with defaults (0x671c) unpacked successfully: WP_RADIUS = 0 (default: 50), WP_SPEED = 100 (default: 100)'
+  );
 } else {
   console.error('param.pck with defaults unpacking failed:', unpackedWithDefaults);
   process.exit(1);
@@ -261,8 +294,8 @@ datDv.setUint16(8, 3, true); // num_items = 3
 
 const testCoords = [
   { lat: 37.7749, lon: -122.4194, alt: 10.0, seq: 0 },
-  { lat: 37.7760, lon: -122.4180, alt: 25.0, seq: 1 },
-  { lat: 37.7770, lon: -122.4170, alt: 30.0, seq: 2 },
+  { lat: 37.776, lon: -122.418, alt: 25.0, seq: 1 },
+  { lat: 37.777, lon: -122.417, alt: 30.0, seq: 2 },
 ];
 
 for (let i = 0; i < testCoords.length; i++) {
@@ -283,10 +316,13 @@ if (
   unpackedMission &&
   unpackedMission.length === 3 &&
   Math.abs(unpackedMission[0].lat - 37.7749) < 0.0001 &&
-  Math.abs(unpackedMission[1].lat - 37.7760) < 0.0001 &&
-  Math.abs(unpackedMission[2].lat - 37.7770) < 0.0001
+  Math.abs(unpackedMission[1].lat - 37.776) < 0.0001 &&
+  Math.abs(unpackedMission[2].lat - 37.777) < 0.0001
 ) {
-  console.log('mission.dat multi-item unpacked successfully without coordinate drift:', unpackedMission.map((w) => ({ seq: w.seq, lat: w.lat, lon: w.lon })));
+  console.log(
+    'mission.dat multi-item unpacked successfully without coordinate drift:',
+    unpackedMission.map((w) => ({ seq: w.seq, lat: w.lat, lon: w.lon }))
+  );
 } else {
   console.error('mission.dat multi-item unpacking failed!', unpackedMission);
   process.exit(1);
@@ -302,10 +338,10 @@ fenceDv.setUint16(6, 0, true);
 fenceDv.setUint16(8, 4, true); // num_items = 4
 
 const fenceVertices = [
-  { lat: 37.775, lon: -122.420, seq: 0 },
+  { lat: 37.775, lon: -122.42, seq: 0 },
   { lat: 37.775, lon: -122.418, seq: 1 },
   { lat: 37.773, lon: -122.418, seq: 2 },
-  { lat: 37.773, lon: -122.420, seq: 3 },
+  { lat: 37.773, lon: -122.42, seq: 3 },
 ];
 
 for (let i = 0; i < fenceVertices.length; i++) {
@@ -349,22 +385,22 @@ if (unpackedEmptyFence !== null && unpackedEmptyFence.length === 0) {
 // 9b. Test groupFencePolygons with consecutive polygon fences
 const mockFenceItems = [
   // Inclusion Polygon 1 (4 vertices described in file)
-  { seq: 0, command: 5001, param1: 4, vertexCount: 4, lat: 37.10, lon: -122.10, inclusion: true },
-  { seq: 1, command: 5001, param1: 4, vertexCount: 4, lat: 37.11, lon: -122.10, inclusion: true },
+  { seq: 0, command: 5001, param1: 4, vertexCount: 4, lat: 37.1, lon: -122.1, inclusion: true },
+  { seq: 1, command: 5001, param1: 4, vertexCount: 4, lat: 37.11, lon: -122.1, inclusion: true },
   { seq: 2, command: 5001, param1: 4, vertexCount: 4, lat: 37.11, lon: -122.11, inclusion: true },
-  { seq: 3, command: 5001, param1: 4, vertexCount: 4, lat: 37.10, lon: -122.11, inclusion: true },
+  { seq: 3, command: 5001, param1: 4, vertexCount: 4, lat: 37.1, lon: -122.11, inclusion: true },
   // Inclusion Polygon 2 (4 vertices described in file, immediately consecutive!)
-  { seq: 4, command: 5001, param1: 4, vertexCount: 4, lat: 37.20, lon: -122.20, inclusion: true },
-  { seq: 5, command: 5001, param1: 4, vertexCount: 4, lat: 37.21, lon: -122.20, inclusion: true },
+  { seq: 4, command: 5001, param1: 4, vertexCount: 4, lat: 37.2, lon: -122.2, inclusion: true },
+  { seq: 5, command: 5001, param1: 4, vertexCount: 4, lat: 37.21, lon: -122.2, inclusion: true },
   { seq: 6, command: 5001, param1: 4, vertexCount: 4, lat: 37.21, lon: -122.21, inclusion: true },
-  { seq: 7, command: 5001, param1: 4, vertexCount: 4, lat: 37.20, lon: -122.21, inclusion: true },
+  { seq: 7, command: 5001, param1: 4, vertexCount: 4, lat: 37.2, lon: -122.21, inclusion: true },
   // Exclusion Polygon (3 vertices described in file)
-  { seq: 8, command: 5002, param1: 3, vertexCount: 3, lat: 37.30, lon: -122.30, inclusion: false },
-  { seq: 9, command: 5002, param1: 3, vertexCount: 3, lat: 37.31, lon: -122.30, inclusion: false },
-  { seq: 10, command: 5002, param1: 3, vertexCount: 3, lat: 37.30, lon: -122.31, inclusion: false },
+  { seq: 8, command: 5002, param1: 3, vertexCount: 3, lat: 37.3, lon: -122.3, inclusion: false },
+  { seq: 9, command: 5002, param1: 3, vertexCount: 3, lat: 37.31, lon: -122.3, inclusion: false },
+  { seq: 10, command: 5002, param1: 3, vertexCount: 3, lat: 37.3, lon: -122.31, inclusion: false },
   // Circle fence and Return Point
-  { seq: 11, command: 5004, param1: 50, radius: 50, lat: 37.40, lon: -122.40, inclusion: false },
-  { seq: 12, command: 5000, param1: 0, lat: 37.10, lon: -122.10, inclusion: false },
+  { seq: 11, command: 5004, param1: 50, radius: 50, lat: 37.4, lon: -122.4, inclusion: false },
+  { seq: 12, command: 5000, param1: 0, lat: 37.1, lon: -122.1, inclusion: false },
 ];
 
 const groupedPolys = groupFencePolygons(mockFenceItems);
@@ -383,7 +419,9 @@ if (
   groupedPolys[2].seqs[0] === 8 &&
   groupedPolys[2].seqs[2] === 10
 ) {
-  console.log('Consecutive polygon fences partitioned successfully into separate polygons containing exact file vertex counts!');
+  console.log(
+    'Consecutive polygon fences partitioned successfully into separate polygons containing exact file vertex counts!'
+  );
 } else {
   console.error('groupFencePolygons failed to isolate consecutive polygon fences!', groupedPolys);
   process.exit(1);
@@ -391,19 +429,15 @@ if (
 
 // 9c. Test groupFencePolygons with duplicate sequence points (SITL dual packet resilience)
 const duplicateFenceItems = [
-  { seq: 0, command: 5001, param1: 4, vertexCount: 4, lat: 37.10, lon: -122.10, inclusion: true },
-  { seq: 0, command: 5001, param1: 4, vertexCount: 4, lat: 37.10, lon: -122.10, inclusion: true }, // duplicate seq 0
-  { seq: 1, command: 5001, param1: 4, vertexCount: 4, lat: 37.11, lon: -122.10, inclusion: true },
-  { seq: 1, command: 5001, param1: 4, vertexCount: 4, lat: 37.11, lon: -122.10, inclusion: true }, // duplicate seq 1
+  { seq: 0, command: 5001, param1: 4, vertexCount: 4, lat: 37.1, lon: -122.1, inclusion: true },
+  { seq: 0, command: 5001, param1: 4, vertexCount: 4, lat: 37.1, lon: -122.1, inclusion: true }, // duplicate seq 0
+  { seq: 1, command: 5001, param1: 4, vertexCount: 4, lat: 37.11, lon: -122.1, inclusion: true },
+  { seq: 1, command: 5001, param1: 4, vertexCount: 4, lat: 37.11, lon: -122.1, inclusion: true }, // duplicate seq 1
   { seq: 2, command: 5001, param1: 4, vertexCount: 4, lat: 37.11, lon: -122.11, inclusion: true },
-  { seq: 3, command: 5001, param1: 4, vertexCount: 4, lat: 37.10, lon: -122.11, inclusion: true },
+  { seq: 3, command: 5001, param1: 4, vertexCount: 4, lat: 37.1, lon: -122.11, inclusion: true },
 ];
 const dedupedPolys = groupFencePolygons(duplicateFenceItems);
-if (
-  dedupedPolys.length === 1 &&
-  dedupedPolys[0].type === 'inclusion' &&
-  dedupedPolys[0].points.length === 4
-) {
+if (dedupedPolys.length === 1 && dedupedPolys[0].type === 'inclusion' && dedupedPolys[0].points.length === 4) {
   console.log('Duplicate packet resilience verified: polygon retains all 4 distinct vertices without splitting!');
 } else {
   console.error('Duplicate packet handling failed in groupFencePolygons!', dedupedPolys);
@@ -420,8 +454,8 @@ rallyDv.setUint16(6, 0, true);
 rallyDv.setUint16(8, 1, true); // num_items = 1
 
 const ofsRally = 10;
-rallyDv.setInt32(ofsRally + 16, Math.round(37.7740 * 1e7), true);
-rallyDv.setInt32(ofsRally + 20, Math.round(-122.4170 * 1e7), true);
+rallyDv.setInt32(ofsRally + 16, Math.round(37.774 * 1e7), true);
+rallyDv.setInt32(ofsRally + 20, Math.round(-122.417 * 1e7), true);
 rallyDv.setFloat32(ofsRally + 24, 25.0, true);
 rallyDv.setUint16(ofsRally + 28, 0, true);
 rallyDv.setUint16(ofsRally + 30, 5100, true); // MAV_CMD_NAV_RALLY_POINT
@@ -431,7 +465,7 @@ const unpackedRally = missionManager.unpackRallyDat(rallyBuffer);
 if (
   unpackedRally &&
   unpackedRally.length === 1 &&
-  Math.abs(unpackedRally[0].lat - 37.7740) < 0.0001 &&
+  Math.abs(unpackedRally[0].lat - 37.774) < 0.0001 &&
   Math.abs(unpackedRally[0].alt - 25.0) < 0.1
 ) {
   console.log('rally.dat unpacked successfully via MAVFTP format:', unpackedRally);
@@ -439,9 +473,6 @@ if (
   console.error('rally.dat unpacking failed!', unpackedRally);
   process.exit(1);
 }
-
-// 11. Test TelemetryStore MISSION_ITEM_INT Isolation by mission_type
-import { useTelemetryStore } from '../src/store/telemetryStore.ts';
 
 // Reset store state
 useTelemetryStore.setState({ missionWaypoints: [], fencePoints: [], rallyPoints: [] });
@@ -494,7 +525,10 @@ useTelemetryStore.getState().processPacket({
 storeState = useTelemetryStore.getState();
 // Crucial check: WP0 must still have lat = 37.1111, NOT 38.2222!
 if (Math.abs(storeState.missionWaypoints[0].lat - 37.1111) > 0.0001) {
-  console.error('BUG DETECTED: Fence item seq 0 overwrote missionWaypoints[0] Home position!', storeState.missionWaypoints);
+  console.error(
+    'BUG DETECTED: Fence item seq 0 overwrote missionWaypoints[0] Home position!',
+    storeState.missionWaypoints
+  );
   process.exit(1);
 }
 if (storeState.fencePoints.length !== 1 || Math.abs(storeState.fencePoints[0].lat - 38.2222) > 0.0001) {
@@ -552,11 +586,23 @@ if (decodedSentinel.throttle !== 0) {
 
 // 7d. Test MAVLink 2 Zero-Truncated Payload (17 bytes: heading high byte and throttle truncated)
 const sitl17BytePayload = new Uint8Array([
-  0x00, 0x00, 0x00, 0x00, // airspeed = 0
-  0x36, 0x84, 0x9e, 0x3c, // groundspeed ~ 0.019
-  0xc2, 0xf5, 0x56, 0x43, // alt ~ 214.96
-  0x10, 0xab, 0x8a, 0xb9, // climb ~ -0.00026
-  0x07,                   // heading low byte = 7 (high byte 0x00 and throttle 0x0000 truncated!)
+  0x00,
+  0x00,
+  0x00,
+  0x00, // airspeed = 0
+  0x36,
+  0x84,
+  0x9e,
+  0x3c, // groundspeed ~ 0.019
+  0xc2,
+  0xf5,
+  0x56,
+  0x43, // alt ~ 214.96
+  0x10,
+  0xab,
+  0x8a,
+  0xb9, // climb ~ -0.00026
+  0x07, // heading low byte = 7 (high byte 0x00 and throttle 0x0000 truncated!)
 ]);
 const decoded17 = decodePayload(MAVLINK_MSG_ID.VFR_HUD, sitl17BytePayload);
 if (decoded17.heading !== 7 || decoded17.throttle !== 0 || Math.abs(decoded17.alt - 214.96) > 0.1) {
@@ -712,7 +758,11 @@ if (getVehicleModeName(10, 11) !== 'RTL') {
   console.error(`Rover mode 11 should be RTL, got: ${getVehicleModeName(10, 11)}`);
   process.exit(1);
 }
-if (getVehicleModeName(2, 3) !== 'AUTO' || getVehicleModeName(2, 2) !== 'ALT_HOLD' || getVehicleModeName(2, 9) !== 'LAND') {
+if (
+  getVehicleModeName(2, 3) !== 'AUTO' ||
+  getVehicleModeName(2, 2) !== 'ALT_HOLD' ||
+  getVehicleModeName(2, 9) !== 'LAND'
+) {
   console.error('Copter mode resolution failed!');
   process.exit(1);
 }
@@ -766,7 +816,12 @@ if (roverLabels.includes('ALT HOLD') || roverLabels.includes('LAND')) {
   console.error('Rover flight modes must NOT include ALT HOLD or LAND!', roverLabels);
   process.exit(1);
 }
-if (roverLabels[0] !== 'HOLD' || roverLabels[1] !== 'MANUAL' || roverLabels[2] !== 'ACRO' || roverLabels[3] !== 'AUTO') {
+if (
+  roverLabels[0] !== 'HOLD' ||
+  roverLabels[1] !== 'MANUAL' ||
+  roverLabels[2] !== 'ACRO' ||
+  roverLabels[3] !== 'AUTO'
+) {
   console.error('Rover first 4 modes must be HOLD | MANUAL | ACRO | AUTO, got:', roverLabels.slice(0, 4));
   process.exit(1);
 }
@@ -790,9 +845,6 @@ if (!copterAuto || copterAuto.mode !== 3) {
 
 console.log('Multi-vehicle category and mode resolution verified successfully!');
 
-// 12. Test Fetch Cancellation and Abort Mechanisms
-import { mavFtpClient } from '../src/mavlink/ftp.ts';
-
 // Test MAVFTP abort
 const aborted = mavFtpClient.abortCurrent();
 if (aborted !== false) {
@@ -802,7 +854,9 @@ if (aborted !== false) {
 
 // Test ParamManager cancelFetch
 let paramStatus: any = null;
-const unsubParam = paramManager.onStatusChange((st) => { paramStatus = st; });
+const unsubParam = paramManager.onStatusChange((st) => {
+  paramStatus = st;
+});
 // simulate active fetch
 (paramManager as any).setStatus({ isFetching: true, method: 'ftp', message: 'Downloading params...' });
 if (!paramStatus?.isFetching) {
@@ -818,7 +872,9 @@ unsubParam();
 
 // Test MissionManager cancelFetch
 let missionStatus: any = null;
-const unsubMission = missionManager.onStatusChange((st) => { missionStatus = st; });
+const unsubMission = missionManager.onStatusChange((st) => {
+  missionStatus = st;
+});
 (missionManager as any).setStatus({ isFetching: true, method: 'ftp', message: 'Syncing mission & fence...' });
 if (!missionStatus?.isFetching) {
   console.error('MissionManager status isFetching should be true');
@@ -880,10 +936,12 @@ if (!updatedParam || updatedParam.value !== 75.0 || updatedParam.defaultValue !=
   console.error('PARAM_VALUE failed to preserve defaultValue in telemetry store!', updatedParam);
   process.exit(1);
 }
-console.log('PARAM_VALUE defaultValue preservation verified successfully: value =', updatedParam.value, 'defaultValue =', updatedParam.defaultValue);
-
-// 14. Test formatParamValue formatting & truncation
-import { formatParamValue } from '../src/components/widgets/ParametersWidget.tsx';
+console.log(
+  'PARAM_VALUE defaultValue preservation verified successfully: value =',
+  updatedParam.value,
+  'defaultValue =',
+  updatedParam.defaultValue
+);
 
 if (formatParamValue(50) !== '50') {
   console.error('formatParamValue(50) expected "50", got:', formatParamValue(50));
@@ -908,9 +966,6 @@ if (formatParamValue(0.000123456) !== '0.000123456') {
   process.exit(1);
 }
 console.log('formatParamValue truncation & formatting verified successfully!');
-
-// 15. Test 4-Way Unit System (m/s / kmh / mph / kts) and Altitude Mode (AGL / MSL)
-import { useUnitsStore } from '../src/store/unitsStore.ts';
 
 // Test m/s (pure SI metric)
 useUnitsStore.getState().setSystem('ms');
@@ -965,9 +1020,6 @@ if (useUnitsStore.getState().altitudeMode !== 'agl') {
 }
 
 console.log('4-Way Unit System (m/s / kmh / mph / kts) and Altitude Mode verified successfully!');
-
-// 16. Test Firmware Version Extraction & Telemetry Store Integration
-import { extractFirmwareVersion } from '../src/mavlink/messages.ts';
 
 const planeVer = extractFirmwareVersion('ArduPlane V4.8.0-dev (1d44127b)');
 if (planeVer !== '4.8.0-dev') {
@@ -1024,7 +1076,10 @@ useTelemetryStore.getState().processPacket({
 });
 
 if (useTelemetryStore.getState().firmwareVersion !== '4.8.0-dev') {
-  console.error('TelemetryStore firmwareVersion expected "4.8.0-dev", got:', useTelemetryStore.getState().firmwareVersion);
+  console.error(
+    'TelemetryStore firmwareVersion expected "4.8.0-dev", got:',
+    useTelemetryStore.getState().firmwareVersion
+  );
   process.exit(1);
 }
 
@@ -1071,8 +1126,8 @@ console.log('MISSION_CURRENT decode and waypoint tracking verified successfully!
 const scaledImuPayload = new Uint8Array(22);
 const scaledView = new DataView(scaledImuPayload.buffer);
 scaledView.setUint32(0, 1000, true); // time_boot_ms
-scaledView.setInt16(4, 0, true);     // xacc
-scaledView.setInt16(6, 0, true);     // yacc
+scaledView.setInt16(4, 0, true); // xacc
+scaledView.setInt16(6, 0, true); // yacc
 scaledView.setInt16(8, -1200, true); // zacc = -1200 mg -> Nz = +1.2 G
 const decodedScaledImu = decodePayload(MAVLINK_MSG_ID.SCALED_IMU, scaledImuPayload);
 if (Math.abs(decodedScaledImu.nz - 1.2) > 0.001) {
@@ -1107,17 +1162,14 @@ if (Math.abs(decodedHighres.nz - 2.0) > 0.01) {
 }
 console.log('IMU and Nz load factor decoding verified successfully!');
 
-// 19. Test Extended Telemetry Store Slices, Custom Widget Value Extraction & Dashboard Reordering
-import { readBinding, scalePwmToUnitRange } from '../src/lib/widgetValues.ts';
 const extractBoundValueFromState = (b: any, st: any) => readBinding(b, st, 'ms', 5).text;
-import { useDashboardStore } from '../src/store/dashboardStore.ts';
 
 // Test WIND (msg 168) -> store & custom widget binding
 const windPayload = new Uint8Array(12);
 const windDv = new DataView(windPayload.buffer);
 windDv.setFloat32(0, 275.0, true); // direction
-windDv.setFloat32(4, 8.5, true);   // speed
-windDv.setFloat32(8, -0.4, true);  // speed_z
+windDv.setFloat32(4, 8.5, true); // speed
+windDv.setFloat32(8, -0.4, true); // speed_z
 useTelemetryStore.getState().processPacket({
   version: 2,
   sequence: 10,
@@ -1238,7 +1290,10 @@ const boundServo2Scaled = extractBoundValueFromState(
   useTelemetryStore.getState()
 );
 if (boundServo2Scaled !== '-1.00') {
-  console.error('extractBoundValueFromState(SERVO_OUTPUT_RAW (scaled).servo2_scaled) expected "-1.00", got:', boundServo2Scaled);
+  console.error(
+    'extractBoundValueFromState(SERVO_OUTPUT_RAW (scaled).servo2_scaled) expected "-1.00", got:',
+    boundServo2Scaled
+  );
   process.exit(1);
 }
 console.log('RC and Servo parameter-based scaling (-1 to 1) verified successfully!');
@@ -1261,8 +1316,6 @@ if (afterTabs[0] !== beforeTabs[1] || afterTabs[1] !== beforeTabs[0]) {
   process.exit(1);
 }
 
-// Test Action button confirmation prompt displays underlying MAV_CMD name
-import { getMavCmdName as getCmdNameCheck } from '../src/mavlink/messages.ts';
 if (getCmdNameCheck(400) !== 'COMPONENT_ARM_DISARM') {
   console.error('getMavCmdName(400) expected COMPONENT_ARM_DISARM, got:', getCmdNameCheck(400));
   process.exit(1);
@@ -1437,7 +1490,13 @@ useTelemetryStore.getState().processPacket({
 });
 
 const gps2State = useTelemetryStore.getState().gps2;
-if (!gps2State || gps2State.fixType !== 6 || gps2State.fixLabel !== 'RTK Fixed' || !gps2State.hasYaw || Math.abs((gps2State.yaw ?? 0) - 120.3) > 0.01) {
+if (
+  !gps2State ||
+  gps2State.fixType !== 6 ||
+  gps2State.fixLabel !== 'RTK Fixed' ||
+  !gps2State.hasYaw ||
+  Math.abs((gps2State.yaw ?? 0) - 120.3) > 0.01
+) {
   console.error('telemetryStore gps2 handling failed!', gps2State);
   process.exit(1);
 }
@@ -1465,7 +1524,10 @@ useTelemetryStore.getState().processPacket({
 
 const uninitGps2State = useTelemetryStore.getState().gps2;
 if (!uninitGps2State || !uninitGps2State.hasYaw || uninitGps2State.yaw !== undefined) {
-  console.error('telemetryStore gps2 uninitialized yaw (65535) failed to register hasYaw=true and yaw=undefined!', uninitGps2State);
+  console.error(
+    'telemetryStore gps2 uninitialized yaw (65535) failed to register hasYaw=true and yaw=undefined!',
+    uninitGps2State
+  );
   process.exit(1);
 }
 
@@ -1695,17 +1757,45 @@ async function testFtpQueueCancel() {
 
 await testFtpQueueCancel();
 
-// 25. Test Mission File Packing, Parsing, and Drop Handling
-import { packDatFile, parseDroppedMissionFile } from '../src/mavlink/missionFileParser.ts';
-
 // Test 25a: packDatFile roundtrip with unpackMissionDat
 const testWps = [
-  { seq: 0, command: 16, x: 37.7749, y: -122.4194, z: 10, current: 1, frame: 0, param1: 0, param2: 0, param3: 0, param4: 0, mission_type: 0 },
-  { seq: 1, command: 16, x: 37.7760, y: -122.4180, z: 50, current: 0, frame: 3, param1: 0, param2: 0, param3: 0, param4: 0, mission_type: 0 },
+  {
+    seq: 0,
+    command: 16,
+    x: 37.7749,
+    y: -122.4194,
+    z: 10,
+    current: 1,
+    frame: 0,
+    param1: 0,
+    param2: 0,
+    param3: 0,
+    param4: 0,
+    mission_type: 0,
+  },
+  {
+    seq: 1,
+    command: 16,
+    x: 37.776,
+    y: -122.418,
+    z: 50,
+    current: 0,
+    frame: 3,
+    param1: 0,
+    param2: 0,
+    param3: 0,
+    param4: 0,
+    mission_type: 0,
+  },
 ];
 const packedDat = packDatFile(testWps, 0);
 const unpackedDat = missionManager.unpackMissionDat(packedDat);
-if (!unpackedDat || unpackedDat.length !== 2 || Math.abs(unpackedDat[1].lat - 37.7760) > 0.0001 || unpackedDat[1].alt !== 50) {
+if (
+  !unpackedDat ||
+  unpackedDat.length !== 2 ||
+  Math.abs(unpackedDat[1].lat - 37.776) > 0.0001 ||
+  unpackedDat[1].alt !== 50
+) {
   console.error('packDatFile -> unpackMissionDat roundtrip failed!', unpackedDat);
   process.exit(1);
 }
@@ -1751,7 +1841,12 @@ const samplePlanJson = JSON.stringify({
   },
 });
 const parsedPlan = parseDroppedMissionFile('survey.plan', new TextEncoder().encode(samplePlanJson));
-if (!parsedPlan || parsedPlan.type !== 'mission' || parsedPlan.items.length !== 3 || Math.abs(parsedPlan.items[1].x! - 37.78) > 0.001) {
+if (
+  !parsedPlan ||
+  parsedPlan.type !== 'mission' ||
+  parsedPlan.items.length !== 3 ||
+  Math.abs(parsedPlan.items[1].x! - 37.78) > 0.001
+) {
   console.error('parseDroppedMissionFile failed on QGC plan JSON!', parsedPlan);
   process.exit(1);
 }
@@ -1766,7 +1861,12 @@ if (parsedRtcm.length !== 1 || parsedRtcm[0].messageId !== MAVLINK_MSG_ID.GPS_RT
   process.exit(1);
 }
 const decodedRtcm = decodePayload(MAVLINK_MSG_ID.GPS_RTCM_DATA, parsedRtcm[0].payload);
-if (decodedRtcm.flags !== 0x08 || decodedRtcm.len !== 6 || decodedRtcm.data.length !== 6 || decodedRtcm.data[0] !== 0xd3) {
+if (
+  decodedRtcm.flags !== 0x08 ||
+  decodedRtcm.len !== 6 ||
+  decodedRtcm.data.length !== 6 ||
+  decodedRtcm.data[0] !== 0xd3
+) {
   console.error('Decoded GPS_RTCM_DATA mismatch!', decodedRtcm);
   process.exit(1);
 }
@@ -1794,14 +1894,16 @@ const encItemPacket = encoder.createMissionItemInt(1, 1, {
 });
 const parsedEncItem = parser.parse(encItemPacket);
 const decodedEncItem = decodePayload(MAVLINK_MSG_ID.MISSION_ITEM_INT, parsedEncItem[0].payload);
-if (decodedEncItem.seq !== 2 || decodedEncItem.command !== 16 || Math.abs(decodedEncItem.x - 37.7749) > 0.0001 || decodedEncItem.z !== 100) {
+if (
+  decodedEncItem.seq !== 2 ||
+  decodedEncItem.command !== 16 ||
+  Math.abs(decodedEncItem.x - 37.7749) > 0.0001 ||
+  decodedEncItem.z !== 100
+) {
   console.error('createMissionItemInt payload mismatch!', decodedEncItem);
   process.exit(1);
 }
 console.log('createMissionCount & createMissionItemInt PASSED!');
-
-// 27. Test MissionManager uploadFile with MAVFTP failure and item-by-item fallback
-import { mavlinkConnection } from '../src/mavlink/connection.ts';
 
 async function testMissionUploadFallback() {
   // The simulated vehicle answers as itself (system 1, the autopilot): answers from any other system are ignored.
@@ -1887,7 +1989,10 @@ async function testMissionUploadFallback() {
   };
 
   try {
-    const uploadResult = await missionManager.uploadFile('sample.waypoints', new TextEncoder().encode(sampleWplText.split('\n').slice(0, 3).join('\n')));
+    const uploadResult = await missionManager.uploadFile(
+      'sample.waypoints',
+      new TextEncoder().encode(sampleWplText.split('\n').slice(0, 3).join('\n'))
+    );
     if (!uploadResult.success || uploadResult.method !== 'legacy' || uploadResult.count !== 2) {
       console.error('uploadFile fallback to legacy item-by-item failed!', uploadResult);
       process.exit(1);
@@ -1899,15 +2004,6 @@ async function testMissionUploadFallback() {
 }
 
 await testMissionUploadFallback();
-
-// 28. Test RTCM3 Stream Parser, CRC24Q, NMEA GGA Generator, and MAVLink Injection
-import {
-  calculateCrc24q,
-  generateNmeaGga,
-  RtcmFrameParser,
-  rtcmInjector,
-  extractRtcm1005Arp,
-} from '../src/mavlink/rtcmInjector.ts';
 
 // 28a. Test CRC24Q and Frame Assembly
 // Create synthetic RTCM 1005 (Base Station ARP): payload length 19 bytes
@@ -1946,7 +2042,11 @@ console.log('RTCM 1005 frame parser & CRC24Q verification PASSED!');
 
 // 28b. Test NMEA GGA Generation
 const ggaSentence = generateNmeaGga(37.7749, -122.4194, 25.5);
-if (!ggaSentence.startsWith('$GPGGA,') || !ggaSentence.includes(',3746.4940,N,12225.1640,W,') || !ggaSentence.endsWith('\r\n')) {
+if (
+  !ggaSentence.startsWith('$GPGGA,') ||
+  !ggaSentence.includes(',3746.4940,N,12225.1640,W,') ||
+  !ggaSentence.endsWith('\r\n')
+) {
   console.error('generateNmeaGga produced invalid NMEA sentence:', ggaSentence);
   process.exit(1);
 }
@@ -1975,7 +2075,7 @@ arpFramePayload[1] = 0xd0;
 // ECEF coordinates scaled to 0.0001 m (37.7749 N, -122.4194 W, 25.0 m MSL)
 writeBitsToBuffer(arpFramePayload, 34, 38, -27061854405n); // X
 writeBitsToBuffer(arpFramePayload, 74, 38, -42610761701n); // Y
-writeBitsToBuffer(arpFramePayload, 114, 38, 38857408040n);  // Z
+writeBitsToBuffer(arpFramePayload, 114, 38, 38857408040n); // Z
 
 const rawArpFrameNoCrc = new Uint8Array(3 + 19);
 rawArpFrameNoCrc[0] = 0xd3;
@@ -2038,8 +2138,14 @@ try {
     process.exit(1);
   }
 
-  const frag0 = decodePayload(MAVLINK_MSG_ID.GPS_RTCM_DATA, new MavlinkParser().parse(sentMavlinkPackets[0])[0].payload);
-  const frag1 = decodePayload(MAVLINK_MSG_ID.GPS_RTCM_DATA, new MavlinkParser().parse(sentMavlinkPackets[1])[0].payload);
+  const frag0 = decodePayload(
+    MAVLINK_MSG_ID.GPS_RTCM_DATA,
+    new MavlinkParser().parse(sentMavlinkPackets[0])[0].payload
+  );
+  const frag1 = decodePayload(
+    MAVLINK_MSG_ID.GPS_RTCM_DATA,
+    new MavlinkParser().parse(sentMavlinkPackets[1])[0].payload
+  );
 
   // Both should have fragmented bit (bit 0 = 1)
   if ((frag0.flags & 1) !== 1 || (frag1.flags & 1) !== 1) {
@@ -2102,12 +2208,14 @@ try {
   rtcmInjector.stopRateMeter();
 }
 
-// 29. Test cmdHasLocation, QGC ComplexItem expansion, RTCM tail fragments, and speed safety
-import { cmdHasLocation } from '../src/mavlink/messages.ts';
-import { useConnectionStore } from '../src/store/connectionStore.ts';
-
 // 29a: cmdHasLocation location vs non-location commands
-if (!cmdHasLocation(16) || !cmdHasLocation(21) || !cmdHasLocation(5001) || !cmdHasLocation(82) || !cmdHasLocation(201)) {
+if (
+  !cmdHasLocation(16) ||
+  !cmdHasLocation(21) ||
+  !cmdHasLocation(5001) ||
+  !cmdHasLocation(82) ||
+  !cmdHasLocation(201)
+) {
   console.error('cmdHasLocation failed to identify geographic location commands!');
   process.exit(1);
 }
@@ -2186,15 +2294,27 @@ const circlePlan = JSON.stringify({
 });
 const parsedCircle = parseDroppedMissionFile('fence.plan', new TextEncoder().encode(circlePlan));
 const fenceSection = parsedCircle?.sections?.find((s) => s.type === 'fence');
-if (!parsedCircle || (parsedCircle.type !== 'fence' && parsedCircle.type !== 'plan') || !fenceSection || fenceSection.items[0]?.param1 !== 120) {
-  console.error('Failed to extract correct circle fence radius 120m!', { parsedCircle, fenceSection, item0: fenceSection?.items[0] });
+if (
+  !parsedCircle ||
+  (parsedCircle.type !== 'fence' && parsedCircle.type !== 'plan') ||
+  !fenceSection ||
+  fenceSection.items[0]?.param1 !== 120
+) {
+  console.error('Failed to extract correct circle fence radius 120m!', {
+    parsedCircle,
+    fenceSection,
+    item0: fenceSection?.items[0],
+  });
   process.exit(1);
 }
 console.log('QGC ComplexItem (0,0) rejection and circle radius extraction PASSED!');
 
 // 29e: Classification of fence_line_inspection.waypoints as mission
 const fenceLineInspectionText = `QGC WPL 110\n0\t1\t0\t16\t0\t0\t0\t0\t37.774900\t-122.419400\t10.000000\t1\n1\t0\t3\t16\t0\t0\t0\t0\t37.776000\t-122.418000\t50.000000\t1`;
-const parsedInspection = parseDroppedMissionFile('fence_line_inspection.waypoints', new TextEncoder().encode(fenceLineInspectionText));
+const parsedInspection = parseDroppedMissionFile(
+  'fence_line_inspection.waypoints',
+  new TextEncoder().encode(fenceLineInspectionText)
+);
 if (!parsedInspection || parsedInspection.type !== 'mission' || parsedInspection.missionType !== 0) {
   console.error('Misclassified fence_line_inspection.waypoints as fence!', parsedInspection);
   process.exit(1);

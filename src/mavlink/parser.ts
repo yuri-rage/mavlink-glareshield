@@ -1,4 +1,4 @@
-import { MAVLINK_MSG_ID, MAVLINK_MESSAGE_CRC_EXTRA, cmdHasLocation } from './messages';
+import { cmdHasLocation, MAVLINK_MESSAGE_CRC_EXTRA, MAVLINK_MSG_ID } from './messages';
 
 export interface MavlinkPacket {
   version: 1 | 2;
@@ -63,10 +63,7 @@ export class MavlinkParser {
         const seq = this.buffer[offset + 4];
         const sysid = this.buffer[offset + 5];
         const compid = this.buffer[offset + 6];
-        const msgid =
-          this.buffer[offset + 7] |
-          (this.buffer[offset + 8] << 8) |
-          (this.buffer[offset + 9] << 16);
+        const msgid = this.buffer[offset + 7] | (this.buffer[offset + 8] << 8) | (this.buffer[offset + 9] << 16);
 
         const crcOffset = offset + 10 + payloadLen;
         const packetCrc = this.buffer[crcOffset] | (this.buffer[crcOffset + 1] << 8);
@@ -339,12 +336,7 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
 
     case MAVLINK_MSG_ID.GPS_RAW_INT: {
       const rawYaw = getUint16(50);
-      const yaw =
-        rawYaw === 36000
-          ? 0
-          : rawYaw > 0 && rawYaw < 36000
-          ? rawYaw / 100
-          : undefined;
+      const yaw = rawYaw === 36000 ? 0 : rawYaw > 0 && rawYaw < 36000 ? rawYaw / 100 : undefined;
       return {
         time_usec: Number(getBigUint64(0)),
         lat: getInt32(8) / 1e7,
@@ -363,12 +355,7 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
 
     case MAVLINK_MSG_ID.GPS2_RAW: {
       const rawYaw = getUint16(35);
-      const yaw =
-        rawYaw === 36000
-          ? 0
-          : rawYaw > 0 && rawYaw < 36000
-          ? rawYaw / 100
-          : undefined;
+      const yaw = rawYaw === 36000 ? 0 : rawYaw > 0 && rawYaw < 36000 ? rawYaw / 100 : undefined;
       return {
         time_usec: Number(getBigUint64(0)),
         lat: getInt32(8) / 1e7,
@@ -796,7 +783,11 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
       // Same layout for each block of four; the named fields carry the motor number (rpm5 is the first motor
       // of ESC_TELEMETRY_5_TO_8), the arrays index within the block.
       const first =
-        messageId === MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4 ? 1 : messageId === MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8 ? 5 : 9;
+        messageId === MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4
+          ? 1
+          : messageId === MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8
+            ? 5
+            : 9;
       const voltage = [getUint16(0) / 100, getUint16(2) / 100, getUint16(4) / 100, getUint16(6) / 100];
       const current = [getUint16(8) / 100, getUint16(10) / 100, getUint16(12) / 100, getUint16(14) / 100];
       const totalcurrent = [getUint16(16), getUint16(18), getUint16(20), getUint16(22)];

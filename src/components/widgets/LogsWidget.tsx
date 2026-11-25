@@ -1,14 +1,22 @@
 // Onboard logs: the vehicle's DataFlash (.bin) logs, listed and downloaded to this computer (mavlink/logManager.ts).
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+
 import { AlertTriangle, Download, FileText, Loader2, RefreshCw, Trash2, X } from 'lucide-react';
-import { useTelemetryStore } from '../../store/telemetryStore';
-import { downloadName, logManager, type LogEntry, type LogList, type LogTransferMethod } from '../../mavlink/logManager';
-import { onActiveVehicleChange } from '../../mavlink/vehicleRoster';
+
+import { downloadFile } from '../../lib/download';
 import { cn } from '../../lib/utils';
+import {
+  downloadName,
+  logManager,
+  type LogEntry,
+  type LogList,
+  type LogTransferMethod,
+} from '../../mavlink/logManager';
+import { onActiveVehicleChange } from '../../mavlink/vehicleRoster';
+import { useTelemetryStore } from '../../store/telemetryStore';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useVehicleTarget } from './custom/panelKit';
-import { downloadFile } from '../../lib/download';
 import { TlogList } from './TlogList';
 
 function formatSize(bytes: number): string {
@@ -77,7 +85,8 @@ export const LogsWidget: React.FC = () => {
       // causes, isn't the new vehicle's.
       if (mounted.current && useTelemetryStore.getState().heartbeat.systemId === sysId) setList(l);
     } catch (e) {
-      if (mounted.current && useTelemetryStore.getState().heartbeat.systemId === sysId) setListError(e instanceof Error ? e.message : String(e));
+      if (mounted.current && useTelemetryStore.getState().heartbeat.systemId === sysId)
+        setListError(e instanceof Error ? e.message : String(e));
     } finally {
       if (mounted.current) setListing(false);
     }
@@ -129,7 +138,8 @@ export const LogsWidget: React.FC = () => {
         maxLogFiles && maxLogFiles > 0 ? maxLogFiles : undefined
       );
       saveBytes(data, downloadName(entry));
-      if (mounted.current) setResults((r) => ({ ...r, [entry.id]: { kind: 'saved', method, seconds: (Date.now() - startedAt) / 1000 } }));
+      if (mounted.current)
+        setResults((r) => ({ ...r, [entry.id]: { kind: 'saved', method, seconds: (Date.now() - startedAt) / 1000 } }));
     } catch (e) {
       const text = e instanceof Error ? e.message : String(e);
       if (mounted.current) setResults((r) => ({ ...r, [entry.id]: { kind: 'failed', text } }));
@@ -147,24 +157,28 @@ export const LogsWidget: React.FC = () => {
     setTimeout(() => mounted.current && void refresh(), 2500);
   };
 
-  const blocked = !linked ? 'Connect to a vehicle to see its logs.' : armed ? 'ArduPilot does not send logs while armed. Disarm to list or download them.' : null;
+  const blocked = !linked
+    ? 'Connect to a vehicle to see its logs.'
+    : armed
+      ? 'ArduPilot does not send logs while armed. Disarm to list or download them.'
+      : null;
   const entries = list ? [...list.entries].reverse() : []; // newest first
   const totalSize = entries.reduce((n, e) => n + e.size, 0);
 
   return (
-    <Card className="h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
-      <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
-        <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center justify-between gap-2">
+    <Card className="flex h-full flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
+      <CardHeader className="border-b border-zinc-800 bg-zinc-900/60 px-3 py-1.5 sm:px-3.5">
+        <CardTitle className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wider text-zinc-300">
           <span className="flex items-center gap-1.5">
             <FileText className="h-4 w-4 text-sky-400" />
             Onboard Logs
           </span>
-          <div className="flex items-center gap-1.5 normal-case tracking-normal font-normal">
+          <div className="flex items-center gap-1.5 font-normal normal-case tracking-normal">
             <button
               type="button"
               onClick={() => void refresh()}
               disabled={!!blocked || listing || !!transfer}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-zinc-800 hover:bg-zinc-800 text-[10px] font-bold text-zinc-300 uppercase disabled:opacity-40"
+              className="inline-flex items-center gap-1 rounded-md border border-zinc-800 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
               title="Ask the vehicle for its log list"
             >
               <RefreshCw className={cn('h-3 w-3', listing && 'animate-spin')} />
@@ -174,7 +188,7 @@ export const LogsWidget: React.FC = () => {
               type="button"
               onClick={() => setConfirmErase((c) => !c)}
               disabled={!!blocked || !!transfer || !list || list.numLogs === 0}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-zinc-800 hover:bg-red-950/40 hover:text-red-300 text-[11px] font-bold text-zinc-400 uppercase disabled:opacity-40"
+              className="inline-flex items-center gap-1 rounded-md border border-zinc-800 px-2 py-0.5 text-[11px] font-bold uppercase text-zinc-400 hover:bg-red-950/40 hover:text-red-300 disabled:opacity-40"
               title="Delete every log on the vehicle"
             >
               <Trash2 className="h-3 w-3" />
@@ -183,17 +197,28 @@ export const LogsWidget: React.FC = () => {
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-2.5 sm:p-3 flex-1 flex flex-col gap-2 min-h-0 text-xs">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 p-2.5 text-xs sm:p-3">
         {confirmErase && (
-          <div className="rounded-md border border-red-800/60 bg-red-950/40 p-2 flex flex-wrap items-center gap-2" role="alertdialog">
-            <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
-            <span className="flex-1 min-w-[12rem] text-red-200">
+          <div
+            className="flex flex-wrap items-center gap-2 rounded-md border border-red-800/60 bg-red-950/40 p-2"
+            role="alertdialog"
+          >
+            <AlertTriangle className="h-4 w-4 shrink-0 text-red-400" />
+            <span className="min-w-[12rem] flex-1 text-red-200">
               Delete all {list?.numLogs ?? ''} logs on the vehicle? This can't be undone.
             </span>
-            <button type="button" onClick={erase} className="px-2 py-1 rounded-md bg-red-700 hover:bg-red-600 text-white text-[11px] font-bold">
+            <button
+              type="button"
+              onClick={erase}
+              className="rounded-md bg-red-700 px-2 py-1 text-[11px] font-bold text-white hover:bg-red-600"
+            >
               Erase all logs
             </button>
-            <button type="button" onClick={() => setConfirmErase(false)} className="px-2 py-1 rounded-md text-zinc-400 hover:text-white text-[11px]">
+            <button
+              type="button"
+              onClick={() => setConfirmErase(false)}
+              className="rounded-md px-2 py-1 text-[11px] text-zinc-400 hover:text-white"
+            >
               Cancel
             </button>
           </div>
@@ -204,7 +229,7 @@ export const LogsWidget: React.FC = () => {
         ) : listError ? (
           <p className="text-amber-400">{listError}</p>
         ) : !list ? (
-          <p className="text-zinc-500 flex items-center gap-1.5">
+          <p className="flex items-center gap-1.5 text-zinc-500">
             <Loader2 className="h-3.5 w-3.5 animate-spin" /> Asking the vehicle for its logs…
           </p>
         ) : entries.length === 0 ? (
@@ -214,7 +239,7 @@ export const LogsWidget: React.FC = () => {
             <p className="text-[11px] text-zinc-500">
               {list.numLogs} logs, {formatSize(totalSize)}. Newest first.
             </p>
-            <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
+            <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
               <ul className="divide-y divide-zinc-900">
                 {entries.map((e) => {
                   const active = transfer?.id === e.id ? transfer : null;
@@ -224,18 +249,21 @@ export const LogsWidget: React.FC = () => {
                   const rate = active && elapsed > 0.5 ? active.received / elapsed : 0;
                   const eta = rate > 0 && active ? (active.total - active.received) / rate : NaN;
                   return (
-                    <li key={e.id} className="py-1.5 flex flex-col gap-1">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="font-mono text-[11px] font-semibold text-zinc-200 w-9 shrink-0">#{e.id}</span>
-                        <span className="flex-1 min-w-0 truncate text-zinc-400" title={e.timeUtc ? new Date(e.timeUtc * 1000).toString() : undefined}>
+                    <li key={e.id} className="flex flex-col gap-1 py-1.5">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="w-9 shrink-0 font-mono text-[11px] font-semibold text-zinc-200">#{e.id}</span>
+                        <span
+                          className="min-w-0 flex-1 truncate text-zinc-400"
+                          title={e.timeUtc ? new Date(e.timeUtc * 1000).toString() : undefined}
+                        >
                           {formatStart(e)}
                         </span>
-                        <span className="font-mono text-[11px] text-zinc-300 shrink-0">{formatSize(e.size)}</span>
+                        <span className="shrink-0 font-mono text-[11px] text-zinc-300">{formatSize(e.size)}</span>
                         {active ? (
                           <button
                             type="button"
                             onClick={() => logManager.cancel()}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-zinc-700 text-[10px] font-bold uppercase text-zinc-300 hover:bg-zinc-800 shrink-0"
+                            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-zinc-700 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-300 hover:bg-zinc-800"
                           >
                             <X className="h-3 w-3" /> Cancel
                           </button>
@@ -244,7 +272,7 @@ export const LogsWidget: React.FC = () => {
                             type="button"
                             onClick={() => void download(e)}
                             disabled={!!transfer || e.size === 0}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-sky-700/60 text-[10px] font-bold uppercase text-sky-300 hover:bg-sky-950/40 disabled:opacity-40 shrink-0"
+                            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-sky-700/60 px-2 py-0.5 text-[10px] font-bold uppercase text-sky-300 hover:bg-sky-950/40 disabled:opacity-40"
                             title={`Download as ${downloadName(e)}`}
                           >
                             <Download className="h-3 w-3" /> Get
@@ -253,17 +281,31 @@ export const LogsWidget: React.FC = () => {
                       </div>
                       {active && (
                         <div className="flex items-center gap-2 pl-11">
-                          <div className="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
-                            <div className="h-full bg-sky-500 transition-[width] duration-200" style={{ width: `${pct}%` }} />
+                          <div
+                            className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800"
+                            role="progressbar"
+                            aria-valuenow={Math.round(pct)}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                          >
+                            <div
+                              className="h-full bg-sky-500 transition-[width] duration-200"
+                              style={{ width: `${pct}%` }}
+                            />
                           </div>
-                          <span className="font-mono text-[10px] text-zinc-400 shrink-0">
+                          <span className="shrink-0 font-mono text-[10px] text-zinc-400">
                             {Math.floor(pct)}% · {rate > 0 ? `${formatSize(rate)}/s` : '…'} · {formatDuration(eta)} left
                             {active.method ? ` · ${active.method === 'mavftp' ? 'MAVFTP' : 'MAVLink'}` : ''}
                           </span>
                         </div>
                       )}
                       {!active && result && (
-                        <p className={cn('pl-11 text-[10px]', result.kind === 'saved' ? 'text-emerald-400' : 'text-amber-400')}>
+                        <p
+                          className={cn(
+                            'pl-11 text-[10px]',
+                            result.kind === 'saved' ? 'text-emerald-400' : 'text-amber-400'
+                          )}
+                        >
                           {result.kind === 'saved'
                             ? `Saved as ${downloadName(e)} (${result.method === 'mavftp' ? 'MAVFTP' : 'MAVLink'}, ${formatDuration(result.seconds)})`
                             : result.text === 'Cancelled'

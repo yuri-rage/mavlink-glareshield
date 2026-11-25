@@ -15,7 +15,10 @@ export const BUILTIN_PANELS: Record<string, BuiltinPanelInfo> = {
   'built-in-gps-card': { name: 'GNSS / GPS' },
   'built-in-battery-card': { name: 'Battery & Power' },
   'built-in-vfr-hud': { name: 'VFR Flight Metrics' },
-  'built-in-glareshield': { name: 'Flight Controls (Arming & Quick Modes)', controls: 'arm / disarm and flight mode changes' },
+  'built-in-glareshield': {
+    name: 'Flight Controls (Arming & Quick Modes)',
+    controls: 'arm / disarm and flight mode changes',
+  },
   'built-in-all-modes': { name: 'All Flight Modes', controls: 'flight mode changes' },
   'built-in-set-speed': { name: 'Set Speed Controller', controls: 'speed changes' },
   'built-in-waypoints': { name: 'Waypoint Navigation', controls: 'waypoint changes and mission restart' },

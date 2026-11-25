@@ -4,7 +4,8 @@
 // vehicle's mission, rally points or fence through an upload.
 
 import { create } from 'zustand';
-import { onActiveVehicleChange } from '../mavlink/vehicleRoster';
+
+import { EMPTY_FENCE, fenceDraftsEqual, type FenceDraft, type LatLon } from '../mavlink/fenceDraft';
 import {
   draftsEqual,
   historyInit,
@@ -15,7 +16,7 @@ import {
   type MissionDraft,
 } from '../mavlink/missionDraft';
 import { rallyDraftsEqual, type RallyDraft } from '../mavlink/rallyDraft';
-import { EMPTY_FENCE, fenceDraftsEqual, type FenceDraft, type LatLon } from '../mavlink/fenceDraft';
+import { onActiveVehicleChange } from '../mavlink/vehicleRoster';
 
 const STORAGE_KEY = 'mavlink_glareshield_mission_draft';
 
@@ -45,7 +46,8 @@ export interface FenceLayerState {
 }
 
 /** What the Place tool draws on the fence layer. */
-export type FenceDrawKind = 'polygon-inclusion' | 'polygon-exclusion' | 'circle-inclusion' | 'circle-exclusion' | 'return-point';
+export type FenceDrawKind =
+  'polygon-inclusion' | 'polygon-exclusion' | 'circle-inclusion' | 'circle-exclusion' | 'return-point';
 
 /** Where the draft came from, shown in the panel. */
 export type DraftSource = { kind: 'vehicle' } | { kind: 'file'; name: string } | { kind: 'empty' };
@@ -322,7 +324,13 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   resetToVehicle: (draft) => {
     const { history, active, uploading } = get();
     if (!active || uploading) return;
-    set({ history: historyPush(history, draft), base: draft, source: { kind: 'vehicle' }, selected: null, vehicleChanged: false });
+    set({
+      history: historyPush(history, draft),
+      base: draft,
+      source: { kind: 'vehicle' },
+      selected: null,
+      vehicleChanged: false,
+    });
   },
 
   syncFromVehicle: (draft) => {
@@ -425,13 +433,28 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   rallyResetToVehicle: (draft) => {
     const { rally, active, uploading } = get();
     if (!active || uploading) return;
-    set({ rally: { ...rally, history: historyPush(rally.history, draft), base: draft, selected: null, vehicleChanged: false } });
+    set({
+      rally: {
+        ...rally,
+        history: historyPush(rally.history, draft),
+        base: draft,
+        selected: null,
+        vehicleChanged: false,
+      },
+    });
   },
 
   rallySyncFromVehicle: (draft) => {
     const { rally, active } = get();
     if (!active) return;
-    set({ rally: { history: historyInit(draft), base: draft, selected: fitSelection(rally.selected, draft.points.length), vehicleChanged: false } });
+    set({
+      rally: {
+        history: historyInit(draft),
+        base: draft,
+        selected: fitSelection(rally.selected, draft.points.length),
+        vehicleChanged: false,
+      },
+    });
   },
 
   rallySelect: (index) => set({ rally: { ...get().rally, selected: index } }),
@@ -450,14 +473,27 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   rallyUploaded: (readBack) => {
     const { rally, active } = get();
     if (!active) return;
-    set({ rally: { history: historyInit(readBack), base: readBack, selected: fitSelection(rally.selected, readBack.points.length), vehicleChanged: false } });
+    set({
+      rally: {
+        history: historyInit(readBack),
+        base: readBack,
+        selected: fitSelection(rally.selected, readBack.points.length),
+        vehicleChanged: false,
+      },
+    });
   },
 
   fenceEdit: (fn, select) => {
     const { fence, active, uploading } = get();
     if (!active || uploading) return;
     const next = fn(fence.history.present);
-    set({ fence: { ...fence, history: historyPush(fence.history, next), ...(select !== undefined ? { selected: select } : {}) } });
+    set({
+      fence: {
+        ...fence,
+        history: historyPush(fence.history, next),
+        ...(select !== undefined ? { selected: select } : {}),
+      },
+    });
   },
 
   fenceReplace: (draft) => {
@@ -470,13 +506,28 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   fenceResetToVehicle: (draft) => {
     const { fence, active, uploading } = get();
     if (!active || uploading) return;
-    set({ fence: { ...fence, history: historyPush(fence.history, draft), base: draft, selected: null, vehicleChanged: false } });
+    set({
+      fence: {
+        ...fence,
+        history: historyPush(fence.history, draft),
+        base: draft,
+        selected: null,
+        vehicleChanged: false,
+      },
+    });
   },
 
   fenceSyncFromVehicle: (draft) => {
     const { fence, active } = get();
     if (!active) return;
-    set({ fence: { history: historyInit(draft), base: draft, selected: fitSelection(fence.selected, draft.shapes.length), vehicleChanged: false } });
+    set({
+      fence: {
+        history: historyInit(draft),
+        base: draft,
+        selected: fitSelection(fence.selected, draft.shapes.length),
+        vehicleChanged: false,
+      },
+    });
   },
 
   fenceSelect: (index) => set({ fence: { ...get().fence, selected: index } }),
@@ -499,7 +550,14 @@ export const useMissionPlanStore = create<MissionPlanState>((set, get) => ({
   fenceUploaded: (readBack) => {
     const { fence, active } = get();
     if (!active) return;
-    set({ fence: { history: historyInit(readBack), base: readBack, selected: fitSelection(fence.selected, readBack.shapes.length), vehicleChanged: false } });
+    set({
+      fence: {
+        history: historyInit(readBack),
+        base: readBack,
+        selected: fitSelection(fence.selected, readBack.shapes.length),
+        vehicleChanged: false,
+      },
+    });
   },
 }));
 

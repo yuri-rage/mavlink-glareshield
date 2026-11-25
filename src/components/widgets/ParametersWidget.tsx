@@ -1,29 +1,51 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useInPane } from '../dashboard/paneContext';
-import { useTelemetryStore } from '../../store/telemetryStore';
-import { mavlinkConnection } from '../../mavlink/connection';
-import { paramManager, ParamManagerStatus } from '../../mavlink/paramManager';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+
 import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  Download,
+  Info,
+  Loader2,
+  Lock,
+  RefreshCw,
+  Search,
+  Sliders,
+  Upload,
+  X,
+  Zap,
+} from 'lucide-react';
+
+import { downloadFile } from '../../lib/download';
+import {
+  compareParams,
+  filterEntries,
+  writeOutcome,
+  type CompareResult,
+  type WriteOutcome,
+} from '../../lib/paramCompare';
+import { mavlinkConnection } from '../../mavlink/connection';
+import { getVehicleCategory } from '../../mavlink/messages';
+import { bitmaskSummary, valueLabel } from '../../mavlink/paramBits';
+import { paramManager, ParamManagerStatus } from '../../mavlink/paramManager';
+import { matchesParamQuery, parseParamQuery } from '../../mavlink/paramMatch';
+import {
+  areParamsDifferent,
   formatParamValue,
   getParamMetadata,
   parseParamFile,
   serializeParamFile,
-  areParamsDifferent,
 } from '../../mavlink/paramMetadata';
-import { useParamMetaStore } from '../../store/paramMetaStore';
-import { bitmaskSummary, valueLabel } from '../../mavlink/paramBits';
-import { BitmaskEditor, DetailsButton, EnumSelect, ParamDetails, Popover } from './params/ParamEditors';
-import { matchesParamQuery, parseParamQuery } from '../../mavlink/paramMatch';
-import { getVehicleCategory } from '../../mavlink/messages';
 import { decodePayload } from '../../mavlink/parser';
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import { Input } from '../ui/input';
-import { Sliders, RefreshCw, Check, Search, Zap, X, Download, Upload, AlertTriangle, Info, Loader2, Lock, ChevronDown } from 'lucide-react';
-import { downloadFile } from '../../lib/download';
 import { markBusy, onActiveVehicleChange } from '../../mavlink/vehicleRoster';
-import { compareParams, filterEntries, writeOutcome, type CompareResult, type WriteOutcome } from '../../lib/paramCompare';
+import { useParamMetaStore } from '../../store/paramMetaStore';
+import { useTelemetryStore } from '../../store/telemetryStore';
+import { useInPane } from '../dashboard/paneContext';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Input } from '../ui/input';
+import { BitmaskEditor, DetailsButton, EnumSelect, ParamDetails, Popover } from './params/ParamEditors';
 
 const ROW_HEIGHT = 38;
 const DEFAULT_VIEWPORT_HEIGHT = 440;
@@ -186,7 +208,11 @@ export const ParametersWidget: React.FC = () => {
       plainMap[k] = parameters[k].value;
     }
     const content = serializeParamFile(plainMap, firmwareVersion);
-    downloadFile(`ardupilot-params-${new Date().toISOString().slice(0, 10)}.param`, content, 'text/plain;charset=utf-8');
+    downloadFile(
+      `ardupilot-params-${new Date().toISOString().slice(0, 10)}.param`,
+      content,
+      'text/plain;charset=utf-8'
+    );
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -198,7 +224,8 @@ export const ParametersWidget: React.FC = () => {
     const parsed = parseParamFile(text);
     // Missing (not on this vehicle) only once its full list is read; until then, not read yet.
     // Only a list read whole this connection, and not being fetched now (a partial stream isn't the whole list).
-    const listComplete = paramStatus.listComplete === true && !paramStatus.isFetching && !paramStatus.fromPreviousConnection;
+    const listComplete =
+      paramStatus.listComplete === true && !paramStatus.isFetching && !paramStatus.fromPreviousConnection;
     const result = compareParams(parsed, parameters, listComplete, getParamMetadata);
     setDiffFileName(file.name);
     setCompare(result);
@@ -289,7 +316,11 @@ export const ParametersWidget: React.FC = () => {
     const values: Record<string, number> = {};
     for (const e of compare.entries) if (selected.has(e.name) && e.vehicle !== undefined) values[e.name] = e.vehicle;
     if (Object.keys(values).length === 0) return;
-    downloadFile(`vehicle-before-${diffFileName.replace(/\.param$/i, '')}-${new Date().toISOString().slice(0, 10)}.param`, serializeParamFile(values, firmwareVersion), 'text/plain;charset=utf-8');
+    downloadFile(
+      `vehicle-before-${diffFileName.replace(/\.param$/i, '')}-${new Date().toISOString().slice(0, 10)}.param`,
+      serializeParamFile(values, firmwareVersion),
+      'text/plain;charset=utf-8'
+    );
   };
 
   const searchQuery = useMemo(() => parseParamQuery(search), [search]);
@@ -346,34 +377,36 @@ export const ParametersWidget: React.FC = () => {
   };
 
   return (
-    <Card className={`border-zinc-800 bg-zinc-950/90 shadow-md flex flex-col h-full ${inPane ? 'min-h-0' : 'min-h-[380px] sm:min-h-[540px]'}`}>
-      <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
+    <Card
+      className={`flex h-full flex-col border-zinc-800 bg-zinc-950/90 shadow-md ${inPane ? 'min-h-0' : 'min-h-[380px] sm:min-h-[540px]'}`}
+    >
+      <CardHeader className="border-b border-zinc-800 bg-zinc-900/60 px-3 py-1.5 sm:px-3.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
+            <CardTitle className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-zinc-300">
               <Sliders className="h-4 w-4 text-sky-400" />
               PARAMETERS ({paramKeys.length})
             </CardTitle>
             {paramStatus.method === 'ftp' && (
-              <Badge variant="info" className="text-[10px] font-mono gap-0.5">
+              <Badge variant="info" className="gap-0.5 font-mono text-[10px]">
                 <Zap className="h-2.5 w-2.5" /> MAVFTP
               </Badge>
             )}
             {paramStatus.method === 'legacy' && (
-              <Badge variant="secondary" className="text-[10px] font-mono">
+              <Badge variant="secondary" className="font-mono text-[10px]">
                 STREAM
               </Badge>
             )}
             {paramMetaStatus !== 'idle' && (
               <span
-                className={`text-[10px] font-mono px-1.5 py-0.5 rounded border inline-flex items-center gap-1 ${
+                className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] ${
                   paramMetaStatus === 'loading'
-                    ? 'text-zinc-400 border-zinc-700'
+                    ? 'border-zinc-700 text-zinc-400'
                     : paramMetaStatus === 'unavailable'
-                      ? 'text-zinc-400 border-zinc-700 bg-zinc-900'
+                      ? 'border-zinc-700 bg-zinc-900 text-zinc-400'
                       : paramMetaSource?.match === 'exact'
-                        ? 'text-emerald-300 border-emerald-700/50 bg-emerald-950/30'
-                        : 'text-amber-300 border-amber-700/50 bg-amber-950/30'
+                        ? 'border-emerald-700/50 bg-emerald-950/30 text-emerald-300'
+                        : 'border-amber-700/50 bg-amber-950/30 text-amber-300'
                 }`}
                 title={paramMetaSummary}
                 aria-label={paramMetaSummary}
@@ -388,7 +421,7 @@ export const ParametersWidget: React.FC = () => {
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex flex-wrap items-center gap-1.5">
             <input
               ref={fileInputRef}
               type="file"
@@ -400,7 +433,7 @@ export const ParametersWidget: React.FC = () => {
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              className="h-7 px-2 text-xs font-semibold gap-1 text-zinc-300 hover:text-white border-zinc-700"
+              className="h-7 gap-1 border-zinc-700 px-2 text-xs font-semibold text-zinc-300 hover:text-white"
               title="Load and compare a .param file against current vehicle parameters"
             >
               <Upload className="h-3 w-3 text-amber-400" />
@@ -412,7 +445,7 @@ export const ParametersWidget: React.FC = () => {
               size="sm"
               disabled={paramKeys.length === 0}
               onClick={handleExportParams}
-              className="h-7 px-2 text-xs font-semibold gap-1 text-zinc-300 hover:text-white border-zinc-700 disabled:opacity-40"
+              className="h-7 gap-1 border-zinc-700 px-2 text-xs font-semibold text-zinc-300 hover:text-white disabled:opacity-40"
               title="Export all loaded parameters to a .param file"
             >
               <Download className="h-3 w-3 text-emerald-400" />
@@ -423,9 +456,9 @@ export const ParametersWidget: React.FC = () => {
               variant={paramStatus.isFetching ? 'destructive' : 'outline'}
               size="sm"
               onClick={paramStatus.isFetching ? () => paramManager.cancelFetch() : handleFetchAll}
-              className={`h-7 px-2.5 text-xs font-bold gap-1 transition-colors ${
+              className={`h-7 gap-1 px-2.5 text-xs font-bold transition-colors ${
                 paramStatus.isFetching
-                  ? 'bg-red-500/10 border-red-500/50 text-red-400 hover:bg-red-500/20 hover:text-red-300'
+                  ? 'border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300'
                   : 'text-zinc-300 hover:text-white'
               }`}
               title={paramStatus.isFetching ? 'Cancel parameter fetch' : 'Fetch parameters from vehicle'}
@@ -445,18 +478,16 @@ export const ParametersWidget: React.FC = () => {
           </div>
         </div>
         {paramStatus.message && paramStatus.isFetching && (
-          <p className="text-[10px] text-sky-400 font-mono mt-1 animate-pulse">
-            {paramStatus.message}
-          </p>
+          <p className="mt-1 animate-pulse font-mono text-[10px] text-sky-400">{paramStatus.message}</p>
         )}
         {paramStatus.fromPreviousConnection && !paramStatus.isFetching && (
-          <p className="text-[11px] text-amber-400 mt-1" role="status">
+          <p className="mt-1 text-[11px] text-amber-400" role="status">
             Values are from the previous connection{connected ? ' and will refresh' : ''}; they may have changed since.
           </p>
         )}
       </CardHeader>
 
-      <CardContent className="p-3 flex-1 min-h-0 flex flex-col space-y-2">
+      <CardContent className="flex min-h-0 flex-1 flex-col space-y-2 p-3">
         {/* Search & filter row */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
@@ -466,12 +497,12 @@ export const ParametersWidget: React.FC = () => {
               placeholder="Search: BATT_*  FS_*  failsafe  -BATT2_*"
               value={search}
               onChange={handleSearchChange}
-              className="h-8 pl-8 pr-20 text-xs sm:text-[13px] font-mono"
+              className="h-8 pl-8 pr-20 font-mono text-xs sm:text-[13px]"
               aria-describedby="param-search-help"
             />
-            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1">
               {!searchQuery.empty && (
-                <span className="text-[11px] font-mono text-zinc-500 tabular-nums" aria-live="polite">
+                <span className="font-mono text-[11px] tabular-nums text-zinc-500" aria-live="polite">
                   {filteredKeys.length}/{paramKeys.length}
                 </span>
               )}
@@ -479,7 +510,7 @@ export const ParametersWidget: React.FC = () => {
                 ref={searchHelpRef}
                 type="button"
                 onClick={() => setSearchHelpOpen((o) => !o)}
-                className="h-5 w-5 inline-flex items-center justify-center rounded text-zinc-500 hover:text-sky-300"
+                className="inline-flex h-5 w-5 items-center justify-center rounded text-zinc-500 hover:text-sky-300"
                 aria-label="Search help"
                 aria-expanded={searchHelpOpen}
               >
@@ -487,22 +518,30 @@ export const ParametersWidget: React.FC = () => {
               </button>
             </div>
             {searchHelpOpen && (
-              <Popover anchor={searchHelpRef.current} onClose={() => setSearchHelpOpen(false)} width={320} label="Search help">
-                <div id="param-search-help" className="p-3 space-y-1.5 text-[11px] text-zinc-300 leading-snug">
+              <Popover
+                anchor={searchHelpRef.current}
+                onClose={() => setSearchHelpOpen(false)}
+                width={320}
+                label="Search help"
+              >
+                <div id="param-search-help" className="space-y-1.5 p-3 text-[11px] leading-snug text-zinc-300">
                   <div className="font-bold text-zinc-100">Searching parameters</div>
                   <p>
-                    <code className="text-sky-300">BATT_*</code> <code className="text-sky-300">FS_?_*</code>: <code>*</code> and <code>?</code> match
-                    whole names. Several add up: <code className="text-sky-300">BATT_* FS_*</code>.
+                    <code className="text-sky-300">BATT_*</code> <code className="text-sky-300">FS_?_*</code>:{' '}
+                    <code>*</code> and <code>?</code> match whole names. Several add up:{' '}
+                    <code className="text-sky-300">BATT_* FS_*</code>.
                   </p>
                   <p>
-                    <code className="text-sky-300">voltage</code>: other words search the name, short name and description; every word must match.{' '}
-                    <code className="text-sky-300">BATT_* voltage</code> narrows the battery parameters.
+                    <code className="text-sky-300">voltage</code>: other words search the name, short name and
+                    description; every word must match. <code className="text-sky-300">BATT_* voltage</code> narrows the
+                    battery parameters.
                   </p>
                   <p>
                     <code className="text-sky-300">-BATT2_*</code>: a leading <code>-</code> leaves matches out.
                   </p>
                   <p>
-                    <code className="text-sky-300">"low battery"</code>: quotes keep words together. Case doesn't matter.
+                    <code className="text-sky-300">"low battery"</code>: quotes keep words together. Case doesn't
+                    matter.
                   </p>
                 </div>
               </Popover>
@@ -511,10 +550,10 @@ export const ParametersWidget: React.FC = () => {
           {hasAnyDefaults && (
             <button
               onClick={() => setOnlyModified((v) => !v)}
-              className={`h-8 px-2.5 rounded-lg border text-xs font-semibold whitespace-nowrap transition-colors ${
+              className={`h-8 whitespace-nowrap rounded-lg border px-2.5 text-xs font-semibold transition-colors ${
                 onlyModified
-                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
-                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                  ? 'border-amber-500/50 bg-amber-500/20 text-amber-300'
+                  : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200'
               }`}
               title="Show only parameters that differ from firmware defaults"
             >
@@ -527,12 +566,12 @@ export const ParametersWidget: React.FC = () => {
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className={`flex-1 bg-black/60 rounded-xl border border-zinc-800 overflow-y-auto ${inPane ? 'min-h-0' : 'min-h-[240px] max-h-[68vh]'}`}
+          className={`flex-1 overflow-y-auto rounded-xl border border-zinc-800 bg-black/60 ${inPane ? 'min-h-0' : 'max-h-[68vh] min-h-[240px]'}`}
         >
           {filteredKeys.length === 0 ? (
-            <div className="text-zinc-500 text-center py-10 px-4 text-xs flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-2 px-4 py-10 text-center text-xs text-zinc-500">
               {paramStatus.isFetching ? (
-                <span className="text-sky-400 font-mono animate-pulse">
+                <span className="animate-pulse font-mono text-sky-400">
                   Downloading parameters from flight controller...
                 </span>
               ) : paramKeys.length === 0 ? (
@@ -543,7 +582,7 @@ export const ParametersWidget: React.FC = () => {
                       : 'No telemetry link active — connect a vehicle to inspect or edit parameters.'}
                   </span>
                   {connected && (
-                    <Button variant="outline" size="sm" onClick={handleFetchAll} className="mt-1 h-7 text-xs gap-1.5">
+                    <Button variant="outline" size="sm" onClick={handleFetchAll} className="mt-1 h-7 gap-1.5 text-xs">
                       <RefreshCw className="h-3 w-3 text-sky-400" /> Load Vehicle Parameters
                     </Button>
                   )}
@@ -561,11 +600,13 @@ export const ParametersWidget: React.FC = () => {
                 <col />
                 {hasAnyDefaults && <col className={compact ? 'w-[4.75rem]' : 'w-[6.5rem]'} />}
               </colgroup>
-              <thead className="bg-zinc-900/95 sticky top-0 border-b border-zinc-800 text-zinc-400 text-left z-10 backdrop-blur-sm">
+              <thead className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900/95 text-left text-zinc-400 backdrop-blur-sm">
                 <tr>
                   <th className={`py-1.5 ${cellX}`}>Parameter</th>
                   <th className={`py-1.5 ${cellX}`}>Value</th>
-                  {hasAnyDefaults && <th className={`py-1.5 ${compact ? 'px-2' : 'px-2 sm:px-3'} text-right`}>Default</th>}
+                  {hasAnyDefaults && (
+                    <th className={`py-1.5 ${compact ? 'px-2' : 'px-2 sm:px-3'} text-right`}>Default</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-900/80">
@@ -581,7 +622,8 @@ export const ParametersWidget: React.FC = () => {
                   const isEditing = editingParam === key;
                   const isSaved = savedSuccess === key;
                   const defVal = item.defaultValue !== undefined ? item.defaultValue : item.value;
-                  const isAtDefault = item.defaultValue === undefined || Math.abs(item.defaultValue - item.value) < 1e-6;
+                  const isAtDefault =
+                    item.defaultValue === undefined || Math.abs(item.defaultValue - item.value) < 1e-6;
                   const enumLabel = valueLabel(meta?.values, item.value);
                   const bitsLabel = meta?.bitmask ? bitmaskSummary(item.value, meta.bitmask) : undefined;
                   const readOnly = Boolean(meta?.readOnly);
@@ -605,10 +647,14 @@ export const ParametersWidget: React.FC = () => {
                     <tr key={key} className="h-[38px] hover:bg-zinc-900/40">
                       <td
                         className={`py-1 ${cellX} overflow-hidden`}
-                        title={meta ? `${key}${meta.displayName ? ` · ${meta.displayName}` : ''}${meta.description ? `\n${meta.description}` : ''}` : key}
+                        title={
+                          meta
+                            ? `${key}${meta.displayName ? ` · ${meta.displayName}` : ''}${meta.description ? `\n${meta.description}` : ''}`
+                            : key
+                        }
                       >
                         <div className="flex items-center gap-1.5 truncate">
-                          <span className="font-semibold text-zinc-200 truncate">{key}</span>
+                          <span className="truncate font-semibold text-zinc-200">{key}</span>
                           {meta && (
                             <DetailsButton
                               name={key}
@@ -617,16 +663,18 @@ export const ParametersWidget: React.FC = () => {
                           )}
                           {meta?.rebootRequired && (
                             <span
-                              className="text-[9px] px-1 py-0 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 font-sans shrink-0"
+                              className="shrink-0 rounded border border-amber-500/30 bg-amber-500/15 px-1 py-0 font-sans text-[9px] text-amber-400"
                               title="Requires flight controller reboot after changing"
                             >
                               Reboot
                             </span>
                           )}
                         </div>
-                        {subtitle && <div className="text-[11px] text-zinc-500 font-sans truncate leading-tight">{subtitle}</div>}
+                        {subtitle && (
+                          <div className="truncate font-sans text-[11px] leading-tight text-zinc-500">{subtitle}</div>
+                        )}
                       </td>
-                      <td className={`py-1 ${cellX} font-mono overflow-hidden`}>
+                      <td className={`py-1 ${cellX} overflow-hidden font-mono`}>
                         {isEditing && editor === 'enum' ? (
                           <div className="flex flex-wrap items-center gap-1">
                             <EnumSelect
@@ -640,12 +688,16 @@ export const ParametersWidget: React.FC = () => {
                             />
                             <button
                               onClick={() => handleSaveParam(key)}
-                              className="h-5 px-1.5 text-[10px] bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded border border-emerald-500/40 font-sans font-semibold"
+                              className="h-5 rounded border border-emerald-500/40 bg-emerald-500/20 px-1.5 font-sans text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/30"
                               title="Save parameter"
                             >
                               Save
                             </button>
-                            <button onClick={() => setEditingParam(null)} className="h-5 px-1 text-[10px] text-zinc-400 hover:text-zinc-200" title="Cancel">
+                            <button
+                              onClick={() => setEditingParam(null)}
+                              className="h-5 px-1 text-[10px] text-zinc-400 hover:text-zinc-200"
+                              title="Cancel"
+                            >
                               ✕
                             </button>
                           </div>
@@ -668,64 +720,93 @@ export const ParametersWidget: React.FC = () => {
                                     setEditingParam(null);
                                   }
                                 }}
-                                className={`h-6 w-[7.5rem] min-w-0 text-xs font-mono px-1 py-0 bg-black/90 text-sky-300 ${
-                                  outOfRange ? 'border-amber-500 focus:ring-amber-500' : 'border-sky-500 focus:ring-1 focus:ring-sky-500'
+                                className={`h-6 w-[7.5rem] min-w-0 bg-black/90 px-1 py-0 font-mono text-xs text-sky-300 ${
+                                  outOfRange
+                                    ? 'border-amber-500 focus:ring-amber-500'
+                                    : 'border-sky-500 focus:ring-1 focus:ring-sky-500'
                                 }`}
                                 autoFocus
                               />
-                              {meta?.units && <span className="text-[11px] text-zinc-400 font-sans">{meta.units}</span>}
+                              {meta?.units && <span className="font-sans text-[11px] text-zinc-400">{meta.units}</span>}
                               <button
                                 onClick={() => handleSaveParam(key)}
-                                className="h-5 px-1.5 text-[10px] bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded border border-emerald-500/40 font-sans font-semibold"
+                                className="h-5 rounded border border-emerald-500/40 bg-emerald-500/20 px-1.5 font-sans text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/30"
                                 title="Save parameter"
                               >
                                 Save
                               </button>
-                              <button onClick={() => setEditingParam(null)} className="h-5 px-1 text-[10px] text-zinc-400 hover:text-zinc-200" title="Cancel">
+                              <button
+                                onClick={() => setEditingParam(null)}
+                                className="h-5 px-1 text-[10px] text-zinc-400 hover:text-zinc-200"
+                                title="Cancel"
+                              >
                                 ✕
                               </button>
                             </div>
-                            {(meta?.min !== undefined || meta?.max !== undefined || valueLabel(meta?.values, parsedEditNum)) && (
-                              <span className={`text-[10px] font-sans ${outOfRange ? 'text-amber-400 font-semibold' : 'text-zinc-500'}`}>
+                            {(meta?.min !== undefined ||
+                              meta?.max !== undefined ||
+                              valueLabel(meta?.values, parsedEditNum)) && (
+                              <span
+                                className={`font-sans text-[10px] ${outOfRange ? 'font-semibold text-amber-400' : 'text-zinc-500'}`}
+                              >
                                 {meta?.min !== undefined || meta?.max !== undefined
                                   ? `Range: ${meta?.min ?? '—'} to ${meta?.max ?? '—'} ${meta?.units ?? ''}`
                                   : ''}
-                                {valueLabel(meta?.values, parsedEditNum) ? ` · ${valueLabel(meta?.values, parsedEditNum)}` : ''}
+                                {valueLabel(meta?.values, parsedEditNum)
+                                  ? ` · ${valueLabel(meta?.values, parsedEditNum)}`
+                                  : ''}
                               </span>
                             )}
                           </div>
                         ) : readOnly ? (
-                          <span className="flex items-center gap-1.5 text-zinc-300 py-0.5 min-w-0" title={`${key} is read-only`}>
+                          <span
+                            className="flex min-w-0 items-center gap-1.5 py-0.5 text-zinc-300"
+                            title={`${key} is read-only`}
+                          >
                             <span className="shrink-0">{formatParamValue(item.value)}</span>
-                            {meta?.units && <span className="text-[11px] text-zinc-500 font-sans truncate min-w-0">{meta.units}</span>}
-                            {enumLabel && <span className="text-[11px] text-zinc-500 font-sans truncate min-w-0">({enumLabel})</span>}
-                            <Lock className="h-2.5 w-2.5 text-zinc-600 shrink-0" aria-label="read-only" />
+                            {meta?.units && (
+                              <span className="min-w-0 truncate font-sans text-[11px] text-zinc-500">{meta.units}</span>
+                            )}
+                            {enumLabel && (
+                              <span className="min-w-0 truncate font-sans text-[11px] text-zinc-500">
+                                ({enumLabel})
+                              </span>
+                            )}
+                            <Lock className="h-2.5 w-2.5 shrink-0 text-zinc-600" aria-label="read-only" />
                           </span>
                         ) : (
                           <button
                             type="button"
                             onClick={(e) => handleStartEdit(key, item.value, e.currentTarget)}
-                            className={`flex items-center gap-1.5 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 px-1 py-0.5 -mx-1 rounded cursor-pointer transition-colors max-w-[calc(100%+0.5rem)] min-w-0 text-left ${
+                            className={`-mx-1 flex min-w-0 max-w-[calc(100%+0.5rem)] cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-left text-sky-400 transition-colors hover:bg-sky-500/10 hover:text-sky-300 ${
                               isEditing ? 'bg-sky-500/10 ring-1 ring-sky-500/60' : ''
                             }`}
                             title={`Click to edit ${key} (raw: ${item.value})`}
                             aria-haspopup={meta?.bitmask ? 'dialog' : undefined}
                           >
-                            <span className="shrink-0">{formatParamValue(isEditing && editor === 'bitmask' ? parsedEditNum : item.value)}</span>
-                            {meta?.units && <span className="text-[11px] text-zinc-400 font-sans truncate min-w-0">{meta.units}</span>}
+                            <span className="shrink-0">
+                              {formatParamValue(isEditing && editor === 'bitmask' ? parsedEditNum : item.value)}
+                            </span>
+                            {meta?.units && (
+                              <span className="min-w-0 truncate font-sans text-[11px] text-zinc-400">{meta.units}</span>
+                            )}
                             {enumLabel && !bitsLabel && (
-                              <span className="text-[11px] text-zinc-400 font-sans truncate min-w-0">({enumLabel})</span>
+                              <span className="min-w-0 truncate font-sans text-[11px] text-zinc-400">
+                                ({enumLabel})
+                              </span>
                             )}
                             {bitsLabel && (
-                              <span className="text-[11px] text-zinc-400 font-sans min-w-0 flex items-center gap-0.5">
+                              <span className="flex min-w-0 items-center gap-0.5 font-sans text-[11px] text-zinc-400">
                                 <span className="truncate">
-                                  {isEditing && editor === 'bitmask' ? bitmaskSummary(parsedEditNum, meta!.bitmask!) : bitsLabel}
+                                  {isEditing && editor === 'bitmask'
+                                    ? bitmaskSummary(parsedEditNum, meta!.bitmask!)
+                                    : bitsLabel}
                                 </span>
                                 <ChevronDown className="h-2.5 w-2.5 shrink-0" />
                               </span>
                             )}
                             {isSaved && (
-                              <span className="text-emerald-400 text-[10px] inline-flex items-center gap-0.5 animate-pulse font-sans shrink-0">
+                              <span className="inline-flex shrink-0 animate-pulse items-center gap-0.5 font-sans text-[10px] text-emerald-400">
                                 <Check className="h-2.5 w-2.5" /> Saved
                               </span>
                             )}
@@ -756,8 +837,8 @@ export const ParametersWidget: React.FC = () => {
                       </td>
                       {hasAnyDefaults && (
                         <td
-                          className={`py-1 ${compact ? 'px-2' : 'px-2 sm:px-3'} font-mono text-right truncate ${
-                            isAtDefault ? 'text-zinc-600' : 'text-amber-300 font-medium'
+                          className={`py-1 ${compact ? 'px-2' : 'px-2 sm:px-3'} truncate text-right font-mono ${
+                            isAtDefault ? 'text-zinc-600' : 'font-medium text-amber-300'
                           }`}
                           title={`Default: ${defVal}`}
                         >
@@ -779,211 +860,292 @@ export const ParametersWidget: React.FC = () => {
       </CardContent>
 
       {/* Parameter File Compare & Batch Load Modal */}
-      {diffModalOpen && compare && (() => {
-        const shown = filterEntries(compare.entries, diffFilter, getParamMetadata);
-        const writableShown = shown.filter((e) => e.writable);
-        const selectedCount = compare.entries.filter((e) => e.writable && selected.has(e.name)).length;
-        const withVehicle = compare.entries.filter((e) => selected.has(e.name) && e.vehicle !== undefined).length;
-        const toggle = (name: string, on: boolean) =>
-          setSelected((prev) => {
-            const next = new Set(prev);
-            if (on) next.add(name);
-            else next.delete(name);
-            return next;
-          });
-        // What a write came to: a clamped or refused write shows the value the vehicle kept.
-        const resultOf = (w: WriteState): { text: string; cls: string } =>
-          w.state === 'writing'
-            ? { text: 'writing…', cls: 'text-sky-300' }
-            : w.state === 'ok'
-              ? { text: '✓ written', cls: 'text-emerald-400' }
-              : w.state === 'kept'
-                ? { text: `kept ${w.echoed !== undefined ? formatParamValue(w.echoed) : 'its value'}`, cls: 'text-amber-300' }
-                : { text: 'no answer', cls: 'text-red-300' };
-        const counts = {
-          differs: compare.entries.filter((e) => e.status === 'differs').length,
-          missing: compare.entries.filter((e) => e.status === 'missing').length,
-          unread: compare.entries.filter((e) => e.status === 'unread').length,
-        };
-        const nothingInFile = compare.entries.length === 0 && compare.same === 0;
-        return (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden">
-            <div className="px-4 py-3 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <Upload className="h-4 w-4 text-amber-400 shrink-0" />
-                <h3 className="text-sm font-bold text-zinc-100 truncate">
-                  Compare Parameter File: <span className="font-mono text-sky-400">{diffFileName}</span>
-                </h3>
-              </div>
-              <button onClick={() => setDiffModalOpen(false)} className="text-zinc-400 hover:text-zinc-200 p-1 rounded" aria-label="Close" disabled={isBatchWriting}>
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="p-4 flex-1 overflow-y-auto space-y-3">
-              <div className="text-[11px] text-zinc-400 flex flex-wrap gap-x-3 gap-y-1">
-                <span>
-                  <strong className="text-zinc-100">{counts.differs}</strong> differ
-                </span>
-                {counts.missing > 0 && (
-                  <span title="In the file but not a parameter of this vehicle (another firmware or vehicle type)">
-                    <strong className="text-zinc-100">{counts.missing}</strong> not on this vehicle
-                  </span>
-                )}
-                {counts.unread > 0 && (
-                  <span title="The vehicle's full list isn't read yet: these may or may not exist">
-                    <strong className="text-zinc-100">{counts.unread}</strong> not read yet
-                  </span>
-                )}
-                <span>
-                  <strong className="text-zinc-100">{compare.same}</strong> same
-                </span>
-                {compare.notInFile > 0 && (
-                  <span title="The vehicle's parameters this file doesn't mention (a partial file, or another vehicle's)">
-                    <strong className="text-zinc-100">{compare.notInFile}</strong> on the vehicle not in the file
-                  </span>
-                )}
-              </div>
-              {nothingInFile ? (
-                <div className="text-center py-8 text-xs text-amber-300 flex flex-col items-center gap-2">
-                  <AlertTriangle className="h-6 w-6" />
-                  <span>No parameters found in {diffFileName}: is it a .param file (NAME,VALUE or NAME VALUE lines)?</span>
-                </div>
-              ) : compare.entries.length === 0 ? (
-                <div className="text-center py-8 text-xs text-emerald-400 flex flex-col items-center gap-2">
-                  <Check className="h-6 w-6" />
-                  <span>All parameters in {diffFileName} match the current vehicle values.</span>
-                </div>
-              ) : (
-                <>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="relative flex-1 min-w-[160px]">
-                      <Search className="h-3.5 w-3.5 text-zinc-500 absolute left-2 top-1/2 -translate-y-1/2" />
-                      <Input value={diffFilter} onChange={(e) => setDiffFilter(e.target.value)} placeholder="Filter by name or description" className="h-8 pl-7 text-xs" />
-                    </div>
-                    <button onClick={() => setSelected((prev) => new Set([...prev, ...writableShown.map((e) => e.name)]))} className="text-[11px] text-sky-400 hover:underline font-semibold" disabled={isBatchWriting}>
-                      Select {diffFilter.trim() ? 'shown' : 'all'}
-                    </button>
-                    <span className="text-zinc-700">·</span>
-                    <button onClick={() => setSelected((prev) => new Set([...prev].filter((n) => !shown.some((e) => e.name === n))))} className="text-[11px] text-zinc-400 hover:underline" disabled={isBatchWriting}>
-                      Clear {diffFilter.trim() ? 'shown' : ''}
-                    </button>
+      {diffModalOpen &&
+        compare &&
+        (() => {
+          const shown = filterEntries(compare.entries, diffFilter, getParamMetadata);
+          const writableShown = shown.filter((e) => e.writable);
+          const selectedCount = compare.entries.filter((e) => e.writable && selected.has(e.name)).length;
+          const withVehicle = compare.entries.filter((e) => selected.has(e.name) && e.vehicle !== undefined).length;
+          const toggle = (name: string, on: boolean) =>
+            setSelected((prev) => {
+              const next = new Set(prev);
+              if (on) next.add(name);
+              else next.delete(name);
+              return next;
+            });
+          // What a write came to: a clamped or refused write shows the value the vehicle kept.
+          const resultOf = (w: WriteState): { text: string; cls: string } =>
+            w.state === 'writing'
+              ? { text: 'writing…', cls: 'text-sky-300' }
+              : w.state === 'ok'
+                ? { text: '✓ written', cls: 'text-emerald-400' }
+                : w.state === 'kept'
+                  ? {
+                      text: `kept ${w.echoed !== undefined ? formatParamValue(w.echoed) : 'its value'}`,
+                      cls: 'text-amber-300',
+                    }
+                  : { text: 'no answer', cls: 'text-red-300' };
+          const counts = {
+            differs: compare.entries.filter((e) => e.status === 'differs').length,
+            missing: compare.entries.filter((e) => e.status === 'missing').length,
+            unread: compare.entries.filter((e) => e.status === 'unread').length,
+          };
+          const nothingInFile = compare.entries.length === 0 && compare.same === 0;
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+              <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl">
+                <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Upload className="h-4 w-4 shrink-0 text-amber-400" />
+                    <h3 className="truncate text-sm font-bold text-zinc-100">
+                      Compare Parameter File: <span className="font-mono text-sky-400">{diffFileName}</span>
+                    </h3>
                   </div>
-
-                  <div className="border border-zinc-800 rounded-lg overflow-x-auto">
-                    <table className="w-full text-xs font-mono">
-                      <thead className="bg-zinc-900 text-zinc-400 border-b border-zinc-800 text-left">
-                        <tr>
-                          <th className="py-1.5 px-2 w-8">Write</th>
-                          <th className="py-1.5 px-2">Parameter</th>
-                          <th className="py-1.5 px-2 text-right">Vehicle</th>
-                          <th className="py-1.5 px-2 text-right">File</th>
-                          <th className="py-1.5 px-2 text-right">Default</th>
-                          <th className="py-1.5 px-2 text-right">Result</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-900">
-                        {shown.map((entry) => {
-                          const meta = getParamMetadata(entry.name);
-                          const state = writeStates[entry.name];
-                          const why = entry.status === 'missing' ? 'not on this vehicle' : entry.readOnly ? 'read-only' : null;
-                          return (
-                            <tr key={entry.name} className={`hover:bg-zinc-900/50 ${entry.writable ? '' : 'opacity-60'}`}>
-                              <td className="py-1.5 px-2">
-                                <input
-                                  type="checkbox"
-                                  checked={entry.writable && selected.has(entry.name)}
-                                  disabled={!entry.writable || isBatchWriting}
-                                  title={why ?? undefined}
-                                  aria-label={`Write ${entry.name}`}
-                                  onChange={(e) => toggle(entry.name, e.target.checked)}
-                                  className="rounded border-zinc-700 bg-zinc-900 text-sky-500"
-                                />
-                              </td>
-                              <td className="py-1.5 px-2">
-                                <div className="font-semibold text-zinc-200 flex items-center gap-1.5">
-                                  {entry.name}
-                                  {entry.rebootRequired && <span className="text-[9px] font-sans font-bold text-amber-300" title="Takes effect after a reboot">↻ reboot</span>}
-                                  {why && <span className="text-[9px] font-sans text-zinc-500">{why}</span>}
-                                  {entry.status === 'unread' && <span className="text-[9px] font-sans text-zinc-500" title="The vehicle's full parameter list isn't read: it may or may not have this">not read yet</span>}
-                                </div>
-                                {meta?.description && <div className="text-[11px] text-zinc-500 font-sans truncate max-w-[260px]">{meta.description}</div>}
-                              </td>
-                              <td className="py-1.5 px-2 text-right text-zinc-400">{entry.vehicle !== undefined ? formatParamValue(entry.vehicle) : '—'}</td>
-                              <td className="py-1.5 px-2 text-right text-amber-300 font-bold">
-                                {formatParamValue(entry.file)}
-                                {entry.units ? <span className="font-normal text-zinc-500"> {entry.units}</span> : null}
-                              </td>
-                              <td className="py-1.5 px-2 text-right text-zinc-500">{entry.defaultValue !== undefined ? formatParamValue(entry.defaultValue) : ''}</td>
-                              <td className={`py-1.5 px-2 text-right text-[11px] ${state ? resultOf(state).cls : ''}`}>{state ? resultOf(state).text : ''}</td>
-                            </tr>
-                          );
-                        })}
-                        {shown.length === 0 && (
-                          <tr>
-                            <td colSpan={6} className="py-3 text-center text-zinc-500 font-sans">
-                              Nothing matches "{diffFilter.trim()}".
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-
-              {batchWriteStatus && (
-                <div
-                  className={`p-2.5 rounded-lg border text-xs flex items-center gap-2 ${
-                    isBatchWriting ? 'bg-sky-950/60 border-sky-500/40 text-sky-300' : 'bg-zinc-900 border-zinc-700 text-zinc-200'
-                  }`}
-                >
-                  {isBatchWriting ? <Loader2 className="h-4 w-4 animate-spin text-sky-400 shrink-0" /> : <Check className="h-4 w-4 text-emerald-400 shrink-0" />}
-                  <span>{batchWriteStatus}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="px-4 py-3 bg-zinc-900 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] text-zinc-400 flex items-center gap-1">
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
-                Review safety-critical parameters before writing to an active vehicle.
-              </span>
-              <div className="flex flex-wrap items-center gap-2">
-                {compare.entries.length > 0 && (
-                  <Button variant="outline" size="sm" disabled={withVehicle === 0 || isBatchWriting} onClick={backupSelected} className="h-8 text-xs gap-1.5" title="Save the vehicle's current values of the selected parameters (.param)">
-                    <Download className="h-3.5 w-3.5" />
-                    Back up these first
-                  </Button>
-                )}
-                {isBatchWriting ? (
-                  <Button variant="destructive" size="sm" onClick={() => (abortBatchRef.current = true)} className="h-8 text-xs font-bold">
-                    Stop writing
-                  </Button>
-                ) : (
-                  <Button variant="ghost" size="sm" onClick={() => setDiffModalOpen(false)} className="h-8 text-xs">
-                    Close
-                  </Button>
-                )}
-                {compare.entries.length > 0 && (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    disabled={!connected || isBatchWriting || selectedCount === 0}
-                    onClick={handleWriteSelectedDiffs}
-                    className="h-8 text-xs bg-sky-600 hover:bg-sky-500 text-white font-bold gap-1.5"
+                  <button
+                    onClick={() => setDiffModalOpen(false)}
+                    className="rounded p-1 text-zinc-400 hover:text-zinc-200"
+                    aria-label="Close"
+                    disabled={isBatchWriting}
                   >
-                    {isBatchWriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                    Write Selected ({selectedCount}) to Vehicle
-                  </Button>
-                )}
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="flex-1 space-y-3 overflow-y-auto p-4">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400">
+                    <span>
+                      <strong className="text-zinc-100">{counts.differs}</strong> differ
+                    </span>
+                    {counts.missing > 0 && (
+                      <span title="In the file but not a parameter of this vehicle (another firmware or vehicle type)">
+                        <strong className="text-zinc-100">{counts.missing}</strong> not on this vehicle
+                      </span>
+                    )}
+                    {counts.unread > 0 && (
+                      <span title="The vehicle's full list isn't read yet: these may or may not exist">
+                        <strong className="text-zinc-100">{counts.unread}</strong> not read yet
+                      </span>
+                    )}
+                    <span>
+                      <strong className="text-zinc-100">{compare.same}</strong> same
+                    </span>
+                    {compare.notInFile > 0 && (
+                      <span title="The vehicle's parameters this file doesn't mention (a partial file, or another vehicle's)">
+                        <strong className="text-zinc-100">{compare.notInFile}</strong> on the vehicle not in the file
+                      </span>
+                    )}
+                  </div>
+                  {nothingInFile ? (
+                    <div className="flex flex-col items-center gap-2 py-8 text-center text-xs text-amber-300">
+                      <AlertTriangle className="h-6 w-6" />
+                      <span>
+                        No parameters found in {diffFileName}: is it a .param file (NAME,VALUE or NAME VALUE lines)?
+                      </span>
+                    </div>
+                  ) : compare.entries.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 py-8 text-center text-xs text-emerald-400">
+                      <Check className="h-6 w-6" />
+                      <span>All parameters in {diffFileName} match the current vehicle values.</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="relative min-w-[160px] flex-1">
+                          <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+                          <Input
+                            value={diffFilter}
+                            onChange={(e) => setDiffFilter(e.target.value)}
+                            placeholder="Filter by name or description"
+                            className="h-8 pl-7 text-xs"
+                          />
+                        </div>
+                        <button
+                          onClick={() => setSelected((prev) => new Set([...prev, ...writableShown.map((e) => e.name)]))}
+                          className="text-[11px] font-semibold text-sky-400 hover:underline"
+                          disabled={isBatchWriting}
+                        >
+                          Select {diffFilter.trim() ? 'shown' : 'all'}
+                        </button>
+                        <span className="text-zinc-700">·</span>
+                        <button
+                          onClick={() =>
+                            setSelected((prev) => new Set([...prev].filter((n) => !shown.some((e) => e.name === n))))
+                          }
+                          className="text-[11px] text-zinc-400 hover:underline"
+                          disabled={isBatchWriting}
+                        >
+                          Clear {diffFilter.trim() ? 'shown' : ''}
+                        </button>
+                      </div>
+
+                      <div className="overflow-x-auto rounded-lg border border-zinc-800">
+                        <table className="w-full font-mono text-xs">
+                          <thead className="border-b border-zinc-800 bg-zinc-900 text-left text-zinc-400">
+                            <tr>
+                              <th className="w-8 px-2 py-1.5">Write</th>
+                              <th className="px-2 py-1.5">Parameter</th>
+                              <th className="px-2 py-1.5 text-right">Vehicle</th>
+                              <th className="px-2 py-1.5 text-right">File</th>
+                              <th className="px-2 py-1.5 text-right">Default</th>
+                              <th className="px-2 py-1.5 text-right">Result</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-900">
+                            {shown.map((entry) => {
+                              const meta = getParamMetadata(entry.name);
+                              const state = writeStates[entry.name];
+                              const why =
+                                entry.status === 'missing'
+                                  ? 'not on this vehicle'
+                                  : entry.readOnly
+                                    ? 'read-only'
+                                    : null;
+                              return (
+                                <tr
+                                  key={entry.name}
+                                  className={`hover:bg-zinc-900/50 ${entry.writable ? '' : 'opacity-60'}`}
+                                >
+                                  <td className="px-2 py-1.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={entry.writable && selected.has(entry.name)}
+                                      disabled={!entry.writable || isBatchWriting}
+                                      title={why ?? undefined}
+                                      aria-label={`Write ${entry.name}`}
+                                      onChange={(e) => toggle(entry.name, e.target.checked)}
+                                      className="rounded border-zinc-700 bg-zinc-900 text-sky-500"
+                                    />
+                                  </td>
+                                  <td className="px-2 py-1.5">
+                                    <div className="flex items-center gap-1.5 font-semibold text-zinc-200">
+                                      {entry.name}
+                                      {entry.rebootRequired && (
+                                        <span
+                                          className="font-sans text-[9px] font-bold text-amber-300"
+                                          title="Takes effect after a reboot"
+                                        >
+                                          ↻ reboot
+                                        </span>
+                                      )}
+                                      {why && <span className="font-sans text-[9px] text-zinc-500">{why}</span>}
+                                      {entry.status === 'unread' && (
+                                        <span
+                                          className="font-sans text-[9px] text-zinc-500"
+                                          title="The vehicle's full parameter list isn't read: it may or may not have this"
+                                        >
+                                          not read yet
+                                        </span>
+                                      )}
+                                    </div>
+                                    {meta?.description && (
+                                      <div className="max-w-[260px] truncate font-sans text-[11px] text-zinc-500">
+                                        {meta.description}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right text-zinc-400">
+                                    {entry.vehicle !== undefined ? formatParamValue(entry.vehicle) : '—'}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right font-bold text-amber-300">
+                                    {formatParamValue(entry.file)}
+                                    {entry.units ? (
+                                      <span className="font-normal text-zinc-500"> {entry.units}</span>
+                                    ) : null}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right text-zinc-500">
+                                    {entry.defaultValue !== undefined ? formatParamValue(entry.defaultValue) : ''}
+                                  </td>
+                                  <td
+                                    className={`px-2 py-1.5 text-right text-[11px] ${state ? resultOf(state).cls : ''}`}
+                                  >
+                                    {state ? resultOf(state).text : ''}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            {shown.length === 0 && (
+                              <tr>
+                                <td colSpan={6} className="py-3 text-center font-sans text-zinc-500">
+                                  Nothing matches "{diffFilter.trim()}".
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+
+                  {batchWriteStatus && (
+                    <div
+                      className={`flex items-center gap-2 rounded-lg border p-2.5 text-xs ${
+                        isBatchWriting
+                          ? 'border-sky-500/40 bg-sky-950/60 text-sky-300'
+                          : 'border-zinc-700 bg-zinc-900 text-zinc-200'
+                      }`}
+                    >
+                      {isBatchWriting ? (
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-sky-400" />
+                      ) : (
+                        <Check className="h-4 w-4 shrink-0 text-emerald-400" />
+                      )}
+                      <span>{batchWriteStatus}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800 bg-zinc-900 px-4 py-3">
+                  <span className="flex items-center gap-1 text-[11px] text-zinc-400">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                    Review safety-critical parameters before writing to an active vehicle.
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {compare.entries.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={withVehicle === 0 || isBatchWriting}
+                        onClick={backupSelected}
+                        className="h-8 gap-1.5 text-xs"
+                        title="Save the vehicle's current values of the selected parameters (.param)"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Back up these first
+                      </Button>
+                    )}
+                    {isBatchWriting ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => (abortBatchRef.current = true)}
+                        className="h-8 text-xs font-bold"
+                      >
+                        Stop writing
+                      </Button>
+                    ) : (
+                      <Button variant="ghost" size="sm" onClick={() => setDiffModalOpen(false)} className="h-8 text-xs">
+                        Close
+                      </Button>
+                    )}
+                    {compare.entries.length > 0 && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        disabled={!connected || isBatchWriting || selectedCount === 0}
+                        onClick={handleWriteSelectedDiffs}
+                        className="h-8 gap-1.5 bg-sky-600 text-xs font-bold text-white hover:bg-sky-500"
+                      >
+                        {isBatchWriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        Write Selected ({selectedCount}) to Vehicle
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-        );
-      })()}
+          );
+        })()}
     </Card>
   );
 };

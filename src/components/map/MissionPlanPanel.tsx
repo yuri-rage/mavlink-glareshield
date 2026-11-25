@@ -2,6 +2,7 @@
 // actions (undo, add, save to file, reset, exit). Docked at the side on a wide map, a bottom sheet on a narrow one.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+
 import {
   AlertTriangle,
   ArrowDown,
@@ -21,14 +22,28 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { cmdHasLocation, getVehicleCategory } from '../../mavlink/messages';
+
+import { downloadFile } from '../../lib/download';
 import {
-  CMD_DO_JUMP,
-  MAV_FRAME,
+  lengthUnit,
+  paramUnitKind,
+  RAW_LENGTH,
+  RAW_SPEED,
+  relabel,
+  speedUnit,
+  wholeLength,
+} from '../../lib/inputUnits';
+import { useConfirmStep } from '../../lib/useWaypointNavigation';
+import { validateFenceDraft } from '../../mavlink/fenceDraft';
+import { cmdHasLocation, getVehicleCategory } from '../../mavlink/messages';
+import { ALTITUDE_FRAMES, MISSION_COMMANDS, missionCommandInfo } from '../../mavlink/missionCommands';
+import {
   changeCommand,
+  CMD_DO_JUMP,
   draftToItems,
   insertItems,
   jumpsTargeting,
+  MAV_FRAME,
   moveItem,
   newWaypoint,
   removeItems,
@@ -38,28 +53,28 @@ import {
   type DraftItem,
   type MissionDraft,
 } from '../../mavlink/missionDraft';
-import { ALTITUDE_FRAMES, MISSION_COMMANDS, missionCommandInfo } from '../../mavlink/missionCommands';
 import { missionFileStem, toQgcWpl } from '../../mavlink/missionFileWriter';
-import { isAnyDirty, isDraftDirty, isFenceDirty, isRallyDirty, useMissionPlanStore } from '../../store/missionPlanStore';
+import { fliesSplines, missionPathLegs, routeIndices } from '../../mavlink/missionPath';
+import { missionSummary, type MissionSummary } from '../../mavlink/missionSummary';
 import { validateRallyDraft } from '../../mavlink/rallyDraft';
-import { validateFenceDraft } from '../../mavlink/fenceDraft';
-import { RallyPlanBody } from './RallyPlanBody';
+import { routeFenceIssues } from '../../mavlink/routeFence';
+import { planningVehicle, useLastVehicleStore } from '../../store/lastVehicleStore';
+import {
+  isAnyDirty,
+  isDraftDirty,
+  isFenceDirty,
+  isRallyDirty,
+  useMissionPlanStore,
+} from '../../store/missionPlanStore';
 import { useMissionTerrainStore } from '../../store/missionTerrainStore';
-import { FencePlanBody } from './FencePlanBody';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
-import { useConfirmStep } from '../../lib/useWaypointNavigation';
-import { downloadFile } from '../../lib/download';
+import { FencePlanBody } from './FencePlanBody';
 import { OPEN_ACCEPT } from './MissionMenu';
-import { ICON_BTN, INPUT, NumField, frameTag } from './planUi';
-import { RAW_LENGTH, RAW_SPEED, lengthUnit, paramUnitKind, relabel, speedUnit, wholeLength } from '../../lib/inputUnits';
-import { missionSummary, type MissionSummary } from '../../mavlink/missionSummary';
-import { routeFenceIssues } from '../../mavlink/routeFence';
-import { fliesSplines, missionPathLegs, routeIndices } from '../../mavlink/missionPath';
-import { planningVehicle, useLastVehicleStore } from '../../store/lastVehicleStore';
+import { frameTag, ICON_BTN, INPUT, NumField } from './planUi';
+import { RallyPlanBody } from './RallyPlanBody';
 
 export { typedValue } from './planUi';
-
 
 export type PlanPanelLayout = 'side' | 'sheet';
 
@@ -107,10 +122,13 @@ const MissionSummaryLine: React.FC<{ summary: MissionSummary }> = ({ summary }) 
   const sp = summary.speeds;
   const title =
     `Estimated at ${formatSpeed(sp.horizontal).full} (${sp.source}), climbing ${formatSpeed(sp.up).full}, descending ${formatSpeed(sp.down).full}; ` +
-    `holds, loiters, speed changes${sp.accel ? ', stops and RTL\'s wait' : ''} included${summary.jumps ? ', jumps followed' : ''}; ` +
+    `holds, loiters, speed changes${sp.accel ? ", stops and RTL's wait" : ''} included${summary.jumps ? ', jumps followed' : ''}; ` +
     `no wind, turns at full speed (expect a little longer).`;
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-zinc-800 bg-zinc-900/40 px-2 py-1 font-mono text-[10px] text-zinc-300" title={title}>
+    <div
+      className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-zinc-800 bg-zinc-900/40 px-2 py-1 font-mono text-[10px] text-zinc-300"
+      title={title}
+    >
       <span className="font-bold text-sky-300">≈ {time}</span>
       {summary.openEnded && <span className="text-amber-300">then {summary.openEnded}</span>}
       <span>· {formatDistance(summary.distanceM).full}</span>
@@ -121,7 +139,11 @@ const MissionSummaryLine: React.FC<{ summary: MissionSummary }> = ({ summary }) 
 };
 
 /** One line describing an item, for the list. */
-function itemSummary(it: DraftItem, formatAlt: (m: number) => string, fmtParam: (label: string, v: number) => string): string {
+function itemSummary(
+  it: DraftItem,
+  formatAlt: (m: number) => string,
+  fmtParam: (label: string, v: number) => string
+): string {
   if (it.command === CMD_DO_JUMP) {
     return `→ #${it.param1}, ${it.param2 === -1 ? 'forever' : `×${it.param2}`}`;
   }
@@ -139,7 +161,11 @@ function itemSummary(it: DraftItem, formatAlt: (m: number) => string, fmtParam: 
 }
 
 /** The command picker: every known command, grouped, plus the item's own command when it isn't listed. */
-const CommandSelect: React.FC<{ value: number; onChange: (id: number) => void; className?: string }> = ({ value, onChange, className }) => {
+const CommandSelect: React.FC<{ value: number; onChange: (id: number) => void; className?: string }> = ({
+  value,
+  onChange,
+  className,
+}) => {
   const known = MISSION_COMMANDS.some((c) => c.id === value);
   return (
     <select value={value} onChange={(e) => onChange(Number(e.target.value))} className={className ?? INPUT}>
@@ -197,7 +223,11 @@ const ItemEditor: React.FC<{
       {hasUnitFields && (
         <div className="flex items-center justify-end gap-1 text-[10px] text-zinc-500">
           Units
-          <div className="flex rounded-md border border-zinc-700 p-0.5" role="group" aria-label="Units for this item's values">
+          <div
+            className="flex rounded-md border border-zinc-700 p-0.5"
+            role="group"
+            aria-label="Units for this item's values"
+          >
             {(['user', 'raw'] as const).map((u) => (
               <button
                 key={u}
@@ -221,7 +251,12 @@ const ItemEditor: React.FC<{
             <NumField label="Longitude" value={it.y} digits={7} onCommit={(v) => set({ y: v })} />
           </div>
           <div className="grid grid-cols-2 gap-1.5">
-            <NumField label={`Altitude (${len.unit})`} value={len.fromSi(it.z)} digits={len.digits} onCommit={(v) => set({ z: len.toSi(v) })} />
+            <NumField
+              label={`Altitude (${len.unit})`}
+              value={len.fromSi(it.z)}
+              digits={len.digits}
+              onCommit={(v) => set({ z: len.toSi(v) })}
+            />
             <label className="block min-w-0 space-y-0.5">
               <span className="block truncate text-[10px] text-zinc-500">Altitude frame</span>
               <select value={it.frame} onChange={(e) => set({ frame: Number(e.target.value) })} className={INPUT}>
@@ -255,7 +290,12 @@ const ItemEditor: React.FC<{
           {!hasLocation &&
             info.extra?.map((label, k) =>
               label ? (
-                <NumField key={`e${k}`} label={label} value={extras[k]} onCommit={(v) => set({ [(['x', 'y', 'z'] as const)[k]]: v })} />
+                <NumField
+                  key={`e${k}`}
+                  label={label}
+                  value={extras[k]}
+                  onCommit={(v) => set({ [(['x', 'y', 'z'] as const)[k]]: v })}
+                />
               ) : null
             )}
         </div>
@@ -264,8 +304,15 @@ const ItemEditor: React.FC<{
       {issues.length > 0 && (
         <ul className="space-y-0.5">
           {issues.map((iss, k) => (
-            <li key={k} className={`flex gap-1 text-[10px] leading-snug ${iss.severity === 'error' ? 'text-red-300' : 'text-amber-300'}`}>
-              {iss.severity === 'error' ? <XCircle className="mt-px h-3 w-3 shrink-0" /> : <AlertTriangle className="mt-px h-3 w-3 shrink-0" />}
+            <li
+              key={k}
+              className={`flex gap-1 text-[10px] leading-snug ${iss.severity === 'error' ? 'text-red-300' : 'text-amber-300'}`}
+            >
+              {iss.severity === 'error' ? (
+                <XCircle className="mt-px h-3 w-3 shrink-0" />
+              ) : (
+                <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+              )}
               {iss.message}
             </li>
           ))}
@@ -273,15 +320,30 @@ const ItemEditor: React.FC<{
       )}
 
       <div className="flex items-center gap-1">
-        <button type="button" className={ICON_BTN} disabled={index <= 1} title="Move up" onClick={() => apply((d) => moveItem(d, index, index - 1), index - 1)}>
+        <button
+          type="button"
+          className={ICON_BTN}
+          disabled={index <= 1}
+          title="Move up"
+          onClick={() => apply((d) => moveItem(d, index, index - 1), index - 1)}
+        >
           <ArrowUp className="h-3.5 w-3.5" />
         </button>
-        <button type="button" className={ICON_BTN} disabled={index >= last} title="Move down" onClick={() => apply((d) => moveItem(d, index, index + 1), index + 1)}>
+        <button
+          type="button"
+          className={ICON_BTN}
+          disabled={index >= last}
+          title="Move down"
+          onClick={() => apply((d) => moveItem(d, index, index + 1), index + 1)}
+        >
           <ArrowDown className="h-3.5 w-3.5" />
         </button>
         <div className="ml-auto flex min-w-0 items-center gap-1">
           {del.armed && jumps.length > 0 && (
-            <span className="truncate text-[10px] text-amber-300" title={`Jump ${jumps.map((j) => `#${j}`).join(', ')} will move to the next item`}>
+            <span
+              className="truncate text-[10px] text-amber-300"
+              title={`Jump ${jumps.map((j) => `#${j}`).join(', ')} will move to the next item`}
+            >
               Jump {jumps.map((j) => `#${j}`).join(', ')} targets this
             </span>
           )}
@@ -360,7 +422,11 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   const rallyLimitKm = useTelemetryStore((s) => s.parameters['RALLY_LIMIT_KM']?.value);
   const rallyUnsupported = useTelemetryStore((s) => s.rallySupport === 'unsupported');
   const rallyIssues = useMemo(
-    () => validateRallyDraft(rallyDraft, { home: homeKnown ? { lat: homeLat, lon: homeLon } : null, limitKm: rallyLimitKm }),
+    () =>
+      validateRallyDraft(rallyDraft, {
+        home: homeKnown ? { lat: homeLat, lon: homeLon } : null,
+        limitKm: rallyLimitKm,
+      }),
     [rallyDraft, homeKnown, homeLat, homeLon, rallyLimitKm]
   );
   const draft = useMissionPlanStore((s) => s.history.present);
@@ -379,7 +445,16 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
   const rawParams = useUnitsStore((s) => s.paramUnits === 'raw');
   const summaryParam = (label: string, v: number) => {
     const kind = paramUnitKind(label);
-    const u = kind === 'length' ? (rawParams ? RAW_LENGTH : lengthUnit(unitSystem)) : kind === 'speed' ? (rawParams ? RAW_SPEED : speedUnit(unitSystem)) : null;
+    const u =
+      kind === 'length'
+        ? rawParams
+          ? RAW_LENGTH
+          : lengthUnit(unitSystem)
+        : kind === 'speed'
+          ? rawParams
+            ? RAW_SPEED
+            : speedUnit(unitSystem)
+          : null;
     return u ? `${Number(u.fromSi(v).toFixed(u.digits))} ${u.unit}` : String(Number(v.toPrecision(6)));
   };
 
@@ -402,7 +477,14 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
     const cat = getVehicleCategory(v.type);
     const param = (n: string) => v.params[n];
     const splines = fliesSplines(cat);
-    const pathItems = draft.items.map((it) => ({ command: it.command, lat: it.x, lon: it.y, alt: it.z, frame: it.frame, param1: it.param1 }));
+    const pathItems = draft.items.map((it) => ({
+      command: it.command,
+      lat: it.x,
+      lon: it.y,
+      alt: it.z,
+      frame: it.frame,
+      param1: it.param1,
+    }));
     const legs = missionPathLegs(pathItems, routeIndices(pathItems, splines), splines);
     const home = draft.items[0];
     const len = lengthUnit(unitSystem);
@@ -430,15 +512,20 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
       // The legs flown (jump returns, RTL's), plus any drawn leg the walk didn't reach (a landing sequence after RTL
       // or an unlimited loiter, entered by DO_LAND_START or by hand).
       routeIssues: summary
-        ? routeFenceIssues([...summary.legs, ...legs.filter((l) => !summary.legs.some((f) => f.from === l.from && f.to === l.to))], draft.items, fenceDraft, {
-            home: home && (home.x !== 0 || home.y !== 0) ? { lat: home.x, lon: home.y } : undefined,
-            types: param('FENCE_TYPE'),
-            inclusionUnion: fenceOptions !== undefined ? (Math.round(fenceOptions) & 2) !== 0 : undefined,
-            altMax: param('FENCE_ALT_MAX'),
-            circleRadius: param('FENCE_RADIUS'),
-            enabled,
-            fmtLen: (m) => wholeLength(m, len),
-          })
+        ? routeFenceIssues(
+            [...summary.legs, ...legs.filter((l) => !summary.legs.some((f) => f.from === l.from && f.to === l.to))],
+            draft.items,
+            fenceDraft,
+            {
+              home: home && (home.x !== 0 || home.y !== 0) ? { lat: home.x, lon: home.y } : undefined,
+              types: param('FENCE_TYPE'),
+              inclusionUnion: fenceOptions !== undefined ? (Math.round(fenceOptions) & 2) !== 0 : undefined,
+              altMax: param('FENCE_ALT_MAX'),
+              circleRadius: param('FENCE_RADIUS'),
+              enabled,
+              fmtLen: (m) => wholeLength(m, len),
+            }
+          )
         : [],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -448,7 +535,8 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
     [draft, vehicleType, terrainIssues, routeIssues]
   );
   // The header's counts are for the layer being edited.
-  const activeIssues: { index: number; severity: string }[] = layer === 'rally' ? rallyIssues : layer === 'fence' ? fenceIssues : issues;
+  const activeIssues: { index: number; severity: string }[] =
+    layer === 'rally' ? rallyIssues : layer === 'fence' ? fenceIssues : issues;
   const errors = activeIssues.filter((i) => i.severity === 'error').length;
   const warnings = activeIssues.length - errors;
   const rallyErrors = rallyIssues.some((i) => i.severity === 'error');
@@ -522,8 +610,7 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
           ? 'No changes to upload'
           : null;
 
-  const sourceText =
-    source.kind === 'vehicle' ? 'from vehicle' : source.kind === 'file' ? source.name : 'new';
+  const sourceText = source.kind === 'vehicle' ? 'from vehicle' : source.kind === 'file' ? source.name : 'new';
 
   const shell =
     layout === 'side'
@@ -539,14 +626,21 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
       {/* Header */}
       <div className="flex items-center gap-1 border-b border-zinc-800 px-2 py-1.5">
         {layout === 'sheet' && (
-          <button type="button" className={ICON_BTN} title={collapsed ? 'Show editor' : 'Hide editor'} onClick={() => setCollapsed((v) => !v)}>
+          <button
+            type="button"
+            className={ICON_BTN}
+            title={collapsed ? 'Show editor' : 'Hide editor'}
+            onClick={() => setCollapsed((v) => !v)}
+          >
             {collapsed ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
         )}
         <div className="min-w-0 flex-1">
           {/* Which draft is being edited is switched over the map (PlanLayerSwitch); here, just its name. */}
           <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider">
-            <span className={layer === 'rally' ? 'text-fuchsia-300' : layer === 'fence' ? 'text-red-300' : 'text-amber-300'}>
+            <span
+              className={layer === 'rally' ? 'text-fuchsia-300' : layer === 'fence' ? 'text-red-300' : 'text-amber-300'}
+            >
               {layer === 'rally' ? 'Rally points' : layer === 'fence' ? 'Fence' : 'Mission'}
             </span>
             {(layer === 'rally' ? rallyDirty : layer === 'fence' ? fenceDirty : dirty) && (
@@ -586,8 +680,16 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
                 }
               }}
             >
-              {errors > 0 && <span className="text-red-300">{errors} error{errors === 1 ? '' : 's'}</span>}
-              {warnings > 0 && <span className="text-amber-300">{warnings} warning{warnings === 1 ? '' : 's'}</span>}
+              {errors > 0 && (
+                <span className="text-red-300">
+                  {errors} error{errors === 1 ? '' : 's'}
+                </span>
+              )}
+              {warnings > 0 && (
+                <span className="text-amber-300">
+                  {warnings} warning{warnings === 1 ? '' : 's'}
+                </span>
+              )}
             </button>
           )}
         </div>
@@ -597,7 +699,12 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
         <button type="button" className={ICON_BTN} disabled={!canRedoActive} title="Redo" onClick={redo}>
           <Redo2 className="h-3.5 w-3.5" />
         </button>
-        <button type="button" className={ICON_BTN} title={maximized ? 'Restore map size' : 'Maximize map for planning'} onClick={onToggleMaximize}>
+        <button
+          type="button"
+          className={ICON_BTN}
+          title={maximized ? 'Restore map size' : 'Maximize map for planning'}
+          onClick={onToggleMaximize}
+        >
           {maximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
         </button>
         <button
@@ -641,7 +748,7 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
         </div>
       )}
       {uploading && (
-        <div className="border-b border-sky-500/40 bg-sky-950/40 px-2 py-1.5 text-[10px] text-sky-200 animate-pulse">
+        <div className="animate-pulse border-b border-sky-500/40 bg-sky-950/40 px-2 py-1.5 text-[10px] text-sky-200">
           Uploading and checking… editing resumes when it finishes.
         </div>
       )}
@@ -658,14 +765,14 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
             rallyUnsupported
               ? "This vehicle doesn't support rally points"
               : !connected
-              ? 'Connect to a vehicle to upload'
-              : uploading || transferBusy
-                ? 'A mission transfer is in progress'
-                : rallyErrors
-                  ? 'Fix the errors first'
-                  : !rallyDirty
-                    ? 'No changes to upload'
-                    : null
+                ? 'Connect to a vehicle to upload'
+                : uploading || transferBusy
+                  ? 'A mission transfer is in progress'
+                  : rallyErrors
+                    ? 'Fix the errors first'
+                    : !rallyDirty
+                      ? 'No changes to upload'
+                      : null
           }
         />
       )}
@@ -728,7 +835,9 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
                     >
                       {isHome ? 'H' : i}
                     </span>
-                    <span className={`w-[74px] shrink-0 truncate font-mono text-[10px] font-bold ${isHome ? 'text-zinc-500' : 'text-zinc-200'}`}>
+                    <span
+                      className={`w-[74px] shrink-0 truncate font-mono text-[10px] font-bold ${isHome ? 'text-zinc-500' : 'text-zinc-200'}`}
+                    >
                       {isHome ? 'HOME' : info.short}
                     </span>
                     <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-zinc-400">
@@ -736,7 +845,11 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
                         ? it.x === 0 && it.y === 0
                           ? 'set by the vehicle'
                           : `${it.x.toFixed(5)}, ${it.y.toFixed(5)}`
-                        : itemSummary(it, (m) => (rawParams ? `${Number(m.toFixed(2))} m` : formatAltitude(m).full), summaryParam)}
+                        : itemSummary(
+                            it,
+                            (m) => (rawParams ? `${Number(m.toFixed(2))} m` : formatAltitude(m).full),
+                            summaryParam
+                          )}
                     </span>
                     {own.some((x) => x.severity === 'error') ? (
                       <XCircle className="h-3 w-3 shrink-0 text-red-400" />
@@ -786,7 +899,12 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
               <button type="button" className={ICON_BTN} title="Save draft to a .waypoints file" onClick={saveDraft}>
                 <Download className="h-3.5 w-3.5" />
               </button>
-              <button type="button" className={ICON_BTN} title="Open a mission file into the draft" onClick={() => fileRef.current?.click()}>
+              <button
+                type="button"
+                className={ICON_BTN}
+                title="Open a mission file into the draft"
+                onClick={() => fileRef.current?.click()}
+              >
                 <FolderOpen className="h-3.5 w-3.5" />
               </button>
               <input
@@ -810,7 +928,9 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
                   onResetToVehicle();
                 }}
                 className={`inline-flex h-7 items-center gap-1 rounded-md border px-1.5 text-[10px] font-bold disabled:opacity-35 ${
-                  resetConfirm.armed ? 'border-red-500 bg-red-600 text-white' : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
+                  resetConfirm.armed
+                    ? 'border-red-500 bg-red-600 text-white'
+                    : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
                 }`}
               >
                 <RotateCcw className="h-3 w-3" />

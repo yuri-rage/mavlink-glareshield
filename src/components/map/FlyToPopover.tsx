@@ -1,9 +1,11 @@
 // A small card pinned beside the point picked on the map: set the altitude and send the vehicle there in GUIDED
 // (DO_REPOSITION). Enter sends, Escape cancels.
 
-import { useLengthUnit } from '../../lib/inputUnits';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+
 import { LocateFixed, Minus, Navigation, Plus, X } from 'lucide-react';
+
+import { useLengthUnit } from '../../lib/inputUnits';
 
 interface FlyToPopoverProps {
   lat: number;
@@ -28,7 +30,20 @@ const CARD_W = 232;
 const CARD_H = 160;
 const GAP = 14;
 
-export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bounds, altInput, onAltInput, modeName, armed, accuracyM, onSend, onCancel, extra }) => {
+export const FlyToPopover: React.FC<FlyToPopoverProps> = ({
+  lat,
+  lon,
+  anchor,
+  bounds,
+  altInput,
+  onAltInput,
+  modeName,
+  armed,
+  accuracyM,
+  onSend,
+  onCancel,
+  extra,
+}) => {
   const sendRef = useRef<HTMLButtonElement | null>(null);
   // The card's real height (its extra actions vary), measured after each render, to place it above or below.
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -70,7 +85,7 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
   return (
     <form
       ref={formRef}
-      className="absolute z-[1000] rounded-lg border border-sky-500/40 bg-zinc-950/95 backdrop-blur-md shadow-2xl text-xs"
+      className="absolute z-[1000] rounded-lg border border-sky-500/40 bg-zinc-950/95 text-xs shadow-2xl backdrop-blur-md"
       style={{ top: Math.max(4, top), left, width: CARD_W }}
       onSubmit={(e) => {
         e.preventDefault();
@@ -102,22 +117,36 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
             </>
           )}
         </span>
-        <button type="button" data-cancel onClick={onCancel} className="p-0.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800" aria-label="Cancel">
+        <button
+          type="button"
+          data-cancel
+          onClick={onCancel}
+          className="rounded p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+          aria-label="Cancel"
+        >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
       <div className="px-2.5 pt-0.5 font-mono text-[10px] text-zinc-400">
         {lat.toFixed(6)}, {lon.toFixed(6)}
         {accuracyM !== undefined && (
-          <span className={accuracyM > 30 ? 'text-amber-400' : 'text-zinc-500'}> ±{Math.round(len.fromSi(accuracyM))} {len.unit}</span>
+          <span className={accuracyM > 30 ? 'text-amber-400' : 'text-zinc-500'}>
+            {' '}
+            ±{Math.round(len.fromSi(accuracyM))} {len.unit}
+          </span>
         )}
       </div>
 
-      <div className="px-2.5 pt-2 flex items-center gap-1.5">
-        <label htmlFor="flyto-alt" className="text-zinc-400 mr-auto" title="Above home">
+      <div className="flex items-center gap-1.5 px-2.5 pt-2">
+        <label htmlFor="flyto-alt" className="mr-auto text-zinc-400" title="Above home">
           Altitude
         </label>
-        <button type="button" onClick={() => step(-stepBy)} className="h-6 w-6 rounded border border-zinc-700 text-zinc-300 hover:bg-zinc-800 flex items-center justify-center" aria-label={`${stepBy} ${len.unit} lower`}>
+        <button
+          type="button"
+          onClick={() => step(-stepBy)}
+          className="flex h-6 w-6 items-center justify-center rounded border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+          aria-label={`${stepBy} ${len.unit} lower`}
+        >
           <Minus className="h-3 w-3" />
         </button>
         <input
@@ -129,15 +158,20 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
           step={1}
           value={altInput}
           onChange={(e) => onAltInput(e.target.value)}
-          className="h-6 w-14 rounded border border-zinc-700 bg-zinc-900 text-center font-mono text-zinc-100 focus:outline-none focus:border-sky-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+          className="h-6 w-14 rounded border border-zinc-700 bg-zinc-900 text-center font-mono text-zinc-100 [appearance:textfield] focus:border-sky-500 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none"
         />
-        <span className="text-[10px] text-zinc-500 -ml-1 mr-0.5">{len.unit}</span>
-        <button type="button" onClick={() => step(stepBy)} className="h-6 w-6 rounded border border-zinc-700 text-zinc-300 hover:bg-zinc-800 flex items-center justify-center" aria-label={`${stepBy} ${len.unit} higher`}>
+        <span className="-ml-1 mr-0.5 text-[10px] text-zinc-500">{len.unit}</span>
+        <button
+          type="button"
+          onClick={() => step(stepBy)}
+          className="flex h-6 w-6 items-center justify-center rounded border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+          aria-label={`${stepBy} ${len.unit} higher`}
+        >
           <Plus className="h-3 w-3" />
         </button>
       </div>
 
-      <div className="px-2.5 pt-1.5 text-[10px] leading-snug min-h-[14px]">
+      <div className="min-h-[14px] px-2.5 pt-1.5 text-[10px] leading-snug">
         {!armed ? (
           <span className="text-amber-400">Vehicle is disarmed; it will not move until armed.</span>
         ) : !inGuided ? (
@@ -153,7 +187,7 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({ lat, lon, anchor, bo
         <button
           ref={sendRef}
           type="submit"
-          className={`w-full h-7 rounded-md font-bold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${
+          className={`h-7 w-full rounded-md font-bold text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${
             inGuided ? 'bg-sky-600 hover:bg-sky-500' : 'bg-amber-600 hover:bg-amber-500'
           }`}
         >

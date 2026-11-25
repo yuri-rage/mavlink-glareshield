@@ -10,14 +10,20 @@
     <meta name="theme-color" content="#09090b" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Glareshield — ArduPilot ground control in your browser</title>
-    <meta name="description" content="Live HUD, tactical map, telemetry and flight controls for ArduPilot vehicles over MAVLink. Runs in the browser, nothing to install." />
+    <meta
+      name="description"
+      content="Live HUD, tactical map, telemetry and flight controls for ArduPilot vehicles over MAVLink. Runs in the browser, nothing to install."
+    />
 
     <!-- Link previews (messengers, social sites): crawlers read these from the raw HTML without running scripts. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Glareshield" />
     <meta property="og:url" content="https://glareshield.yurirage.com/" />
     <meta property="og:title" content="Glareshield — ArduPilot ground control in your browser" />
-    <meta property="og:description" content="Live HUD, tactical map, telemetry and flight controls for ArduPilot vehicles. Nothing to install." />
+    <meta
+      property="og:description"
+      content="Live HUD, tactical map, telemetry and flight controls for ArduPilot vehicles. Nothing to install."
+    />
     <meta property="og:image" content="https://glareshield.yurirage.com/og-image.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
@@ -25,19 +31,54 @@
     <meta property="og:image:alt" content="Glareshield's heads-up display beside the Glareshield logo" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Glareshield — ArduPilot ground control in your browser" />
-    <meta name="twitter:description" content="Live HUD, tactical map, telemetry and flight controls for ArduPilot vehicles. Nothing to install." />
+    <meta
+      name="twitter:description"
+      content="Live HUD, tactical map, telemetry and flight controls for ArduPilot vehicles. Nothing to install."
+    />
     <meta name="twitter:image" content="https://glareshield.yurirage.com/og-image.png" />
     <link rel="canonical" href="https://glareshield.yurirage.com/" />
   </head>
-  <body class="bg-background text-foreground antialiased min-h-screen selection:bg-primary/20">
+  <body class="min-h-screen bg-background text-foreground antialiased selection:bg-primary/20">
     <div id="root">
-      <div id="initial-loader" style="position: fixed; top: 0; left: 0; right: 0; height: 53px; border-bottom: 1px solid #27272a; background: rgba(9, 9, 11, 0.9); display: flex; align-items: center; padding: 0 1rem; gap: 0.625rem; font-family: ui-sans-serif, system-ui, sans-serif;">
-        <div style="width: 32px; height: 32px; border-radius: 0.5rem; border: 1px solid rgba(56, 189, 248, 0.25); background: #18181b; display: flex; align-items: center; justify-content: center; padding: 2px;">
-          <img src="/logo-64.png" alt="Glareshield Logo" style="width: 100%; height: 100%; object-fit: contain;" />
+      <div
+        id="initial-loader"
+        style="
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 53px;
+          border-bottom: 1px solid #27272a;
+          background: rgba(9, 9, 11, 0.9);
+          display: flex;
+          align-items: center;
+          padding: 0 1rem;
+          gap: 0.625rem;
+          font-family: ui-sans-serif, system-ui, sans-serif;
+        "
+      >
+        <div
+          style="
+            width: 32px;
+            height: 32px;
+            border-radius: 0.5rem;
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            background: #18181b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px;
+          "
+        >
+          <img src="/logo-64.png" alt="Glareshield Logo" style="width: 100%; height: 100%; object-fit: contain" />
         </div>
         <div>
-          <span style="font-weight: bold; font-size: 0.95rem; color: #f4f4f5; letter-spacing: -0.025em;">GLARESHIELD</span>
-          <span style="display: block; font-size: 10px; color: #a1a1aa; font-family: monospace; line-height: 1;">ArduPilot MAVLink</span>
+          <span style="font-weight: bold; font-size: 0.95rem; color: #f4f4f5; letter-spacing: -0.025em"
+            >GLARESHIELD</span
+          >
+          <span style="display: block; font-size: 10px; color: #a1a1aa; font-family: monospace; line-height: 1"
+            >ArduPilot MAVLink</span
+          >
         </div>
       </div>
     </div>

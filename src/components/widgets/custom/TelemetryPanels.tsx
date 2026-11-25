@@ -1,18 +1,28 @@
 // Read-only custom widget panels: numbers, lists, gauges, charts, compass, bars and LEDs.
 
-import { useInPane } from '../../dashboard/paneContext';
 import React, { useEffect, useMemo, useRef } from 'react';
-import { useTelemetryStore } from '../../../store/telemetryStore';
-import { evaluateAlert, toDisplayUnits, type BindingReading } from '../../../lib/widgetValues';
+
 import { valueSampler } from '../../../lib/valueSampler';
+import { evaluateAlert, toDisplayUnits, type BindingReading } from '../../../lib/widgetValues';
+import { useTelemetryStore } from '../../../store/telemetryStore';
 import type { WidgetDataBinding } from '../../../types/widget';
-import { RadialGauge } from './RadialGauge';
-import { LinearGauge } from './LinearGauge';
+import { useInPane } from '../../dashboard/paneContext';
 import { GaugeGrid, type GridGauge } from './GaugeGrid';
-import { TimeSeriesChart, type ChartSeries } from './TimeSeriesChart';
+import { LinearGauge } from './LinearGauge';
 import { ACCENT_HEX, SERIES_HEX, useChromeColors, type ColorScheme } from './palette';
-import { displayBinding, extractMultiBarItems, gaugeLevels, isMultiGauge, multiBarGroup, multiBarItemsEqual, seriesLabel, type MultiBarItem } from './panelModel';
 import type { PanelProps } from './panelKit';
+import {
+  displayBinding,
+  extractMultiBarItems,
+  gaugeLevels,
+  isMultiGauge,
+  multiBarGroup,
+  multiBarItemsEqual,
+  seriesLabel,
+  type MultiBarItem,
+} from './panelModel';
+import { RadialGauge } from './RadialGauge';
+import { TimeSeriesChart, type ChartSeries } from './TimeSeriesChart';
 
 /** The primary value in display units, with its range (min / max are configured in base units). */
 function primaryView({ def, readings, system }: PanelProps) {
@@ -32,7 +42,11 @@ function primaryView({ def, readings, system }: PanelProps) {
 /** The first extra value, drawn as a marker on single gauges and the compass rose. */
 function secondaryView(bindings: WidgetDataBinding[], readings: BindingReading[]) {
   return bindings.length > 1 && readings[1]
-    ? { value: readings[1].value, text: `${readings[1].text} ${readings[1].unit}`.trim(), label: seriesLabel(bindings[1]) }
+    ? {
+        value: readings[1].value,
+        text: `${readings[1].text} ${readings[1].unit}`.trim(),
+        label: seriesLabel(bindings[1]),
+      }
     : null;
 }
 
@@ -69,14 +83,14 @@ export const StatPanel: React.FC<PanelProps> = (props) => {
   // glance. Elsewhere, the usual size.
   const inPane = useInPane();
   return (
-    <div className={`text-center py-2 transition-opacity ${props.staleAll ? 'opacity-40' : ''}`}>
+    <div className={`py-2 text-center transition-opacity ${props.staleAll ? 'opacity-40' : ''}`}>
       <div
         className={`${inPane ? '' : 'text-3xl'} font-mono font-bold leading-tight ${props.scheme.valueText}`}
         style={inPane ? { fontSize: 'clamp(1.875rem, 13cqw, 4.5rem)' } : undefined}
       >
         {boundText} <span className="text-sm font-normal text-zinc-400">{unit}</span>
       </div>
-      {props.def.description && <p className="text-[11px] text-zinc-500 mt-1">{props.def.description}</p>}
+      {props.def.description && <p className="mt-1 text-[11px] text-zinc-500">{props.def.description}</p>}
     </div>
   );
 };
@@ -84,7 +98,9 @@ export const StatPanel: React.FC<PanelProps> = (props) => {
 export const TextPanel: React.FC<PanelProps> = (props) => {
   const { boundText, unit } = primaryView(props);
   return (
-    <div className={`bg-zinc-900/60 border border-zinc-800 rounded-lg p-2.5 font-mono text-xs text-zinc-300 transition-opacity ${props.staleAll ? 'opacity-40' : ''}`}>
+    <div
+      className={`rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5 font-mono text-xs text-zinc-300 transition-opacity ${props.staleAll ? 'opacity-40' : ''}`}
+    >
       {props.def.description || 'Raw output'}: <b className={props.scheme.icon}>{boundText}</b> {unit}
     </div>
   );
@@ -166,7 +182,10 @@ export const ValueListPanel: React.FC<PanelProps> = ({ bindings, readings }) => 
       const level = evaluateAlert(r?.base ?? null, b);
       return (
         <React.Fragment key={`${b.messageName}.${b.fieldName}.${i}`}>
-          <span className={`text-zinc-400 truncate ${r?.stale ? 'opacity-40' : ''}`} title={`${b.messageName}.${b.fieldName}`}>
+          <span
+            className={`truncate text-zinc-400 ${r?.stale ? 'opacity-40' : ''}`}
+            title={`${b.messageName}.${b.fieldName}`}
+          >
             {seriesLabel(b)}
           </span>
           <span
@@ -179,7 +198,7 @@ export const ValueListPanel: React.FC<PanelProps> = ({ bindings, readings }) => 
         </React.Fragment>
       );
     })}
-    {bindings.length === 0 && <span className="text-zinc-500 col-span-2">No values configured.</span>}
+    {bindings.length === 0 && <span className="col-span-2 text-zinc-500">No values configured.</span>}
   </div>
 );
 
@@ -209,14 +228,18 @@ export const MultiBarPanel: React.FC<PanelProps> = ({ def, scheme }) => {
         const barColor = isCrit ? 'bg-red-500' : isWarn ? 'bg-amber-500' : scheme.bg;
         return (
           <div key={item.label} className="space-y-0.5">
-            <div className="flex justify-between items-center text-[11px] font-mono">
-              <span className="text-zinc-400 font-semibold">{item.label}</span>
-              <span className={isCrit ? 'text-red-400 font-bold' : isWarn ? 'text-amber-300 font-bold' : 'text-zinc-200'}>
+            <div className="flex items-center justify-between font-mono text-[11px]">
+              <span className="font-semibold text-zinc-400">{item.label}</span>
+              <span
+                className={isCrit ? 'font-bold text-red-400' : isWarn ? 'font-bold text-amber-300' : 'text-zinc-200'}
+              >
                 {item.displayValue ?? `${item.value} ${item.unit}`.trim()}
               </span>
             </div>
-            <div className="w-full bg-zinc-900 h-2 rounded overflow-hidden border border-zinc-800/80 relative">
-              {item.min < 0 && <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-zinc-600/80 z-10 -translate-x-1/2" />}
+            <div className="relative h-2 w-full overflow-hidden rounded border border-zinc-800/80 bg-zinc-900">
+              {item.min < 0 && (
+                <div className="absolute bottom-0 left-1/2 top-0 z-10 w-0.5 -translate-x-1/2 bg-zinc-600/80" />
+              )}
               <div className={`h-full ${barColor} transition-all duration-150`} style={{ width: `${barPct}%` }} />
             </div>
           </div>
@@ -233,8 +256,8 @@ export const CompassPanel: React.FC<PanelProps> = (props) => {
   const secondary = secondaryView(props.bindings, props.readings);
   return (
     <div className={`flex items-center justify-around gap-3 py-1 transition-opacity ${staleAll ? 'opacity-40' : ''}`}>
-      <div className="relative w-24 h-24 shrink-0">
-        <svg viewBox="0 0 100 100" className="w-full h-full">
+      <div className="relative h-24 w-24 shrink-0">
+        <svg viewBox="0 0 100 100" className="h-full w-full">
           <circle cx="50" cy="50" r="44" stroke={chrome.track} fill={chrome.panel} strokeWidth="2" />
           {Array.from({ length: 36 }, (_, i) => {
             const a = (i * 10 * Math.PI) / 180;
@@ -251,10 +274,18 @@ export const CompassPanel: React.FC<PanelProps> = (props) => {
               />
             );
           })}
-          <text x="50" y="22" textAnchor="middle" className="fill-sky-400 text-[9px] font-bold font-mono">N</text>
-          <text x="80" y="53" textAnchor="middle" fill={chrome.label} className="text-[8px] font-mono">E</text>
-          <text x="50" y="84" textAnchor="middle" fill={chrome.label} className="text-[8px] font-mono">S</text>
-          <text x="20" y="53" textAnchor="middle" fill={chrome.label} className="text-[8px] font-mono">W</text>
+          <text x="50" y="22" textAnchor="middle" className="fill-sky-400 font-mono text-[9px] font-bold">
+            N
+          </text>
+          <text x="80" y="53" textAnchor="middle" fill={chrome.label} className="font-mono text-[8px]">
+            E
+          </text>
+          <text x="50" y="84" textAnchor="middle" fill={chrome.label} className="font-mono text-[8px]">
+            S
+          </text>
+          <text x="20" y="53" textAnchor="middle" fill={chrome.label} className="font-mono text-[8px]">
+            W
+          </text>
           {secondary?.value !== null && secondary?.value !== undefined && (
             <g transform={`rotate(${secondary.value} 50 50)`}>
               <polygon points="50,6 46,14 54,14" fill="#d946ef" />
@@ -267,20 +298,20 @@ export const CompassPanel: React.FC<PanelProps> = (props) => {
           <circle cx="50" cy="50" r="3.5" fill={chrome.pivot} />
         </svg>
       </div>
-      <div className="text-right font-mono min-w-0">
+      <div className="min-w-0 text-right font-mono">
         <div className={`text-2xl font-bold ${scheme.valueText}`}>
           {boundText}
-          <span className="text-xs font-normal text-zinc-400 ml-0.5">{unit || '°'}</span>
+          <span className="ml-0.5 text-xs font-normal text-zinc-400">{unit || '°'}</span>
         </div>
         {secondary && (
-          <div className="text-[10px] mt-0.5 truncate" style={{ color: '#d946ef' }}>
+          <div className="mt-0.5 truncate text-[10px]" style={{ color: '#d946ef' }}>
             ▲ {secondary.label} {secondary.text}
           </div>
         )}
-        <div className="text-[11px] text-zinc-500 uppercase tracking-wider mt-0.5">
+        <div className="mt-0.5 text-[11px] uppercase tracking-wider text-zinc-500">
           {def.binding?.messageName || 'VECTOR'} · {def.binding?.fieldName || 'deg'}
         </div>
-        {def.description && <div className="text-[10px] text-zinc-400 mt-1">{def.description}</div>}
+        {def.description && <div className="mt-1 text-[10px] text-zinc-400">{def.description}</div>}
       </div>
     </div>
   );
@@ -299,7 +330,9 @@ export const ChartPanel: React.FC<PanelProps> = (props) => {
           key,
           ring,
           label: seriesLabel(b),
-          color: b.color || (i === 0 ? ACCENT_HEX[(def.colorScheme ?? 'default') as ColorScheme] : SERIES_HEX[i % SERIES_HEX.length]),
+          color:
+            b.color ||
+            (i === 0 ? ACCENT_HEX[(def.colorScheme ?? 'default') as ColorScheme] : SERIES_HEX[i % SERIES_HEX.length]),
           unit: readings[i]?.unit ?? b.unit ?? '',
           decimals: b.decimals ?? 1,
           toDisplay: (base: number) => toDisplayUnits(base, b, system),
@@ -317,7 +350,7 @@ export const ChartPanel: React.FC<PanelProps> = (props) => {
   }, [bindings, def.staleAfterSec]);
 
   return (
-    <div className="flex-1 min-h-[170px] flex flex-col">
+    <div className="flex min-h-[170px] flex-1 flex-col">
       <TimeSeriesChart
         series={series}
         config={{ yScale: 'auto', ...def.chart }}
@@ -337,10 +370,14 @@ export const LedPanel: React.FC<PanelProps> = (props) => {
   const on = primary?.base !== null && primary?.base !== undefined && primary.base > threshold && !primary.stale;
   return (
     <div className="flex items-center gap-3 py-2">
-      <div className={`h-5 w-5 rounded-full border shadow-lg ${on ? `${props.scheme.ledActive} animate-pulse` : 'bg-zinc-800 border-zinc-700'}`} />
+      <div
+        className={`h-5 w-5 rounded-full border shadow-lg ${on ? `${props.scheme.ledActive} animate-pulse` : 'border-zinc-700 bg-zinc-800'}`}
+      />
       <div>
-        <span className="text-sm font-bold text-zinc-200">{primary?.stale ? 'NO DATA' : on ? 'ACTIVE / HIGH' : 'INACTIVE / LOW'}</span>
-        <span className="text-[11px] text-zinc-500 block font-mono">
+        <span className="text-sm font-bold text-zinc-200">
+          {primary?.stale ? 'NO DATA' : on ? 'ACTIVE / HIGH' : 'INACTIVE / LOW'}
+        </span>
+        <span className="block font-mono text-[11px] text-zinc-500">
           Value: {boundText} {unit} · on above {threshold}
         </span>
       </div>

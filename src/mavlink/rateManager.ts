@@ -192,12 +192,7 @@ export class MessageRateManager {
 
       const prevInterval = this.currentRequestedIntervals.get(msgId);
       if (prevInterval !== intervalUs) {
-        const cmd = encoder.createSetMessageInterval(
-          this.targetSystem,
-          this.targetComponent,
-          msgId,
-          intervalUs
-        );
+        const cmd = encoder.createSetMessageInterval(this.targetSystem, this.targetComponent, msgId, intervalUs);
         mavlinkConnection.send(cmd);
         this.currentRequestedIntervals.set(msgId, intervalUs);
       }

@@ -1,4 +1,5 @@
 import * as React from 'react';
+
 import { cn } from '../../lib/utils';
 
 /**
@@ -32,14 +33,27 @@ Card.displayName = 'Card';
 export const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => {
     const embedded = React.useContext(CardEmbedContext);
-    return <div ref={ref} className={cn('flex flex-col py-1.5 px-3 sm:px-3.5', className, embedded && EMBED_HEADER)} {...props} />;
+    return (
+      <div
+        ref={ref}
+        className={cn('flex flex-col px-3 py-1.5 sm:px-3.5', className, embedded && EMBED_HEADER)}
+        {...props}
+      />
+    );
   }
 );
 CardHeader.displayName = 'CardHeader';
 
 export const CardTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
-    <h3 ref={ref} className={cn('font-semibold leading-none tracking-tight text-zinc-100 text-sm sm:text-base flex items-center', className)} {...props} />
+    <h3
+      ref={ref}
+      className={cn(
+        'flex items-center text-sm font-semibold leading-none tracking-tight text-zinc-100 sm:text-base',
+        className
+      )}
+      {...props}
+    />
   )
 );
 CardTitle.displayName = 'CardTitle';
@@ -47,7 +61,7 @@ CardTitle.displayName = 'CardTitle';
 export const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => {
     const embedded = React.useContext(CardEmbedContext);
-    return <div ref={ref} className={cn('p-4 sm:p-5 pt-0', className, embedded && EMBED_CONTENT)} {...props} />;
+    return <div ref={ref} className={cn('p-4 pt-0 sm:p-5', className, embedded && EMBED_CONTENT)} {...props} />;
   }
 );
 CardContent.displayName = 'CardContent';

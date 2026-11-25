@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
+
 import { Pause, Play } from 'lucide-react';
-import type { WidgetChartConfig } from '../../../types/widget';
-import type { SampleRing } from '../../../lib/valueSampler';
+
 import { niceStep, niceTicks, stepDecimals } from '../../../lib/gaugeGeometry';
+import type { SampleRing } from '../../../lib/valueSampler';
+import type { WidgetChartConfig } from '../../../types/widget';
 import { useChromeColors, useElementSize } from './palette';
 
 export interface ChartSeries {
@@ -86,14 +88,14 @@ export const ChartControls: React.FC<{
   paused: boolean;
   onTogglePause: () => void;
 }> = ({ windowSec, onWindow, paused, onTogglePause }) => (
-  <div className="flex items-center gap-1 shrink-0">
-    <div className="flex rounded-md border border-zinc-800 overflow-hidden">
+  <div className="flex shrink-0 items-center gap-1">
+    <div className="flex overflow-hidden rounded-md border border-zinc-800">
       {WINDOW_CHOICES.map((sec) => (
         <button
           key={sec}
           type="button"
           onClick={() => onWindow(sec)}
-          className={`px-1.5 py-0.5 text-[11px] font-mono ${
+          className={`px-1.5 py-0.5 font-mono text-[11px] ${
             windowSec === sec ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
           }`}
           aria-pressed={windowSec === sec}
@@ -105,7 +107,7 @@ export const ChartControls: React.FC<{
     <button
       type="button"
       onClick={onTogglePause}
-      className={`p-1 rounded-md border ${
+      className={`rounded-md border p-1 ${
         paused ? 'border-amber-500/60 text-amber-400' : 'border-zinc-800 text-zinc-400 hover:text-zinc-200'
       }`}
       title={paused ? 'Resume' : 'Pause (hover the chart to read values)'}
@@ -237,7 +239,15 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
           ctx.stroke();
         }
         ctx.fillStyle = colors.label;
-        ctx.fillText(s === 0 ? (pausedAt ? 'paused' : 'now') : `-${s >= 60 && s % 60 === 0 ? `${s / 60}m` : `${Number(s.toFixed(1))}s`}`, x, TOP + plotH + 4);
+        ctx.fillText(
+          s === 0
+            ? pausedAt
+              ? 'paused'
+              : 'now'
+            : `-${s >= 60 && s % 60 === 0 ? `${s / 60}m` : `${Number(s.toFixed(1))}s`}`,
+          x,
+          TOP + plotH + 4
+        );
       }
 
       // Series: one min/max pair per pixel column keeps 3000-sample windows cheap and spikes visible.
@@ -387,7 +397,19 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
     };
     frame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(frame);
-  }, [size.width, size.height, series, windowSec, pausedAt, config?.yScale, config?.showGrid, config?.fill, fixedMin, fixedMax, colors]);
+  }, [
+    size.width,
+    size.height,
+    series,
+    windowSec,
+    pausedAt,
+    config?.yScale,
+    config?.showGrid,
+    config?.fill,
+    fixedMin,
+    fixedMax,
+    colors,
+  ]);
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -400,14 +422,16 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
   };
 
   return (
-    <div className={`flex flex-col gap-1.5 h-full min-h-0 transition-opacity ${dimmed ? 'opacity-40' : ''}`}>
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-x-3 gap-y-0.5 flex-wrap min-w-0 font-mono">
+    <div className={`flex h-full min-h-0 flex-col gap-1.5 transition-opacity ${dimmed ? 'opacity-40' : ''}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 font-mono">
           {series.map((s, i) => (
-            <span key={s.key + i} className="flex items-baseline gap-1 min-w-0">
-              <span className="h-2 w-2 rounded-full shrink-0 self-center" style={{ background: s.color }} />
-              {(series.length > 1 || legendLabels) && <span className="text-xs text-zinc-400 truncate">{s.label}</span>}
-              <span className={`${series.length > 1 ? 'text-base' : 'text-2xl'} font-bold text-zinc-100`}>{latest[i] ?? '--'}</span>
+            <span key={s.key + i} className="flex min-w-0 items-baseline gap-1">
+              <span className="h-2 w-2 shrink-0 self-center rounded-full" style={{ background: s.color }} />
+              {(series.length > 1 || legendLabels) && <span className="truncate text-xs text-zinc-400">{s.label}</span>}
+              <span className={`${series.length > 1 ? 'text-base' : 'text-2xl'} font-bold text-zinc-100`}>
+                {latest[i] ?? '--'}
+              </span>
               <span className="text-xs text-zinc-400">{s.unit}</span>
             </span>
           ))}
@@ -424,7 +448,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
       <div ref={wrapRef} className="relative flex-1" style={{ minHeight: plotMinHeight }}>
         <canvas
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full"
+          className="absolute inset-0 h-full w-full"
           onPointerMove={onPointerMove}
           onPointerDown={onPointerMove}
           onPointerLeave={onPointerLeave}

@@ -5,8 +5,8 @@
 // an altitude and its frame. ArduPilot returns to the nearest rally point (or home, with RALLY_INCL_HOME) on RTL,
 // and ignores any rally point farther than RALLY_LIMIT_KM from home.
 
-import type { MissionItemIntData } from './encoder';
 import type { RallyPoint } from '../store/telemetryStore';
+import type { MissionItemIntData } from './encoder';
 import { MAV_FRAME, normalFrame } from './missionDraft';
 
 export const CMD_NAV_RALLY_POINT = 5100;
@@ -34,7 +34,6 @@ export interface RallyDraft {
   points: RallyItem[];
 }
 
-
 const finiteOr = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 
 // ------------------------------------------------------------------------------------------------
@@ -46,7 +45,12 @@ export function rallyDraftFromPoints(points: RallyPoint[]): RallyDraft {
   return {
     points: [...points]
       .sort((a, b) => a.seq - b.seq)
-      .map((p) => ({ lat: p.lat, lon: p.lon, alt: rallyAlt(p.alt), frame: finiteOr(p.frame, MAV_FRAME.GLOBAL_RELATIVE_ALT) })),
+      .map((p) => ({
+        lat: p.lat,
+        lon: p.lon,
+        alt: rallyAlt(p.alt),
+        frame: finiteOr(p.frame, MAV_FRAME.GLOBAL_RELATIVE_ALT),
+      })),
   };
 }
 
@@ -190,7 +194,8 @@ export function validateRallyDraft(draft: RallyDraft, ctx: RallyCheckContext = {
     if (f !== MAV_FRAME.GLOBAL && f !== MAV_FRAME.GLOBAL_RELATIVE_ALT && f !== MAV_FRAME.GLOBAL_TERRAIN_ALT) {
       warn(i, `Unusual altitude frame ${p.frame}.`);
     }
-    if (f === MAV_FRAME.GLOBAL_TERRAIN_ALT) warn(i, 'Altitude is above terrain: the vehicle needs terrain data for this point.');
+    if (f === MAV_FRAME.GLOBAL_TERRAIN_ALT)
+      warn(i, 'Altitude is above terrain: the vehicle needs terrain data for this point.');
     if (f === MAV_FRAME.GLOBAL_RELATIVE_ALT && p.alt < 0) warn(i, 'Altitude is below home.');
     if (home && limitM !== null && Math.abs(p.lat) <= 90 && Math.abs(p.lon) <= 180) {
       const d = distanceM(home.lat, home.lon, p.lat, p.lon);

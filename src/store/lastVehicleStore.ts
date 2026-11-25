@@ -4,10 +4,11 @@
 // the vehicle). Updated while a vehicle is connected; another vehicle type starts over.
 
 import { create } from 'zustand';
+
+import { getVehicleCategory } from '../mavlink/messages';
+import { paramManager } from '../mavlink/paramManager';
 import { onActiveVehicleChange } from '../mavlink/vehicleRoster';
 import { useTelemetryStore } from './telemetryStore';
-import { paramManager } from '../mavlink/paramManager';
-import { getVehicleCategory } from '../mavlink/messages';
 
 const KEY = 'mavlink_glareshield_last_vehicle';
 
@@ -16,13 +17,33 @@ export const RADIUS_PARAMS = ['WP_RADIUS', 'WP_LOITER_RAD', 'WP_RADIUS_M', 'WPNA
 
 /** Mission speeds (missionSummary.ts), current names and those of 4.6 and before. */
 export const SPEED_PARAMS = [
-  'WP_SPD', 'WP_SPD_UP', 'WP_SPD_DN', 'WPNAV_SPEED', 'WPNAV_SPEED_UP', 'WPNAV_SPEED_DN', 'WP_ACC', 'WPNAV_ACCEL', 'RTL_LOIT_TIME',
-  'AIRSPEED_CRUISE', 'TRIM_ARSPD_CM', 'TECS_CLMB_MAX', 'TECS_SINK_MAX',
-  'WP_SPEED', 'CRUISE_SPEED',
+  'WP_SPD',
+  'WP_SPD_UP',
+  'WP_SPD_DN',
+  'WPNAV_SPEED',
+  'WPNAV_SPEED_UP',
+  'WPNAV_SPEED_DN',
+  'WP_ACC',
+  'WPNAV_ACCEL',
+  'RTL_LOIT_TIME',
+  'AIRSPEED_CRUISE',
+  'TRIM_ARSPD_CM',
+  'TECS_CLMB_MAX',
+  'TECS_SINK_MAX',
+  'WP_SPEED',
+  'CRUISE_SPEED',
 ] as const;
 
 /** The fence settings the route is checked against (routeFence.ts). */
-export const FENCE_CHECK_PARAMS = ['FENCE_ENABLE', 'FENCE_TYPE', 'FENCE_OPTIONS', 'FENCE_ALT_MAX', 'FENCE_RADIUS', 'FENCE_ACTION', 'FENCE_AUTOENABLE'] as const;
+export const FENCE_CHECK_PARAMS = [
+  'FENCE_ENABLE',
+  'FENCE_TYPE',
+  'FENCE_OPTIONS',
+  'FENCE_ALT_MAX',
+  'FENCE_RADIUS',
+  'FENCE_ACTION',
+  'FENCE_AUTOENABLE',
+] as const;
 
 /**
  * Names for the same setting on different firmware (master's first): a vehicle has one, so when it sends one the
@@ -87,13 +108,30 @@ export function planningVehicle(): LastVehicle {
 /** The radius parameters a vehicle has (Copter: WP_RADIUS_M on master, WPNAV_RADIUS in cm on 4.6 and before). */
 function radiusParamsFor(type: number): string[] {
   const cat = getVehicleCategory(type);
-  const radius = cat === 'plane' ? ['WP_RADIUS', 'WP_LOITER_RAD'] : cat === 'copter' ? ['WP_RADIUS_M', 'WPNAV_RADIUS'] : cat === 'rover' ? ['WP_RADIUS'] : [];
+  const radius =
+    cat === 'plane'
+      ? ['WP_RADIUS', 'WP_LOITER_RAD']
+      : cat === 'copter'
+        ? ['WP_RADIUS_M', 'WPNAV_RADIUS']
+        : cat === 'rover'
+          ? ['WP_RADIUS']
+          : [];
   // Speeds (the current name and the 4.6 one; the missing one goes unanswered) and the fence, for the summary.
   const speeds =
     cat === 'plane'
       ? ['AIRSPEED_CRUISE', 'TRIM_ARSPD_CM', 'TECS_CLMB_MAX', 'TECS_SINK_MAX']
       : cat === 'copter'
-        ? ['WP_SPD', 'WP_SPD_UP', 'WP_SPD_DN', 'WP_ACC', 'WPNAV_SPEED', 'WPNAV_SPEED_UP', 'WPNAV_SPEED_DN', 'WPNAV_ACCEL', 'RTL_LOIT_TIME']
+        ? [
+            'WP_SPD',
+            'WP_SPD_UP',
+            'WP_SPD_DN',
+            'WP_ACC',
+            'WPNAV_SPEED',
+            'WPNAV_SPEED_UP',
+            'WPNAV_SPEED_DN',
+            'WPNAV_ACCEL',
+            'RTL_LOIT_TIME',
+          ]
         : cat === 'rover'
           ? ['WP_SPEED', 'CRUISE_SPEED']
           : [];
@@ -117,7 +155,8 @@ useTelemetryStore.subscribe((s, prev) => {
   const key = `${s.heartbeat.systemId}:${s.heartbeat.type}`;
   if (askedFor !== key) {
     askedFor = key;
-    for (const n of radiusParamsFor(s.heartbeat.type)) paramManager.requestParam(s.heartbeat.systemId, s.heartbeat.componentId || 1, n);
+    for (const n of radiusParamsFor(s.heartbeat.type))
+      paramManager.requestParam(s.heartbeat.systemId, s.heartbeat.componentId || 1, n);
   }
   const last = useLastVehicleStore.getState();
   let next: LastVehicle = s.heartbeat.type === last.type ? last : { type: s.heartbeat.type, params: {} };

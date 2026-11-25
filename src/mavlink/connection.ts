@@ -1,14 +1,14 @@
-import { MavlinkParser, MavlinkPacket } from './parser';
 import { MavlinkEncoder } from './encoder';
+import { MavlinkPacket, MavlinkParser } from './parser';
 import { messageRateManager } from './rateManager';
 import {
-  WebSerialTransport,
-  WebSocketTransport,
-  WebUsbSerialTransport,
   getSerialApi,
   hasTextChannel,
   resolveSerialPort,
   resolveUsbSerialDevice,
+  WebSerialTransport,
+  WebSocketTransport,
+  WebUsbSerialTransport,
   type Transport,
   type TransportStatus,
   type Unsubscribe,
@@ -65,12 +65,7 @@ export function isLoopbackWs(url: string): boolean {
   try {
     const parsed = new URL(url);
     const h = parsed.hostname.toLowerCase();
-    return (
-      h === 'localhost' ||
-      /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h) ||
-      h === '[::1]' ||
-      h === '::1'
-    );
+    return h === 'localhost' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h) || h === '[::1]' || h === '::1';
   } catch {
     return /^ws:\/\/(localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[?::1\]?)(:\d+)?(\/.*)?$/i.test(url.trim());
   }

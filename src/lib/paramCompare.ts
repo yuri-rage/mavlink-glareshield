@@ -82,8 +82,17 @@ export function writeOutcome(requested: number, echoed: number | undefined): Wri
 }
 
 /** Filter entries by a name or description fragment (case-insensitive). */
-export function filterEntries(entries: CompareEntry[], query: string, meta: (name: string) => ParamMeta | null | undefined): CompareEntry[] {
+export function filterEntries(
+  entries: CompareEntry[],
+  query: string,
+  meta: (name: string) => ParamMeta | null | undefined
+): CompareEntry[] {
   const q = query.trim().toLowerCase();
   if (!q) return entries;
-  return entries.filter((e) => e.name.toLowerCase().includes(q) || (meta(e.name)?.description ?? '').toLowerCase().includes(q) || (meta(e.name)?.displayName ?? '').toLowerCase().includes(q));
+  return entries.filter(
+    (e) =>
+      e.name.toLowerCase().includes(q) ||
+      (meta(e.name)?.description ?? '').toLowerCase().includes(q) ||
+      (meta(e.name)?.displayName ?? '').toLowerCase().includes(q)
+  );
 }

@@ -1,15 +1,15 @@
 // Terrain in and out: answers the vehicle's TERRAIN_REQUESTs from the elevation tiles, keeps its TERRAIN_REPORT, and
 // asks for both (they ride in a stream a link may have turned off). Imported once at startup.
 
+import { browserTerrainIO, TerrainService } from '../lib/terrainService';
+import { useTelemetryStore } from '../store/telemetryStore';
+import { useTerrainStore } from '../store/terrainStore';
 import { mavlinkConnection } from './connection';
-import { onActiveVehicleChange } from './vehicleRoster';
-import { decodePayload } from './parser';
 import { MAVLINK_MSG_ID } from './messages';
+import { decodePayload } from './parser';
 import { messageRateManager } from './rateManager';
 import { TerrainServer } from './terrainServer';
-import { TerrainService, browserTerrainIO } from '../lib/terrainService';
-import { useTerrainStore } from '../store/terrainStore';
-import { useTelemetryStore } from '../store/telemetryStore';
+import { onActiveVehicleChange } from './vehicleRoster';
 
 export const terrainService = new TerrainService(browserTerrainIO);
 terrainService.enabled = useTerrainStore.getState().enabled;
@@ -20,8 +20,10 @@ useTerrainStore.subscribe((s) => {
 const server = new TerrainServer(
   terrainService,
   (packet) => mavlinkConnection.send(packet), // false with no link: the server stops and doesn't count it
-  (lat, lon, spacing, bit, heights) => mavlinkConnection.getEncoder().createTerrainData(lat, lon, spacing, bit, heights),
-  (sent, unavailable) => useTerrainStore.setState((s) => ({ sent: s.sent + sent, unavailable: s.unavailable + unavailable }))
+  (lat, lon, spacing, bit, heights) =>
+    mavlinkConnection.getEncoder().createTerrainData(lat, lon, spacing, bit, heights),
+  (sent, unavailable) =>
+    useTerrainStore.setState((s) => ({ sent: s.sent + sent, unavailable: s.unavailable + unavailable }))
 );
 
 mavlinkConnection.onPacket((p) => {
@@ -32,7 +34,14 @@ mavlinkConnection.onPacket((p) => {
     void server.handle(d);
   } else {
     useTerrainStore.setState({
-      report: { terrainHeight: d.terrain_height, currentHeight: d.current_height, spacing: d.spacing, pending: d.pending, loaded: d.loaded, at: Date.now() },
+      report: {
+        terrainHeight: d.terrain_height,
+        currentHeight: d.current_height,
+        spacing: d.spacing,
+        pending: d.pending,
+        loaded: d.loaded,
+        at: Date.now(),
+      },
     });
   }
 });

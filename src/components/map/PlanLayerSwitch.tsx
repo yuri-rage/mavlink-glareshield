@@ -2,18 +2,29 @@
 // Each tab shows when its draft has unsaved changes or errors.
 
 import React, { useMemo } from 'react';
+
 import { XCircle } from 'lucide-react';
+
+import { validateFenceDraft } from '../../mavlink/fenceDraft';
 import { getVehicleCategory } from '../../mavlink/messages';
 import { validateDraft } from '../../mavlink/missionDraft';
 import { validateRallyDraft } from '../../mavlink/rallyDraft';
-import { validateFenceDraft } from '../../mavlink/fenceDraft';
-import { isDraftDirty, isFenceDirty, isRallyDirty, useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
+import {
+  isDraftDirty,
+  isFenceDirty,
+  isRallyDirty,
+  useMissionPlanStore,
+  type PlanLayer,
+} from '../../store/missionPlanStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 
 /** Room the switch takes at the map's top right, so the GPS readout column can stop short of it (px). */
 export const PLAN_LAYER_SWITCH_WIDTH = 196;
 
-export const PlanLayerSwitch: React.FC<{ className?: string; style?: React.CSSProperties }> = ({ className, style }) => {
+export const PlanLayerSwitch: React.FC<{ className?: string; style?: React.CSSProperties }> = ({
+  className,
+  style,
+}) => {
   const layer = useMissionPlanStore((s) => s.layer);
   const draft = useMissionPlanStore((s) => s.history.present);
   const rally = useMissionPlanStore((s) => s.rally.history.present);
@@ -62,12 +73,16 @@ export const PlanLayerSwitch: React.FC<{ className?: string; style?: React.CSSPr
                 ? "This vehicle doesn't support rally points"
                 : `Edit the ${what[t.id]}${t.err ? ' (has errors)' : t.dirty ? ' (unsaved changes)' : ''}`
             }
-            className={`inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-bold disabled:cursor-not-allowed disabled:opacity-40 disabled:line-through ${
+            className={`inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-bold disabled:cursor-not-allowed disabled:line-through disabled:opacity-40 ${
               layer === t.id ? t.on : 'text-zinc-300 hover:bg-zinc-800'
             }`}
           >
             {t.label}
-            {t.err ? <XCircle className="h-3 w-3" /> : t.dirty ? <span className="h-1.5 w-1.5 rounded-full bg-current" /> : null}
+            {t.err ? (
+              <XCircle className="h-3 w-3" />
+            ) : t.dirty ? (
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+            ) : null}
           </button>
         );
       })}

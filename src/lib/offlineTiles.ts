@@ -80,7 +80,12 @@ export function tileRanges(b: LatLngBoundsLike, z: number): { x0: number; x1: nu
   // An east edge exactly on 180° is the world's last column, not wrapped round to -180 (column 0).
   const eastWrapped = wrap(b.east);
   const x1 = tileXY(0, eastWrapped === -180 && b.east > b.west ? 180 : eastWrapped, z).x;
-  return x0 <= x1 ? [{ x0, x1, y0, y1 }] : [{ x0, x1: n - 1, y0, y1 }, { x0: 0, x1, y0, y1 }];
+  return x0 <= x1
+    ? [{ x0, x1, y0, y1 }]
+    : [
+        { x0, x1: n - 1, y0, y1 },
+        { x0: 0, x1, y0, y1 },
+      ];
 }
 
 /** How many tiles cover `b` from zoom zMin to zMax. */
@@ -91,9 +96,14 @@ export function countTiles(b: LatLngBoundsLike, zMin: number, zMax: number): num
 }
 
 /** Every tile covering `b` from zMin to zMax, lowest zoom first. */
-export function* tilesIn(b: LatLngBoundsLike, zMin: number, zMax: number): Generator<{ z: number; x: number; y: number }> {
+export function* tilesIn(
+  b: LatLngBoundsLike,
+  zMin: number,
+  zMax: number
+): Generator<{ z: number; x: number; y: number }> {
   for (let z = zMin; z <= zMax; z++) {
-    for (const r of tileRanges(b, z)) for (let x = r.x0; x <= r.x1; x++) for (let y = r.y0; y <= r.y1; y++) yield { z, x, y };
+    for (const r of tileRanges(b, z))
+      for (let x = r.x0; x <= r.x1; x++) for (let y = r.y0; y <= r.y1; y++) yield { z, x, y };
   }
 }
 
@@ -124,7 +134,8 @@ export function tileUrl(template: string, z: number, x: number, y: number, subdo
 export const mbtilesRowToY = (z: number, row: number) => 2 ** z - 1 - row;
 
 /** An imported set's tile address (a cache key). */
-export const importTileUrl = (setId: string, z: number, x: number, y: number) => `${IMPORT_HOST}/${setId}/${z}/${x}/${y}`;
+export const importTileUrl = (setId: string, z: number, x: number, y: number) =>
+  `${IMPORT_HOST}/${setId}/${z}/${x}/${y}`;
 
 /** A template is usable when it has {z}, {x} and {y} (or {-y}) and is http(s). */
 export function validTemplate(t: string): boolean {
@@ -137,7 +148,11 @@ export function validTemplate(t: string): boolean {
 
 /** Offline tiles work here: a secure page with the Cache API and IndexedDB. */
 export function offlineAvailable(): boolean {
-  return typeof caches !== 'undefined' && typeof indexedDB !== 'undefined' && (typeof window === 'undefined' || window.isSecureContext !== false);
+  return (
+    typeof caches !== 'undefined' &&
+    typeof indexedDB !== 'undefined' &&
+    (typeof window === 'undefined' || window.isSecureContext !== false)
+  );
 }
 
 /** Terrain areas go in the terrain service's own cache, where it looks for them. */
@@ -174,7 +189,11 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-async function tx<T>(stores: string[], mode: IDBTransactionMode, fn: (t: IDBTransaction) => IDBRequest<T> | void): Promise<T | undefined> {
+async function tx<T>(
+  stores: string[],
+  mode: IDBTransactionMode,
+  fn: (t: IDBTransaction) => IDBRequest<T> | void
+): Promise<T | undefined> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const t = db.transaction(stores, mode);
@@ -247,7 +266,10 @@ export class AreaKeeper {
   private urls = new Set<string>();
   private bytes = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
-  constructor(public area: OfflineArea, private onChange?: (area: OfflineArea) => void) {}
+  constructor(
+    public area: OfflineArea,
+    private onChange?: (area: OfflineArea) => void
+  ) {}
 
   async keepTile(url: string): Promise<void> {
     if (this.urls.has(url)) return;
@@ -289,7 +311,11 @@ export class AreaKeeper {
 export async function downloadArea(
   area: OfflineArea,
   urls: string[],
-  opts: { signal?: AbortSignal; concurrency?: number; onProgress?: (done: number, failed: number, bytes: number) => void } = {}
+  opts: {
+    signal?: AbortSignal;
+    concurrency?: number;
+    onProgress?: (done: number, failed: number, bytes: number) => void;
+  } = {}
 ): Promise<OfflineArea> {
   const kept: string[] = [];
   let next = 0;
@@ -362,14 +388,18 @@ const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg
  * Import an MBTiles file (SQLite: metadata and tiles tables, TMS rows) as an area with its own layer. Raster
  * formats only (png, jpg, webp); vector tiles (pbf) are refused. Progress as tiles are stored.
  */
-export async function importMbtiles(file: File, onProgress?: (done: number, total: number) => void): Promise<OfflineArea> {
+export async function importMbtiles(
+  file: File,
+  onProgress?: (done: number, total: number) => void
+): Promise<OfflineArea> {
   const initSqlJs = (await import('sql.js')).default;
   const wasmUrl = (await import('sql.js/dist/sql-wasm.wasm?url')).default;
   const SQL = await initSqlJs({ locateFile: () => wasmUrl });
   const db = new SQL.Database(new Uint8Array(await file.arrayBuffer()));
   try {
     const meta: Record<string, string> = {};
-    for (const row of db.exec('SELECT name, value FROM metadata')[0]?.values ?? []) meta[String(row[0])] = String(row[1]);
+    for (const row of db.exec('SELECT name, value FROM metadata')[0]?.values ?? [])
+      meta[String(row[0])] = String(row[1]);
     const format = (meta.format ?? 'png').toLowerCase();
     if (!MIME[format]) throw new Error(`${format} tiles aren't supported (raster png, jpg or webp only)`);
     const total = Number(db.exec('SELECT COUNT(*) FROM tiles')[0]?.values[0]?.[0] ?? 0);
@@ -386,7 +416,12 @@ export async function importMbtiles(file: File, onProgress?: (done: number, tota
         const [z, col, row, data] = stmt.get() as [number, number, number, Uint8Array | null];
         if (!(data instanceof Uint8Array) || data.byteLength === 0) continue; // a corrupt row: skipped
         const url = importTileUrl(id, z, col, mbtilesRowToY(z, row));
-        await cache.put(url, new Response(new Blob([data as Uint8Array<ArrayBuffer>], { type: MIME[format] }), { headers: { 'Content-Type': MIME[format] } }));
+        await cache.put(
+          url,
+          new Response(new Blob([data as Uint8Array<ArrayBuffer>], { type: MIME[format] }), {
+            headers: { 'Content-Type': MIME[format] },
+          })
+        );
         urls.push(url);
         bytes += data.byteLength;
         minZoom = Math.min(minZoom, z);
@@ -408,7 +443,8 @@ export async function importMbtiles(file: File, onProgress?: (done: number, tota
       name: meta.name || file.name.replace(/\.mbtiles$/i, ''),
       kind: 'imported',
       source: file.name,
-      bounds: b.length === 4 && b.every(Number.isFinite) ? { west: b[0], south: b[1], east: b[2], north: b[3] } : undefined,
+      bounds:
+        b.length === 4 && b.every(Number.isFinite) ? { west: b[0], south: b[1], east: b[2], north: b[3] } : undefined,
       minZoom,
       maxZoom,
       tiles: urls.length,

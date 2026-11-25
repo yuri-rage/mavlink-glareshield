@@ -66,11 +66,11 @@ export const SlideToConfirm: React.FC<SlideToConfirmProps> = ({ label, onConfirm
         onTouchEnd={release}
         // Keyboard steps would let the handle reach the end without a deliberate drag.
         onKeyDown={(e) => e.preventDefault()}
-        className={`w-full h-8 rounded-lg appearance-none transition-all select-none border ${
-          disabled ? 'cursor-not-allowed accent-zinc-600 bg-zinc-950/60 border-zinc-800' : `cursor-pointer ${toneClass}`
+        className={`h-8 w-full select-none appearance-none rounded-lg border transition-all ${
+          disabled ? 'cursor-not-allowed border-zinc-800 bg-zinc-950/60 accent-zinc-600' : `cursor-pointer ${toneClass}`
         }`}
       />
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-[11px] font-bold uppercase tracking-wider text-zinc-200">
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] font-bold uppercase tracking-wider text-zinc-200">
         {label}
       </div>
     </div>

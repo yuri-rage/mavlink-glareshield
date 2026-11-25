@@ -7,9 +7,9 @@
 //   pointed at. A jump whose target is deleted moves to the item that took its place.
 // - Commands the editor doesn't know are carried unchanged, so a draft round-trips any mission.
 
+import type { MissionWaypoint } from '../store/telemetryStore';
 import type { MissionItemIntData } from './encoder';
 import { cmdHasLocation, type VehicleCategory } from './messages';
-import type { MissionWaypoint } from '../store/telemetryStore';
 
 export const MAV_FRAME = {
   GLOBAL: 0,
@@ -95,7 +95,10 @@ function homeItem(home?: { lat: number; lon: number; alt: number }): DraftItem {
  * A draft from mission items in any order (a file, or what the vehicle sent). Without items the draft is home
  * alone, at `home` when given.
  */
-export function draftFromItems(items: MissionItemIntData[], home?: { lat: number; lon: number; alt: number }): MissionDraft {
+export function draftFromItems(
+  items: MissionItemIntData[],
+  home?: { lat: number; lon: number; alt: number }
+): MissionDraft {
   if (items.length === 0) return { items: [homeItem(home)] };
   const sorted = [...items].sort((a, b) => a.seq - b.seq);
   // A file numbered from 1 has no home line: give it one, so its first item isn't taken for home.
@@ -104,23 +107,26 @@ export function draftFromItems(items: MissionItemIntData[], home?: { lat: number
     items: [
       ...head,
       ...sorted.map((it) => ({
-      command: it.command,
-      frame: finiteOr(it.frame, cmdHasLocation(it.command) ? MAV_FRAME.GLOBAL_RELATIVE_ALT : MAV_FRAME.MISSION),
-      param1: finiteOr(it.param1, 0),
-      param2: finiteOr(it.param2, 0),
-      param3: finiteOr(it.param3, 0),
-      param4: finiteOr(it.param4, 0),
-      x: finiteOr(it.x, 0),
-      y: finiteOr(it.y, 0),
-      z: finiteOr(it.z, 0),
-      autocontinue: typeof it.autocontinue === 'boolean' ? (it.autocontinue ? 1 : 0) : finiteOr(it.autocontinue, 1),
+        command: it.command,
+        frame: finiteOr(it.frame, cmdHasLocation(it.command) ? MAV_FRAME.GLOBAL_RELATIVE_ALT : MAV_FRAME.MISSION),
+        param1: finiteOr(it.param1, 0),
+        param2: finiteOr(it.param2, 0),
+        param3: finiteOr(it.param3, 0),
+        param4: finiteOr(it.param4, 0),
+        x: finiteOr(it.x, 0),
+        y: finiteOr(it.y, 0),
+        z: finiteOr(it.z, 0),
+        autocontinue: typeof it.autocontinue === 'boolean' ? (it.autocontinue ? 1 : 0) : finiteOr(it.autocontinue, 1),
       })),
     ],
   };
 }
 
 /** A draft from the mission the vehicle reported (the telemetry store's waypoints). */
-export function draftFromWaypoints(waypoints: MissionWaypoint[], home?: { lat: number; lon: number; alt: number }): MissionDraft {
+export function draftFromWaypoints(
+  waypoints: MissionWaypoint[],
+  home?: { lat: number; lon: number; alt: number }
+): MissionDraft {
   return draftFromItems(
     waypoints.map((w) => ({
       seq: w.seq,
@@ -165,7 +171,9 @@ export function draftToItems(draft: MissionDraft): MissionItemIntData[] {
 function assertEditable(draft: MissionDraft, index: number, allowEnd = false) {
   const max = allowEnd ? draft.items.length : draft.items.length - 1;
   if (!Number.isInteger(index) || index < 1 || index > max) {
-    throw new RangeError(`Mission item ${index} can't be edited (home is item 0; the mission has ${draft.items.length} items)`);
+    throw new RangeError(
+      `Mission item ${index} can't be edited (home is item 0; the mission has ${draft.items.length} items)`
+    );
   }
 }
 
@@ -225,7 +233,11 @@ export function moveItem(draft: MissionDraft, from: number, to: number): Mission
 }
 
 /** Change fields of one item. To change its command use changeCommand, which also clears stale params. */
-export function updateItem(draft: MissionDraft, index: number, patch: Partial<Omit<DraftItem, 'command'>>): MissionDraft {
+export function updateItem(
+  draft: MissionDraft,
+  index: number,
+  patch: Partial<Omit<DraftItem, 'command'>>
+): MissionDraft {
   assertEditable(draft, index);
   const items = [...draft.items];
   items[index] = { ...items[index], ...patch };
@@ -279,10 +291,19 @@ export function changeCommand(
 
 /** Altitude and frame for a new item at `index`: the nearest earlier route point's (not a land, and not an ROI or
  *  other non-navigation item, whose altitude is often 0), skipping home. */
-function altitudeReference(draft: MissionDraft, index: number, fallbackAlt = DEFAULT_WAYPOINT_ALT): { alt: number; frame: number } {
+function altitudeReference(
+  draft: MissionDraft,
+  index: number,
+  fallbackAlt = DEFAULT_WAYPOINT_ALT
+): { alt: number; frame: number } {
   for (let i = Math.min(index, draft.items.length) - 1; i >= 1; i--) {
     const it = draft.items[i];
-    if (isRoutePoint(it.command) && LOCATION_FRAMES.has(it.frame) && it.command !== CMD_NAV_LAND && it.command !== CMD_NAV_VTOL_LAND) {
+    if (
+      isRoutePoint(it.command) &&
+      LOCATION_FRAMES.has(it.frame) &&
+      it.command !== CMD_NAV_LAND &&
+      it.command !== CMD_NAV_VTOL_LAND
+    ) {
       return { alt: it.z, frame: it.frame };
     }
   }
@@ -290,7 +311,13 @@ function altitudeReference(draft: MissionDraft, index: number, fallbackAlt = DEF
 }
 
 /** A NAV_WAYPOINT for `index`, at the altitude and frame of the waypoint before it. */
-export function newWaypoint(draft: MissionDraft, index: number, lat: number, lon: number, fallbackAlt = DEFAULT_WAYPOINT_ALT): DraftItem {
+export function newWaypoint(
+  draft: MissionDraft,
+  index: number,
+  lat: number,
+  lon: number,
+  fallbackAlt = DEFAULT_WAYPOINT_ALT
+): DraftItem {
   const ref = altitudeReference(draft, index, fallbackAlt);
   return {
     command: CMD_NAV_WAYPOINT,
@@ -307,7 +334,12 @@ export function newWaypoint(draft: MissionDraft, index: number, lat: number, lon
 }
 
 /** Add a waypoint at the end of the mission. */
-export function appendWaypoint(draft: MissionDraft, lat: number, lon: number, fallbackAlt = DEFAULT_WAYPOINT_ALT): MissionDraft {
+export function appendWaypoint(
+  draft: MissionDraft,
+  lat: number,
+  lon: number,
+  fallbackAlt = DEFAULT_WAYPOINT_ALT
+): MissionDraft {
   const at = draft.items.length;
   return insertItems(draft, at, [newWaypoint(draft, at, lat, lon, fallbackAlt)]);
 }
@@ -334,14 +366,22 @@ const EARTH_RADIUS_M = 6371008.8;
  * The point `distM` metres from (lat, lon) along the great circle starting on `bearingDeg` (true): exact on the
  * sphere at any range, unlike a flat-earth offset. Longitude wrapped to [-180, 180).
  */
-export function destinationPoint(lat: number, lon: number, bearingDeg: number, distM: number): { lat: number; lon: number } {
+export function destinationPoint(
+  lat: number,
+  lon: number,
+  bearingDeg: number,
+  distM: number
+): { lat: number; lon: number } {
   const rad = Math.PI / 180;
   const d = distM / EARTH_RADIUS_M;
   const b = bearingDeg * rad;
   const p1 = lat * rad;
   // Clamped: rounding can carry the sine a hair past ±1 at the poles, and asin of that is NaN.
-  const p2 = Math.asin(Math.min(1, Math.max(-1, Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(b))));
-  const l2 = lon * rad + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2));
+  const p2 = Math.asin(
+    Math.min(1, Math.max(-1, Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(b)))
+  );
+  const l2 =
+    lon * rad + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2));
   return { lat: p2 / rad, lon: ((((l2 / rad + 180) % 360) + 360) % 360) - 180 };
 }
 
@@ -360,7 +400,8 @@ export function insertWaypointAtBearing(
 ): { draft: MissionDraft; index: number } {
   const ref = draft.items[from];
   // Home or an item with a location: a command without one (DELAY, CAMERA) keeps other numbers in x and y.
-  if (!ref || (from !== 0 && !cmdHasLocation(ref.command)) || (ref.x === 0 && ref.y === 0)) throw new RangeError(`Item ${from} has no position to measure from`);
+  if (!ref || (from !== 0 && !cmdHasLocation(ref.command)) || (ref.x === 0 && ref.y === 0))
+    throw new RangeError(`Item ${from} has no position to measure from`);
   if (!Number.isFinite(bearingDeg)) throw new RangeError('Bearing must be a number');
   if (!Number.isFinite(distM) || distM <= 0) throw new RangeError('Distance must be more than 0');
   const p = destinationPoint(ref.x, ref.y, bearingDeg, distM);
@@ -444,9 +485,11 @@ export function validateDraft(draft: MissionDraft, category?: VehicleCategory): 
 
     if (it.command === CMD_DO_JUMP) {
       const target = it.param1;
-      if (!Number.isInteger(target) || target < 1 || target >= n) err(i, `Jump target ${target} is not an item in the mission.`);
+      if (!Number.isInteger(target) || target < 1 || target >= n)
+        err(i, `Jump target ${target} is not an item in the mission.`);
       else if (target === i) err(i, 'Jump targets itself.');
-      if (!Number.isInteger(it.param2) || it.param2 < -1) err(i, `Jump repeat count ${it.param2} is invalid (-1 repeats forever).`);
+      if (!Number.isInteger(it.param2) || it.param2 < -1)
+        err(i, `Jump repeat count ${it.param2} is invalid (-1 repeats forever).`);
     }
   }
 
@@ -527,7 +570,8 @@ export function compareDrafts(a: MissionDraft, b: MissionDraft): DraftComparison
       qn.push(q.x, q.y, q.z);
     }
     // A jump's target decides where the mission goes next.
-    if (p.command === CMD_DO_JUMP && p.param1 !== q.param1) structural.push(`#${i}: jump target ${p.param1} vs ${q.param1}`);
+    if (p.command === CMD_DO_JUMP && p.param1 !== q.param1)
+      structural.push(`#${i}: jump target ${p.param1} vs ${q.param1}`);
     pn.forEach((v, k) => {
       if (!sameFloat(v, qn[k])) params.push(`#${i}: param${k + 1} ${v} vs ${qn[k]}`);
     });

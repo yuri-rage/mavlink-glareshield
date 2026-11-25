@@ -2,14 +2,20 @@
 // ring), shared by the flight control widgets.
 
 import React from 'react';
+
 import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
+
 import type { CommandFeedbackInfo } from '../../store/telemetryStore';
 
 /** How long a settled result stays on the button. */
 const SHOW_RESULT_MS = 6000;
 
 /** The feedback that belongs to the button `key` right now, or null. */
-function current(feedback: CommandFeedbackInfo | null | undefined, key: string, nowMs: number): CommandFeedbackInfo | null {
+function current(
+  feedback: CommandFeedbackInfo | null | undefined,
+  key: string,
+  nowMs: number
+): CommandFeedbackInfo | null {
   if (!feedback || feedback.targetKey !== key) return null;
   if (feedback.status !== 'pending' && nowMs - feedback.time > SHOW_RESULT_MS) return null;
   return feedback;
@@ -24,9 +30,9 @@ export function feedbackBadge(
 ): React.ReactNode {
   const fb = current(feedback, key, nowMs);
   if (!fb) return null;
-  if (fb.status === 'pending') return <Loader2 className={`${size} animate-spin text-sky-400 shrink-0`} />;
-  if (fb.status === 'accepted') return <CheckCircle2 className={`${size} text-emerald-400 shrink-0`} />;
-  return <XCircle className={`${size} text-rose-400 shrink-0`} />;
+  if (fb.status === 'pending') return <Loader2 className={`${size} shrink-0 animate-spin text-sky-400`} />;
+  if (fb.status === 'accepted') return <CheckCircle2 className={`${size} shrink-0 text-emerald-400`} />;
+  return <XCircle className={`${size} shrink-0 text-rose-400`} />;
 }
 
 /** Ring classes for the button `key`. */

@@ -1,5 +1,5 @@
-import * as ort from 'onnxruntime-web';
 import * as tts from '@diffusionstudio/vits-web';
+import * as ort from 'onnxruntime-web';
 
 const DEFAULT_VOICE_ID: tts.VoiceId = 'en_US-amy-medium';
 // VITS length_scale multiplier: 0.87 (~15% faster cadence) at natural vocal pitch
@@ -26,11 +26,7 @@ let cachedModelByteLength = 0;
 
 const origBlobArrayBuffer = Blob.prototype.arrayBuffer;
 Blob.prototype.arrayBuffer = function (this: Blob) {
-  if (
-    cachedSessionPromise &&
-    cachedModelByteLength > 0 &&
-    this.size === cachedModelByteLength
-  ) {
+  if (cachedSessionPromise && cachedModelByteLength > 0 && this.size === cachedModelByteLength) {
     // Model session is already compiled in WASM memory; return a lightweight stub
     // with matching byteLength to avoid re-reading 60MB from OPFS on every utterance.
     return Promise.resolve(
@@ -58,10 +54,7 @@ function wrapSessionForCadence(session: ort.InferenceSession): ort.InferenceSess
 }
 
 const origCreate = ort.InferenceSession.create.bind(ort.InferenceSession);
-(ort.InferenceSession as any).create = (
-  bufferOrPath: any,
-  options?: ort.InferenceSession.SessionOptions
-) => {
+(ort.InferenceSession as any).create = (bufferOrPath: any, options?: ort.InferenceSession.SessionOptions) => {
   const byteLen = bufferOrPath?.byteLength ?? 0;
   if (cachedSessionPromise && byteLen > 0 && byteLen === cachedModelByteLength) {
     return cachedSessionPromise;
@@ -127,10 +120,7 @@ self.onmessage = (event: MessageEvent) => {
           voiceId,
         });
         const wavBuffer = await origBlobArrayBuffer.call(wavBlob);
-        (self as any).postMessage(
-          { type: 'result', id, text, wavBuffer },
-          [wavBuffer]
-        );
+        (self as any).postMessage({ type: 'result', id, text, wavBuffer }, [wavBuffer]);
       } catch (err: any) {
         self.postMessage({
           type: 'error',

@@ -3,14 +3,15 @@
 // terrain data on. Recomputed a moment after the draft, the clearance or the vehicle's home changes.
 
 import { useEffect } from 'react';
-import { useMissionPlanStore } from '../../store/missionPlanStore';
-import { useMissionTerrainStore } from '../../store/missionTerrainStore';
-import { useTerrainStore } from '../../store/terrainStore';
-import { useTelemetryStore } from '../../store/telemetryStore';
+
 import { getVehicleCategory } from '../../mavlink/messages';
 import { fliesSplines, missionPathLegs, routeIndices, type PathItem } from '../../mavlink/missionPath';
 import { missionProfile, terrainChecked, terrainIssues } from '../../mavlink/missionProfile';
 import { terrainService } from '../../mavlink/terrainBoot';
+import { useMissionPlanStore } from '../../store/missionPlanStore';
+import { useMissionTerrainStore } from '../../store/missionTerrainStore';
+import { useTelemetryStore } from '../../store/telemetryStore';
+import { useTerrainStore } from '../../store/terrainStore';
 import { useUnitsStore } from '../../store/unitsStore';
 
 const DEBOUNCE_MS = 250;
@@ -33,7 +34,14 @@ export function useMissionTerrain() {
     }
     let cancelled = false;
     const t = setTimeout(async () => {
-      const items: PathItem[] = draft.items.map((it) => ({ command: it.command, lat: it.x, lon: it.y, alt: it.z, frame: it.frame, param1: it.param1 }));
+      const items: PathItem[] = draft.items.map((it) => ({
+        command: it.command,
+        lat: it.x,
+        lon: it.y,
+        alt: it.z,
+        frame: it.frame,
+        param1: it.param1,
+      }));
       const splines = fliesSplines(category);
       const legs = missionPathLegs(items, routeIndices(items, splines), splines);
       if (legs.length === 0) {
@@ -45,14 +53,21 @@ export function useMissionTerrain() {
       const rough = missionProfile(items, legs, () => null, { homeMslHint: hint });
       useMissionTerrainStore.setState({ loading: true });
       // Home's terrain too, when it has a position (0, 0 is "unknown", not a place to fetch).
-      const homePos = items[0] && (items[0].lat !== 0 || items[0].lon !== 0) ? [{ lat: items[0].lat, lon: items[0].lon }] : [];
+      const homePos =
+        items[0] && (items[0].lat !== 0 || items[0].lon !== 0) ? [{ lat: items[0].lat, lon: items[0].lon }] : [];
       await terrainService.heightsAt([...rough.points, ...homePos]);
       if (cancelled) return;
-      const profile = missionProfile(items, legs, (lat, lon) => terrainService.heightNow(lat, lon), { homeMslHint: hint });
+      const profile = missionProfile(items, legs, (lat, lon) => terrainService.heightNow(lat, lon), {
+        homeMslHint: hint,
+      });
       // Heights in the warnings in the user's units, whole feet or metres; above zero is at least 1 (never "0 ft below").
       const whole = (v: number) => (v > 0 ? Math.max(1, Math.round(v)) : Math.round(v));
       const fmt = (m: number) => (imperial ? `${whole(m * 3.28084)} ft` : `${whole(m)} m`);
-      useMissionTerrainStore.setState({ profile, issues: terrainIssues(profile, legs, clearanceM, fmt), loading: false });
+      useMissionTerrainStore.setState({
+        profile,
+        issues: terrainIssues(profile, legs, clearanceM, fmt),
+        loading: false,
+      });
     }, DEBOUNCE_MS);
     return () => {
       cancelled = true;

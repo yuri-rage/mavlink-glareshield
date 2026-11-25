@@ -8,7 +8,8 @@ export type TlogWorkerRequest =
   | { op: 'write'; id: number; data: ArrayBuffer }
   | { op: 'close'; id: number };
 
-export type TlogWorkerReply = { id: number; ok: true; size: number } | { id: number; ok: false; error: string; quota: boolean };
+export type TlogWorkerReply =
+  { id: number; ok: true; size: number } | { id: number; ok: false; error: string; quota: boolean };
 
 let handle: any = null;
 let position = 0;

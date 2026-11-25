@@ -17,7 +17,8 @@ export interface BuildInfo {
 }
 
 /** This build (defined at build time; "dev" on the dev server and in tests). */
-export const BUILD: BuildInfo = typeof __BUILD__ !== 'undefined' ? __BUILD__ : { id: 'dev', sha: null, date: null, dirty: false };
+export const BUILD: BuildInfo =
+  typeof __BUILD__ !== 'undefined' ? __BUILD__ : { id: 'dev', sha: null, date: null, dirty: false };
 
 /** "2026.11.25 · 55b37e4" (with "+" when built from uncommitted changes), or "dev". */
 export function buildLabel(b: BuildInfo = BUILD): string {
@@ -51,7 +52,10 @@ export const useUpdateStore = create<UpdateState>(() => ({ available: null }));
 const CHECK_EVERY_MS = 10 * 60 * 1000;
 
 /** Fetch the deployed build ID and note a newer one (quietly: offline or a failed fetch changes nothing). */
-export async function checkForUpdate(fetchImpl: typeof fetch = fetch, currentId: string = BUILD.id): Promise<string | null> {
+export async function checkForUpdate(
+  fetchImpl: typeof fetch = fetch,
+  currentId: string = BUILD.id
+): Promise<string | null> {
   try {
     const res = await fetchImpl(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return null;

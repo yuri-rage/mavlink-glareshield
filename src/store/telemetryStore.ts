@@ -1,9 +1,17 @@
 import { create, type StateCreator } from 'zustand';
-import { observePacket, onActiveVehicleChange, useVehicleRosterStore } from '../mavlink/vehicleRoster';
-import { MAVLINK_MSG_ID, getVehicleModeName, extractFirmwareVersion, isVehicleAutopilotHeartbeat, getMavCmdName, MAV_CMD } from '../mavlink/messages';
-import { decodePacket, MavlinkPacket } from '../mavlink/parser';
+
 import { mavlinkConnection } from '../mavlink/connection';
+import {
+  extractFirmwareVersion,
+  getMavCmdName,
+  getVehicleModeName,
+  isVehicleAutopilotHeartbeat,
+  MAV_CMD,
+  MAVLINK_MSG_ID,
+} from '../mavlink/messages';
+import { decodePacket, MavlinkPacket } from '../mavlink/parser';
 import { messageRateManager } from '../mavlink/rateManager';
+import { observePacket, onActiveVehicleChange, useVehicleRosterStore } from '../mavlink/vehicleRoster';
 
 export interface VehicleHeartbeat {
   type: number;
@@ -275,7 +283,6 @@ export interface HomePositionInfo {
   source: 'home_msg' | 'wp0' | 'arm_pos' | 'none';
 }
 
-
 export interface BaseStationPosition {
   lat: number;
   lon: number;
@@ -414,7 +421,9 @@ export function appendTracePoint(trace: [number, number][], lat: number, lon: nu
 /** The store fields after a trace change. */
 function traceChange(state: { traceVersion: number; traceResets: number }, what: 'none' | 'appended' | 'trimmed') {
   if (what === 'none') return {};
-  return what === 'trimmed' ? { traceVersion: state.traceVersion + 1, traceResets: state.traceResets + 1 } : { traceVersion: state.traceVersion + 1 };
+  return what === 'trimmed'
+    ? { traceVersion: state.traceVersion + 1, traceResets: state.traceResets + 1 }
+    : { traceVersion: state.traceVersion + 1 };
 }
 
 /** Heartbeat gap after which the vehicle counts as re-acquired (rates and home are requested again). */
@@ -479,15 +488,12 @@ export function computeDistanceAndBearing(
   const phi2 = toRad(lat2);
 
   const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const distanceM = R * c;
 
   const y = Math.sin(dLon) * Math.cos(phi2);
-  const x =
-    Math.cos(phi1) * Math.sin(phi2) -
-    Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLon);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLon);
   const bearingDeg = (toDeg(Math.atan2(y, x)) + 360) % 360;
 
   return { distanceM, bearingDeg };
@@ -521,8 +527,7 @@ export function evaluatePreArmReadiness(
 ): PreArmReadiness {
   const PREARM_BIT = 0x10000000; // MAV_SYS_STATUS_PREARM_CHECK (268435456)
   const prearmBitPresent =
-    (sysStatus.sensorsPresent & PREARM_BIT) !== 0 ||
-    (sysStatus.sensorsEnabled & PREARM_BIT) !== 0;
+    (sysStatus.sensorsPresent & PREARM_BIT) !== 0 || (sysStatus.sensorsEnabled & PREARM_BIT) !== 0;
   const prearmBitHealthy = (sysStatus.sensorsHealth & PREARM_BIT) !== 0;
 
   const failedSubsystems: string[] = [];
@@ -604,9 +609,15 @@ export function appendStatusMessage(
   // parameter file is opened by MAVFTP, besides when asked for. Counted on the earlier copy, in place, rather than
   // listed again. Warnings and worse always come to the top.
   if (msg.severity >= 5) {
-    const i = existing.slice(0, REPEAT_LOOKBACK).findIndex(
-      (m) => m.text === msg.text && m.severity === msg.severity && m.timestamp !== undefined && now - m.timestamp <= REPEAT_WINDOW_MS
-    );
+    const i = existing
+      .slice(0, REPEAT_LOOKBACK)
+      .findIndex(
+        (m) =>
+          m.text === msg.text &&
+          m.severity === msg.severity &&
+          m.timestamp !== undefined &&
+          now - m.timestamp <= REPEAT_WINDOW_MS
+      );
     if (i > 0) {
       const next = existing.slice();
       next[i] = { ...existing[i], count: (existing[i].count ?? 1) + 1 };
@@ -744,1038 +755,1047 @@ function batchedNotify(config: StateCreator<TelemetryState>): StateCreator<Telem
   };
 }
 
-export const useTelemetryStore = create<TelemetryState>()(batchedNotify((set) => ({
-  heartbeat: {
-    type: 0,
-    autopilot: 0,
-    baseMode: 0,
-    customMode: 0,
-    modeName: 'DISCONNECTED',
-    isArmed: false,
-    systemStatus: 0,
-    lastHeartbeatTime: 0,
-    systemId: 1,
-    componentId: 1,
-  },
-  attitude: {
-    roll: 0,
-    pitch: 0,
-    yaw: 0,
-    rollDeg: 0,
-    pitchDeg: 0,
-    yawDeg: 0,
-    rollSpeed: 0,
-    pitchSpeed: 0,
-    yawSpeed: 0,
-  },
-  imu: {
-    xacc: 0,
-    yacc: 0,
-    zacc: -1000,
-    nz: 1.0,
-  },
-  position: {
-    timeBootMs: 0,
-    lat: 0,
-    lon: 0,
-    alt: 0,
-    relativeAlt: 0,
-    vx: 0,
-    vy: 0,
-    vz: 0,
-    hdg: 0,
-  },
-  gps: {
-    fixType: 0,
-    fixLabel: 'No GPS',
-    satellites: 0,
-    hdop: 99.9,
-    vdop: 99.9,
-    groundspeed: 0,
-    cog: 0,
-    hasYaw: false,
-  },
-  gps2: null,
-  battery: {
-    voltage: 0,
-    current: 0,
-    remaining: 0,
-    consumedMah: 0,
-    cellVoltages: [],
-  },
-  batteries: {},
-  vfr: {
-    airspeed: 0,
-    groundspeed: 0,
-    heading: 0,
-    throttle: 0,
-    alt: 0,
-    climb: 0,
-  },
-  fenceStatus: { breached: false, breachCount: 0, breachType: 0, receivedAt: 0 },
-  sysStatus: {
-    load: 0,
-    dropRateComm: 0,
-    errorsComm: 0,
-    sensorsPresent: 0,
-    sensorsEnabled: 0,
-    sensorsHealth: 0,
-  },
-  rc: {
-    chancount: 8,
-    rssi: 0,
-    channels: [1500, 1500, 1000, 1500, 1500, 1500, 1500, 1500, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  },
-  servo: {
-    port: 0,
-    ports: {
-      0: [1100, 1100, 1100, 1100, 1500, 1500, 1500, 1500, 0, 0, 0, 0, 0, 0, 0, 0],
+export const useTelemetryStore = create<TelemetryState>()(
+  batchedNotify((set) => ({
+    heartbeat: {
+      type: 0,
+      autopilot: 0,
+      baseMode: 0,
+      customMode: 0,
+      modeName: 'DISCONNECTED',
+      isArmed: false,
+      systemStatus: 0,
+      lastHeartbeatTime: 0,
+      systemId: 1,
+      componentId: 1,
     },
-    servos: [1100, 1100, 1100, 1100, 1500, 1500, 1500, 1500, 0, 0, 0, 0, 0, 0, 0, 0],
-  },
-  navController: {
-    navRoll: 0,
-    navPitch: 0,
-    navBearing: 0,
-    targetBearing: 0,
-    wpDist: 0,
-    altError: 0,
-    aspdError: 0,
-    xtrackError: 0,
-  },
-  wind: {
-    direction: 0,
-    speed: 0,
-    speedZ: 0,
-  },
-  vibration: {
-    vibrationX: 0,
-    vibrationY: 0,
-    vibrationZ: 0,
-    clipping0: 0,
-    clipping1: 0,
-    clipping2: 0,
-  },
-  ekf: {
-    flags: 0,
-    velocityVariance: 0,
-    posHorizVariance: 0,
-    posVertVariance: 0,
-    compassVariance: 0,
-    terrainAltVariance: 0,
-    airspeedVariance: 0,
-  },
-  rangefinder: {
-    distance: 0,
-    voltage: 0,
-    minDistance: 0,
-    maxDistance: 0,
-    signalQuality: 0,
-  },
-  rpm: {
-    rpm1: 0,
-    rpm2: 0,
-  },
-  esc: {
-    voltage: escZeros(),
-    current: escZeros(),
-    totalCurrent: escZeros(),
-    rpm: escZeros(),
-    temperature: escZeros(),
-    count: 4,
-  },
-  extendedState: { landedState: 0, vtolState: 0, lastUpdate: 0 },
-  power: {
-    vcc: 5.0,
-    vservo: 5.0,
-    flags: 0,
-  },
-  pressure: {
-    pressAbs: 1013.25,
-    pressDiff: 0,
-    temperature: 25.0,
-  },
-  homePosition: (() => {
-    const wp0 = initialNav.missionWaypoints?.find(
-      (w) => w.seq === 0 && (w.lat !== 0 || w.lon !== 0)
-    );
-    if (wp0) {
-      return {
-        lat: wp0.lat,
-        lon: wp0.lon,
-        alt: wp0.alt,
-        distanceM: null,
-        bearingDeg: null,
-        source: 'wp0' as const,
-      };
-    }
-    return {
+    attitude: {
+      roll: 0,
+      pitch: 0,
+      yaw: 0,
+      rollDeg: 0,
+      pitchDeg: 0,
+      yawDeg: 0,
+      rollSpeed: 0,
+      pitchSpeed: 0,
+      yawSpeed: 0,
+    },
+    imu: {
+      xacc: 0,
+      yacc: 0,
+      zacc: -1000,
+      nz: 1.0,
+    },
+    position: {
+      timeBootMs: 0,
       lat: 0,
       lon: 0,
       alt: 0,
-      distanceM: null,
-      bearingDeg: null,
-      source: 'none' as const,
-    };
-  })(),
-  lastKnownHome: validHome(initialNav.home),
-  homeFromVehicle: false,
-  rallySupport: 'unknown',
-  statusMessages: [],
-  firmwareVersion: null,
-  firmwareRaw: undefined,
-  parameters: {},
-  missionWaypoints: initialNav.missionWaypoints ?? [],
-  currentWaypointSeq: 0,
-  lastReachedWaypointSeq: 0,
-  lastReachedAt: 0,
-  missionItemReachedSeen: false,
-  manualWaypointJump: null,
-  fencePoints: initialNav.fencePoints ?? [],
-  rallyPoints: initialNav.rallyPoints ?? [],
-  flightTrace: [],
-  traceVersion: 0,
-  traceResets: 0,
-  baseStationPosition: null,
-  hasConnectedInSession: false,
-  armedStartedAt: null,
-  accumulatedArmedMs: 0,
+      relativeAlt: 0,
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      hdg: 0,
+    },
+    gps: {
+      fixType: 0,
+      fixLabel: 'No GPS',
+      satellites: 0,
+      hdop: 99.9,
+      vdop: 99.9,
+      groundspeed: 0,
+      cog: 0,
+      hasYaw: false,
+    },
+    gps2: null,
+    battery: {
+      voltage: 0,
+      current: 0,
+      remaining: 0,
+      consumedMah: 0,
+      cellVoltages: [],
+    },
+    batteries: {},
+    vfr: {
+      airspeed: 0,
+      groundspeed: 0,
+      heading: 0,
+      throttle: 0,
+      alt: 0,
+      climb: 0,
+    },
+    fenceStatus: { breached: false, breachCount: 0, breachType: 0, receivedAt: 0 },
+    sysStatus: {
+      load: 0,
+      dropRateComm: 0,
+      errorsComm: 0,
+      sensorsPresent: 0,
+      sensorsEnabled: 0,
+      sensorsHealth: 0,
+    },
+    rc: {
+      chancount: 8,
+      rssi: 0,
+      channels: [1500, 1500, 1000, 1500, 1500, 1500, 1500, 1500, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    },
+    servo: {
+      port: 0,
+      ports: {
+        0: [1100, 1100, 1100, 1100, 1500, 1500, 1500, 1500, 0, 0, 0, 0, 0, 0, 0, 0],
+      },
+      servos: [1100, 1100, 1100, 1100, 1500, 1500, 1500, 1500, 0, 0, 0, 0, 0, 0, 0, 0],
+    },
+    navController: {
+      navRoll: 0,
+      navPitch: 0,
+      navBearing: 0,
+      targetBearing: 0,
+      wpDist: 0,
+      altError: 0,
+      aspdError: 0,
+      xtrackError: 0,
+    },
+    wind: {
+      direction: 0,
+      speed: 0,
+      speedZ: 0,
+    },
+    vibration: {
+      vibrationX: 0,
+      vibrationY: 0,
+      vibrationZ: 0,
+      clipping0: 0,
+      clipping1: 0,
+      clipping2: 0,
+    },
+    ekf: {
+      flags: 0,
+      velocityVariance: 0,
+      posHorizVariance: 0,
+      posVertVariance: 0,
+      compassVariance: 0,
+      terrainAltVariance: 0,
+      airspeedVariance: 0,
+    },
+    rangefinder: {
+      distance: 0,
+      voltage: 0,
+      minDistance: 0,
+      maxDistance: 0,
+      signalQuality: 0,
+    },
+    rpm: {
+      rpm1: 0,
+      rpm2: 0,
+    },
+    esc: {
+      voltage: escZeros(),
+      current: escZeros(),
+      totalCurrent: escZeros(),
+      rpm: escZeros(),
+      temperature: escZeros(),
+      count: 4,
+    },
+    extendedState: { landedState: 0, vtolState: 0, lastUpdate: 0 },
+    power: {
+      vcc: 5.0,
+      vservo: 5.0,
+      flags: 0,
+    },
+    pressure: {
+      pressAbs: 1013.25,
+      pressDiff: 0,
+      temperature: 25.0,
+    },
+    homePosition: (() => {
+      const wp0 = initialNav.missionWaypoints?.find((w) => w.seq === 0 && (w.lat !== 0 || w.lon !== 0));
+      if (wp0) {
+        return {
+          lat: wp0.lat,
+          lon: wp0.lon,
+          alt: wp0.alt,
+          distanceM: null,
+          bearingDeg: null,
+          source: 'wp0' as const,
+        };
+      }
+      return {
+        lat: 0,
+        lon: 0,
+        alt: 0,
+        distanceM: null,
+        bearingDeg: null,
+        source: 'none' as const,
+      };
+    })(),
+    lastKnownHome: validHome(initialNav.home),
+    homeFromVehicle: false,
+    rallySupport: 'unknown',
+    statusMessages: [],
+    firmwareVersion: null,
+    firmwareRaw: undefined,
+    parameters: {},
+    missionWaypoints: initialNav.missionWaypoints ?? [],
+    currentWaypointSeq: 0,
+    lastReachedWaypointSeq: 0,
+    lastReachedAt: 0,
+    missionItemReachedSeen: false,
+    manualWaypointJump: null,
+    fencePoints: initialNav.fencePoints ?? [],
+    rallyPoints: initialNav.rallyPoints ?? [],
+    flightTrace: [],
+    traceVersion: 0,
+    traceResets: 0,
+    baseStationPosition: null,
+    hasConnectedInSession: false,
+    armedStartedAt: null,
+    accumulatedArmedMs: 0,
 
-  clearMessages: () => set({ statusMessages: [] }),
-  clearCommandFeedback: () => set({ commandFeedback: undefined }),
-  setBaseStationPosition: (pos: BaseStationPosition | null) => set({ baseStationPosition: pos }),
+    clearMessages: () => set({ statusMessages: [] }),
+    clearCommandFeedback: () => set({ commandFeedback: undefined }),
+    setBaseStationPosition: (pos: BaseStationPosition | null) => set({ baseStationPosition: pos }),
 
-  addTracePoint: (lat: number, lon: number) => {
-    set((state) => {
-      const what = appendTracePoint(state.flightTrace, lat, lon);
-      return what === 'none' ? state : traceChange(state, what);
-    });
-  },
+    addTracePoint: (lat: number, lon: number) => {
+      set((state) => {
+        const what = appendTracePoint(state.flightTrace, lat, lon);
+        return what === 'none' ? state : traceChange(state, what);
+      });
+    },
 
-  clearTrace: () => set((s) => ({ flightTrace: [], traceVersion: s.traceVersion + 1, traceResets: s.traceResets + 1 })),
+    clearTrace: () =>
+      set((s) => ({ flightTrace: [], traceVersion: s.traceVersion + 1, traceResets: s.traceResets + 1 })),
 
-  processPacket: (packet: MavlinkPacket) => {
-    // Early filter: skip unhandled packets to avoid unnecessary subscriber notifications
-    if (!HANDLED_MESSAGE_IDS.has(packet.messageId)) {
-      return;
-    }
+    processPacket: (packet: MavlinkPacket) => {
+      // Early filter: skip unhandled packets to avoid unnecessary subscriber notifications
+      if (!HANDLED_MESSAGE_IDS.has(packet.messageId)) {
+        return;
+      }
 
-    const data = decodePacket(packet);
-    // The list of vehicles hears every packet; it says which vehicle is active (and may switch to another first).
-    const active = observePacket(packet, data);
+      const data = decodePacket(packet);
+      // The list of vehicles hears every packet; it says which vehicle is active (and may switch to another first).
+      const active = observePacket(packet, data);
 
-    packetUpdate = true;
-    try {
-    set((state) => {
-      const now = Date.now();
+      packetUpdate = true;
+      try {
+        set((state) => {
+          const now = Date.now();
 
-      // Autopilot lock-on and multi-system filtering
-      if (packet.messageId === MAVLINK_MSG_ID.HEARTBEAT) {
-        // Only accept heartbeats from true vehicle autopilots (reject GCS, tracker, gimbal, companion)
-        if (!isVehicleAutopilotHeartbeat(data.type, data.autopilot, packet.componentId)) {
-          return state;
-        }
+          // Autopilot lock-on and multi-system filtering
+          if (packet.messageId === MAVLINK_MSG_ID.HEARTBEAT) {
+            // Only accept heartbeats from true vehicle autopilots (reject GCS, tracker, gimbal, companion)
+            if (!isVehicleAutopilotHeartbeat(data.type, data.autopilot, packet.componentId)) {
+              return state;
+            }
 
-        // Only the active vehicle (vehicleRoster: the first heard, or the one switched to); others are only listed.
-        if (packet.systemId !== active) {
-          return state;
-        }
+            // Only the active vehicle (vehicleRoster: the first heard, or the one switched to); others are only listed.
+            if (packet.systemId !== active) {
+              return state;
+            }
 
-        const isArmed = (data.base_mode & 0x80) !== 0;
-        const modeName = resolveModeName(data.type, data.custom_mode);
-        messageRateManager.setTarget(packet.systemId, packet.componentId);
+            const isArmed = (data.base_mode & 0x80) !== 0;
+            const modeName = resolveModeName(data.type, data.custom_mode);
+            messageRateManager.setTarget(packet.systemId, packet.componentId);
 
-        // The vehicle is back after a silence (reboot, radio dropout) while our link stayed up. A rebooted
-        // autopilot has forgotten the stream rates we asked for, so ask again, and re-request home.
-        if (isVehicleReacquired(state.heartbeat.lastHeartbeatTime, now) && state.heartbeat.systemId === packet.systemId) {
-          messageRateManager.resetCache();
-          const encoder = mavlinkConnection.getEncoder();
-          mavlinkConnection.send(encoder.createRequestMessage(packet.systemId, packet.componentId, MAVLINK_MSG_ID.HOME_POSITION));
-        }
-
-        // Poll for firmware version / version banner if not yet resolved
-        if (!state.firmwareVersion) { if (versionPollAttempts < 5) {
-          if (now - lastVersionPollTime >= 2500) {
-            lastVersionPollTime = now;
-            versionPollAttempts++;
-            const encoder = mavlinkConnection.getEncoder();
-            mavlinkConnection.send(encoder.createRequestBanner(packet.systemId, packet.componentId));
-            mavlinkConnection.send(
-              encoder.createRequestMessage(packet.systemId, packet.componentId, MAVLINK_MSG_ID.AUTOPILOT_VERSION)
-            );
-            if (versionPollAttempts === 1) {
+            // The vehicle is back after a silence (reboot, radio dropout) while our link stayed up. A rebooted
+            // autopilot has forgotten the stream rates we asked for, so ask again, and re-request home.
+            if (
+              isVehicleReacquired(state.heartbeat.lastHeartbeatTime, now) &&
+              state.heartbeat.systemId === packet.systemId
+            ) {
+              messageRateManager.resetCache();
+              const encoder = mavlinkConnection.getEncoder();
               mavlinkConnection.send(
                 encoder.createRequestMessage(packet.systemId, packet.componentId, MAVLINK_MSG_ID.HOME_POSITION)
               );
             }
-            if (versionPollAttempts === 3) {
-              mavlinkConnection.send(encoder.createParamRequestList(packet.systemId, packet.componentId));
-            }
-          }
-        } } else {
-          versionPollAttempts = 0;
-        }
 
-        // Track armed flight time and arm-position fallback for Home
-        let armedStartedAt = state.armedStartedAt;
-        let accumulatedArmedMs = state.accumulatedArmedMs;
-        if (isArmed && !state.heartbeat.isArmed) {
-          armedStartedAt = now;
-        } else if (!isArmed && state.heartbeat.isArmed && state.armedStartedAt !== null) {
-          accumulatedArmedMs += Math.max(0, now - state.armedStartedAt);
-          armedStartedAt = null;
-        }
-
-        let updatedHome = state.homePosition;
-        if (
-          isArmed &&
-          !state.heartbeat.isArmed &&
-          state.homePosition.source === 'none' &&
-          (state.position.lat !== 0 || state.position.lon !== 0)
-        ) {
-          updatedHome = {
-            lat: state.position.lat,
-            lon: state.position.lon,
-            alt: state.position.alt,
-            distanceM: 0,
-            bearingDeg: 0,
-            source: 'arm_pos',
-          };
-        }
-
-        return {
-          hasConnectedInSession: true,
-          armedStartedAt,
-          accumulatedArmedMs,
-          // Another vehicle, or the same one back after a silence (rebooted, reflashed, another SITL binary): what we
-          // learned about rally support may no longer hold.
-          ...(packet.systemId !== state.heartbeat.systemId || isVehicleReacquired(state.heartbeat.lastHeartbeatTime, now)
-            ? { rallySupport: 'unknown' as const }
-            : {}),
-          ...(updatedHome !== state.homePosition ? { homePosition: updatedHome, homeFromVehicle: true } : {}),
-          heartbeat: {
-            type: data.type,
-            autopilot: data.autopilot,
-            baseMode: data.base_mode,
-            customMode: data.custom_mode,
-            modeName,
-            isArmed,
-            systemStatus: data.system_status,
-            lastHeartbeatTime: now,
-            systemId: packet.systemId,
-            componentId: packet.componentId,
-          },
-        };
-      }
-
-      // For all other messages: once a vehicle is active, only its packets.
-      if (active !== null && packet.systemId !== active) {
-        return state;
-      }
-
-      switch (packet.messageId) {
-
-        case MAVLINK_MSG_ID.ATTITUDE: {
-          const rollDeg = (data.roll * 180) / Math.PI;
-          const pitchDeg = (data.pitch * 180) / Math.PI;
-          let yawDeg = (data.yaw * 180) / Math.PI;
-          if (yawDeg < 0) yawDeg += 360;
-
-          return {
-            attitude: {
-              roll: data.roll,
-              pitch: data.pitch,
-              yaw: data.yaw,
-              rollDeg,
-              pitchDeg,
-              yawDeg,
-              rollSpeed: data.rollspeed,
-              pitchSpeed: data.pitchspeed,
-              yawSpeed: data.yawspeed,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.RAW_IMU:
-        case MAVLINK_MSG_ID.SCALED_IMU:
-        case MAVLINK_MSG_ID.HIGHRES_IMU: {
-          return {
-            imu: {
-              xacc: data.xacc,
-              yacc: data.yacc,
-              zacc: data.zacc,
-              nz: data.nz,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.GLOBAL_POSITION_INT: {
-          const traceWhat = appendTracePoint(state.flightTrace, data.lat, data.lon);
-
-          let updatedHome = state.homePosition;
-          if (
-            state.homePosition.source !== 'none' &&
-            (data.lat !== 0 || data.lon !== 0) &&
-            (state.homePosition.lat !== 0 || state.homePosition.lon !== 0)
-          ) {
-            const { distanceM, bearingDeg } = computeDistanceAndBearing(
-              data.lat,
-              data.lon,
-              state.homePosition.lat,
-              state.homePosition.lon
-            );
-            updatedHome = {
-              ...state.homePosition,
-              distanceM,
-              bearingDeg,
-            };
-          }
-
-          return {
-            position: {
-              timeBootMs: data.time_boot_ms ?? 0,
-              lat: data.lat,
-              lon: data.lon,
-              alt: data.alt,
-              relativeAlt: data.relative_alt,
-              vx: data.vx,
-              vy: data.vy,
-              vz: data.vz,
-              hdg: data.rawHdg === 65535 ? 65535 : data.hdg,
-            },
-            ...traceChange(state, traceWhat),
-            ...(updatedHome !== state.homePosition ? { homePosition: updatedHome } : {}),
-          };
-        }
-
-        case MAVLINK_MSG_ID.GPS_RAW_INT: {
-          const rawYaw = data.raw_yaw ?? 0;
-          const hasYaw = Boolean(state.gps.hasYaw || rawYaw > 0);
-          const yaw = rawYaw === 65535 ? undefined : (hasYaw ? data.yaw : undefined);
-          return {
-            gps: {
-              fixType: data.fix_type,
-              fixLabel: GPS_FIX_LABELS[data.fix_type] ?? `Fix ${data.fix_type}`,
-              satellites: data.satellites_visible,
-              hdop: data.eph,
-              vdop: data.epv,
-              groundspeed: data.vel,
-              cog: data.cog,
-              yaw,
-              hasYaw,
-              lastUpdate: Date.now(),
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.GPS2_RAW: {
-          const rawYaw = data.raw_yaw ?? 0;
-          const hasYaw = Boolean(state.gps2?.hasYaw || rawYaw > 0);
-          const yaw = rawYaw === 65535 ? undefined : (hasYaw ? data.yaw : undefined);
-          return {
-            gps2: {
-              fixType: data.fix_type,
-              fixLabel: GPS_FIX_LABELS[data.fix_type] ?? `Fix ${data.fix_type}`,
-              satellites: data.satellites_visible,
-              hdop: data.eph,
-              vdop: data.epv,
-              groundspeed: data.vel,
-              cog: data.cog,
-              yaw,
-              hasYaw,
-              lastUpdate: Date.now(),
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.FENCE_STATUS: {
-          return {
-            fenceStatus: {
-              breached: data.breach_status !== 0,
-              breachCount: data.breach_count ?? 0,
-              breachType: data.breach_type ?? 0,
-              receivedAt: Date.now(),
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.SYS_STATUS: {
-          return {
-            battery: {
-              ...state.battery,
-              voltage: data.voltage_battery > 0 ? data.voltage_battery : state.battery.voltage,
-              current: data.current_battery !== undefined ? data.current_battery : state.battery.current,
-              remaining: data.battery_remaining >= 0 ? data.battery_remaining : state.battery.remaining,
-            },
-            sysStatus: {
-              load: data.load ?? state.sysStatus.load,
-              dropRateComm: data.drop_rate_comm ?? state.sysStatus.dropRateComm,
-              errorsComm: data.errors_comm ?? state.sysStatus.errorsComm,
-              sensorsPresent: data.onboard_control_sensors_present ?? state.sysStatus.sensorsPresent,
-              sensorsEnabled: data.onboard_control_sensors_enabled ?? state.sysStatus.sensorsEnabled,
-              sensorsHealth: data.onboard_control_sensors_health ?? state.sysStatus.sensorsHealth,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.SCALED_PRESSURE: {
-          return {
-            pressure: {
-              pressAbs: data.press_abs,
-              pressDiff: data.press_diff,
-              temperature: data.temperature,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.RC_CHANNELS: {
-          return {
-            rc: {
-              chancount: data.chancount !== undefined ? data.chancount : 18,
-              rssi: data.rssi,
-              channels: data.channels,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.RC_CHANNELS_RAW: {
-          const merged = [...state.rc.channels];
-          for (let i = 0; i < 8; i++) {
-            merged[i] = data.channels[i];
-          }
-          return {
-            rc: {
-              chancount: Math.max(state.rc.chancount, 8),
-              rssi: data.rssi,
-              channels: merged,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.SERVO_OUTPUT_RAW: {
-          const port = data.port ?? 0;
-          const ports = {
-            ...(state.servo.ports ?? {}),
-            [port]: data.servos,
-          };
-          const baseIndex = port * 16;
-          const merged = [...(state.servo.servos ?? [])];
-          for (let i = 0; i < data.servos.length; i++) {
-            merged[baseIndex + i] = data.servos[i];
-          }
-          return {
-            servo: {
-              port,
-              ports,
-              servos: merged,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.NAV_CONTROLLER_OUTPUT: {
-          return {
-            navController: {
-              navRoll: data.nav_roll,
-              navPitch: data.nav_pitch,
-              navBearing: data.nav_bearing,
-              targetBearing: data.target_bearing,
-              wpDist: data.wp_dist,
-              altError: data.alt_error,
-              aspdError: data.aspd_error,
-              xtrackError: data.xtrack_error,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.POWER_STATUS: {
-          return {
-            power: {
-              vcc: data.Vcc,
-              vservo: data.Vservo,
-              flags: data.flags,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.WIND: {
-          return {
-            wind: {
-              direction: ((data.direction % 360) + 360) % 360,
-              speed: data.speed,
-              speedZ: data.speed_z,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.RANGEFINDER: {
-          return {
-            rangefinder: {
-              ...state.rangefinder,
-              distance: data.distance,
-              voltage: data.voltage,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.DISTANCE_SENSOR: {
-          // Only downward-facing readings (orientation 25 = MAV_SENSOR_ROTATION_PITCH_270) belong in rangefinder
-          if (data.orientation !== 25) {
-            return state;
-          }
-          return {
-            rangefinder: {
-              ...state.rangefinder,
-              distance: data.current_distance,
-              minDistance: data.min_distance,
-              maxDistance: data.max_distance,
-              signalQuality: data.signal_quality,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.EKF_STATUS_REPORT: {
-          return {
-            ekf: {
-              flags: data.flags,
-              velocityVariance: data.velocity_variance,
-              posHorizVariance: data.pos_horiz_variance,
-              posVertVariance: data.pos_vert_variance,
-              compassVariance: data.compass_variance,
-              terrainAltVariance: data.terrain_alt_variance,
-              airspeedVariance: data.airspeed_variance,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.RPM: {
-          return {
-            rpm: {
-              rpm1: data.rpm1,
-              rpm2: data.rpm2,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.VIBRATION: {
-          return {
-            vibration: {
-              vibrationX: data.vibration_x,
-              vibrationY: data.vibration_y,
-              vibrationZ: data.vibration_z,
-              clipping0: data.clipping_0,
-              clipping1: data.clipping_1,
-              clipping2: data.clipping_2,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.EXTENDED_SYS_STATE:
-          return { extendedState: { landedState: data.landed_state, vtolState: data.vtol_state, lastUpdate: now } };
-
-        case MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4:
-        case MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8:
-        case MAVLINK_MSG_ID.ESC_TELEMETRY_9_TO_12: {
-          // Each block is four ESCs: put it at its place (ESC 5 is index 4), keeping the other blocks.
-          const at = packet.messageId === MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4 ? 0 : packet.messageId === MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8 ? 4 : 8;
-          const put = (prev: number[], block: number[]) => {
-            const next = prev.length === ESC_SLOTS ? [...prev] : escZeros().map((z, i) => prev[i] ?? z);
-            block.forEach((v, i) => (next[at + i] = v));
-            return next;
-          };
-          return {
-            esc: {
-              voltage: put(state.esc.voltage, data.voltage),
-              current: put(state.esc.current, data.current),
-              totalCurrent: put(state.esc.totalCurrent, data.totalcurrent),
-              rpm: put(state.esc.rpm, data.rpm),
-              temperature: put(state.esc.temperature, data.temperature),
-              count: Math.max(state.esc.count ?? 4, at + 4),
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.BATTERY_STATUS: {
-          const sumCellVoltage = data.voltages && data.voltages.length > 0
-            ? data.voltages.reduce((a: number, b: number) => a + b, 0)
-            : 0;
-          // Each monitor reports with its id: keep them apart, so two packs don't overwrite each other.
-          const id: number = data.id ?? 0;
-          const prev = state.batteries[id];
-          const pack: BatteryPack = {
-            id,
-            voltage: sumCellVoltage > 0 ? sumCellVoltage : prev?.voltage ?? 0,
-            current: data.current_battery !== undefined ? data.current_battery : prev?.current ?? 0,
-            consumedMah: data.current_consumed !== undefined ? data.current_consumed : prev?.consumedMah ?? 0,
-            remaining: data.battery_remaining >= 0 ? data.battery_remaining : prev?.remaining ?? -1,
-            cellVoltages: data.voltages && data.voltages.length > 0 ? data.voltages : prev?.cellVoltages ?? [],
-            temperature: data.temperature,
-            at: Date.now(),
-          };
-          const batteries = { ...state.batteries, [id]: pack };
-          if (id !== 0) return { batteries };
-          return {
-            batteries,
-            battery: {
-              ...state.battery,
-              voltage: state.battery.voltage > 0 ? state.battery.voltage : (sumCellVoltage > 0 ? sumCellVoltage : state.battery.voltage),
-              current: data.current_battery !== undefined ? data.current_battery : state.battery.current,
-              consumedMah: data.current_consumed !== undefined ? data.current_consumed : state.battery.consumedMah,
-              remaining: data.battery_remaining >= 0 ? data.battery_remaining : state.battery.remaining,
-              cellVoltages: data.voltages && data.voltages.length > 0 ? data.voltages : state.battery.cellVoltages,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.VFR_HUD: {
-
-          return {
-            vfr: {
-              airspeed: data.airspeed,
-              groundspeed: data.groundspeed,
-              heading: data.heading,
-              throttle: data.throttle,
-              alt: data.alt,
-              climb: data.climb,
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.AUTOPILOT_VERSION: {
-          // The capability bit confirms rally support; its absence proves nothing, and an explicit "unsupported"
-          // answer from the vehicle stands.
-          const rallyCap = typeof data.capabilities === 'number' && (data.capabilities & CAPABILITY_MISSION_RALLY) !== 0;
-          return {
-            firmwareVersion: data.versionStr || state.firmwareVersion,
-            firmwareRaw: data.versionStr ? `v${data.versionStr}` : state.firmwareRaw,
-            ...(rallyCap && state.rallySupport === 'unknown' ? { rallySupport: 'supported' as const } : {}),
-          };
-        }
-
-        case MAVLINK_MSG_ID.STATUSTEXT: {
-          const version = extractFirmwareVersion(data.text);
-          const trimmedText = (data.text ?? '').trim();
-          const isExplanatory =
-            Boolean(trimmedText) &&
-            !version &&
-            (data.severity <= 4 ||
-              /^(PreArm:|Arm:|Takeoff|Mode|Guided|RTL|Land|Auto|Fence|Mission|Command|Disarm|Failed|Unable|Requires)/i.test(
-                trimmedText
-              ));
-
-          if (isExplanatory) {
-            lastRecentExplanatoryStatus = { text: trimmedText, time: now };
-          }
-
-          let updatedLastAck = state.lastCommandAck;
-          let updatedFeedback = state.commandFeedback;
-
-          if (
-            isExplanatory &&
-            state.lastCommandAck &&
-            state.lastCommandAck.result !== 0 &&
-            state.lastCommandAck.result !== 5 &&
-            now - state.lastCommandAck.time <= 1200 &&
-            !state.lastCommandAck.reason
-          ) {
-            updatedLastAck = {
-              ...state.lastCommandAck,
-              reason: trimmedText,
-            };
-          }
-
-          if (
-            isExplanatory &&
-            state.commandFeedback &&
-            (state.commandFeedback.status === 'denied' || state.commandFeedback.status === 'pending') &&
-            now - state.commandFeedback.time <= 1200 &&
-            !state.commandFeedback.reason
-          ) {
-            updatedFeedback = {
-              ...state.commandFeedback,
-              reason: trimmedText,
-            };
-          }
-
-          return {
-            statusMessages: appendStatusMessage(
-              state.statusMessages,
-              {
-                severity: data.severity,
-                severityLabel: SEVERITY_LABELS[data.severity] ?? `SEV_${data.severity}`,
-                text: data.text,
-              },
-              now
-            ),
-            ...(version ? { firmwareVersion: version, firmwareRaw: data.text } : {}),
-            ...(updatedLastAck !== state.lastCommandAck ? { lastCommandAck: updatedLastAck } : {}),
-            ...(updatedFeedback !== state.commandFeedback ? { commandFeedback: updatedFeedback } : {}),
-          };
-        }
-
-        case MAVLINK_MSG_ID.PARAM_VALUE: {
-          const prev = state.parameters[data.param_id];
-          return {
-            parameters: {
-              ...state.parameters,
-              [data.param_id]: {
-                value: data.param_value,
-                type: data.param_type,
-                index: data.param_index,
-                defaultValue: prev?.defaultValue,
-              },
-            },
-          };
-        }
-
-        case MAVLINK_MSG_ID.MISSION_ITEM:
-        case MAVLINK_MSG_ID.MISSION_ITEM_INT: {
-          const missionType = data.mission_type ?? 0;
-
-          if (missionType === 1) {
-            // Geofence item (MAV_MISSION_TYPE_FENCE)
-            const isCircle = data.command === 5004 || data.command === 5005 || (data.command === 5003 && data.param1 > 0);
-            const isInclusion = data.command === 5001 || data.command === 5005 || (data.command === 5003 && data.param1 > 0);
-            const fp: FencePoint = {
-              seq: data.seq,
-              command: data.command,
-              lat: data.x,
-              lon: data.y,
-              alt: data.z,
-              param1: data.param1,
-              radius: isCircle ? data.param1 : undefined,
-              vertexCount: !isCircle ? Math.round(data.param1) : undefined,
-              inclusion: isInclusion,
-            };
-            const existingIdx = state.fencePoints.findIndex((f) => f.seq === data.seq);
-            const updated = [...state.fencePoints];
-            if (existingIdx >= 0) updated[existingIdx] = fp;
-            else updated.push(fp);
-            updated.sort((a, b) => a.seq - b.seq);
-            return { fencePoints: updated };
-          }
-
-          if (missionType === 2) {
-            // Rally point (MAV_MISSION_TYPE_RALLY)
-            const rp: RallyPoint = {
-              seq: data.seq,
-              lat: data.x,
-              lon: data.y,
-              alt: data.z,
-              frame: data.frame,
-            };
-            const existingIdx = state.rallyPoints.findIndex((r) => r.seq === data.seq);
-            const updated = [...state.rallyPoints];
-            if (existingIdx >= 0) updated[existingIdx] = rp;
-            else updated.push(rp);
-            updated.sort((a, b) => a.seq - b.seq);
-            return { rallyPoints: updated };
-          }
-
-          // Only missionType === 0 (MAV_MISSION_TYPE_MISSION) updates mission waypoints
-          const existingIdx = state.missionWaypoints.findIndex((w) => w.seq === data.seq);
-          const isCurrent = data.current === 1;
-          const wp: MissionWaypoint = {
-            seq: data.seq,
-            command: data.command,
-            lat: data.x,
-            lon: data.y,
-            alt: data.z,
-            current: isCurrent,
-            frame: data.frame,
-            param1: data.param1,
-            param2: data.param2,
-            param3: data.param3,
-            param4: data.param4,
-            autocontinue: data.autocontinue,
-          };
-          const updatedWps = [...state.missionWaypoints];
-          if (existingIdx >= 0) {
-            updatedWps[existingIdx] = wp;
-          } else {
-            updatedWps.push(wp);
-            updatedWps.sort((a, b) => a.seq - b.seq);
-          }
-
-          let updatedHome = state.homePosition;
-          if (
-            data.seq === 0 &&
-            (data.x !== 0 || data.y !== 0) &&
-            state.homePosition.source !== 'home_msg'
-          ) {
-            const hasPos = state.position.lat !== 0 || state.position.lon !== 0;
-            const distBrg = hasPos
-              ? computeDistanceAndBearing(state.position.lat, state.position.lon, data.x, data.y)
-              : null;
-            updatedHome = {
-              lat: data.x,
-              lon: data.y,
-              alt: data.z,
-              distanceM: distBrg ? distBrg.distanceM : null,
-              bearingDeg: distBrg ? distBrg.bearingDeg : null,
-              source: 'wp0',
-            };
-          }
-
-          return {
-            missionWaypoints: updatedWps,
-            ...(isCurrent ? { currentWaypointSeq: data.seq } : {}),
-            ...(updatedHome !== state.homePosition ? { homePosition: updatedHome, homeFromVehicle: true } : {}),
-          };
-        }
-
-        case MAVLINK_MSG_ID.MISSION_CURRENT: {
-          const feedback = state.commandFeedback;
-          const isMatchingNavFeedback =
-            feedback &&
-            feedback.targetKey === `action:wp:${data.seq}` &&
-            (feedback.status === 'pending' || feedback.status === 'denied' || feedback.status === 'failed');
-
-          // Vehicles repeat MISSION_CURRENT several times a second. Rebuild the mission only when the active item
-          // actually changes: a new array re-renders the map and rewrites the whole mission to localStorage.
-          const currentChanged = state.missionWaypoints.some((w) => w.current !== (w.seq === data.seq));
-          return {
-            currentWaypointSeq: data.seq,
-            ...(currentChanged
-              ? { missionWaypoints: state.missionWaypoints.map((w) => ({ ...w, current: w.seq === data.seq })) }
-              : {}),
-            ...(isMatchingNavFeedback
-              ? {
-                  commandFeedback: {
-                    ...feedback,
-                    status: 'accepted',
-                    result: 0,
-                    resultText: 'ACCEPTED',
-                    reason: undefined,
-                  },
+            // Poll for firmware version / version banner if not yet resolved
+            if (!state.firmwareVersion) {
+              if (versionPollAttempts < 5) {
+                if (now - lastVersionPollTime >= 2500) {
+                  lastVersionPollTime = now;
+                  versionPollAttempts++;
+                  const encoder = mavlinkConnection.getEncoder();
+                  mavlinkConnection.send(encoder.createRequestBanner(packet.systemId, packet.componentId));
+                  mavlinkConnection.send(
+                    encoder.createRequestMessage(packet.systemId, packet.componentId, MAVLINK_MSG_ID.AUTOPILOT_VERSION)
+                  );
+                  if (versionPollAttempts === 1) {
+                    mavlinkConnection.send(
+                      encoder.createRequestMessage(packet.systemId, packet.componentId, MAVLINK_MSG_ID.HOME_POSITION)
+                    );
+                  }
+                  if (versionPollAttempts === 3) {
+                    mavlinkConnection.send(encoder.createParamRequestList(packet.systemId, packet.componentId));
+                  }
                 }
-              : {}),
-          };
-        }
+              }
+            } else {
+              versionPollAttempts = 0;
+            }
 
-        case MAVLINK_MSG_ID.MISSION_ITEM_REACHED: {
-          return {
-            lastReachedWaypointSeq: data.seq,
-            lastReachedAt: now,
-            missionItemReachedSeen: true,
-          };
-        }
+            // Track armed flight time and arm-position fallback for Home
+            let armedStartedAt = state.armedStartedAt;
+            let accumulatedArmedMs = state.accumulatedArmedMs;
+            if (isArmed && !state.heartbeat.isArmed) {
+              armedStartedAt = now;
+            } else if (!isArmed && state.heartbeat.isArmed && state.armedStartedAt !== null) {
+              accumulatedArmedMs += Math.max(0, now - state.armedStartedAt);
+              armedStartedAt = null;
+            }
 
-        case MAVLINK_MSG_ID.HOME_POSITION: {
-          if (data.latitude === 0 && data.longitude === 0) {
+            let updatedHome = state.homePosition;
+            if (
+              isArmed &&
+              !state.heartbeat.isArmed &&
+              state.homePosition.source === 'none' &&
+              (state.position.lat !== 0 || state.position.lon !== 0)
+            ) {
+              updatedHome = {
+                lat: state.position.lat,
+                lon: state.position.lon,
+                alt: state.position.alt,
+                distanceM: 0,
+                bearingDeg: 0,
+                source: 'arm_pos',
+              };
+            }
+
+            return {
+              hasConnectedInSession: true,
+              armedStartedAt,
+              accumulatedArmedMs,
+              // Another vehicle, or the same one back after a silence (rebooted, reflashed, another SITL binary): what we
+              // learned about rally support may no longer hold.
+              ...(packet.systemId !== state.heartbeat.systemId ||
+              isVehicleReacquired(state.heartbeat.lastHeartbeatTime, now)
+                ? { rallySupport: 'unknown' as const }
+                : {}),
+              ...(updatedHome !== state.homePosition ? { homePosition: updatedHome, homeFromVehicle: true } : {}),
+              heartbeat: {
+                type: data.type,
+                autopilot: data.autopilot,
+                baseMode: data.base_mode,
+                customMode: data.custom_mode,
+                modeName,
+                isArmed,
+                systemStatus: data.system_status,
+                lastHeartbeatTime: now,
+                systemId: packet.systemId,
+                componentId: packet.componentId,
+              },
+            };
+          }
+
+          // For all other messages: once a vehicle is active, only its packets.
+          if (active !== null && packet.systemId !== active) {
             return state;
           }
-          const hasPos = state.position.lat !== 0 || state.position.lon !== 0;
-          const distBrg = hasPos
-            ? computeDistanceAndBearing(
-                state.position.lat,
-                state.position.lon,
-                data.latitude,
-                data.longitude
-              )
-            : null;
-          return {
-            homePosition: {
-              lat: data.latitude,
-              lon: data.longitude,
-              alt: data.altitude ?? 0,
-              distanceM: distBrg ? distBrg.distanceM : null,
-              bearingDeg: distBrg ? distBrg.bearingDeg : null,
-              source: 'home_msg',
-            },
-            homeFromVehicle: true,
-          };
-        }
 
-        case MAVLINK_MSG_ID.COMMAND_ACK: {
-          let matchedPending: PendingCommand | undefined;
-          const pendingList = pendingCommands.get(data.command);
-          // MAV_RESULT_IN_PROGRESS is not the answer: the command stays pending (with a longer wait) until the
-          // final ACCEPTED / FAILED / … ACK arrives.
-          const inProgress = data.result === 5;
-          if (pendingList && pendingList.length > 0) {
-            if (inProgress) {
-              matchedPending = pendingList[0];
-              clearTimeout(matchedPending.timer);
-              matchedPending.timer = setTimeout(matchedPending.onTimeout, IN_PROGRESS_TIMEOUT_MS);
-            } else {
-              matchedPending = pendingList.shift()!;
-              clearTimeout(matchedPending.timer);
-              if (pendingList.length === 0) {
-                pendingCommands.delete(data.command);
-              }
+          switch (packet.messageId) {
+            case MAVLINK_MSG_ID.ATTITUDE: {
+              const rollDeg = (data.roll * 180) / Math.PI;
+              const pitchDeg = (data.pitch * 180) / Math.PI;
+              let yawDeg = (data.yaw * 180) / Math.PI;
+              if (yawDeg < 0) yawDeg += 360;
+
+              return {
+                attitude: {
+                  roll: data.roll,
+                  pitch: data.pitch,
+                  yaw: data.yaw,
+                  rollDeg,
+                  pitchDeg,
+                  yawDeg,
+                  rollSpeed: data.rollspeed,
+                  pitchSpeed: data.pitchspeed,
+                  yawSpeed: data.yawspeed,
+                },
+              };
             }
-          }
-          const cmdName = getMavCmdName(data.command);
-          const resultText = COMMAND_ACK_RESULTS[data.result] ?? `CODE_${data.result}`;
-          const isError = data.result !== 0 && data.result !== 5; // not ACCEPTED or IN_PROGRESS
-          const isHousekeeping =
-            data.command === MAV_CMD.SET_MESSAGE_INTERVAL ||
-            data.command === MAV_CMD.REQUEST_MESSAGE ||
-            data.command === MAV_CMD.REQUEST_AUTOPILOT_CAPABILITIES ||
-            data.command === MAV_CMD.DO_SEND_BANNER;
 
-          let reason: string | undefined;
-          if (
-            isError &&
-            lastRecentExplanatoryStatus &&
-            now - lastRecentExplanatoryStatus.time <= 600
-          ) {
-            reason = lastRecentExplanatoryStatus.text;
-          }
+            case MAVLINK_MSG_ID.RAW_IMU:
+            case MAVLINK_MSG_ID.SCALED_IMU:
+            case MAVLINK_MSG_ID.HIGHRES_IMU: {
+              return {
+                imu: {
+                  xacc: data.xacc,
+                  yacc: data.yacc,
+                  zacc: data.zacc,
+                  nz: data.nz,
+                },
+              };
+            }
 
-          const ackInfo: CommandAckInfo = {
-            command: data.command,
-            result: data.result,
-            resultText,
-            reason,
-            time: now,
-          };
+            case MAVLINK_MSG_ID.GLOBAL_POSITION_INT: {
+              const traceWhat = appendTracePoint(state.flightTrace, data.lat, data.lon);
 
-          if (matchedPending?.resolve && !inProgress) {
-            matchedPending.resolve(ackInfo);
-          }
-
-          const isUserTracked = Boolean(matchedPending?.label);
-          const ackMsg = isError && (!isHousekeeping || isUserTracked)
-            ? {
-                severity: data.result === 1 ? 4 : 3, // WARNING or ERROR
-                severityLabel: data.result === 1 ? 'WARNING' : 'ERROR',
-                text: `CMD ${cmdName}: ${resultText}${data.result_param2 ? ` (${data.result_param2})` : ''}${reason ? ` — ${reason}` : ''}`,
+              let updatedHome = state.homePosition;
+              if (
+                state.homePosition.source !== 'none' &&
+                (data.lat !== 0 || data.lon !== 0) &&
+                (state.homePosition.lat !== 0 || state.homePosition.lon !== 0)
+              ) {
+                const { distanceM, bearingDeg } = computeDistanceAndBearing(
+                  data.lat,
+                  data.lon,
+                  state.homePosition.lat,
+                  state.homePosition.lon
+                );
+                updatedHome = {
+                  ...state.homePosition,
+                  distanceM,
+                  bearingDeg,
+                };
               }
-            : null;
 
-          const shouldUpdateFeedback = !isHousekeeping || Boolean(matchedPending?.label);
-          const updatedFeedback: CommandFeedbackInfo | undefined = shouldUpdateFeedback
-            ? {
-                id: matchedPending?.id ?? nextPendingId++,
+              return {
+                position: {
+                  timeBootMs: data.time_boot_ms ?? 0,
+                  lat: data.lat,
+                  lon: data.lon,
+                  alt: data.alt,
+                  relativeAlt: data.relative_alt,
+                  vx: data.vx,
+                  vy: data.vy,
+                  vz: data.vz,
+                  hdg: data.rawHdg === 65535 ? 65535 : data.hdg,
+                },
+                ...traceChange(state, traceWhat),
+                ...(updatedHome !== state.homePosition ? { homePosition: updatedHome } : {}),
+              };
+            }
+
+            case MAVLINK_MSG_ID.GPS_RAW_INT: {
+              const rawYaw = data.raw_yaw ?? 0;
+              const hasYaw = Boolean(state.gps.hasYaw || rawYaw > 0);
+              const yaw = rawYaw === 65535 ? undefined : hasYaw ? data.yaw : undefined;
+              return {
+                gps: {
+                  fixType: data.fix_type,
+                  fixLabel: GPS_FIX_LABELS[data.fix_type] ?? `Fix ${data.fix_type}`,
+                  satellites: data.satellites_visible,
+                  hdop: data.eph,
+                  vdop: data.epv,
+                  groundspeed: data.vel,
+                  cog: data.cog,
+                  yaw,
+                  hasYaw,
+                  lastUpdate: Date.now(),
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.GPS2_RAW: {
+              const rawYaw = data.raw_yaw ?? 0;
+              const hasYaw = Boolean(state.gps2?.hasYaw || rawYaw > 0);
+              const yaw = rawYaw === 65535 ? undefined : hasYaw ? data.yaw : undefined;
+              return {
+                gps2: {
+                  fixType: data.fix_type,
+                  fixLabel: GPS_FIX_LABELS[data.fix_type] ?? `Fix ${data.fix_type}`,
+                  satellites: data.satellites_visible,
+                  hdop: data.eph,
+                  vdop: data.epv,
+                  groundspeed: data.vel,
+                  cog: data.cog,
+                  yaw,
+                  hasYaw,
+                  lastUpdate: Date.now(),
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.FENCE_STATUS: {
+              return {
+                fenceStatus: {
+                  breached: data.breach_status !== 0,
+                  breachCount: data.breach_count ?? 0,
+                  breachType: data.breach_type ?? 0,
+                  receivedAt: Date.now(),
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.SYS_STATUS: {
+              return {
+                battery: {
+                  ...state.battery,
+                  voltage: data.voltage_battery > 0 ? data.voltage_battery : state.battery.voltage,
+                  current: data.current_battery !== undefined ? data.current_battery : state.battery.current,
+                  remaining: data.battery_remaining >= 0 ? data.battery_remaining : state.battery.remaining,
+                },
+                sysStatus: {
+                  load: data.load ?? state.sysStatus.load,
+                  dropRateComm: data.drop_rate_comm ?? state.sysStatus.dropRateComm,
+                  errorsComm: data.errors_comm ?? state.sysStatus.errorsComm,
+                  sensorsPresent: data.onboard_control_sensors_present ?? state.sysStatus.sensorsPresent,
+                  sensorsEnabled: data.onboard_control_sensors_enabled ?? state.sysStatus.sensorsEnabled,
+                  sensorsHealth: data.onboard_control_sensors_health ?? state.sysStatus.sensorsHealth,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.SCALED_PRESSURE: {
+              return {
+                pressure: {
+                  pressAbs: data.press_abs,
+                  pressDiff: data.press_diff,
+                  temperature: data.temperature,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.RC_CHANNELS: {
+              return {
+                rc: {
+                  chancount: data.chancount !== undefined ? data.chancount : 18,
+                  rssi: data.rssi,
+                  channels: data.channels,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.RC_CHANNELS_RAW: {
+              const merged = [...state.rc.channels];
+              for (let i = 0; i < 8; i++) {
+                merged[i] = data.channels[i];
+              }
+              return {
+                rc: {
+                  chancount: Math.max(state.rc.chancount, 8),
+                  rssi: data.rssi,
+                  channels: merged,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.SERVO_OUTPUT_RAW: {
+              const port = data.port ?? 0;
+              const ports = {
+                ...(state.servo.ports ?? {}),
+                [port]: data.servos,
+              };
+              const baseIndex = port * 16;
+              const merged = [...(state.servo.servos ?? [])];
+              for (let i = 0; i < data.servos.length; i++) {
+                merged[baseIndex + i] = data.servos[i];
+              }
+              return {
+                servo: {
+                  port,
+                  ports,
+                  servos: merged,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.NAV_CONTROLLER_OUTPUT: {
+              return {
+                navController: {
+                  navRoll: data.nav_roll,
+                  navPitch: data.nav_pitch,
+                  navBearing: data.nav_bearing,
+                  targetBearing: data.target_bearing,
+                  wpDist: data.wp_dist,
+                  altError: data.alt_error,
+                  aspdError: data.aspd_error,
+                  xtrackError: data.xtrack_error,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.POWER_STATUS: {
+              return {
+                power: {
+                  vcc: data.Vcc,
+                  vservo: data.Vservo,
+                  flags: data.flags,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.WIND: {
+              return {
+                wind: {
+                  direction: ((data.direction % 360) + 360) % 360,
+                  speed: data.speed,
+                  speedZ: data.speed_z,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.RANGEFINDER: {
+              return {
+                rangefinder: {
+                  ...state.rangefinder,
+                  distance: data.distance,
+                  voltage: data.voltage,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.DISTANCE_SENSOR: {
+              // Only downward-facing readings (orientation 25 = MAV_SENSOR_ROTATION_PITCH_270) belong in rangefinder
+              if (data.orientation !== 25) {
+                return state;
+              }
+              return {
+                rangefinder: {
+                  ...state.rangefinder,
+                  distance: data.current_distance,
+                  minDistance: data.min_distance,
+                  maxDistance: data.max_distance,
+                  signalQuality: data.signal_quality,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.EKF_STATUS_REPORT: {
+              return {
+                ekf: {
+                  flags: data.flags,
+                  velocityVariance: data.velocity_variance,
+                  posHorizVariance: data.pos_horiz_variance,
+                  posVertVariance: data.pos_vert_variance,
+                  compassVariance: data.compass_variance,
+                  terrainAltVariance: data.terrain_alt_variance,
+                  airspeedVariance: data.airspeed_variance,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.RPM: {
+              return {
+                rpm: {
+                  rpm1: data.rpm1,
+                  rpm2: data.rpm2,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.VIBRATION: {
+              return {
+                vibration: {
+                  vibrationX: data.vibration_x,
+                  vibrationY: data.vibration_y,
+                  vibrationZ: data.vibration_z,
+                  clipping0: data.clipping_0,
+                  clipping1: data.clipping_1,
+                  clipping2: data.clipping_2,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.EXTENDED_SYS_STATE:
+              return { extendedState: { landedState: data.landed_state, vtolState: data.vtol_state, lastUpdate: now } };
+
+            case MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4:
+            case MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8:
+            case MAVLINK_MSG_ID.ESC_TELEMETRY_9_TO_12: {
+              // Each block is four ESCs: put it at its place (ESC 5 is index 4), keeping the other blocks.
+              const at =
+                packet.messageId === MAVLINK_MSG_ID.ESC_TELEMETRY_1_TO_4
+                  ? 0
+                  : packet.messageId === MAVLINK_MSG_ID.ESC_TELEMETRY_5_TO_8
+                    ? 4
+                    : 8;
+              const put = (prev: number[], block: number[]) => {
+                const next = prev.length === ESC_SLOTS ? [...prev] : escZeros().map((z, i) => prev[i] ?? z);
+                block.forEach((v, i) => (next[at + i] = v));
+                return next;
+              };
+              return {
+                esc: {
+                  voltage: put(state.esc.voltage, data.voltage),
+                  current: put(state.esc.current, data.current),
+                  totalCurrent: put(state.esc.totalCurrent, data.totalcurrent),
+                  rpm: put(state.esc.rpm, data.rpm),
+                  temperature: put(state.esc.temperature, data.temperature),
+                  count: Math.max(state.esc.count ?? 4, at + 4),
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.BATTERY_STATUS: {
+              const sumCellVoltage =
+                data.voltages && data.voltages.length > 0
+                  ? data.voltages.reduce((a: number, b: number) => a + b, 0)
+                  : 0;
+              // Each monitor reports with its id: keep them apart, so two packs don't overwrite each other.
+              const id: number = data.id ?? 0;
+              const prev = state.batteries[id];
+              const pack: BatteryPack = {
+                id,
+                voltage: sumCellVoltage > 0 ? sumCellVoltage : (prev?.voltage ?? 0),
+                current: data.current_battery !== undefined ? data.current_battery : (prev?.current ?? 0),
+                consumedMah: data.current_consumed !== undefined ? data.current_consumed : (prev?.consumedMah ?? 0),
+                remaining: data.battery_remaining >= 0 ? data.battery_remaining : (prev?.remaining ?? -1),
+                cellVoltages: data.voltages && data.voltages.length > 0 ? data.voltages : (prev?.cellVoltages ?? []),
+                temperature: data.temperature,
+                at: Date.now(),
+              };
+              const batteries = { ...state.batteries, [id]: pack };
+              if (id !== 0) return { batteries };
+              return {
+                batteries,
+                battery: {
+                  ...state.battery,
+                  voltage:
+                    state.battery.voltage > 0
+                      ? state.battery.voltage
+                      : sumCellVoltage > 0
+                        ? sumCellVoltage
+                        : state.battery.voltage,
+                  current: data.current_battery !== undefined ? data.current_battery : state.battery.current,
+                  consumedMah: data.current_consumed !== undefined ? data.current_consumed : state.battery.consumedMah,
+                  remaining: data.battery_remaining >= 0 ? data.battery_remaining : state.battery.remaining,
+                  cellVoltages: data.voltages && data.voltages.length > 0 ? data.voltages : state.battery.cellVoltages,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.VFR_HUD: {
+              return {
+                vfr: {
+                  airspeed: data.airspeed,
+                  groundspeed: data.groundspeed,
+                  heading: data.heading,
+                  throttle: data.throttle,
+                  alt: data.alt,
+                  climb: data.climb,
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.AUTOPILOT_VERSION: {
+              // The capability bit confirms rally support; its absence proves nothing, and an explicit "unsupported"
+              // answer from the vehicle stands.
+              const rallyCap =
+                typeof data.capabilities === 'number' && (data.capabilities & CAPABILITY_MISSION_RALLY) !== 0;
+              return {
+                firmwareVersion: data.versionStr || state.firmwareVersion,
+                firmwareRaw: data.versionStr ? `v${data.versionStr}` : state.firmwareRaw,
+                ...(rallyCap && state.rallySupport === 'unknown' ? { rallySupport: 'supported' as const } : {}),
+              };
+            }
+
+            case MAVLINK_MSG_ID.STATUSTEXT: {
+              const version = extractFirmwareVersion(data.text);
+              const trimmedText = (data.text ?? '').trim();
+              const isExplanatory =
+                Boolean(trimmedText) &&
+                !version &&
+                (data.severity <= 4 ||
+                  /^(PreArm:|Arm:|Takeoff|Mode|Guided|RTL|Land|Auto|Fence|Mission|Command|Disarm|Failed|Unable|Requires)/i.test(
+                    trimmedText
+                  ));
+
+              if (isExplanatory) {
+                lastRecentExplanatoryStatus = { text: trimmedText, time: now };
+              }
+
+              let updatedLastAck = state.lastCommandAck;
+              let updatedFeedback = state.commandFeedback;
+
+              if (
+                isExplanatory &&
+                state.lastCommandAck &&
+                state.lastCommandAck.result !== 0 &&
+                state.lastCommandAck.result !== 5 &&
+                now - state.lastCommandAck.time <= 1200 &&
+                !state.lastCommandAck.reason
+              ) {
+                updatedLastAck = {
+                  ...state.lastCommandAck,
+                  reason: trimmedText,
+                };
+              }
+
+              if (
+                isExplanatory &&
+                state.commandFeedback &&
+                (state.commandFeedback.status === 'denied' || state.commandFeedback.status === 'pending') &&
+                now - state.commandFeedback.time <= 1200 &&
+                !state.commandFeedback.reason
+              ) {
+                updatedFeedback = {
+                  ...state.commandFeedback,
+                  reason: trimmedText,
+                };
+              }
+
+              return {
+                statusMessages: appendStatusMessage(
+                  state.statusMessages,
+                  {
+                    severity: data.severity,
+                    severityLabel: SEVERITY_LABELS[data.severity] ?? `SEV_${data.severity}`,
+                    text: data.text,
+                  },
+                  now
+                ),
+                ...(version ? { firmwareVersion: version, firmwareRaw: data.text } : {}),
+                ...(updatedLastAck !== state.lastCommandAck ? { lastCommandAck: updatedLastAck } : {}),
+                ...(updatedFeedback !== state.commandFeedback ? { commandFeedback: updatedFeedback } : {}),
+              };
+            }
+
+            case MAVLINK_MSG_ID.PARAM_VALUE: {
+              const prev = state.parameters[data.param_id];
+              return {
+                parameters: {
+                  ...state.parameters,
+                  [data.param_id]: {
+                    value: data.param_value,
+                    type: data.param_type,
+                    index: data.param_index,
+                    defaultValue: prev?.defaultValue,
+                  },
+                },
+              };
+            }
+
+            case MAVLINK_MSG_ID.MISSION_ITEM:
+            case MAVLINK_MSG_ID.MISSION_ITEM_INT: {
+              const missionType = data.mission_type ?? 0;
+
+              if (missionType === 1) {
+                // Geofence item (MAV_MISSION_TYPE_FENCE)
+                const isCircle =
+                  data.command === 5004 || data.command === 5005 || (data.command === 5003 && data.param1 > 0);
+                const isInclusion =
+                  data.command === 5001 || data.command === 5005 || (data.command === 5003 && data.param1 > 0);
+                const fp: FencePoint = {
+                  seq: data.seq,
+                  command: data.command,
+                  lat: data.x,
+                  lon: data.y,
+                  alt: data.z,
+                  param1: data.param1,
+                  radius: isCircle ? data.param1 : undefined,
+                  vertexCount: !isCircle ? Math.round(data.param1) : undefined,
+                  inclusion: isInclusion,
+                };
+                const existingIdx = state.fencePoints.findIndex((f) => f.seq === data.seq);
+                const updated = [...state.fencePoints];
+                if (existingIdx >= 0) updated[existingIdx] = fp;
+                else updated.push(fp);
+                updated.sort((a, b) => a.seq - b.seq);
+                return { fencePoints: updated };
+              }
+
+              if (missionType === 2) {
+                // Rally point (MAV_MISSION_TYPE_RALLY)
+                const rp: RallyPoint = {
+                  seq: data.seq,
+                  lat: data.x,
+                  lon: data.y,
+                  alt: data.z,
+                  frame: data.frame,
+                };
+                const existingIdx = state.rallyPoints.findIndex((r) => r.seq === data.seq);
+                const updated = [...state.rallyPoints];
+                if (existingIdx >= 0) updated[existingIdx] = rp;
+                else updated.push(rp);
+                updated.sort((a, b) => a.seq - b.seq);
+                return { rallyPoints: updated };
+              }
+
+              // Only missionType === 0 (MAV_MISSION_TYPE_MISSION) updates mission waypoints
+              const existingIdx = state.missionWaypoints.findIndex((w) => w.seq === data.seq);
+              const isCurrent = data.current === 1;
+              const wp: MissionWaypoint = {
+                seq: data.seq,
                 command: data.command,
-                cmdName,
-                label: matchedPending?.label ?? cmdName,
-                targetKey: matchedPending?.targetKey,
-                status: isError ? 'denied' : inProgress ? 'pending' : 'accepted',
+                lat: data.x,
+                lon: data.y,
+                alt: data.z,
+                current: isCurrent,
+                frame: data.frame,
+                param1: data.param1,
+                param2: data.param2,
+                param3: data.param3,
+                param4: data.param4,
+                autocontinue: data.autocontinue,
+              };
+              const updatedWps = [...state.missionWaypoints];
+              if (existingIdx >= 0) {
+                updatedWps[existingIdx] = wp;
+              } else {
+                updatedWps.push(wp);
+                updatedWps.sort((a, b) => a.seq - b.seq);
+              }
+
+              let updatedHome = state.homePosition;
+              if (data.seq === 0 && (data.x !== 0 || data.y !== 0) && state.homePosition.source !== 'home_msg') {
+                const hasPos = state.position.lat !== 0 || state.position.lon !== 0;
+                const distBrg = hasPos
+                  ? computeDistanceAndBearing(state.position.lat, state.position.lon, data.x, data.y)
+                  : null;
+                updatedHome = {
+                  lat: data.x,
+                  lon: data.y,
+                  alt: data.z,
+                  distanceM: distBrg ? distBrg.distanceM : null,
+                  bearingDeg: distBrg ? distBrg.bearingDeg : null,
+                  source: 'wp0',
+                };
+              }
+
+              return {
+                missionWaypoints: updatedWps,
+                ...(isCurrent ? { currentWaypointSeq: data.seq } : {}),
+                ...(updatedHome !== state.homePosition ? { homePosition: updatedHome, homeFromVehicle: true } : {}),
+              };
+            }
+
+            case MAVLINK_MSG_ID.MISSION_CURRENT: {
+              const feedback = state.commandFeedback;
+              const isMatchingNavFeedback =
+                feedback &&
+                feedback.targetKey === `action:wp:${data.seq}` &&
+                (feedback.status === 'pending' || feedback.status === 'denied' || feedback.status === 'failed');
+
+              // Vehicles repeat MISSION_CURRENT several times a second. Rebuild the mission only when the active item
+              // actually changes: a new array re-renders the map and rewrites the whole mission to localStorage.
+              const currentChanged = state.missionWaypoints.some((w) => w.current !== (w.seq === data.seq));
+              return {
+                currentWaypointSeq: data.seq,
+                ...(currentChanged
+                  ? { missionWaypoints: state.missionWaypoints.map((w) => ({ ...w, current: w.seq === data.seq })) }
+                  : {}),
+                ...(isMatchingNavFeedback
+                  ? {
+                      commandFeedback: {
+                        ...feedback,
+                        status: 'accepted',
+                        result: 0,
+                        resultText: 'ACCEPTED',
+                        reason: undefined,
+                      },
+                    }
+                  : {}),
+              };
+            }
+
+            case MAVLINK_MSG_ID.MISSION_ITEM_REACHED: {
+              return {
+                lastReachedWaypointSeq: data.seq,
+                lastReachedAt: now,
+                missionItemReachedSeen: true,
+              };
+            }
+
+            case MAVLINK_MSG_ID.HOME_POSITION: {
+              if (data.latitude === 0 && data.longitude === 0) {
+                return state;
+              }
+              const hasPos = state.position.lat !== 0 || state.position.lon !== 0;
+              const distBrg = hasPos
+                ? computeDistanceAndBearing(state.position.lat, state.position.lon, data.latitude, data.longitude)
+                : null;
+              return {
+                homePosition: {
+                  lat: data.latitude,
+                  lon: data.longitude,
+                  alt: data.altitude ?? 0,
+                  distanceM: distBrg ? distBrg.distanceM : null,
+                  bearingDeg: distBrg ? distBrg.bearingDeg : null,
+                  source: 'home_msg',
+                },
+                homeFromVehicle: true,
+              };
+            }
+
+            case MAVLINK_MSG_ID.COMMAND_ACK: {
+              let matchedPending: PendingCommand | undefined;
+              const pendingList = pendingCommands.get(data.command);
+              // MAV_RESULT_IN_PROGRESS is not the answer: the command stays pending (with a longer wait) until the
+              // final ACCEPTED / FAILED / … ACK arrives.
+              const inProgress = data.result === 5;
+              if (pendingList && pendingList.length > 0) {
+                if (inProgress) {
+                  matchedPending = pendingList[0];
+                  clearTimeout(matchedPending.timer);
+                  matchedPending.timer = setTimeout(matchedPending.onTimeout, IN_PROGRESS_TIMEOUT_MS);
+                } else {
+                  matchedPending = pendingList.shift()!;
+                  clearTimeout(matchedPending.timer);
+                  if (pendingList.length === 0) {
+                    pendingCommands.delete(data.command);
+                  }
+                }
+              }
+              const cmdName = getMavCmdName(data.command);
+              const resultText = COMMAND_ACK_RESULTS[data.result] ?? `CODE_${data.result}`;
+              const isError = data.result !== 0 && data.result !== 5; // not ACCEPTED or IN_PROGRESS
+              const isHousekeeping =
+                data.command === MAV_CMD.SET_MESSAGE_INTERVAL ||
+                data.command === MAV_CMD.REQUEST_MESSAGE ||
+                data.command === MAV_CMD.REQUEST_AUTOPILOT_CAPABILITIES ||
+                data.command === MAV_CMD.DO_SEND_BANNER;
+
+              let reason: string | undefined;
+              if (isError && lastRecentExplanatoryStatus && now - lastRecentExplanatoryStatus.time <= 600) {
+                reason = lastRecentExplanatoryStatus.text;
+              }
+
+              const ackInfo: CommandAckInfo = {
+                command: data.command,
                 result: data.result,
                 resultText,
                 reason,
                 time: now,
+              };
+
+              if (matchedPending?.resolve && !inProgress) {
+                matchedPending.resolve(ackInfo);
               }
-            : state.commandFeedback;
 
-          return {
-            lastCommandAck: ackInfo,
-            ...(shouldUpdateFeedback ? { commandFeedback: updatedFeedback } : {}),
-            ...(ackMsg ? { statusMessages: appendStatusMessage(state.statusMessages, ackMsg, now) } : {}),
-          };
-        }
+              const isUserTracked = Boolean(matchedPending?.label);
+              const ackMsg =
+                isError && (!isHousekeeping || isUserTracked)
+                  ? {
+                      severity: data.result === 1 ? 4 : 3, // WARNING or ERROR
+                      severityLabel: data.result === 1 ? 'WARNING' : 'ERROR',
+                      text: `CMD ${cmdName}: ${resultText}${data.result_param2 ? ` (${data.result_param2})` : ''}${reason ? ` — ${reason}` : ''}`,
+                    }
+                  : null;
 
-        default:
-          return state;
+              const shouldUpdateFeedback = !isHousekeeping || Boolean(matchedPending?.label);
+              const updatedFeedback: CommandFeedbackInfo | undefined = shouldUpdateFeedback
+                ? {
+                    id: matchedPending?.id ?? nextPendingId++,
+                    command: data.command,
+                    cmdName,
+                    label: matchedPending?.label ?? cmdName,
+                    targetKey: matchedPending?.targetKey,
+                    status: isError ? 'denied' : inProgress ? 'pending' : 'accepted',
+                    result: data.result,
+                    resultText,
+                    reason,
+                    time: now,
+                  }
+                : state.commandFeedback;
+
+              return {
+                lastCommandAck: ackInfo,
+                ...(shouldUpdateFeedback ? { commandFeedback: updatedFeedback } : {}),
+                ...(ackMsg ? { statusMessages: appendStatusMessage(state.statusMessages, ackMsg, now) } : {}),
+              };
+            }
+
+            default:
+              return state;
+          }
+        });
+      } finally {
+        packetUpdate = false;
       }
-    });
-    } finally {
-      packetUpdate = false;
-    }
-  },
-})));
+    },
+  }))
+);
 
 // Wire up global packet listener
 mavlinkConnection.onPacket((packet) => {
@@ -1829,15 +1849,49 @@ function settlePendingCommands(now: number) {
  * so nothing of the old one (position, mission, parameters, home, firmware, trace) shows as the new one's.
  */
 const VEHICLE_FIELDS = [
-  'heartbeat', 'attitude', 'imu', 'position', 'gps', 'battery', 'batteries', 'vfr', 'sysStatus', 'fenceStatus', 'rc', 'servo',
-  'navController', 'wind', 'vibration', 'ekf', 'rangefinder', 'rpm', 'esc', 'extendedState', 'power', 'pressure',
-  'homePosition', 'homeFromVehicle', 'rallySupport', 'firmwareVersion', 'firmwareRaw', 'parameters', 'currentWaypointSeq',
-  'lastReachedWaypointSeq', 'lastReachedAt', 'missionItemReachedSeen', 'manualWaypointJump', 'lastCommandAck',
-  'armedStartedAt', 'accumulatedArmedMs',
+  'heartbeat',
+  'attitude',
+  'imu',
+  'position',
+  'gps',
+  'battery',
+  'batteries',
+  'vfr',
+  'sysStatus',
+  'fenceStatus',
+  'rc',
+  'servo',
+  'navController',
+  'wind',
+  'vibration',
+  'ekf',
+  'rangefinder',
+  'rpm',
+  'esc',
+  'extendedState',
+  'power',
+  'pressure',
+  'homePosition',
+  'homeFromVehicle',
+  'rallySupport',
+  'firmwareVersion',
+  'firmwareRaw',
+  'parameters',
+  'currentWaypointSeq',
+  'lastReachedWaypointSeq',
+  'lastReachedAt',
+  'missionItemReachedSeen',
+  'manualWaypointJump',
+  'lastCommandAck',
+  'armedStartedAt',
+  'accumulatedArmedMs',
 ] as const satisfies readonly (keyof TelemetryState)[];
 const initialVehicleState = (() => {
   const st = useTelemetryStore.getState();
-  return Object.fromEntries(VEHICLE_FIELDS.map((k) => [k, st[k]])) as Pick<TelemetryState, (typeof VEHICLE_FIELDS)[number]>;
+  return Object.fromEntries(VEHICLE_FIELDS.map((k) => [k, st[k]])) as Pick<
+    TelemetryState,
+    (typeof VEHICLE_FIELDS)[number]
+  >;
 })();
 
 onActiveVehicleChange((to, from) => {
@@ -1862,11 +1916,22 @@ onActiveVehicleChange((to, from) => {
     traceResets: state.traceResets + 1,
     commandFeedback:
       state.commandFeedback?.status === 'pending'
-        ? { ...state.commandFeedback, status: 'failed', result: -2, resultText: 'NOT_SENT', reason: 'Switched to another vehicle', time: now }
+        ? {
+            ...state.commandFeedback,
+            status: 'failed',
+            result: -2,
+            resultText: 'NOT_SENT',
+            reason: 'Switched to another vehicle',
+            time: now,
+          }
         : state.commandFeedback,
     statusMessages: appendStatusMessage(
       state.statusMessages,
-      { severity: 5, severityLabel: 'NOTICE', text: `Now commanding vehicle ${to}${from !== null ? ` (was ${from})` : ''}` },
+      {
+        severity: 5,
+        severityLabel: 'NOTICE',
+        text: `Now commanding vehicle ${to}${from !== null ? ` (was ${from})` : ''}`,
+      },
       now
     ),
   }));
@@ -1913,7 +1978,14 @@ mavlinkConnection.onStatus((status) => {
       // state would otherwise make a fixed-wing plane look like a VTOL; an 8-ESC vehicle's count would stick).
       extendedState: { landedState: 0, vtolState: 0, lastUpdate: 0 },
       batteries: {},
-      esc: { voltage: escZeros(), current: escZeros(), totalCurrent: escZeros(), rpm: escZeros(), temperature: escZeros(), count: 4 },
+      esc: {
+        voltage: escZeros(),
+        current: escZeros(),
+        totalCurrent: escZeros(),
+        rpm: escZeros(),
+        temperature: escZeros(),
+        count: 4,
+      },
     }));
   }
 });
@@ -1927,7 +1999,7 @@ export function sendTrackedCommand(
 ): Promise<CommandAckInfo> {
   return new Promise<CommandAckInfo>((resolve) => {
     let cmdId = 0;
-    if (packet.length >= 12 && packet[0] === 0xFD) {
+    if (packet.length >= 12 && packet[0] === 0xfd) {
       const payloadLen = packet[1];
       const msgId = packet[7] | (packet[8] << 8) | (packet[9] << 16);
       if (msgId === MAVLINK_MSG_ID.COMMAND_LONG || msgId === MAVLINK_MSG_ID.COMMAND_INT) {
@@ -1984,7 +2056,7 @@ export function sendTrackedCommand(
 }
 
 mavlinkConnection.onSend((data) => {
-  if (data.length >= 12 && data[0] === 0xFD) {
+  if (data.length >= 12 && data[0] === 0xfd) {
     const payloadLen = data[1];
     const msgId = data[7] | (data[8] << 8) | (data[9] << 16);
     if (msgId === MAVLINK_MSG_ID.COMMAND_LONG || msgId === MAVLINK_MSG_ID.COMMAND_INT) {
@@ -2105,7 +2177,11 @@ let savedHome: { lat: number; lon: number } | null = validHome(initialNav.home);
 
 useTelemetryStore.subscribe((state) => {
   const h = state.homePosition;
-  const homeSame = h.lat === lastHomeLat && h.lon === lastHomeLon && h.source === lastHomeSource && state.homeFromVehicle === lastHomeFromVehicle;
+  const homeSame =
+    h.lat === lastHomeLat &&
+    h.lon === lastHomeLon &&
+    h.source === lastHomeSource &&
+    state.homeFromVehicle === lastHomeFromVehicle;
   if (state.missionWaypoints === lastWps && state.fencePoints === lastFp && state.rallyPoints === lastRp && homeSame) {
     return;
   }
@@ -2204,15 +2280,7 @@ export async function setMissionCurrentWaypoint(seq: number, onAck?: (ack: Comma
 
   // Also send tracked MAV_CMD_DO_SET_MISSION_CURRENT (224) for command confirmation toast
   if (sent) {
-    const cmdPkt = encoder.createCommandLong(sysId, compId, MAV_CMD.DO_SET_MISSION_CURRENT, [
-      seq,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-    ]);
+    const cmdPkt = encoder.createCommandLong(sysId, compId, MAV_CMD.DO_SET_MISSION_CURRENT, [seq, 0, 0, 0, 0, 0, 0]);
     sendTrackedCommand(cmdPkt, {
       label: `Nav to WP ${seq}`,
       targetKey: `action:wp:${seq}`,

@@ -1,27 +1,29 @@
 import React, { useState } from 'react';
-import { useInPane } from '../dashboard/paneContext';
-import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
-import { formatEta, useConfirmStep, useWaypointNavigation } from '../../lib/useWaypointNavigation';
-import { useUnitsStore } from '../../store/unitsStore';
-import { useAudioAlertsStore } from '../../lib/audioAlerts';
-import { missionManager } from '../../mavlink/missionManager';
-import { mavlinkConnection } from '../../mavlink/connection';
-import { getMavCmdName, getAutoModeNum } from '../../mavlink/messages';
-import { Card, CardHeader, CardContent } from '../ui/card';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
+
 import {
+  AlertTriangle,
+  Compass,
   Milestone,
-  SkipForward,
-  SkipBack,
-  RotateCcw,
   Navigation,
   RefreshCw,
-  Compass,
-  AlertTriangle,
+  RotateCcw,
+  SkipBack,
+  SkipForward,
   Volume2,
   VolumeX,
 } from 'lucide-react';
+
+import { useAudioAlertsStore } from '../../lib/audioAlerts';
+import { formatEta, useConfirmStep, useWaypointNavigation } from '../../lib/useWaypointNavigation';
+import { mavlinkConnection } from '../../mavlink/connection';
+import { getAutoModeNum, getMavCmdName } from '../../mavlink/messages';
+import { missionManager } from '../../mavlink/missionManager';
+import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
+import { useUnitsStore } from '../../store/unitsStore';
+import { useInPane } from '../dashboard/paneContext';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardHeader } from '../ui/card';
 
 export const WaypointControlWidget: React.FC = () => {
   // In a Cockpit pane: the card fills it and its content scrolls under the pinned title.
@@ -46,12 +48,7 @@ export const WaypointControlWidget: React.FC = () => {
   const vfr = useTelemetryStore((s) => s.vfr);
 
   const { formatDistance, formatAltitude, formatCrosstrack } = useUnitsStore();
-  const {
-    waypointAnnounceEnabled,
-    toggleWaypointAnnounce,
-    soundEnabled,
-    voiceEnabled,
-  } = useAudioAlertsStore();
+  const { waypointAnnounceEnabled, toggleWaypointAnnounce, soundEnabled, voiceEnabled } = useAudioAlertsStore();
 
   // The dropdown only picks a waypoint (null = follow the active one); Go sends the jump, after a confirm.
   const [pickedWp, setPickedWp] = useState<number | null>(null);
@@ -80,22 +77,20 @@ export const WaypointControlWidget: React.FC = () => {
   };
 
   return (
-    <Card className="border-zinc-800 bg-zinc-950/90 shadow-lg flex flex-col h-full overflow-hidden">
-      <CardHeader className="py-2 px-3.5 bg-zinc-900/60 border-b border-zinc-800 flex flex-row items-center justify-between space-y-0">
+    <Card className="flex h-full flex-col overflow-hidden border-zinc-800 bg-zinc-950/90 shadow-lg">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-zinc-800 bg-zinc-900/60 px-3.5 py-2">
         <div className="flex items-center gap-2">
-          <Milestone className="h-4 w-4 text-amber-400 shrink-0" />
-          <span className="font-semibold text-xs tracking-wide text-zinc-100 uppercase">
-            Waypoint Control
-          </span>
+          <Milestone className="h-4 w-4 shrink-0 text-amber-400" />
+          <span className="text-xs font-semibold uppercase tracking-wide text-zinc-100">Waypoint Control</span>
         </div>
 
         <div className="flex items-center gap-1.5">
           {userWpCount > 0 ? (
-            <Badge variant="warning" className="text-[10px] font-mono px-1.5 py-0.5">
+            <Badge variant="warning" className="px-1.5 py-0.5 font-mono text-[10px]">
               WP {currentWaypointSeq} / {userWpCount}
             </Badge>
           ) : (
-            <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0.5 text-zinc-400">
+            <Badge variant="secondary" className="px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">
               No WPs
             </Badge>
           )}
@@ -103,10 +98,10 @@ export const WaypointControlWidget: React.FC = () => {
           {connected && (
             <Badge
               variant={isAutoMode ? 'success' : 'outline'}
-              className={`text-[10px] font-mono px-1.5 py-0.5 ${
+              className={`px-1.5 py-0.5 font-mono text-[10px] ${
                 isAutoMode
-                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
-                  : 'text-amber-300 border-amber-500/40'
+                  ? 'border-emerald-500/40 bg-emerald-950/60 text-emerald-300'
+                  : 'border-amber-500/40 text-amber-300'
               }`}
             >
               {heartbeat.modeName}
@@ -116,10 +111,10 @@ export const WaypointControlWidget: React.FC = () => {
           <button
             type="button"
             onClick={toggleWaypointAnnounce}
-            className={`h-6 w-6 rounded flex items-center justify-center transition-colors border ${
+            className={`flex h-6 w-6 items-center justify-center rounded border transition-colors ${
               waypointAnnounceEnabled && soundEnabled && voiceEnabled
-                ? 'bg-amber-950/40 border-amber-500/50 text-amber-300'
-                : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300'
+                ? 'border-amber-500/50 bg-amber-950/40 text-amber-300'
+                : 'border-zinc-800 bg-zinc-900 text-zinc-500 hover:text-zinc-300'
             }`}
             title={
               waypointAnnounceEnabled && soundEnabled && voiceEnabled
@@ -136,11 +131,13 @@ export const WaypointControlWidget: React.FC = () => {
         </div>
       </CardHeader>
 
-      <CardContent className={`p-3 sm:p-3.5 space-y-3 flex-1 flex flex-col justify-between min-h-0 ${inPane ? 'overflow-y-auto' : ''}`}>
+      <CardContent
+        className={`flex min-h-0 flex-1 flex-col justify-between space-y-3 p-3 sm:p-3.5 ${inPane ? 'overflow-y-auto' : ''}`}
+      >
         {userWpCount === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-4 border border-dashed border-zinc-800 rounded-lg space-y-2">
+          <div className="flex flex-1 flex-col items-center justify-center space-y-2 rounded-lg border border-dashed border-zinc-800 p-4 text-center">
             <Milestone className="h-6 w-6 text-zinc-600" />
-            <div className="text-xs text-zinc-400 font-medium">No waypoints loaded on vehicle</div>
+            <div className="text-xs font-medium text-zinc-400">No waypoints loaded on vehicle</div>
             <div className="text-[11px] text-zinc-500">
               Fetch mission items from vehicle or drop a .plan file onto the map.
             </div>
@@ -149,7 +146,7 @@ export const WaypointControlWidget: React.FC = () => {
                 variant="outline"
                 size="sm"
                 onClick={() => missionManager.fetchMission()}
-                className="mt-1 h-7 text-xs font-semibold gap-1.5 border-zinc-700 hover:bg-zinc-900"
+                className="mt-1 h-7 gap-1.5 border-zinc-700 text-xs font-semibold hover:bg-zinc-900"
               >
                 <RefreshCw className="h-3 w-3 text-amber-400" />
                 Fetch Waypoints
@@ -165,7 +162,7 @@ export const WaypointControlWidget: React.FC = () => {
                 size="sm"
                 disabled={!hasPrev || isPending}
                 onClick={() => handleNavigateTo(prevSeq)}
-                className="h-8 text-xs font-bold gap-1 border-zinc-800 hover:bg-zinc-900 disabled:opacity-40"
+                className="h-8 gap-1 border-zinc-800 text-xs font-bold hover:bg-zinc-900 disabled:opacity-40"
                 title={`Step back to previous waypoint (WP ${prevSeq})`}
               >
                 <SkipBack className="h-3.5 w-3.5 text-zinc-300" />
@@ -182,7 +179,7 @@ export const WaypointControlWidget: React.FC = () => {
                     void handleNavigateTo(minSeq);
                   }}
                   onBlur={restartConfirm.cancel}
-                  className="h-8 text-xs font-bold gap-1 bg-amber-600 hover:bg-amber-500 text-white animate-pulse"
+                  className="h-8 animate-pulse gap-1 bg-amber-600 text-xs font-bold text-white hover:bg-amber-500"
                   title={`Confirm: restart the flight plan from WP ${minSeq}`}
                   autoFocus
                 >
@@ -195,7 +192,7 @@ export const WaypointControlWidget: React.FC = () => {
                   size="sm"
                   disabled={!connected || currentWaypointSeq === minSeq || isPending}
                   onClick={restartConfirm.arm}
-                  className="h-8 text-xs font-bold gap-1 border-zinc-800 hover:bg-zinc-900 text-amber-300 hover:text-amber-200 disabled:opacity-40"
+                  className="h-8 gap-1 border-zinc-800 text-xs font-bold text-amber-300 hover:bg-zinc-900 hover:text-amber-200 disabled:opacity-40"
                   title={`Restart flight plan from first mission waypoint (WP ${minSeq}); asks to confirm`}
                 >
                   <RotateCcw className="h-3.5 w-3.5 text-amber-400" />
@@ -208,7 +205,7 @@ export const WaypointControlWidget: React.FC = () => {
                 size="sm"
                 disabled={!hasNext || isPending}
                 onClick={() => handleNavigateTo(nextSeq)}
-                className="h-8 text-xs font-bold gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-40 shadow-sm"
+                className="h-8 gap-1.5 bg-emerald-600 text-xs font-bold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-40"
                 title={`Advance to next waypoint (WP ${nextSeq})`}
               >
                 <SkipForward className="h-4 w-4" />
@@ -218,10 +215,10 @@ export const WaypointControlWidget: React.FC = () => {
 
             {/* Direct Jump to Chosen Waypoint Dropdown */}
             <div className="space-y-1.5 pt-1">
-              <label className="text-[11px] font-medium text-zinc-400 flex items-center justify-between">
+              <label className="flex items-center justify-between text-[11px] font-medium text-zinc-400">
                 <span>Jump to Waypoint:</span>
                 {activeWp && (
-                  <span className="text-[10px] font-mono text-zinc-500">
+                  <span className="font-mono text-[10px] text-zinc-500">
                     Active: {getMavCmdName(activeWp.command).replace(/^(NAV_|MAV_CMD_NAV_)/, '')}
                   </span>
                 )}
@@ -235,9 +232,9 @@ export const WaypointControlWidget: React.FC = () => {
                     const val = Number(e.target.value);
                     setPickedWp(val === currentWaypointSeq ? null : val);
                   }}
-                  aria-label="Waypoint to jump to" 
+                  aria-label="Waypoint to jump to"
                   disabled={!connected || userWpCount === 0 || isPending}
-                  className="bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md px-2.5 py-1.5 text-xs font-mono flex-1 focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:opacity-50 cursor-pointer"
+                  className="flex-1 cursor-pointer rounded-md border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 font-mono text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
                 >
                   {userWps.map((wp) => {
                     const cmdLabel = getMavCmdName(wp.command).replace(/^(NAV_|MAV_CMD_NAV_)/, '');
@@ -262,7 +259,7 @@ export const WaypointControlWidget: React.FC = () => {
                       void handleNavigateTo(selectedWpInput);
                     }}
                     onBlur={goConfirm.cancel}
-                    className="h-8 px-3 text-xs font-bold gap-1 bg-amber-600 hover:bg-amber-500 text-white shrink-0 animate-pulse"
+                    className="h-8 shrink-0 animate-pulse gap-1 bg-amber-600 px-3 text-xs font-bold text-white hover:bg-amber-500"
                     title={`Confirm: fly directly to WP ${selectedWpInput}`}
                     autoFocus
                   >
@@ -275,7 +272,7 @@ export const WaypointControlWidget: React.FC = () => {
                     size="sm"
                     disabled={!connected || isPending || selectedWpInput === currentWaypointSeq}
                     onClick={goConfirm.arm}
-                    className="h-8 px-3 text-xs font-bold gap-1 bg-sky-600 hover:bg-sky-500 text-white shrink-0 disabled:opacity-40"
+                    className="h-8 shrink-0 gap-1 bg-sky-600 px-3 text-xs font-bold text-white hover:bg-sky-500 disabled:opacity-40"
                     title={
                       selectedWpInput === currentWaypointSeq
                         ? 'Already the active waypoint'
@@ -290,30 +287,28 @@ export const WaypointControlWidget: React.FC = () => {
             </div>
 
             {/* Live Waypoint Navigation Metrics Strip */}
-            <div className="grid grid-cols-2 @md:grid-cols-4 gap-1.5 bg-zinc-900/70 border border-zinc-800/80 rounded-lg p-2 text-xs sm:text-[13px] font-mono">
+            <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-zinc-800/80 bg-zinc-900/70 p-2 font-mono text-xs @md:grid-cols-4 sm:text-[13px]">
               <div className="flex flex-col">
-                <span className="text-[11px] text-zinc-500 font-sans">Distance</span>
-                <span className="text-sky-400 font-bold">
+                <span className="font-sans text-[11px] text-zinc-500">Distance</span>
+                <span className="font-bold text-sky-400">
                   {navController.wpDist > 0 ? formatDistance(navController.wpDist).full : '--'}
                 </span>
               </div>
 
               <div className="flex flex-col">
-                <span className="text-[11px] text-zinc-500 font-sans flex items-center gap-0.5">
+                <span className="flex items-center gap-0.5 font-sans text-[11px] text-zinc-500">
                   <Compass className="h-2.5 w-2.5" /> Bearing
                 </span>
-                <span className="text-zinc-200 font-bold">
+                <span className="font-bold text-zinc-200">
                   {navController.wpDist > 0 ? `${Math.round(navController.navBearing)}°` : '--'}
                 </span>
               </div>
 
               <div className="flex flex-col">
-                <span className="text-[11px] text-zinc-500 font-sans">X-Track</span>
+                <span className="font-sans text-[11px] text-zinc-500">X-Track</span>
                 <span
                   className={
-                    Math.abs(navController.xtrackError) > 3
-                      ? 'text-amber-400 font-bold'
-                      : 'text-zinc-300 font-medium'
+                    Math.abs(navController.xtrackError) > 3 ? 'font-bold text-amber-400' : 'font-medium text-zinc-300'
                   }
                 >
                   {formatCrosstrack(navController.xtrackError).full}
@@ -321,16 +316,16 @@ export const WaypointControlWidget: React.FC = () => {
               </div>
 
               <div className="flex flex-col">
-                <span className="text-[11px] text-zinc-500 font-sans">ETA</span>
-                <span className="text-emerald-400 font-bold">{etaFormatted}</span>
+                <span className="font-sans text-[11px] text-zinc-500">ETA</span>
+                <span className="font-bold text-emerald-400">{etaFormatted}</span>
               </div>
             </div>
 
             {/* AUTO mode notice banner if aircraft is armed in non-AUTO mode */}
             {connected && heartbeat.isArmed && !isAutoMode && (
-              <div className="p-2 rounded-lg bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-950/40 p-2 text-xs text-amber-200">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
                   <span className="truncate text-[11px]">
                     Vehicle in <b>{heartbeat.modeName}</b> mode. Switch to AUTO to track waypoints.
                   </span>
@@ -339,7 +334,7 @@ export const WaypointControlWidget: React.FC = () => {
                   variant="outline"
                   size="sm"
                   onClick={handleSwitchToAuto}
-                  className="h-6 px-2 text-[10px] font-bold text-amber-300 border-amber-500/50 hover:bg-amber-500/20 shrink-0"
+                  className="h-6 shrink-0 border-amber-500/50 px-2 text-[10px] font-bold text-amber-300 hover:bg-amber-500/20"
                 >
                   Set AUTO
                 </Button>

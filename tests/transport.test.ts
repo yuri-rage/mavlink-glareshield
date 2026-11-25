@@ -256,9 +256,19 @@ const msgIdOf = (bytes: Uint8Array) => (bytes[0] === 0xfd ? bytes[7] | (bytes[8]
   const ws = last(FakeWebSocket.instances)!;
   ws.serverMessage(new Uint8Array([1, 2, 3]).buffer);
   ws.serverMessage('{"type":"ntrip_status"}');
-  check('WebSocketTransport: connect walks idle → connecting → connected', statuses.join(',') === 'idle,connecting,connected', statuses.join(','));
-  check('WebSocketTransport: binary messages arrive as frames, in order and synchronously', frames.length === 1 && frames[0].join() === '1,2,3');
-  check('WebSocketTransport: text messages go to the text channel, never into the MAVLink byte stream', texts.length === 1 && frames.length === 1);
+  check(
+    'WebSocketTransport: connect walks idle → connecting → connected',
+    statuses.join(',') === 'idle,connecting,connected',
+    statuses.join(',')
+  );
+  check(
+    'WebSocketTransport: binary messages arrive as frames, in order and synchronously',
+    frames.length === 1 && frames[0].join() === '1,2,3'
+  );
+  check(
+    'WebSocketTransport: text messages go to the text channel, never into the MAVLink byte stream',
+    texts.length === 1 && frames.length === 1
+  );
   check('WebSocketTransport: binaryType is set to arraybuffer', ws.binaryType === 'arraybuffer');
   check('WebSocketTransport: sendText sends a text frame while open', t.sendText('hi') && last(ws.sent) === 'hi');
   await t.send(new Uint8Array([9]));
@@ -273,7 +283,10 @@ const msgIdOf = (bytes: Uint8Array) => (bytes[0] === 0xfd ? bytes[7] | (bytes[8]
   const t = new WebSocketTransport('bad', { url: 'not a url' });
   let rejected = false;
   await t.connect().catch(() => (rejected = true));
-  check('WebSocketTransport: a socket constructor that throws ends in error, not stuck connecting', rejected && t.getStatus().kind === 'error');
+  check(
+    'WebSocketTransport: a socket constructor that throws ends in error, not stuck connecting',
+    rejected && t.getStatus().kind === 'error'
+  );
 }
 {
   FakeWebSocket.autoOpen = false;
@@ -284,7 +297,10 @@ const msgIdOf = (bytes: Uint8Array) => (bytes[0] === 0xfd ? bytes[7] | (bytes[8]
   await t.disconnect();
   await tick();
   last(FakeWebSocket.instances)!.serverOpen();
-  check('WebSocketTransport: disconnect during connect rejects the attempt and a late open is ignored', rejected && t.getStatus().kind === 'disconnected');
+  check(
+    'WebSocketTransport: disconnect during connect rejects the attempt and a late open is ignored',
+    rejected && t.getStatus().kind === 'disconnected'
+  );
   FakeWebSocket.autoOpen = true;
 }
 {
@@ -295,9 +311,17 @@ const msgIdOf = (bytes: Uint8Array) => (bytes[0] === 0xfd ? bytes[7] | (bytes[8]
   t.onStatus((s) => seen.push(s.kind));
   ws.serverError();
   ws.serverClose(1006);
-  check('WebSocketTransport: a runtime error followed by close reports error then disconnected', seen.join(',') === 'connected,error,disconnected', seen.join(','));
+  check(
+    'WebSocketTransport: a runtime error followed by close reports error then disconnected',
+    seen.join(',') === 'connected,error,disconnected',
+    seen.join(',')
+  );
 }
-check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new WebSocketTransport('x', { url: 'ws://a' })) && !hasTextChannel(new WebSerialTransport('y', { baudRate: 1 })));
+check(
+  'hasTextChannel: true for WebSocket, false for serial',
+  hasTextChannel(new WebSocketTransport('x', { url: 'ws://a' })) &&
+    !hasTextChannel(new WebSerialTransport('y', { baudRate: 1 }))
+);
 
 // ------------------------------------------------------------------------------------------------
 // B. MavlinkConnection over WebSocket (behaviour preserved from the pre-transport implementation)
@@ -316,19 +340,38 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   await waitFor(() => conn.getStatus() === 'connected');
   const ws = last(FakeWebSocket.instances)!;
   check('MavlinkConnection/ws: connects', conn.getStatus() === 'connected', statuses.join(','));
-  check('MavlinkConnection/ws: a second connect() while connecting opens no extra socket', FakeWebSocket.instances.length === before + 1);
+  check(
+    'MavlinkConnection/ws: a second connect() while connecting opens no extra socket',
+    FakeWebSocket.instances.length === before + 1
+  );
   // Nothing may be on the other end of a bridge yet; requests wait for a vehicle heartbeat (telemetryStore).
-  check('MavlinkConnection/ws: sends no commands before a vehicle is heard', !ws.sent.some((d) => d instanceof Uint8Array && msgIdOf(d) === MAVLINK_MSG_ID.COMMAND_LONG));
+  check(
+    'MavlinkConnection/ws: sends no commands before a vehicle is heard',
+    !ws.sent.some((d) => d instanceof Uint8Array && msgIdOf(d) === MAVLINK_MSG_ID.COMMAND_LONG)
+  );
   const hb = vehicleHeartbeat();
   ws.serverMessage(hb.slice(0, 5).buffer);
   ws.serverMessage(hb.slice(5).buffer);
-  check('MavlinkConnection/ws: a heartbeat split across two messages is parsed once', packets.length === 1 && packets[0].messageId === 0, `${packets.length}`);
-  check('MavlinkConnection/ws: byte and packet counters advance', conn.stats.bytesReceived === hb.length && conn.stats.packetsReceived === 1);
+  check(
+    'MavlinkConnection/ws: a heartbeat split across two messages is parsed once',
+    packets.length === 1 && packets[0].messageId === 0,
+    `${packets.length}`
+  );
+  check(
+    'MavlinkConnection/ws: byte and packet counters advance',
+    conn.stats.bytesReceived === hb.length && conn.stats.packetsReceived === 1
+  );
   ws.serverMessage('{"type":"ntrip_ok"}');
   check('MavlinkConnection/ws: bridge text messages reach onText', texts.length === 1);
-  check('MavlinkConnection/ws: sendText works on a WebSocket link', conn.sendText('{"type":"ping"}') && last(ws.sent) === '{"type":"ping"}');
+  check(
+    'MavlinkConnection/ws: sendText works on a WebSocket link',
+    conn.sendText('{"type":"ping"}') && last(ws.sent) === '{"type":"ping"}'
+  );
   const sentBefore = ws.sent.length;
-  check('MavlinkConnection/ws: send() returns true and writes synchronously', conn.send(new Uint8Array([0xfd])) && ws.sent.length === sentBefore + 1);
+  check(
+    'MavlinkConnection/ws: send() returns true and writes synchronously',
+    conn.send(new Uint8Array([0xfd])) && ws.sent.length === sentBefore + 1
+  );
 
   // Link drops: disconnected, then an automatic reconnect ~2 s later (unchanged behaviour).
   ws.serverClose(1006);
@@ -337,7 +380,10 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   check('MavlinkConnection/ws: send() returns false while disconnected', conn.send(new Uint8Array([1])) === false);
   const count = FakeWebSocket.instances.length;
   await waitFor(() => conn.getStatus() === 'connected', 3000);
-  check('MavlinkConnection/ws: reconnects on its own after a drop', FakeWebSocket.instances.length === count + 1 && conn.getStatus() === 'connected');
+  check(
+    'MavlinkConnection/ws: reconnects on its own after a drop',
+    FakeWebSocket.instances.length === count + 1 && conn.getStatus() === 'connected'
+  );
 
   conn.disconnect();
   check('MavlinkConnection/ws: manual disconnect', conn.getStatus() === 'disconnected' && conn.isManualDisconnect);
@@ -354,7 +400,11 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   await waitFor(() => last(FakeWebSocket.instances)?.url === 'ws://down:1');
   last(FakeWebSocket.instances)!.serverError();
   const kinds = seen.map((s) => s[0]).join(',');
-  check('MavlinkConnection/ws: a failed open reports error with the same message as before, then disconnected', kinds === 'disconnected,connecting,error,disconnected' && seen[2][1] === 'WebSocket error occurred', kinds);
+  check(
+    'MavlinkConnection/ws: a failed open reports error with the same message as before, then disconnected',
+    kinds === 'disconnected,connecting,error,disconnected' && seen[2][1] === 'WebSocket error occurred',
+    kinds
+  );
   conn.pauseReconnect();
   conn.disconnect();
   FakeWebSocket.autoOpen = true;
@@ -365,7 +415,10 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   await waitFor(() => conn.getStatus() === 'connected');
   conn.setUrl('ws://b:2');
   await waitFor(() => conn.getStatus() === 'connected' && last(FakeWebSocket.instances)!.url === 'ws://b:2');
-  check('MavlinkConnection/ws: setUrl on a live link reconnects to the new URL', last(FakeWebSocket.instances)!.url === 'ws://b:2' && conn.getStatus() === 'connected');
+  check(
+    'MavlinkConnection/ws: setUrl on a live link reconnects to the new URL',
+    last(FakeWebSocket.instances)!.url === 'ws://b:2' && conn.getStatus() === 'connected'
+  );
   conn.disconnect();
 }
 
@@ -380,12 +433,21 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   check('watchdog: a quiet link inside the timeout is left alone', conn.getStatus() === 'connected');
   const sockets = FakeWebSocket.instances.length;
   conn.checkLinkSilence(t0 + LINK_SILENCE_TIMEOUT_MS + 1500);
-  check('watchdog: a link silent past the timeout is closed and not marked manual', conn.getStatus() === 'disconnected' && !conn.isManualDisconnect);
+  check(
+    'watchdog: a link silent past the timeout is closed and not marked manual',
+    conn.getStatus() === 'disconnected' && !conn.isManualDisconnect
+  );
   await waitFor(() => conn.getStatus() === 'connected', 3000);
-  check('watchdog: ...and reopened automatically', FakeWebSocket.instances.length === sockets + 1 && conn.getStatus() === 'connected');
+  check(
+    'watchdog: ...and reopened automatically',
+    FakeWebSocket.instances.length === sockets + 1 && conn.getStatus() === 'connected'
+  );
   const t1 = Date.now();
   conn.checkLinkSilence(t1 + LINK_SILENCE_TIMEOUT_MS + 1500);
-  check('watchdog: after a silent reopen it waits longer (backoff) before trying again', conn.getStatus() === 'connected');
+  check(
+    'watchdog: after a silent reopen it waits longer (backoff) before trying again',
+    conn.getStatus() === 'connected'
+  );
   last(FakeWebSocket.instances).serverMessage(vehicleHeartbeat().buffer);
   conn.checkLinkSilence(Date.now() + LINK_SILENCE_TIMEOUT_MS - 1000);
   check('watchdog: data resets the timer', conn.getStatus() === 'connected');
@@ -400,7 +462,12 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   const waitingSockets = FakeWebSocket.instances.length;
   conn.checkLinkNow();
   await waitFor(() => conn.getStatus() === 'connected', 1000);
-  check('checkLinkNow: a link waiting to retry reconnects immediately instead of after the retry delay', conn.getStatus() === 'connected' && FakeWebSocket.instances.length === waitingSockets + 1 && waitingSockets === before);
+  check(
+    'checkLinkNow: a link waiting to retry reconnects immediately instead of after the retry delay',
+    conn.getStatus() === 'connected' &&
+      FakeWebSocket.instances.length === waitingSockets + 1 &&
+      waitingSockets === before
+  );
   conn.disconnect();
   conn.checkLinkNow();
   check('checkLinkNow: never reopens a link the user disconnected', conn.getStatus() === 'disconnected');
@@ -423,23 +490,38 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   conn.setLink({ kind: 'serial', baudRate: 57600 });
   conn.connect();
   await waitFor(() => conn.getStatus() === 'connected');
-  check('MavlinkConnection/serial: connects and opens the port at the chosen baud', conn.getStatus() === 'connected' && port1.baudRate === 57600);
+  check(
+    'MavlinkConnection/serial: connects and opens the port at the chosen baud',
+    conn.getStatus() === 'connected' && port1.baudRate === 57600
+  );
   check('MavlinkConnection/serial: sendText is false (no text side channel on serial)', conn.sendText('{}') === false);
   port1.push(vehicleHeartbeat());
   await waitFor(() => packets.length === 1);
-  check('MavlinkConnection/serial: bytes from the port are parsed as MAVLink', packets.length === 1 && packets[0].messageId === 0);
+  check(
+    'MavlinkConnection/serial: bytes from the port are parsed as MAVLink',
+    packets.length === 1 && packets[0].messageId === 0
+  );
   conn.send(conn.getEncoder().createRequestMessage(1, 1, MAVLINK_MSG_ID.AUTOPILOT_VERSION));
   await waitFor(() => port1.written.length > 0);
-  check('MavlinkConnection/serial: outbound MAVLink is written to the port', port1.written.some((c: Uint8Array) => msgIdOf(c) === MAVLINK_MSG_ID.COMMAND_LONG));
+  check(
+    'MavlinkConnection/serial: outbound MAVLink is written to the port',
+    port1.written.some((c: Uint8Array) => msgIdOf(c) === MAVLINK_MSG_ID.COMMAND_LONG)
+  );
 
   // Unplug, replug as a new SerialPort object: the link reconnects to it without the picker.
   port1.unplug();
   await waitFor(() => conn.getStatus() === 'disconnected');
-  check('MavlinkConnection/serial: unplugging ends the link', conn.getStatus() === 'disconnected' && !conn.isManualDisconnect);
+  check(
+    'MavlinkConnection/serial: unplugging ends the link',
+    conn.getStatus() === 'disconnected' && !conn.isManualDisconnect
+  );
   const port2 = fakeSerialPort();
   ports.push(port2);
   await waitFor(() => conn.getStatus() === 'connected', 5000);
-  check('MavlinkConnection/serial: a replugged device (new port object, same USB ids) is reconnected automatically', conn.getStatus() === 'connected' && port2.opened);
+  check(
+    'MavlinkConnection/serial: a replugged device (new port object, same USB ids) is reconnected automatically',
+    conn.getStatus() === 'connected' && port2.opened
+  );
   port2.push(vehicleHeartbeat());
   await waitFor(() => packets.length === 2);
   check('MavlinkConnection/serial: telemetry flows again after the replug', packets.length === 2);
@@ -449,7 +531,10 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   check('MavlinkConnection/serial: manual disconnect closes the port', !port2.opened);
   conn.connect();
   await waitFor(() => conn.getStatus() === 'connected');
-  check('MavlinkConnection/serial: reconnecting after a manual disconnect reopens the same port', port2.opened && port2.openCount === 2);
+  check(
+    'MavlinkConnection/serial: reconnecting after a manual disconnect reopens the same port',
+    port2.opened && port2.openCount === 2
+  );
   conn.disconnect();
   await waitFor(() => !port2.opened);
 
@@ -459,7 +544,10 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   reloaded.setLink({ kind: 'serial', baudRate: 115200 });
   reloaded.connect();
   await waitFor(() => reloaded.getStatus() === 'connected');
-  check('MavlinkConnection/serial: after a reload the remembered device is reopened without a picker', reloaded.getStatus() === 'connected' && port2.baudRate === 115200);
+  check(
+    'MavlinkConnection/serial: after a reload the remembered device is reopened without a picker',
+    reloaded.getStatus() === 'connected' && port2.baudRate === 115200
+  );
   reloaded.disconnect();
   await waitFor(() => !port2.opened);
 }
@@ -477,7 +565,10 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   };
   const t = new WebSerialTransport('stale', { baudRate: 115200, port: () => port });
   await t.connect();
-  check('WebSerialTransport: a stale handle whose first open() fails is closed and reopened (upstream fix)', opens === 2 && t.getStatus().kind === 'connected');
+  check(
+    'WebSerialTransport: a stale handle whose first open() fails is closed and reopened (upstream fix)',
+    opens === 2 && t.getStatus().kind === 'connected'
+  );
   await t.disconnect();
 }
 
@@ -498,7 +589,10 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   conn.setLink({ kind: 'websocket', url: 'ws://switched:1' });
   release();
   await waitFor(() => conn.getStatus() === 'connected');
-  check('MavlinkConnection: changing the link while a serial attempt is resolving connects the new link, not the old one', conn.getStatus() === 'connected' && last(FakeWebSocket.instances).url === 'ws://switched:1' && !port.opened);
+  check(
+    'MavlinkConnection: changing the link while a serial attempt is resolving connects the new link, not the old one',
+    conn.getStatus() === 'connected' && last(FakeWebSocket.instances).url === 'ws://switched:1' && !port.opened
+  );
   conn.disconnect();
 }
 
@@ -507,9 +601,21 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
 // ------------------------------------------------------------------------------------------------
 {
   const ports = findCdcSerialPorts(ardupilotDualCdcConfiguration() as any);
-  check('webUsbCdc: finds both CDC data interfaces on an ArduPilot dual-CDC board, MAVLink first', ports.length === 2 && ports[0].interfaceNumber === 1 && ports[0].controlInterfaceNumber === 0 && ports[1].interfaceNumber === 3);
-  check('webUsbCdc: an out-of-range port index falls back to the first port', selectCdcSerialPort(ports, 5) === ports[0]);
-  check('webUsbCdc: reads are rounded up to whole packets', alignReadSize(100, 64) === 128 && alignReadSize(64, 64) === 64);
+  check(
+    'webUsbCdc: finds both CDC data interfaces on an ArduPilot dual-CDC board, MAVLink first',
+    ports.length === 2 &&
+      ports[0].interfaceNumber === 1 &&
+      ports[0].controlInterfaceNumber === 0 &&
+      ports[1].interfaceNumber === 3
+  );
+  check(
+    'webUsbCdc: an out-of-range port index falls back to the first port',
+    selectCdcSerialPort(ports, 5) === ports[0]
+  );
+  check(
+    'webUsbCdc: reads are rounded up to whole packets',
+    alignReadSize(100, 64) === 128 && alignReadSize(64, 64) === 64
+  );
 
   Object.defineProperty(globalThis.navigator, 'serial', { value: undefined, configurable: true });
   const device = fakeUsbDevice();
@@ -524,7 +630,12 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   });
   resetSerialSelection();
   check('getSerialApi: web-usb-serial when only WebUSB exists (Android)', getSerialApi() === 'web-usb-serial');
-  check('requestSerialDevice: WebUSB picker is filtered to ArduPilot / CDC devices', (await requestSerialDevice()) && filters.some((f) => f.vendorId === 0x1209) && filters.some((f) => f.classCode === 0x02));
+  check(
+    'requestSerialDevice: WebUSB picker is filtered to ArduPilot / CDC devices',
+    (await requestSerialDevice()) &&
+      filters.some((f) => f.vendorId === 0x1209) &&
+      filters.some((f) => f.classCode === 0x02)
+  );
 
   const conn = new MavlinkConnection(undefined, { reconnectDelayMs: 50 });
   const packets: any[] = [];
@@ -532,7 +643,13 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   conn.setLink({ kind: 'serial', baudRate: 57600 });
   conn.connect();
   await waitFor(() => conn.getStatus() === 'connected');
-  check('MavlinkConnection/usb: connects over WebUSB, claiming comm + MAVLink data interfaces', conn.getStatus() === 'connected' && device.calls.includes('claim:0') && device.calls.includes('claim:1') && !device.calls.includes('claim:3'));
+  check(
+    'MavlinkConnection/usb: connects over WebUSB, claiming comm + MAVLink data interfaces',
+    conn.getStatus() === 'connected' &&
+      device.calls.includes('claim:0') &&
+      device.calls.includes('claim:1') &&
+      !device.calls.includes('claim:3')
+  );
   device.push(vehicleHeartbeat());
   await waitFor(() => packets.length === 1);
   check('MavlinkConnection/usb: bytes from the bulk IN endpoint are parsed as MAVLink', packets.length === 1);
@@ -541,7 +658,10 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   conn.disconnect();
   device.wakeIdle();
   await waitFor(() => device.calls.includes('close'));
-  check('MavlinkConnection/usb: disconnect releases both interfaces and closes the device', device.calls.includes('release:1') && device.calls.includes('release:0') && device.calls.includes('close'));
+  check(
+    'MavlinkConnection/usb: disconnect releases both interfaces and closes the device',
+    device.calls.includes('release:1') && device.calls.includes('release:0') && device.calls.includes('close')
+  );
   Object.defineProperty(globalThis.navigator, 'usb', { value: undefined, configurable: true });
 }
 {
@@ -552,7 +672,10 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   };
   const t = new WebUsbSerialTransport('usb', { device });
   await t.connect();
-  check('WebUsbSerialTransport: falls back to the second CDC interface when the first is taken (upstream behaviour)', t.getStatus().kind === 'connected' && device.calls.includes('claim:3'));
+  check(
+    'WebUsbSerialTransport: falls back to the second CDC interface when the first is taken (upstream behaviour)',
+    t.getStatus().kind === 'connected' && device.calls.includes('claim:3')
+  );
   const closing = t.disconnect();
   device.wakeIdle();
   await Promise.race([closing, tick(1500)]);
@@ -562,7 +685,8 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
 // WebUSB writes: one at a time, never late, and a stalled endpoint is cleared or reported
 // ------------------------------------------------------------------------------------------------
 {
-  const { USB_WRITE_MAX_AGE_MS, USB_WRITE_MAX_QUEUED } = await import('../src/mavlink/transport/webUsbSerialTransport.ts');
+  const { USB_WRITE_MAX_AGE_MS, USB_WRITE_MAX_QUEUED } =
+    await import('../src/mavlink/transport/webUsbSerialTransport.ts');
   const frame = (n: number) => new Uint8Array([0xfd, n]);
 
   // Writes never overlap.
@@ -581,7 +705,10 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
     const t = new WebUsbSerialTransport('usb', { device });
     await t.connect();
     await Promise.all([1, 2, 3, 4, 5].map((n) => t.send(frame(n))));
-    check('WebUSB: writes go out one at a time, in order', maxInFlight === 1 && device.written.map((w: Uint8Array) => w[1]).join() === '1,2,3,4,5');
+    check(
+      'WebUSB: writes go out one at a time, in order',
+      maxInFlight === 1 && device.written.map((w: Uint8Array) => w[1]).join() === '1,2,3,4,5'
+    );
     const closing = t.disconnect();
     device.wakeIdle();
     await Promise.race([closing, tick(1500)]);
@@ -610,9 +737,16 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
     await Promise.all(sends);
     console.warn = origWarn;
     // Only the frame already in flight goes out; everything that waited behind it is stale.
-    check('WebUSB: frames held up past the age limit are dropped, not sent late', device.written.length === 1, `${device.written.length} written`);
+    check(
+      'WebUSB: frames held up past the age limit are dropped, not sent late',
+      device.written.length === 1,
+      `${device.written.length} written`
+    );
     await t.send(frame(200));
-    check('WebUSB: writes flow again once the endpoint recovers', device.written.length === 2 && last(device.written as Uint8Array[])[1] === 200);
+    check(
+      'WebUSB: writes flow again once the endpoint recovers',
+      device.written.length === 2 && last(device.written as Uint8Array[])[1] === 200
+    );
     const closing = t.disconnect();
     device.wakeIdle();
     await Promise.race([closing, tick(1500)]);
@@ -636,9 +770,18 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
     };
     const t = new WebUsbSerialTransport('usb', { device });
     await t.connect();
-    const firstErr = await t.send(frame(1)).then(() => null, (e: Error) => e.message);
+    const firstErr = await t.send(frame(1)).then(
+      () => null,
+      (e: Error) => e.message
+    );
     await t.send(frame(2));
-    check('WebUSB: a stall clears the halt and later writes succeed', firstErr === 'USB write stalled.' && halts.length === 1 && device.written.length === 1 && t.getStatus().kind === 'connected');
+    check(
+      'WebUSB: a stall clears the halt and later writes succeed',
+      firstErr === 'USB write stalled.' &&
+        halts.length === 1 &&
+        device.written.length === 1 &&
+        t.getStatus().kind === 'connected'
+    );
 
     stalls = 10;
     for (let i = 0; i < 3; i++) await t.send(frame(10 + i)).catch(() => {});

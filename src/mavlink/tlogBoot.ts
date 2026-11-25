@@ -1,10 +1,10 @@
 // Starts telemetry logging: one recorder, fed by the connection (frames received and sent, link status) and the
 // on/off setting. Imported once at startup.
 
-import { mavlinkConnection } from './connection';
-import { TlogRecorder } from './tlogRecorder';
 import { createOpfsTlogStorage } from '../lib/tlogStorage';
 import { useTlogStore } from '../store/tlogStore';
+import { mavlinkConnection } from './connection';
+import { TlogRecorder } from './tlogRecorder';
 
 export const tlogRecorder = new TlogRecorder({ storage: createOpfsTlogStorage() });
 

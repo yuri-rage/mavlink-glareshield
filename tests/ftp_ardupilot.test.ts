@@ -29,8 +29,13 @@ const { mavFtpClient, parseFtpPayload, FTP_OPCODE } = await import('../src/mavli
 const { MavlinkParser } = await import('../src/mavlink/parser.ts');
 const { packDatFile } = await import('../src/mavlink/missionFileParser.ts');
 
-const ACK = 128, NAK = 129;
-const ERR_FAIL = 1, ERR_FAIL_ERRNO = 2, ERR_EOF = 6, ERR_INVALID_SESSION = 4, ENOENT = 2;
+const ACK = 128,
+  NAK = 129;
+const ERR_FAIL = 1,
+  ERR_FAIL_ERRNO = 2,
+  ERR_EOF = 6,
+  ERR_INVALID_SESSION = 4,
+  ENOENT = 2;
 const TIMEOUT_MS = 60;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -38,16 +43,23 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Simulated vehicle
 // ------------------------------------------------------------------------------------------------
 interface SimOptions {
-  loss?: number;                                       // probability each request and each reply is lost
+  loss?: number; // probability each request and each reply is lost
   seed?: number;
-  dropReply?: (req: Req, nth: number) => boolean;      // deterministic reply loss (nth = how many times this opcode was answered)
-  delayReply?: (req: Req) => number;                   // extra latency for a reply, ms
-  nakWrite?: (req: Req) => boolean;                    // vehicle rejects this WriteFile
-  files?: Record<string, Uint8Array>;                  // pre-existing readable files
-  noRally?: boolean;                                   // a vehicle without rally points: rally.dat refused, rally
-                                                       // MISSION_REQUEST_LIST / MISSION_COUNT answered MAV_MISSION_UNSUPPORTED
+  dropReply?: (req: Req, nth: number) => boolean; // deterministic reply loss (nth = how many times this opcode was answered)
+  delayReply?: (req: Req) => number; // extra latency for a reply, ms
+  nakWrite?: (req: Req) => boolean; // vehicle rejects this WriteFile
+  files?: Record<string, Uint8Array>; // pre-existing readable files
+  noRally?: boolean; // a vehicle without rally points: rally.dat refused, rally
+  // MISSION_REQUEST_LIST / MISSION_COUNT answered MAV_MISSION_UNSUPPORTED
 }
-interface Req { seq: number; session: number; opcode: number; size: number; offset: number; data: Uint8Array }
+interface Req {
+  seq: number;
+  session: number;
+  opcode: number;
+  size: number;
+  offset: number;
+  data: Uint8Array;
+}
 
 class ArduPilotFtpSim {
   committed: Record<string, Uint8Array> = {};
@@ -60,24 +72,46 @@ class ArduPilotFtpSim {
 
   constructor(private o: SimOptions = {}) {
     let s = o.seed ?? 1;
-    this.rng = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    this.rng = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
     Object.assign(this.committed, o.files ?? {});
   }
 
   install() {
     (mavlinkConnection as any).status = 'connected';
-    (mavlinkConnection as any).send = (bytes: Uint8Array) => { this.onRequest(bytes); return true; };
+    (mavlinkConnection as any).send = (bytes: Uint8Array) => {
+      this.onRequest(bytes);
+      return true;
+    };
   }
 
-  private lost() { return (this.o.loss ?? 0) > 0 && this.rng() < (this.o.loss ?? 0); }
+  private lost() {
+    return (this.o.loss ?? 0) > 0 && this.rng() < (this.o.loss ?? 0);
+  }
 
   private emit(bytes: Uint8Array, delay = 2) {
     if (this.lost()) return;
-    const pkt = { version: 2, sequence: 0, systemId: 1, componentId: 1, messageId: 110, payload: bytes, crc: 0, raw: bytes };
-    setTimeout(() => { for (const l of (mavlinkConnection as any).packetListeners) l(pkt); }, delay);
+    const pkt = {
+      version: 2,
+      sequence: 0,
+      systemId: 1,
+      componentId: 1,
+      messageId: 110,
+      payload: bytes,
+      crc: 0,
+      raw: bytes,
+    };
+    setTimeout(() => {
+      for (const l of (mavlinkConnection as any).packetListeners) l(pkt);
+    }, delay);
   }
 
-  private reply(req: Req, opcode: number, offset: number, data: Uint8Array, opts: { burstComplete?: number; seqBump?: number } = {}) {
+  private reply(
+    req: Req,
+    opcode: number,
+    offset: number,
+    data: Uint8Array,
+    opts: { burstComplete?: number; seqBump?: number } = {}
+  ) {
     const p = new Uint8Array(254);
     const v = new DataView(p.buffer, 3);
     const seq = (req.seq + (opts.seqBump ?? 1)) & 0xffff;
@@ -95,7 +129,9 @@ class ArduPilotFtpSim {
     this.emit(p, 2 + (this.o.delayReply?.(req) ?? 0));
   }
 
-  private nak(req: Req, code: number, errno?: number) { this.reply(req, NAK, 0, errno === undefined ? Uint8Array.of(code) : Uint8Array.of(code, errno)); }
+  private nak(req: Req, code: number, errno?: number) {
+    this.reply(req, NAK, 0, errno === undefined ? Uint8Array.of(code) : Uint8Array.of(code, errno));
+  }
 
   requestsSeen: number[] = [];
 
@@ -109,16 +145,19 @@ class ArduPilotFtpSim {
     if (!this.o.noRally || missionType !== 2) return;
     const ack = Uint8Array.of(255, 190, 3 /* MAV_MISSION_UNSUPPORTED */, 2);
     const pkt = { version: 2, sequence: 0, systemId: 1, componentId: 1, messageId: 47, payload: ack, crc: 0, raw: ack };
-    setTimeout(() => { for (const l of (mavlinkConnection as any).packetListeners) l(pkt); }, 2);
+    setTimeout(() => {
+      for (const l of (mavlinkConnection as any).packetListeners) l(pkt);
+    }, 2);
   }
 
   private onRequest(bytes: Uint8Array) {
     if (this.lost()) return;
     const frames = this.parser.parse(bytes);
-    if (frames.length === 1 && (frames[0].messageId === 43 || frames[0].messageId === 44)) return this.missionProtocol(frames[0]);
+    if (frames.length === 1 && (frames[0].messageId === 43 || frames[0].messageId === 44))
+      return this.missionProtocol(frames[0]);
     if (frames.length !== 1 || frames[0].messageId !== 110) return;
     const full = new Uint8Array(254);
-    full.set(frames[0].payload.subarray(0, 254));         // undo MAVLink 2 zero-trimming
+    full.set(frames[0].payload.subarray(0, 254)); // undo MAVLink 2 zero-trimming
     const f = parseFtpPayload(full)!;
     const req: Req = { seq: f.seq, session: f.session, opcode: f.opcode, size: f.size, offset: f.offset, data: f.data };
     this.requests.push(`${req.opcode}#${req.seq}`);
@@ -155,14 +194,21 @@ class ArduPilotFtpSim {
         const stored = this.o.noRally && path.endsWith('rally.dat') ? undefined : this.committed[path];
         // AP_Filesystem open() fails with errno set; GCS_FTP replies FailErrno with the errno.
         if (!stored) return this.nak(req, ERR_FAIL_ERRNO, ENOENT);
-        const buf = path.startsWith('@MISSION/') ? regenerateMissionDat(stored, path.endsWith('rally.dat')) : stored.slice();
+        const buf = path.startsWith('@MISSION/')
+          ? regenerateMissionDat(stored, path.endsWith('rally.dat'))
+          : stored.slice();
         this.fd = { mode: 'r', path, buf, len: buf.length };
         return this.reply(req, ACK, 0, new Uint8Array(new Uint32Array([buf.length]).buffer));
       }
       case FTP_OPCODE.ReadFile: {
         if (!this.fd || this.fd.mode !== 'r') return this.nak(req, ERR_INVALID_SESSION);
         if (req.offset >= this.fd.len) return this.nak(req, ERR_EOF);
-        return this.reply(req, ACK, req.offset, this.fd.buf.subarray(req.offset, Math.min(req.offset + req.size, this.fd.len)));
+        return this.reply(
+          req,
+          ACK,
+          req.offset,
+          this.fd.buf.subarray(req.offset, Math.min(req.offset + req.size, this.fd.len))
+        );
       }
       case FTP_OPCODE.BurstReadFile: {
         if (!this.fd || this.fd.mode !== 'r') return this.nak(req, ERR_INVALID_SESSION);
@@ -170,7 +216,10 @@ class ArduPilotFtpSim {
         let bump = 1;
         for (let off = req.offset; off < this.fd.len; off += 239, bump++) {
           const end = Math.min(off + 239, this.fd.len);
-          this.reply(req, ACK, off, this.fd.buf.subarray(off, end), { burstComplete: end >= this.fd.len ? 1 : 0, seqBump: bump });
+          this.reply(req, ACK, off, this.fd.buf.subarray(off, end), {
+            burstComplete: end >= this.fd.len ? 1 : 0,
+            seqBump: bump,
+          });
         }
         return;
       }
@@ -190,9 +239,9 @@ function regenerateMissionDat(stored: Uint8Array, rally = false): Uint8Array {
   for (let i = 0, o = 10; o + 38 <= out.length; i++, o += 38) {
     const alt = v.getFloat32(o + 24, true);
     v.setFloat32(o + 24, rally ? Math.round(alt) : Math.round(alt * 100) * 0.01, true); // rally: int16 m; mission: int32 cm
-    v.setUint16(o + 28, i, true);   // seq = index
-    out[o + 35] = 0;                // current: only the executing nav command
-    out[o + 36] = 1;                // autocontinue forced
+    v.setUint16(o + 28, i, true); // seq = index
+    out[o + 35] = 0; // current: only the executing nav command
+    out[o + 36] = 1; // autocontinue forced
   }
   return out;
 }
@@ -201,12 +250,24 @@ function regenerateMissionDat(stored: Uint8Array, rally = false): Uint8Array {
 // Fixtures
 // ------------------------------------------------------------------------------------------------
 function missionFixture(n = 40): Uint8Array {
-  const items = [{ seq: 0, command: 16, current: 1, frame: 0, x: 37.7749, y: -122.4194, z: 10.37, autocontinue: 1 }] as any[];
+  const items = [
+    { seq: 0, command: 16, current: 1, frame: 0, x: 37.7749, y: -122.4194, z: 10.37, autocontinue: 1 },
+  ] as any[];
   items.push({ seq: 1, command: 22, frame: 3, x: 0, y: 0, z: 20, autocontinue: 1 });
-  for (let i = 2; i < n; i++) items.push({ seq: i, command: 16, frame: 3, x: 37.7749 + i * 1e-4, y: -122.4194 + i * 1e-4, z: 30.33, autocontinue: 1 });
+  for (let i = 2; i < n; i++)
+    items.push({
+      seq: i,
+      command: 16,
+      frame: 3,
+      x: 37.7749 + i * 1e-4,
+      y: -122.4194 + i * 1e-4,
+      z: 30.33,
+      autocontinue: 1,
+    });
   return packDatFile(items, 0);
 }
-const same = (a: Uint8Array | null | undefined, b: Uint8Array) => !!a && a.length === b.length && a.every((x, i) => x === b[i]);
+const same = (a: Uint8Array | null | undefined, b: Uint8Array) =>
+  !!a && a.length === b.length && a.every((x, i) => x === b[i]);
 
 // ------------------------------------------------------------------------------------------------
 // Tests
@@ -220,7 +281,7 @@ function check(name: string, ok: boolean, detail = '') {
 async function upload(sim: ArduPilotFtpSim, data: Uint8Array, path = '@MISSION/mission.dat') {
   sim.install();
   const ok = await mavFtpClient.writeFile(1, 1, path, data, 239, TIMEOUT_MS);
-  await sleep(20);                                     // let any trailing Terminate land
+  await sleep(20); // let any trailing Terminate land
   return ok;
 }
 
@@ -236,8 +297,10 @@ const PATH = '@MISSION/mission.dat';
   check('clean link: vehicle committed the exact bytes', same(sim.committed[PATH], DATA));
   check('clean link: exactly one CreateFile (no retry storm)', creates === 1, `CreateFile sent ${creates}x`);
   check('clean link: session closed afterwards', sim.fd === null);
-  check('read-back is regenerated by ArduPilot (sanity: not byte-identical), yet the upload still counts as success',
-    !same(regenerateMissionDat(DATA), DATA) && ok === true);
+  check(
+    'read-back is regenerated by ArduPilot (sanity: not byte-identical), yet the upload still counts as success',
+    !same(regenerateMissionDat(DATA), DATA) && ok === true
+  );
 }
 
 // 2. The CreateFile ACK is lost once. The vehicle already has the file open, so a retry with a NEW seq
@@ -255,7 +318,8 @@ const PATH = '@MISSION/mission.dat';
 {
   let delayed = false;
   const sim = new ArduPilotFtpSim({
-    delayReply: (r) => (r.opcode === FTP_OPCODE.WriteFile && r.offset === 239 && !delayed ? ((delayed = true), TIMEOUT_MS * 1.5) : 0),
+    delayReply: (r) =>
+      r.opcode === FTP_OPCODE.WriteFile && r.offset === 239 && !delayed ? ((delayed = true), TIMEOUT_MS * 1.5) : 0,
   });
   const ok = await upload(sim, DATA);
   await sleep(TIMEOUT_MS * 2);
@@ -265,17 +329,23 @@ const PATH = '@MISSION/mission.dat';
 
 // 4. Lossy link, both directions. Never report success for a corrupt file; never strand the session.
 for (const loss of [0.1, 0.2]) {
-  let succeeded = 0, corruptSuccess = 0, stranded = 0;
+  let succeeded = 0,
+    corruptSuccess = 0,
+    stranded = 0;
   const runs = 10;
   for (let seed = 1; seed <= runs; seed++) {
     const sim = new ArduPilotFtpSim({ loss, seed });
     const ok = await upload(sim, DATA);
-    await sleep(TIMEOUT_MS);                           // allow cleanup traffic to finish
+    await sleep(TIMEOUT_MS); // allow cleanup traffic to finish
     if (ok) succeeded++;
     if (ok && !same(sim.committed[PATH], DATA)) corruptSuccess++;
     if (sim.fd !== null) stranded++;
   }
-  check(`${loss * 100}% loss: never reports success for a corrupt file`, corruptSuccess === 0, `${corruptSuccess}/${runs}`);
+  check(
+    `${loss * 100}% loss: never reports success for a corrupt file`,
+    corruptSuccess === 0,
+    `${corruptSuccess}/${runs}`
+  );
   check(`${loss * 100}% loss: never leaves the vehicle session open`, stranded === 0, `${stranded}/${runs} stranded`);
   // 20% each way is ~36% round-trip loss; with 3 retries per step some uploads legitimately fall back to item-by-item.
   const floor = loss < 0.15 ? runs : runs / 2;
@@ -325,7 +395,11 @@ for (const loss of [0.1, 0.2]) {
   sim.install();
   sim.fd = { mode: 'r', path: 'stale', buf: new Uint8Array(1), len: 1 };
   const got = await mavFtpClient.readFile(1, 1, '@PARAM/param.pck', 239, TIMEOUT_MS);
-  check('stale open file: sessions reset, then the read succeeds', same(got, file) && sim.requests.some((r) => r.startsWith(`${FTP_OPCODE.ResetSessions}#`)), sim.requests.slice(0, 4).join(' '));
+  check(
+    'stale open file: sessions reset, then the read succeeds',
+    same(got, file) && sim.requests.some((r) => r.startsWith(`${FTP_OPCODE.ResetSessions}#`)),
+    sim.requests.slice(0, 4).join(' ')
+  );
 }
 
 // 9. Planning: upload a draft, read it back from the vehicle and judge it, end to end. The vehicle regenerates
@@ -337,29 +411,46 @@ for (const loss of [0.1, 0.2]) {
   draft = d.insertItems(draft, 1, [{ ...d.newWaypoint(draft, 1, 0, 0), command: 22, z: 20.004 }]);
   for (let i = 0; i < 5; i++) draft = d.appendWaypoint(draft, 37.775 + i * 1e-4, -122.419 + i * 1e-4);
   draft = d.updateItem(draft, 3, { z: 33.337, param1: 2.5 });
-  draft = d.insertItems(draft, 5, [{ command: 177, frame: 2, param1: 3, param2: 2, param3: 0, param4: 0, x: 0, y: 0, z: 0, autocontinue: 1 }]);
+  draft = d.insertItems(draft, 5, [
+    { command: 177, frame: 2, param1: 3, param2: 2, param3: 0, param4: 0, x: 0, y: 0, z: 0, autocontinue: 1 },
+  ]);
 
   const sim = new ArduPilotFtpSim();
   sim.install();
   const res = await missionManager.uploadMissionAndReadBack(d.draftToItems(draft), 1, 1);
   await sleep(50);
   const verdict = d.checkReadBack(draft, res.readBack);
-  check('draft upload over MAVFTP: accepted and read back', res.success && res.method === 'ftp' && res.readBack.length === draft.items.length, `${res.success} ${res.method} ${res.readBack.length}`);
-  check('draft upload: vehicle-regenerated read-back counts as verified', verdict.status === 'verified', JSON.stringify(verdict.comparison));
+  check(
+    'draft upload over MAVFTP: accepted and read back',
+    res.success && res.method === 'ftp' && res.readBack.length === draft.items.length,
+    `${res.success} ${res.method} ${res.readBack.length}`
+  );
+  check(
+    'draft upload: vehicle-regenerated read-back counts as verified',
+    verdict.status === 'verified',
+    JSON.stringify(verdict.comparison)
+  );
 
   // A MAVFTP download (here the read-back) takes home from mission.dat's item 0, as a streamed download does, and
   // marks it as from the vehicle; it never overrides a HOME_POSITION home.
   {
     const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
     const st = useTelemetryStore.getState();
-    check('MAVFTP download: home from item 0, marked as from the vehicle',
+    check(
+      'MAVFTP download: home from item 0, marked as from the vehicle',
       st.homePosition.source === 'wp0' && Math.abs(st.homePosition.lat - 37.7749) < 1e-6 && st.homeFromVehicle === true,
-      `${st.homePosition.source} ${st.homePosition.lat} ${st.homeFromVehicle}`);
-    useTelemetryStore.setState({ homePosition: { lat: 10, lon: 20, alt: 0, distanceM: null, bearingDeg: null, source: 'home_msg' } });
+      `${st.homePosition.source} ${st.homePosition.lat} ${st.homeFromVehicle}`
+    );
+    useTelemetryStore.setState({
+      homePosition: { lat: 10, lon: 20, alt: 0, distanceM: null, bearingDeg: null, source: 'home_msg' },
+    });
     new ArduPilotFtpSim({ files: { '@MISSION/mission.dat': packDatFile(d.draftToItems(draft), 0) } }).install();
     await missionManager.fetchWaypoints(1, 1);
     await sleep(50);
-    check('MAVFTP download: a HOME_POSITION home is not overridden', useTelemetryStore.getState().homePosition.lat === 10);
+    check(
+      'MAVFTP download: a HOME_POSITION home is not overridden',
+      useTelemetryStore.getState().homePosition.lat === 10
+    );
   }
 
   // The vehicle keeps all but the last item (e.g. storage full): the route differs and must not pass.
@@ -372,17 +463,29 @@ for (const loss of [0.1, 0.2]) {
   short.committed['@MISSION/mission.dat'] = packDatFile(truncated, 0);
   const res3Read = await missionManager.fetchWaypoints(1, 1);
   const verdict2 = d.checkReadBack(draft, res3Read);
-  check('draft upload: a vehicle copy missing an item is a mismatch', Boolean(stored) && res2.success && verdict2.status === 'mismatch', verdict2.comparison.structural.join('; '));
+  check(
+    'draft upload: a vehicle copy missing an item is a mismatch',
+    Boolean(stored) && res2.success && verdict2.status === 'mismatch',
+    verdict2.comparison.structural.join('; ')
+  );
 
-  check('draft upload: nothing read back is unreadable, not verified', d.checkReadBack(draft, []).status === 'unreadable');
+  check(
+    'draft upload: nothing read back is unreadable, not verified',
+    d.checkReadBack(draft, []).status === 'unreadable'
+  );
 
   // Clearing the mission: ArduPilot keeps home as item 0, so a home-only upload reads back as one item and verifies.
   const homeOnly = d.draftFromItems([{ seq: 0, command: 16, frame: 0, x: 37.7749, y: -122.4194, z: 10 }]);
   new ArduPilotFtpSim().install();
   const cleared = await missionManager.uploadMissionAndReadBack(d.draftToItems(homeOnly), 1, 1);
   await sleep(50);
-  check('clearing the mission (home only) reads back home and verifies', cleared.success && cleared.readBack.length === 1 && d.checkReadBack(homeOnly, cleared.readBack).status === 'verified',
-    `${cleared.readBack.length} ${d.checkReadBack(homeOnly, cleared.readBack).status}`);
+  check(
+    'clearing the mission (home only) reads back home and verifies',
+    cleared.success &&
+      cleared.readBack.length === 1 &&
+      d.checkReadBack(homeOnly, cleared.readBack).status === 'verified',
+    `${cleared.readBack.length} ${d.checkReadBack(homeOnly, cleared.readBack).status}`
+  );
 
   // Review fixes: a failed read keeps the uploaded mission on the map; a throw never leaves a transfer stuck.
   const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
@@ -396,9 +499,13 @@ for (const loss of [0.1, 0.2]) {
   new ArduPilotFtpSim().install();
   const unreadable = await missionManager.uploadMissionAndReadBack(d.draftToItems(draft), 1, 1);
   await sleep(50);
-  check('failed read-back: upload still reported, map keeps the uploaded mission',
-    unreadable.success && unreadable.readBack.length === 0 && useTelemetryStore.getState().missionWaypoints.length === draft.items.length,
-    String(useTelemetryStore.getState().missionWaypoints.length));
+  check(
+    'failed read-back: upload still reported, map keeps the uploaded mission',
+    unreadable.success &&
+      unreadable.readBack.length === 0 &&
+      useTelemetryStore.getState().missionWaypoints.length === draft.items.length,
+    String(useTelemetryStore.getState().missionWaypoints.length)
+  );
   check('failed read-back: transfer not left in progress', last && !last.isFetching && !last.isUploading);
 
   (missionManager as any).fetchWaypoints = async () => {
@@ -407,16 +514,33 @@ for (const loss of [0.1, 0.2]) {
   new ArduPilotFtpSim().install();
   const thrown = await missionManager.uploadMissionAndReadBack(d.draftToItems(draft), 1, 1);
   await sleep(50);
-  check('throw during read-back: reported as failed with the reason', !thrown.success && /link lost/.test(thrown.error ?? ''), thrown.error);
-  check('throw during read-back: transfer not left in progress', last && !last.isFetching && !last.isUploading && last.method === 'idle');
+  check(
+    'throw during read-back: reported as failed with the reason',
+    !thrown.success && /link lost/.test(thrown.error ?? ''),
+    thrown.error
+  );
+  check(
+    'throw during read-back: transfer not left in progress',
+    last && !last.isFetching && !last.isUploading && last.method === 'idle'
+  );
   (missionManager as any).fetchWaypoints = realFetch;
   new ArduPilotFtpSim().install();
   const after = await missionManager.uploadMissionAndReadBack(d.draftToItems(draft), 1, 1);
   await sleep(50);
-  check('after a throw: the next upload goes ahead', after.success && d.checkReadBack(draft, after.readBack).status === 'verified', after.error);
+  check(
+    'after a throw: the next upload goes ahead',
+    after.success && d.checkReadBack(draft, after.readBack).status === 'verified',
+    after.error
+  );
   unsub();
-  const p = d.checkReadBack(draft, res.readBack.map((w: any) => (w.seq === 3 ? { ...w, param4: 45 } : w)));
-  check('draft upload: a param the vehicle stored differently is reported, route still verified', p.status === 'params-differ' && p.comparison.params.length === 1);
+  const p = d.checkReadBack(
+    draft,
+    res.readBack.map((w: any) => (w.seq === 3 ? { ...w, param4: 45 } : w))
+  );
+  check(
+    'draft upload: a param the vehicle stored differently is reported, route still verified',
+    p.status === 'params-differ' && p.comparison.params.length === 1
+  );
 }
 
 // 10. Rally points: upload a rally draft, read it back (the vehicle regenerates rally.dat: seq, alt in whole metres) and judge.
@@ -433,9 +557,20 @@ for (const loss of [0.1, 0.2]) {
   const res = await missionManager.uploadRallyAndReadBack(rd.rallyDraftToItems(rally), 1, 1);
   await sleep(50);
   const verdict = rd.checkRallyReadBack(rally, res.readBack);
-  check('rally upload over MAVFTP: accepted and read back', res.success && res.method === 'ftp' && res.readBack.length === 2, `${res.success} ${res.method} ${res.readBack.length}`);
-  check('rally upload: regenerated read-back (alt in whole metres, frame kept) verifies', verdict.status === 'verified', verdict.differences.join('; '));
-  check('rally upload: the map shows the read-back with its frame', useTelemetryStore.getState().rallyPoints[1]?.frame === 0);
+  check(
+    'rally upload over MAVFTP: accepted and read back',
+    res.success && res.method === 'ftp' && res.readBack.length === 2,
+    `${res.success} ${res.method} ${res.readBack.length}`
+  );
+  check(
+    'rally upload: regenerated read-back (alt in whole metres, frame kept) verifies',
+    verdict.status === 'verified',
+    verdict.differences.join('; ')
+  );
+  check(
+    'rally upload: the map shows the read-back with its frame',
+    useTelemetryStore.getState().rallyPoints[1]?.frame === 0
+  );
 
   // Clearing all rally points: nothing uploaded, nothing back, verified (unlike a mission, empty is a valid answer).
   new ArduPilotFtpSim().install();
@@ -450,18 +585,32 @@ for (const loss of [0.1, 0.2]) {
   new ArduPilotFtpSim().install();
   const unread = await missionManager.uploadRallyAndReadBack(rd.rallyDraftToItems(rally), 1, 1);
   await sleep(50);
-  check('rally read-back fails: unreadable, map keeps the uploaded points',
-    unread.success && !unread.readOk && rd.checkRallyReadBack(rally, unread.readBack, unread.readOk).status === 'unreadable' && useTelemetryStore.getState().rallyPoints.length === 2,
-    String(useTelemetryStore.getState().rallyPoints.length));
+  check(
+    'rally read-back fails: unreadable, map keeps the uploaded points',
+    unread.success &&
+      !unread.readOk &&
+      rd.checkRallyReadBack(rally, unread.readBack, unread.readOk).status === 'unreadable' &&
+      useTelemetryStore.getState().rallyPoints.length === 2,
+    String(useTelemetryStore.getState().rallyPoints.length)
+  );
   // Clearing all rally points with a failed read: the empty result proves nothing, so it is not verified.
   new ArduPilotFtpSim().install();
   const clearUnread = await missionManager.uploadRallyAndReadBack([], 1, 1);
   await sleep(50);
   (missionManager as any).fetchRally = realFetchRally;
-  check('clearing rally points with a failed read: unreadable, not verified',
-    clearUnread.success && rd.checkRallyReadBack({ points: [] }, clearUnread.readBack, clearUnread.readOk).status === 'unreadable');
+  check(
+    'clearing rally points with a failed read: unreadable, not verified',
+    clearUnread.success &&
+      rd.checkRallyReadBack({ points: [] }, clearUnread.readBack, clearUnread.readOk).status === 'unreadable'
+  );
 
-  check('clearing rally points verifies', cleared.success && cleared.readOk && rd.checkRallyReadBack({ points: [] }, cleared.readBack, cleared.readOk).status === 'verified', `${cleared.success} ${cleared.readBack.length} ${cleared.error ?? ''}`);
+  check(
+    'clearing rally points verifies',
+    cleared.success &&
+      cleared.readOk &&
+      rd.checkRallyReadBack({ points: [] }, cleared.readBack, cleared.readOk).status === 'verified',
+    `${cleared.success} ${cleared.readBack.length} ${cleared.error ?? ''}`
+  );
 }
 
 // 11. A vehicle without rally points: its "unsupported" answer ends the download at once, is remembered for the
@@ -479,10 +628,16 @@ for (const loss of [0.1, 0.2]) {
   const t0 = Date.now();
   const got = await missionManager.fetchRally(1, 1);
   const took = Date.now() - t0;
-  check('no rally: download stops at the vehicle\'s answer, not after the retries', took < 1500, `${took} ms`);
-  check('incomplete rally download: map keeps its points, and they are what is returned (counts agree)',
-    useTelemetryStore.getState().rallyPoints === known && got === known, `${got.length}`);
-  check('no rally: remembered as unsupported, read not counted as complete', useTelemetryStore.getState().rallySupport === 'unsupported' && !missionManager.lastRallyReadOk);
+  check("no rally: download stops at the vehicle's answer, not after the retries", took < 1500, `${took} ms`);
+  check(
+    'incomplete rally download: map keeps its points, and they are what is returned (counts agree)',
+    useTelemetryStore.getState().rallyPoints === known && got === known,
+    `${got.length}`
+  );
+  check(
+    'no rally: remembered as unsupported, read not counted as complete',
+    useTelemetryStore.getState().rallySupport === 'unsupported' && !missionManager.lastRallyReadOk
+  );
 
   const asked = sim.requestsSeen.length;
   await missionManager.fetchRally(1, 1);
@@ -494,7 +649,11 @@ for (const loss of [0.1, 0.2]) {
   const rally = rd.addRallyPoint({ points: [] }, null, 37.78, -122.41).draft;
   const up = await missionManager.uploadRallyAndReadBack(rd.rallyDraftToItems(rally), 1, 1);
   await sleep(50);
-  check('no rally: upload fails, saying rally points are not supported', !up.success && /not supported/.test(up.error ?? ''), up.error);
+  check(
+    'no rally: upload fails, saying rally points are not supported',
+    !up.success && /not supported/.test(up.error ?? ''),
+    up.error
+  );
   check('no rally: upload refusal also remembered', useTelemetryStore.getState().rallySupport === 'unsupported');
 }
 
@@ -521,18 +680,28 @@ for (const loss of [0.1, 0.2]) {
   armedSim.install();
   const armed = await missionManager.uploadSection('mission', 0, items as any, undefined, 1, 1);
   await sleep(50);
-  check('armed in AUTO: mission uploaded item-by-item, no MAVFTP write attempted',
-    armed.success && armed.method === 'legacy' && legacyCalls === 1 && !armedSim.requests.some((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)),
-    `${armed.method} ${legacyCalls} ${armedSim.requests.join(' ')}`);
+  check(
+    'armed in AUTO: mission uploaded item-by-item, no MAVFTP write attempted',
+    armed.success &&
+      armed.method === 'legacy' &&
+      legacyCalls === 1 &&
+      !armedSim.requests.some((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)),
+    `${armed.method} ${legacyCalls} ${armedSim.requests.join(' ')}`
+  );
 
   useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: true, modeName: 'AUTO_RTL' } });
   const autoRtlSim = new ArduPilotFtpSim();
   autoRtlSim.install();
   const autoRtl = await missionManager.uploadSection('mission', 0, items as any, undefined, 1, 1);
   await sleep(50);
-  check('armed in AUTO_RTL: mission uploaded item-by-item, no MAVFTP write attempted',
-    autoRtl.success && autoRtl.method === 'legacy' && legacyCalls === 2 && !autoRtlSim.requests.some((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)),
-    `${autoRtl.method} ${legacyCalls}`);
+  check(
+    'armed in AUTO_RTL: mission uploaded item-by-item, no MAVFTP write attempted',
+    autoRtl.success &&
+      autoRtl.method === 'legacy' &&
+      legacyCalls === 2 &&
+      !autoRtlSim.requests.some((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)),
+    `${autoRtl.method} ${legacyCalls}`
+  );
 
   // A mode the app doesn't recognise (named by number) might run the mission: item-by-item to be safe.
   useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: true, modeName: 'COPTER_31' } });
@@ -540,9 +709,13 @@ for (const loss of [0.1, 0.2]) {
   unknownSim.install();
   const unknownMode = await missionManager.uploadSection('mission', 0, items as any, undefined, 1, 1);
   await sleep(50);
-  check('armed in an unrecognised mode: mission item-by-item (it might be running the mission)',
-    unknownMode.success && unknownMode.method === 'legacy' && !unknownSim.requests.some((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)),
-    unknownMode.method);
+  check(
+    'armed in an unrecognised mode: mission item-by-item (it might be running the mission)',
+    unknownMode.success &&
+      unknownMode.method === 'legacy' &&
+      !unknownSim.requests.some((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)),
+    unknownMode.method
+  );
 
   useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: true, modeName: 'LOITER' } });
   new ArduPilotFtpSim().install();
@@ -553,9 +726,19 @@ for (const loss of [0.1, 0.2]) {
   useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: true, modeName: 'AUTO' } });
   const rallySim = new ArduPilotFtpSim();
   rallySim.install();
-  const rally = await missionManager.uploadSection('rally', 2, [{ seq: 0, command: 5100, frame: 3, x: 37.78, y: -122.41, z: 30 }] as any, undefined, 1, 1);
+  const rally = await missionManager.uploadSection(
+    'rally',
+    2,
+    [{ seq: 0, command: 5100, frame: 3, x: 37.78, y: -122.41, z: 30 }] as any,
+    undefined,
+    1,
+    1
+  );
   await sleep(50);
-  check('armed in AUTO: rally points still go over MAVFTP (ArduPilot clears them whatever the state)', rally.success && rally.method === 'ftp');
+  check(
+    'armed in AUTO: rally points still go over MAVFTP (ArduPilot clears them whatever the state)',
+    rally.success && rally.method === 'ftp'
+  );
 
   useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: false, modeName: 'AUTO' } });
   new ArduPilotFtpSim().install();
@@ -574,8 +757,13 @@ for (const loss of [0.1, 0.2]) {
   sim.fd = { mode: 'r', path: '@PARAM/param.pck', buf: new Uint8Array(10), len: 10 }; // left open
   const ok = await mavFtpClient.writeFile(1, 1, PATH, DATA, 239, TIMEOUT_MS);
   await sleep(50);
-  check('CreateFile refused by a file left open: sessions reset, written on retry', ok && same(sim.committed[PATH], DATA),
-    sim.requests.filter((r) => r.startsWith(`${FTP_OPCODE.ResetSessions}#`) || r.startsWith(`${FTP_OPCODE.CreateFile}#`)).join(' '));
+  check(
+    'CreateFile refused by a file left open: sessions reset, written on retry',
+    ok && same(sim.committed[PATH], DATA),
+    sim.requests
+      .filter((r) => r.startsWith(`${FTP_OPCODE.ResetSessions}#`) || r.startsWith(`${FTP_OPCODE.CreateFile}#`))
+      .join(' ')
+  );
 }
 
 // 14. Item-by-item upload where the vehicle requests an item twice (as ArduPilot does, e.g. armed in AUTO): it
@@ -585,7 +773,9 @@ for (const loss of [0.1, 0.2]) {
   const parser = new MavlinkParser();
   const emit = (messageId: number, payload: Uint8Array) => {
     const pkt = { version: 2, sequence: 0, systemId: 1, componentId: 1, messageId, payload, crc: 0, raw: payload };
-    setTimeout(() => { for (const l of (mavlinkConnection as any).packetListeners) l(pkt); }, 2);
+    setTimeout(() => {
+      for (const l of (mavlinkConnection as any).packetListeners) l(pkt);
+    }, 2);
   };
   const request = (seq: number) => emit(51, Uint8Array.of(seq & 0xff, seq >> 8, 255, 190, 0));
   const ack = (type: number) => emit(47, Uint8Array.of(255, 190, type, 0));
@@ -622,21 +812,30 @@ for (const loss of [0.1, 0.2]) {
   };
   const items = [0, 1, 2].map((seq) => ({ seq, command: 16, frame: 3, x: 37.77 + seq * 1e-4, y: -122.41, z: 30 }));
   const ok = await missionManager.uploadLegacyItems(0, items as any, 1, 1, 300);
-  check('item-by-item: a duplicate refused as out-of-sequence does not stop the upload', ok && refused.length >= 1 && stored.length === 3,
-    `ok=${ok} refused=${refused.join(',')} stored=${stored.length}`);
+  check(
+    'item-by-item: a duplicate refused as out-of-sequence does not stop the upload',
+    ok && refused.length >= 1 && stored.length === 3,
+    `ok=${ok} refused=${refused.join(',')} stored=${stored.length}`
+  );
 }
 
 // 15. The refusal that starts a session reset arrives just before the create's own timeout (a slow link). The
 // pending timeout must be cancelled, or it fires during the 80 ms pause and sends a duplicate create.
 {
   const SLOW_TIMEOUT_MS = 200;
-  const sim = new ArduPilotFtpSim({ delayReply: (req) => (req.opcode === FTP_OPCODE.CreateFile ? SLOW_TIMEOUT_MS - 40 : 0) });
+  const sim = new ArduPilotFtpSim({
+    delayReply: (req) => (req.opcode === FTP_OPCODE.CreateFile ? SLOW_TIMEOUT_MS - 40 : 0),
+  });
   sim.install();
   sim.fd = { mode: 'r', path: '@PARAM/param.pck', buf: new Uint8Array(10), len: 10 }; // left open: the first create is refused
   const ok = await mavFtpClient.writeFile(1, 1, PATH, DATA, 239, SLOW_TIMEOUT_MS);
   await sleep(20);
   const creates = sim.requests.filter((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)).length;
-  check('late CreateFile refusal: no duplicate create during the reset pause', ok && creates === 2, `${creates} creates: ${sim.requests.slice(0, 8).join(' ')}`);
+  check(
+    'late CreateFile refusal: no duplicate create during the reset pause',
+    ok && creates === 2,
+    `${creates} creates: ${sim.requests.slice(0, 8).join(' ')}`
+  );
 }
 
 // 16. Geofence: upload a fence draft, read it back and judge it; clear it; a failed read keeps the map's fence.
@@ -646,22 +845,39 @@ for (const loss of [0.1, 0.2]) {
   const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
   // Earlier sections call the low-level uploadSection directly, which leaves the transfer state set (the app's
   // own paths reset it afterwards): reset it, or this upload is refused as "already in progress".
-  (missionManager as any).setStatus({ isUploading: false, isFetching: false, method: 'idle', uploadProgress: undefined });
+  (missionManager as any).setStatus({
+    isUploading: false,
+    isFetching: false,
+    method: 'idle',
+    uploadProgress: undefined,
+  });
   let fence = fd.addShape(fd.EMPTY_FENCE, fd.squareAt({ lat: 37.7749, lon: -122.4194 }, 400, true)).draft;
-  fence = fd.addShape(fence, { kind: 'circle', inclusion: false, center: { lat: 37.775, lon: -122.419 }, radius: 25.5 }).draft;
+  fence = fd.addShape(fence, {
+    kind: 'circle',
+    inclusion: false,
+    center: { lat: 37.775, lon: -122.419 },
+    radius: 25.5,
+  }).draft;
   fence = fd.setReturnPoint(fence, { lat: 37.7745, lon: -122.4198 });
 
   new ArduPilotFtpSim().install();
   const res = await missionManager.uploadFenceAndReadBack(fd.fenceDraftToItems(fence), 1, 1);
   await sleep(50);
   const v = fd.checkFenceReadBack(fence, res.readBack, res.readOk);
-  check('fence upload over MAVFTP: read back and verified', res.success && res.method === 'ftp' && res.readOk && v.status === 'verified', `${res.method} ${v.status} ${v.differences.join('; ')}`);
+  check(
+    'fence upload over MAVFTP: read back and verified',
+    res.success && res.method === 'ftp' && res.readOk && v.status === 'verified',
+    `${res.method} ${v.status} ${v.differences.join('; ')}`
+  );
 
   new ArduPilotFtpSim().install();
   const cleared = await missionManager.uploadFenceAndReadBack([], 1, 1);
   await sleep(50);
-  check('clearing the fence verifies', cleared.success && fd.checkFenceReadBack(fd.EMPTY_FENCE, cleared.readBack, cleared.readOk).status === 'verified',
-    `${cleared.method} readOk=${cleared.readOk} ${cleared.error ?? ''}`);
+  check(
+    'clearing the fence verifies',
+    cleared.success && fd.checkFenceReadBack(fd.EMPTY_FENCE, cleared.readBack, cleared.readOk).status === 'verified',
+    `${cleared.method} readOk=${cleared.readOk} ${cleared.error ?? ''}`
+  );
 
   const realFetch = missionManager.fetchFence.bind(missionManager);
   (missionManager as any).fetchFence = async () => {
@@ -672,9 +888,17 @@ for (const loss of [0.1, 0.2]) {
   const unread = await missionManager.uploadFenceAndReadBack(fd.fenceDraftToItems(fence), 1, 1);
   await sleep(50);
   (missionManager as any).fetchFence = realFetch;
-  check('fence read fails: unreadable, map keeps the uploaded fence',
-    unread.success && fd.checkFenceReadBack(fence, unread.readBack, unread.readOk).status === 'unreadable' && useTelemetryStore.getState().fencePoints.length === fd.fenceDraftToItems(fence).length);
+  check(
+    'fence read fails: unreadable, map keeps the uploaded fence',
+    unread.success &&
+      fd.checkFenceReadBack(fence, unread.readBack, unread.readOk).status === 'unreadable' &&
+      useTelemetryStore.getState().fencePoints.length === fd.fenceDraftToItems(fence).length
+  );
 }
 
-console.log(failures.length ? `\n${failures.length} MAVFTP ArduPilot-sim check(s) FAILED` : '\nAll MAVFTP ArduPilot-sim checks PASSED');
+console.log(
+  failures.length
+    ? `\n${failures.length} MAVFTP ArduPilot-sim check(s) FAILED`
+    : '\nAll MAVFTP ArduPilot-sim checks PASSED'
+);
 process.exit(failures.length ? 1 : 0);

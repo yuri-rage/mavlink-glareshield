@@ -85,8 +85,13 @@ export function tlogResumeDecision(
 ): { resume: boolean; reason: string } {
   if (!last) return { resume: false, reason: 'no earlier log' };
   if (last.closed) return { resume: false, reason: 'the last log was closed' };
-  if (last.sysId !== now.sysId || last.vehicleType !== now.vehicleType) return { resume: false, reason: 'a different vehicle' };
-  if (last.bootEpochMs !== undefined && now.bootEpochMs !== undefined && Math.abs(last.bootEpochMs - now.bootEpochMs) > BOOT_TOLERANCE_MS) {
+  if (last.sysId !== now.sysId || last.vehicleType !== now.vehicleType)
+    return { resume: false, reason: 'a different vehicle' };
+  if (
+    last.bootEpochMs !== undefined &&
+    now.bootEpochMs !== undefined &&
+    Math.abs(last.bootEpochMs - now.bootEpochMs) > BOOT_TOLERANCE_MS
+  ) {
     return { resume: false, reason: 'the vehicle rebooted' };
   }
   const gap = now.timeMs - last.lastWriteMs;
@@ -100,7 +105,11 @@ export function tlogResumeDecision(
  * Which logs to delete, oldest first, to bring the total to `capBytes` or less. Kept logs and the active one are
  * never deleted; if they alone exceed the cap, nothing more can be done (the caller reports it).
  */
-export function tlogsToPrune(logs: Pick<TlogMeta, 'name' | 'bytes' | 'kept' | 'startMs'>[], capBytes: number, active: string | null): string[] {
+export function tlogsToPrune(
+  logs: Pick<TlogMeta, 'name' | 'bytes' | 'kept' | 'startMs'>[],
+  capBytes: number,
+  active: string | null
+): string[] {
   let total = logs.reduce((t, l) => t + l.bytes, 0);
   const out: string[] = [];
   for (const l of [...logs].sort((a, b) => a.startMs - b.startMs)) {

@@ -2,21 +2,24 @@
 // its latest fields, decoded from the dialect (ArduPilot's ardupilotmega.xml) with their units. Filter by name or ID,
 // pause to read, clear to start over. Collecting runs only while the widget is shown.
 
-import { useInPane } from '../dashboard/paneContext';
 import React, { useEffect, useState } from 'react';
+
 import { Pause, Play, Search, Trash2, Waves } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { mavlinkConnection } from '../../mavlink/connection';
+
 import { InspectorCollector, type InspectorEntry } from '../../lib/mavlinkInspector';
-import { decodeAny, messageName, type DecodedField } from '../../mavlink/dialectDecode';
 import { cn } from '../../lib/utils';
+import { mavlinkConnection } from '../../mavlink/connection';
+import { decodeAny, messageName, type DecodedField } from '../../mavlink/dialectDecode';
+import { useInPane } from '../dashboard/paneContext';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
 export const inspector = new InspectorCollector((fn) => mavlinkConnection.onPacket(fn));
 
 const name = (id: number) => messageName(id) ?? `MSG ${id}`;
 
 function fmtValue(v: DecodedField['value']): string {
-  const one = (x: number | string) => (typeof x === 'number' && !Number.isInteger(x) ? String(+x.toPrecision(7)) : String(x));
+  const one = (x: number | string) =>
+    typeof x === 'number' && !Number.isInteger(x) ? String(+x.toPrecision(7)) : String(x);
   if (Array.isArray(v)) {
     const shown = v.slice(0, 32).map(one).join(', ');
     return v.length > 32 ? `[${shown}, … ${v.length - 32} more]` : `[${shown}]`;
@@ -56,7 +59,9 @@ export const InspectorWidget: React.FC = () => {
   }, []);
 
   const f = filter.trim().toLowerCase();
-  const entries = [...inspector.entries.values()].filter((e) => !f || name(e.msgId).toLowerCase().includes(f) || String(e.msgId) === f);
+  const entries = [...inspector.entries.values()].filter(
+    (e) => !f || name(e.msgId).toLowerCase().includes(f) || String(e.msgId) === f
+  );
   const groups = (() => {
     const m = new Map<string, InspectorEntry[]>();
     for (const e of entries) {
@@ -84,7 +89,9 @@ export const InspectorWidget: React.FC = () => {
             MAVLink Inspector
           </span>
           <span className="flex items-center gap-1.5 font-normal normal-case tracking-normal">
-            <span className="font-mono text-[10px] text-zinc-500">{entries.length} types · {total.toFixed(0)} msg/s</span>
+            <span className="font-mono text-[10px] text-zinc-500">
+              {entries.length} types · {total.toFixed(0)} msg/s
+            </span>
             <button
               type="button"
               onClick={() => {
@@ -92,15 +99,23 @@ export const InspectorWidget: React.FC = () => {
                 refresh();
               }}
               title={paused ? 'Resume' : 'Pause (freeze the values to read them)'}
-              className={cn('rounded-md border px-1.5 py-0.5', paused ? 'border-amber-500/60 text-amber-300' : 'border-zinc-800 text-zinc-300 hover:bg-zinc-800')}
+              className={cn(
+                'rounded-md border px-1.5 py-0.5',
+                paused ? 'border-amber-500/60 text-amber-300' : 'border-zinc-800 text-zinc-300 hover:bg-zinc-800'
+              )}
             >
               {paused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
             </button>
-            <button type="button" onClick={() => {
+            <button
+              type="button"
+              onClick={() => {
                 inspector.clear();
                 setSelected(null);
                 refresh();
-              }} title="Clear counts" className="rounded-md border border-zinc-800 px-1.5 py-0.5 text-zinc-400 hover:bg-zinc-800">
+              }}
+              title="Clear counts"
+              className="rounded-md border border-zinc-800 px-1.5 py-0.5 text-zinc-400 hover:bg-zinc-800"
+            >
               <Trash2 className="h-3 w-3" />
             </button>
           </span>
@@ -117,8 +132,12 @@ export const InspectorWidget: React.FC = () => {
             aria-label="Filter messages"
           />
         </label>
-        <div className={`grid min-h-0 flex-1 gap-2 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] ${inPane ? '@2xl:grid-rows-1 grid-rows-2' : ''}`}>
-          <div className={`${inPane ? 'min-h-0' : 'max-h-[60vh] min-h-[8rem]'} overflow-y-auto rounded-md border border-zinc-800`}>
+        <div
+          className={`grid min-h-0 flex-1 gap-2 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] ${inPane ? 'grid-rows-2 @2xl:grid-rows-1' : ''}`}
+        >
+          <div
+            className={`${inPane ? 'min-h-0' : 'max-h-[60vh] min-h-[8rem]'} overflow-y-auto rounded-md border border-zinc-800`}
+          >
             {groups.length === 0 && (
               <p className="p-2 text-zinc-500">
                 {inspector.entries.size > 0
@@ -142,7 +161,11 @@ export const InspectorWidget: React.FC = () => {
                         key={e.key}
                         type="button"
                         onClick={() => setSelected(e.key === selected ? null : e.key)}
-                        className={cn('flex w-full items-center gap-2 px-2 py-0.5 text-left font-mono text-[11px] hover:bg-zinc-800', e.key === selected && 'bg-sky-950/60 text-sky-200', r === 0 && 'text-zinc-500')}
+                        className={cn(
+                          'flex w-full items-center gap-2 px-2 py-0.5 text-left font-mono text-[11px] hover:bg-zinc-800',
+                          e.key === selected && 'bg-sky-950/60 text-sky-200',
+                          r === 0 && 'text-zinc-500'
+                        )}
                       >
                         <span className="min-w-0 flex-1 truncate">{name(e.msgId)}</span>
                         <span className="w-10 text-right text-zinc-500">{e.msgId}</span>
@@ -154,7 +177,9 @@ export const InspectorWidget: React.FC = () => {
               );
             })}
           </div>
-          <div className={`${inPane ? 'min-h-0' : 'max-h-[60vh] min-h-[8rem]'} overflow-y-auto rounded-md border border-zinc-800`}>
+          <div
+            className={`${inPane ? 'min-h-0' : 'max-h-[60vh] min-h-[8rem]'} overflow-y-auto rounded-md border border-zinc-800`}
+          >
             {!sel ? (
               <p className="p-2 text-zinc-500">Select a message for its latest fields.</p>
             ) : (
@@ -162,7 +187,8 @@ export const InspectorWidget: React.FC = () => {
                 <div className="sticky top-0 flex items-center justify-between gap-2 bg-zinc-900 px-2 py-1 font-mono text-[11px]">
                   <span className="font-bold text-sky-300">{name(sel.msgId)}</span>
                   <span className="text-[10px] text-zinc-500">
-                    #{sel.msgId} · {sel.count} · v{sel.version} · {sel.lastPayload.length} B · {((inspector.clock() - sel.lastAt) / 1000).toFixed(1)} s ago
+                    #{sel.msgId} · {sel.count} · v{sel.version} · {sel.lastPayload.length} B ·{' '}
+                    {((inspector.clock() - sel.lastAt) / 1000).toFixed(1)} s ago
                   </span>
                 </div>
                 {!fields ? (

@@ -2,12 +2,17 @@
 // loads the tile as usual: offline maps work with or without the service worker, and in development.
 
 import L from 'leaflet';
+
 import { IMPORT_HOST, offlineTileUrl } from '../../lib/offlineTiles';
 
 type TileImg = HTMLImageElement & { _offlineObjectUrl?: string };
 
 const OfflineAwareTileLayer = L.TileLayer.extend({
-  createTile(this: L.TileLayer & { _tileOnLoad: Function; _tileOnError: Function; _map?: L.Map }, coords: L.Coords, done: L.DoneCallback) {
+  createTile(
+    this: L.TileLayer & { _tileOnLoad: Function; _tileOnError: Function; _map?: L.Map },
+    coords: L.Coords,
+    done: L.DoneCallback
+  ) {
     const tile = document.createElement('img') as TileImg;
     const release = () => {
       if (tile._offlineObjectUrl) {
@@ -50,5 +55,8 @@ const OfflineAwareTileLayer = L.TileLayer.extend({
 
 /** A tile layer that looks in the offline store first (see the file comment). */
 export function offlineAwareTileLayer(template: string, options: L.TileLayerOptions): L.TileLayer {
-  return new (OfflineAwareTileLayer as unknown as new (t: string, o: L.TileLayerOptions) => L.TileLayer)(template, options);
+  return new (OfflineAwareTileLayer as unknown as new (t: string, o: L.TileLayerOptions) => L.TileLayer)(
+    template,
+    options
+  );
 }

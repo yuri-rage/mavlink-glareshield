@@ -3,11 +3,13 @@
 // switch is confirmed when something is at stake). Drawn from a store subscription, without re-rendering the map.
 
 import { useEffect, useRef } from 'react';
+
 import L from 'leaflet';
+
+import { escapeHtml } from '../../mavlink/adsb';
 import { requestVehicleSwitch, useVehicleRosterStore, type RosterVehicle } from '../../mavlink/vehicleRoster';
 import { useUnitsStore } from '../../store/unitsStore';
 import { vehicleSummary } from '../navbar/VehiclePicker';
-import { escapeHtml } from '../../mavlink/adsb';
 
 const PANE = 'otherVehiclesPane';
 /** A position older than this is shown faded. */
@@ -53,7 +55,8 @@ export function useOtherVehiclesLayer(mapRef: React.MutableRefObject<L.Map | nul
       const now = Date.now();
       const seen = new Set<number>();
       for (const v of Object.values(vehicles)) {
-        if (v.sysId === activeSystemId || v.lat === undefined || v.lon === undefined || (v.lat === 0 && v.lon === 0)) continue;
+        if (v.sysId === activeSystemId || v.lat === undefined || v.lon === undefined || (v.lat === 0 && v.lon === 0))
+          continue;
         seen.add(v.sysId);
         const stale = !v.posTime || now - v.posTime > STALE_MS;
         // The icon is rebuilt only when its label or look changes (mode, armed, staleness); the heading turns the
@@ -71,8 +74,15 @@ export function useOtherVehiclesLayer(mapRef: React.MutableRefObject<L.Map | nul
           }
           if (had.marker.isPopupOpen()) had.marker.setPopupContent(popupHtml(v, imperial));
         } else {
-          const marker = L.marker([v.lat, v.lon], { icon: icon(v, stale), pane: PANE, keyboard: false, title: `Vehicle ${v.sysId}` })
-            .bindPopup(() => popupHtml(useVehicleRosterStore.getState().vehicles[v.sysId] ?? v, isImperial()), { pane: 'popupPane' })
+          const marker = L.marker([v.lat, v.lon], {
+            icon: icon(v, stale),
+            pane: PANE,
+            keyboard: false,
+            title: `Vehicle ${v.sysId}`,
+          })
+            .bindPopup(() => popupHtml(useVehicleRosterStore.getState().vehicles[v.sysId] ?? v, isImperial()), {
+              pane: 'popupPane',
+            })
             .addTo(map);
           markers.current.set(v.sysId, { marker, key });
         }

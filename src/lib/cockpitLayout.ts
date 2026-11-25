@@ -6,7 +6,13 @@
 // layout that comes in (saved, imported, edited) goes through sanitizeCockpit: only known widgets, each once, a
 // bounded depth and pane count, sizes that sum to 100.
 
-import type { CockpitLayout, CockpitNode, CustomWidgetDefinition, PlacedWidget, WidgetPanelDefinition } from '../types/widget';
+import type {
+  CockpitLayout,
+  CockpitNode,
+  CustomWidgetDefinition,
+  PlacedWidget,
+  WidgetPanelDefinition,
+} from '../types/widget';
 
 export const MAX_DEPTH = 6;
 export const MAX_PANES = 24;
@@ -20,7 +26,10 @@ export function isPane(n: CockpitNode): n is { pane: string } {
 /** Sizes for n children: the given ones when usable (finite, positive, n of them), else equal; scaled to sum 100. */
 export function normalizeSizes(sizes: unknown, n: number): number[] {
   if (n <= 0) return [];
-  const ok = Array.isArray(sizes) && sizes.length === n && sizes.every((v) => typeof v === 'number' && Number.isFinite(v) && v > 0);
+  const ok =
+    Array.isArray(sizes) &&
+    sizes.length === n &&
+    sizes.every((v) => typeof v === 'number' && Number.isFinite(v) && v > 0);
   const raw = ok ? (sizes as number[]) : Array(n).fill(1);
   const total = raw.reduce((a, b) => a + b, 0);
   // Each at least 0.5 (a zero would read as invalid next time, resetting the split), to the hundredth.
@@ -98,7 +107,11 @@ export function panesInOrder(layout: CockpitLayout | null | undefined): string[]
 }
 
 /** The layout with a widget taken out (its space goes to its neighbours). */
-export function removeFromLayout(layout: CockpitLayout, instanceId: string, widgetIds: Iterable<string>): CockpitLayout {
+export function removeFromLayout(
+  layout: CockpitLayout,
+  instanceId: string,
+  widgetIds: Iterable<string>
+): CockpitLayout {
   const ids = [...widgetIds].filter((id) => id !== instanceId);
   return sanitizeCockpit(layout, ids) ?? { header: null, root: null };
 }
@@ -110,7 +123,14 @@ export function appendPane(layout: CockpitLayout, instanceId: string): CockpitLa
   if (!root) return { ...layout, root: pane };
   if (!isPane(root) && root.split === 'row') {
     const n = root.children.length;
-    return { ...layout, root: { ...root, children: [...root.children, pane], sizes: normalizeSizes([...root.sizes.map((s) => (s * n) / (n + 1)), 100 / (n + 1)], n + 1) } };
+    return {
+      ...layout,
+      root: {
+        ...root,
+        children: [...root.children, pane],
+        sizes: normalizeSizes([...root.sizes.map((s) => (s * n) / (n + 1)), 100 / (n + 1)], n + 1),
+      },
+    };
   }
   return { ...layout, root: { split: 'row', children: [root, pane], sizes: [75, 25] } };
 }
@@ -132,7 +152,9 @@ export function setSplitSizes(layout: CockpitLayout, path: number[], sizes: numb
     if (depth === path.length) return { ...n, sizes: normalizeSizes(sizes, n.children.length) };
     return { ...n, children: n.children.map((c, i) => (i === path[depth] ? update(c, depth + 1) : c)) };
   };
-  return layout.root && nodeAt(layout.root, path) && !isPane(nodeAt(layout.root, path)!) ? { ...layout, root: update(layout.root, 0) } : layout;
+  return layout.root && nodeAt(layout.root, path) && !isPane(nodeAt(layout.root, path)!)
+    ? { ...layout, root: update(layout.root, 0) }
+    : layout;
 }
 
 export interface Size {
@@ -141,7 +163,9 @@ export interface Size {
 }
 
 /** Roughly how tall a custom widget panel's content is at its smallest (px), by type and how many values it shows. */
-function panelMinHeight(p: Pick<WidgetPanelDefinition, 'displayType' | 'widgetId' | 'bindings' | 'gauge' | 'multiBarConfig'>): number {
+function panelMinHeight(
+  p: Pick<WidgetPanelDefinition, 'displayType' | 'widgetId' | 'bindings' | 'gauge' | 'multiBarConfig'>
+): number {
   const n = 1 + (p.bindings?.length ?? 0);
   switch (p.displayType) {
     // A built-in widget as it is in a pane (not its taller Flow-card minimum).
@@ -197,7 +221,8 @@ const COMPOSITE_STACK_PX = 360;
  * needed to keep panels side by side), each row as tall as its tallest panel; a single panel by its type.
  */
 export function customWidgetMinSize(def: CustomWidgetDefinition): Size {
-  if (def.displayType !== 'composite') return { w: 220, h: Math.min(CUSTOM_MIN_H_CAP, panelMinHeight(def as WidgetPanelDefinition) + CARD_CHROME) };
+  if (def.displayType !== 'composite')
+    return { w: 220, h: Math.min(CUSTOM_MIN_H_CAP, panelMinHeight(def as WidgetPanelDefinition) + CARD_CHROME) };
   const panels = def.panels ?? [];
   if (panels.length === 0) return { w: 220, h: 140 };
   // Panels fill rows of twelve columns, left to right.
@@ -285,11 +310,26 @@ export const COCKPIT_PRESETS: { id: CockpitPresetId; name: string; description: 
   { id: 'hd', name: 'HD cockpit', description: 'HUD and map side by side, telemetry cards beneath (16:9 screens).' },
   { id: 'ultrawide', name: 'Ultrawide', description: 'HUD | map | a column of telemetry and messages (21:9 screens).' },
   { id: 'map-first', name: 'Map first', description: 'A large map with the HUD and telemetry in a side column.' },
-  { id: 'from-tab', name: "This tab's widgets", description: 'The widgets already on the tab: large ones on top, small ones beneath.' },
+  {
+    id: 'from-tab',
+    name: "This tab's widgets",
+    description: 'The widgets already on the tab: large ones on top, small ones beneath.',
+  },
 ];
 
 /** Widgets that want room (instruments, maps, lists) rather than a card's worth. */
-const LARGE = new Set(['built-in-hud', 'built-in-pfd', 'built-in-map', 'built-in-charts', 'built-in-parameters', 'built-in-statustext', 'built-in-inspector', 'built-in-logs', 'built-in-pid-tuning', 'built-in-ntrip']);
+const LARGE = new Set([
+  'built-in-hud',
+  'built-in-pfd',
+  'built-in-map',
+  'built-in-charts',
+  'built-in-parameters',
+  'built-in-statustext',
+  'built-in-inspector',
+  'built-in-logs',
+  'built-in-pid-tuning',
+  'built-in-ntrip',
+]);
 /** The quick-actions bar (Flight Controls), by either of its names: the one widget that can be pinned above the panes. */
 export const QUICK_ACTIONS = new Set(['built-in-glareshield', 'built-in-arm-modes']);
 
@@ -297,7 +337,11 @@ export const QUICK_ACTIONS = new Set(['built-in-glareshield', 'built-in-arm-mode
  * A preset applied to a tab: the widgets it uses (the tab's own where it has them, new instances otherwise; the
  * tab's other widgets are kept, unplaced) and the layout. `newId` makes instance IDs.
  */
-export function buildPreset(preset: CockpitPresetId, existing: PlacedWidget[], newId: () => string): { widgets: PlacedWidget[]; layout: CockpitLayout } {
+export function buildPreset(
+  preset: CockpitPresetId,
+  existing: PlacedWidget[],
+  newId: () => string
+): { widgets: PlacedWidget[]; layout: CockpitLayout } {
   const widgets = [...existing];
   const taken = new Set<string>();
   // A widget the preset wants, by any of its names (older profiles have built-in-arm-modes for the quick actions,
@@ -331,23 +375,45 @@ export function buildPreset(preset: CockpitPresetId, existing: PlacedWidget[], n
     rest.forEach((w) => taken.add(w.instanceId));
     const big = rest.filter((w) => LARGE.has(w.widgetId)).map((w) => ({ pane: w.instanceId }) as CockpitNode);
     const small = rest.filter((w) => !LARGE.has(w.widgetId)).map((w) => ({ pane: w.instanceId }) as CockpitNode);
-    const bigRow = big.length > 1 ? row(big, []) : big[0] ?? null;
-    const smallRow = small.length > 1 ? row(small, []) : small[0] ?? null;
-    root = bigRow && smallRow ? col([bigRow, smallRow], [70, 30]) : bigRow ?? smallRow;
+    const bigRow = big.length > 1 ? row(big, []) : (big[0] ?? null);
+    const smallRow = small.length > 1 ? row(small, []) : (small[0] ?? null);
+    root = bigRow && smallRow ? col([bigRow, smallRow], [70, 30]) : (bigRow ?? smallRow);
   } else {
     header = use('built-in-glareshield');
     if (preset === 'hd') {
-      root = col([row([p('built-in-hud'), p('built-in-map')], [45, 55]), row([p('built-in-vfr-hud'), p('built-in-battery-card'), p('built-in-gps-card')], [])], [64, 36]);
+      root = col(
+        [
+          row([p('built-in-hud'), p('built-in-map')], [45, 55]),
+          row([p('built-in-vfr-hud'), p('built-in-battery-card'), p('built-in-gps-card')], []),
+        ],
+        [64, 36]
+      );
     } else if (preset === 'ultrawide') {
       root = row(
-        [p('built-in-hud'), p('built-in-map'), col([p('built-in-vfr-hud'), p('built-in-battery-card'), p('built-in-gps-card'), p('built-in-statustext-mini')], [])],
+        [
+          p('built-in-hud'),
+          p('built-in-map'),
+          col(
+            [p('built-in-vfr-hud'), p('built-in-battery-card'), p('built-in-gps-card'), p('built-in-statustext-mini')],
+            []
+          ),
+        ],
         [30, 46, 24]
       );
     } else {
-      root = row([p('built-in-map'), col([p('built-in-hud'), p('built-in-vfr-hud'), p('built-in-statustext-mini')], [50, 30, 20])], [70, 30]);
+      root = row(
+        [
+          p('built-in-map'),
+          col([p('built-in-hud'), p('built-in-vfr-hud'), p('built-in-statustext-mini')], [50, 30, 20]),
+        ],
+        [70, 30]
+      );
     }
   }
-  const layout = sanitizeCockpit({ header, root }, widgets.map((w) => w.instanceId)) ?? { header: null, root: null };
+  const layout = sanitizeCockpit(
+    { header, root },
+    widgets.map((w) => w.instanceId)
+  ) ?? { header: null, root: null };
   return { widgets, layout };
 }
 
@@ -358,7 +424,11 @@ export function buildPreset(preset: CockpitPresetId, existing: PlacedWidget[], n
 /** Where a pane goes relative to another: beside it (left/right), above or below it, or in its place (swap). */
 export type DropZone = 'left' | 'right' | 'top' | 'bottom' | 'center';
 
-const replaceNode = (root: CockpitNode, match: (n: CockpitNode) => boolean, make: (n: CockpitNode) => CockpitNode): CockpitNode => {
+const replaceNode = (
+  root: CockpitNode,
+  match: (n: CockpitNode) => boolean,
+  make: (n: CockpitNode) => CockpitNode
+): CockpitNode => {
   if (match(root)) return make(root);
   if (isPane(root)) return root;
   return { ...root, children: root.children.map((c) => replaceNode(c, match, make)) };
@@ -368,7 +438,12 @@ const replaceNode = (root: CockpitNode, match: (n: CockpitNode) => boolean, make
  * The layout with `newId` put beside, above or below the pane `targetId`, which gives up half its room. Next to a
  * pane in a split of the same direction it becomes a sibling (no deeper nesting), else the pane becomes a split.
  */
-export function splitPane(layout: CockpitLayout, targetId: string, side: Exclude<DropZone, 'center'>, newId: string): CockpitLayout {
+export function splitPane(
+  layout: CockpitLayout,
+  targetId: string,
+  side: Exclude<DropZone, 'center'>,
+  newId: string
+): CockpitLayout {
   if (!layout.root) return { ...layout, root: { pane: newId } };
   const dir: 'row' | 'column' = side === 'left' || side === 'right' ? 'row' : 'column';
   const before = side === 'left' || side === 'top';
@@ -404,14 +479,27 @@ export function splitPane(layout: CockpitLayout, targetId: string, side: Exclude
 /** The layout with the pane showing `oldId` showing `newId` instead. */
 export function replacePane(layout: CockpitLayout, oldId: string, newId: string): CockpitLayout {
   if (!layout.root) return layout;
-  return { ...layout, root: replaceNode(layout.root, (n) => isPane(n) && n.pane === oldId, () => ({ pane: newId })) };
+  return {
+    ...layout,
+    root: replaceNode(
+      layout.root,
+      (n) => isPane(n) && n.pane === oldId,
+      () => ({ pane: newId })
+    ),
+  };
 }
 
 /** The layout with two panes' widgets exchanged (each keeps the other's place and size). */
 export function swapPanes(layout: CockpitLayout, a: string, b: string): CockpitLayout {
   if (!layout.root || a === b) return layout;
   const swap = (n: CockpitNode): CockpitNode =>
-    isPane(n) ? (n.pane === a ? { pane: b } : n.pane === b ? { pane: a } : n) : { ...n, children: n.children.map(swap) };
+    isPane(n)
+      ? n.pane === a
+        ? { pane: b }
+        : n.pane === b
+          ? { pane: a }
+          : n
+      : { ...n, children: n.children.map(swap) };
   return { ...layout, root: swap(layout.root) };
 }
 
@@ -419,7 +507,13 @@ export function swapPanes(layout: CockpitLayout, a: string, b: string): CockpitL
  * The layout with the pane `srcId` moved to `zone` of the pane `targetId`: the centre swaps them; an edge takes it
  * out of its place (its neighbours take the room) and splits the target there.
  */
-export function movePane(layout: CockpitLayout, srcId: string, targetId: string, zone: DropZone, widgetIds: Iterable<string>): CockpitLayout {
+export function movePane(
+  layout: CockpitLayout,
+  srcId: string,
+  targetId: string,
+  zone: DropZone,
+  widgetIds: Iterable<string>
+): CockpitLayout {
   if (srcId === targetId) return layout;
   if (zone === 'center') return swapPanes(layout, srcId, targetId);
   const ids = [...widgetIds];
@@ -433,7 +527,11 @@ export function movePane(layout: CockpitLayout, srcId: string, targetId: string,
  * go past the depth or pane limits (sanitizing drops what doesn't fit, wherever it is) does nothing, rather than
  * losing panes.
  */
-export function placedOrUnchanged(layout: CockpitLayout, next: CockpitLayout | null, added: string[] = []): CockpitLayout {
+export function placedOrUnchanged(
+  layout: CockpitLayout,
+  next: CockpitLayout | null,
+  added: string[] = []
+): CockpitLayout {
   if (!next) return layout;
   const shown = new Set(panesInOrder(next));
   return [...panesInOrder(layout), ...added].every((id) => shown.has(id)) ? next : layout;
@@ -478,11 +576,19 @@ export function addAtEdge(layout: CockpitLayout, id: string, side: Exclude<DropZ
       },
     };
   }
-  return { ...layout, root: { split: dir, children: first ? [fresh, root] : [root, fresh], sizes: first ? [25, 75] : [75, 25] } };
+  return {
+    ...layout,
+    root: { split: dir, children: first ? [fresh, root] : [root, fresh], sizes: first ? [25, 75] : [75, 25] },
+  };
 }
 
 /** The layout with the pane `srcId` moved to a whole edge of it (out of its place first; nothing lost, or no change). */
-export function movePaneToEdge(layout: CockpitLayout, srcId: string, side: Exclude<DropZone, 'center'>, widgetIds: Iterable<string>): CockpitLayout {
+export function movePaneToEdge(
+  layout: CockpitLayout,
+  srcId: string,
+  side: Exclude<DropZone, 'center'>,
+  widgetIds: Iterable<string>
+): CockpitLayout {
   const ids = [...widgetIds];
   const without = removeFromLayout(layout, srcId, ids);
   return placedOrUnchanged(layout, sanitizeCockpit(addAtEdge(without, srcId, side), ids));
@@ -499,7 +605,14 @@ export function unpinHeader(layout: CockpitLayout, widgetIds: Iterable<string>):
   const placed = addAtEdge({ ...layout, header: null }, id, 'bottom');
   const root = placed.root;
   // A bar needs little height: an eighth of the room, not the usual quarter.
-  if (root && !isPane(root) && root.split === 'column' && root.children[root.children.length - 1] && isPane(root.children[root.children.length - 1]) && (root.children[root.children.length - 1] as { pane: string }).pane === id) {
+  if (
+    root &&
+    !isPane(root) &&
+    root.split === 'column' &&
+    root.children[root.children.length - 1] &&
+    isPane(root.children[root.children.length - 1]) &&
+    (root.children[root.children.length - 1] as { pane: string }).pane === id
+  ) {
     const n = root.sizes.length;
     const rest = root.sizes.slice(0, -1);
     const sum = rest.reduce((a, b) => a + b, 0) || 1;

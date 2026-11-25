@@ -1,20 +1,15 @@
-import { feedbackBadge, feedbackRing } from './commandFeedback';
-import React, { useState, useEffect } from 'react';
-import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
-import { useUnitsStore, UnitSystem } from '../../store/unitsStore';
+import React, { useEffect, useState } from 'react';
+
+import { Gauge, RotateCcw } from 'lucide-react';
+
 import { mavlinkConnection } from '../../mavlink/connection';
+import { getVehicleCategory, MAV_CMD, MAVLINK_MSG_ID } from '../../mavlink/messages';
 import { messageRateManager } from '../../mavlink/rateManager';
-import { Card, CardContent } from '../ui/card';
+import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
+import { UnitSystem, useUnitsStore } from '../../store/unitsStore';
 import { Button } from '../ui/button';
-import {
-  MAV_CMD,
-  MAVLINK_MSG_ID,
-  getVehicleCategory,
-} from '../../mavlink/messages';
-import {
-  Gauge,
-  RotateCcw,
-} from 'lucide-react';
+import { Card, CardContent } from '../ui/card';
+import { feedbackBadge, feedbackRing } from './commandFeedback';
 
 function toActiveUnits(speedMs: number, system: UnitSystem): number {
   switch (system) {
@@ -71,9 +66,14 @@ export const SetSpeedWidget: React.FC = () => {
 
   const activeUnit = system === 'ms' ? 'm/s' : system === 'kmh' ? 'km/h' : system === 'mph' ? 'mph' : 'kts';
   const defaultSpeedMs = category === 'plane' ? 15 : category === 'rover' ? 2 : category === 'sub' ? 1 : 5;
-  const liveSpeedMs = category === 'plane'
-    ? (vfr.airspeed >= 0.5 ? vfr.airspeed : defaultSpeedMs)
-    : (vfr.groundspeed >= 0.5 ? vfr.groundspeed : defaultSpeedMs);
+  const liveSpeedMs =
+    category === 'plane'
+      ? vfr.airspeed >= 0.5
+        ? vfr.airspeed
+        : defaultSpeedMs
+      : vfr.groundspeed >= 0.5
+        ? vfr.groundspeed
+        : defaultSpeedMs;
 
   const currentSpeedMs = manualTargetSpeedMs ?? liveSpeedMs;
   const currentTargetDisplay = Number(toActiveUnits(currentSpeedMs, system).toFixed(1));
@@ -105,75 +105,64 @@ export const SetSpeedWidget: React.FC = () => {
     });
   };
 
-  const presets = category === 'rover'
-    ? [1, 2, 3, 5]
-    : category === 'plane'
-      ? [12, 15, 18, 22]
-      : [3, 5, 8, 12];
+  const presets = category === 'rover' ? [1, 2, 3, 5] : category === 'plane' ? [12, 15, 18, 22] : [3, 5, 8, 12];
 
   return (
-    <Card className="border-sky-500/20 bg-zinc-950/90 shadow-xl overflow-hidden">
-      <CardContent className="p-3 sm:p-4 space-y-3">
+    <Card className="overflow-hidden border-sky-500/20 bg-zinc-950/90 shadow-xl">
+      <CardContent className="space-y-3 p-3 sm:p-4">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
           <div className="flex items-center gap-2">
             <Gauge className="h-4 w-4 text-emerald-400" />
-            <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">
-              Set Speed
-            </span>
-            <span className="text-[10px] text-zinc-500 font-mono">
+            <span className="text-xs font-bold uppercase tracking-wider text-zinc-200">Set Speed</span>
+            <span className="font-mono text-[10px] text-zinc-500">
               ({category === 'plane' ? 'Airspeed' : 'Groundspeed'})
             </span>
           </div>
 
           <div className="flex items-center gap-1.5 font-mono text-xs">
-            <span className="text-zinc-500 text-[11px] uppercase font-bold">Live:</span>
+            <span className="text-[11px] font-bold uppercase text-zinc-500">Live:</span>
             <span className="font-bold text-zinc-200">
-              {isVehicleConnected
-                ? formatSpeed(category === 'plane' ? vfr.airspeed : vfr.groundspeed).full
-                : '--'}
+              {isVehicleConnected ? formatSpeed(category === 'plane' ? vfr.airspeed : vfr.groundspeed).full : '--'}
             </span>
           </div>
         </div>
 
         {/* Target Stepper & Commanded Speed */}
         <div
-          className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 min-w-0 ${getFeedbackRing('speed')}`}
+          className={`flex min-w-0 flex-col justify-between gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-2.5 sm:flex-row sm:items-center ${getFeedbackRing('speed')}`}
         >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="p-2 rounded-lg bg-emerald-950/40 text-emerald-400 shrink-0">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="shrink-0 rounded-lg bg-emerald-950/40 p-2 text-emerald-400">
               <Gauge className="h-4 w-4" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-zinc-400 font-bold uppercase whitespace-nowrap">
-                  Target Speed
-                </span>
+                <span className="whitespace-nowrap text-[10px] font-bold uppercase text-zinc-400">Target Speed</span>
                 {manualTargetSpeedMs !== null && (
                   <button
                     type="button"
                     onClick={handleResetToLiveSpeed}
                     title="Reset to follow vehicle speed"
-                    className="text-zinc-500 hover:text-sky-400 p-0.5 rounded transition-colors"
+                    className="rounded p-0.5 text-zinc-500 transition-colors hover:text-sky-400"
                   >
                     <RotateCcw className="h-3 w-3" />
                   </button>
                 )}
               </div>
-              <div className="flex items-baseline gap-1.5 mt-0.5">
-                <span className="text-xl font-mono font-bold text-zinc-100">
-                  {currentTargetDisplay}{' '}
-                  <span className="text-xs font-normal text-zinc-400">{activeUnit}</span>
+              <div className="mt-0.5 flex items-baseline gap-1.5">
+                <span className="font-mono text-xl font-bold text-zinc-100">
+                  {currentTargetDisplay} <span className="text-xs font-normal text-zinc-400">{activeUnit}</span>
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
             <Button
               variant="outline"
               size="sm"
-              className="h-8 px-2 font-mono text-xs text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+              className="h-8 border-zinc-700 px-2 font-mono text-xs text-zinc-300 hover:bg-zinc-800"
               onClick={() => handleStepSpeed(-coarseStep)}
               title={`Decrease by ${coarseStep} ${activeUnit}`}
             >
@@ -182,7 +171,7 @@ export const SetSpeedWidget: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 px-2 font-mono text-xs text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+              className="h-8 border-zinc-700 px-2 font-mono text-xs text-zinc-300 hover:bg-zinc-800"
               onClick={() => handleStepSpeed(-0.5)}
               title={`Decrease by 0.5 ${activeUnit}`}
             >
@@ -191,7 +180,7 @@ export const SetSpeedWidget: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 px-2 font-mono text-xs text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+              className="h-8 border-zinc-700 px-2 font-mono text-xs text-zinc-300 hover:bg-zinc-800"
               onClick={() => handleStepSpeed(0.5)}
               title={`Increase by 0.5 ${activeUnit}`}
             >
@@ -200,7 +189,7 @@ export const SetSpeedWidget: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 px-2 font-mono text-xs text-zinc-300 border-zinc-700 hover:bg-zinc-800"
+              className="h-8 border-zinc-700 px-2 font-mono text-xs text-zinc-300 hover:bg-zinc-800"
               onClick={() => handleStepSpeed(coarseStep)}
               title={`Increase by ${coarseStep} ${activeUnit}`}
             >
@@ -211,7 +200,7 @@ export const SetSpeedWidget: React.FC = () => {
               variant="default"
               size="sm"
               disabled={!isVehicleConnected}
-              className="h-8 px-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white ml-0.5 gap-1"
+              className="ml-0.5 h-8 gap-1 bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700"
               onClick={() => handleSetSpeed()}
             >
               Set Spd
@@ -221,8 +210,8 @@ export const SetSpeedWidget: React.FC = () => {
         </div>
 
         {/* Quick Presets */}
-        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-          <span className="text-[10px] uppercase font-bold text-zinc-500 mr-1">Presets:</span>
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          <span className="mr-1 text-[10px] font-bold uppercase text-zinc-500">Presets:</span>
           {presets.map((presetMs) => {
             const presetVal = Number(toActiveUnits(presetMs, system).toFixed(1));
             const isCurrent = Math.abs(currentSpeedMs - presetMs) < 0.2;
@@ -231,10 +220,10 @@ export const SetSpeedWidget: React.FC = () => {
                 key={presetMs}
                 type="button"
                 onClick={() => setManualTargetSpeedMs(presetMs)}
-                className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border transition-colors ${
+                className={`rounded border px-2 py-0.5 font-mono text-[11px] font-bold transition-colors ${
                   isCurrent
-                    ? 'bg-emerald-600 border-emerald-400 text-white'
-                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                    ? 'border-emerald-400 bg-emerald-600 text-white'
+                    : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200'
                 }`}
               >
                 {presetVal} {activeUnit}

@@ -1,6 +1,7 @@
 // Small pieces shared by the planning editor's mission and rally views.
 
 import React, { useEffect, useRef, useState } from 'react';
+
 import { MAV_FRAME } from '../../mavlink/missionDraft';
 
 export { FT_PER_M } from '../../lib/inputUnits';
@@ -84,4 +85,3 @@ export function frameTag(frame: number): string {
   if (frame === MAV_FRAME.GLOBAL_TERRAIN_ALT || frame === MAV_FRAME.GLOBAL_TERRAIN_ALT_INT) return 'TER';
   return 'REL';
 }
-

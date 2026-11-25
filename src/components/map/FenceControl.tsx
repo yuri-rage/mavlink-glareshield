@@ -7,24 +7,26 @@
 // to enable, which the vehicle would refuse too. Changes last until reboot; FENCE_ENABLE (at boot) is unchanged.
 
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+
 import { Shield, ShieldAlert, ShieldOff } from 'lucide-react';
-import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
+
+import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { mavlinkConnection } from '../../mavlink/connection';
-import { paramManager } from '../../mavlink/paramManager';
-import { messageRateManager } from '../../mavlink/rateManager';
-import { MAVLINK_MSG_ID, getVehicleCategory } from '../../mavlink/messages';
-import { FENCE_PARAMS, fenceActionText, fenceDraftFromPoints } from '../../mavlink/fenceDraft';
 import {
   FENCE_TYPE_ALT_MIN,
-  MAV_CMD_DO_FENCE_ENABLE,
   fenceEnableBreaches,
   fenceTypeNames,
+  MAV_CMD_DO_FENCE_ENABLE,
   vehicleFenceState,
   type FenceState,
 } from '../../mavlink/fenceControl';
-import { describeAck, type AckView } from '../widgets/custom/panelModel';
+import { FENCE_PARAMS, fenceActionText, fenceDraftFromPoints } from '../../mavlink/fenceDraft';
+import { getVehicleCategory, MAVLINK_MSG_ID } from '../../mavlink/messages';
+import { paramManager } from '../../mavlink/paramManager';
+import { messageRateManager } from '../../mavlink/rateManager';
+import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
 import { AckChip } from '../widgets/custom/panelKit';
-import { useConfirmStep } from '../../lib/useWaypointNavigation';
+import { describeAck, type AckView } from '../widgets/custom/panelModel';
 
 const EXTRA_PARAMS = ['FENCE_RADIUS', 'FENCE_ALT_MAX', 'FENCE_ALT_MIN'];
 
@@ -38,7 +40,9 @@ function useFenceState(): FenceState & { connected: boolean } {
   const fenceType = useTelemetryStore((s) => s.parameters['FENCE_TYPE']?.value);
   const fenceAction = useTelemetryStore((s) => s.parameters['FENCE_ACTION']?.value);
   const hasZones = useTelemetryStore((s) => s.fencePoints.some((p) => p.command !== 5000));
-  const connected = useTelemetryStore((s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED');
+  const connected = useTelemetryStore(
+    (s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED'
+  );
   const [nowMs, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -48,7 +52,8 @@ function useFenceState(): FenceState & { connected: boolean } {
   const sysId = useTelemetryStore((s) => s.heartbeat.systemId);
   const compId = useTelemetryStore((s) => s.heartbeat.componentId);
   useEffect(() => {
-    if (connected && sysId > 0) [...FENCE_PARAMS, ...EXTRA_PARAMS].forEach((p) => paramManager.requestParam(sysId, compId || 1, p));
+    if (connected && sysId > 0)
+      [...FENCE_PARAMS, ...EXTRA_PARAMS].forEach((p) => paramManager.requestParam(sysId, compId || 1, p));
   }, [connected, sysId, compId]);
   // FENCE_STATUS isn't in every vehicle's default streams: ask for it while the fence is shown.
   const owner = `fence-control-${useId()}`; // each instance its own, so closing the popover keeps the chip's
@@ -56,7 +61,17 @@ function useFenceState(): FenceState & { connected: boolean } {
     messageRateManager.registerRequirement(owner, MAVLINK_MSG_ID.FENCE_STATUS);
     return () => messageRateManager.unregisterRequirement(owner, MAVLINK_MSG_ID.FENCE_STATUS);
   }, [owner]);
-  const st = vehicleFenceState({ sensorsPresent, sensorsEnabled, sensorsHealth, fenceStatusAt, fenceStatusBreached, nowMs, fenceType, fenceAction, hasZones });
+  const st = vehicleFenceState({
+    sensorsPresent,
+    sensorsEnabled,
+    sensorsHealth,
+    fenceStatusAt,
+    fenceStatusBreached,
+    nowMs,
+    fenceType,
+    fenceAction,
+    hasZones,
+  });
   return { ...st, connected };
 }
 
@@ -106,7 +121,9 @@ export const FenceControlBody: React.FC<{ compact?: boolean }> = ({ compact }) =
     enable2.cancel();
     disable.cancel();
     setAck({ status: 'pending', text: 'Sent, awaiting acknowledgement', time: Date.now() });
-    const packet = mavlinkConnection.getEncoder().createCommandLong(sysId, compId || 1, MAV_CMD_DO_FENCE_ENABLE, [param1, 0, 0, 0, 0, 0, 0]);
+    const packet = mavlinkConnection
+      .getEncoder()
+      .createCommandLong(sysId, compId || 1, MAV_CMD_DO_FENCE_ENABLE, [param1, 0, 0, 0, 0, 0, 0]);
     void sendTrackedCommand(packet, { label }).then((info) => {
       const view = describeAck(info);
       // ArduPilot answers FAILED when there's nothing to enable.
@@ -132,14 +149,27 @@ export const FenceControlBody: React.FC<{ compact?: boolean }> = ({ compact }) =
     send(0, 'Fence: disable');
   };
 
-  const BTN = 'inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md border px-2 text-[11px] font-bold disabled:cursor-not-allowed disabled:opacity-40';
+  const BTN =
+    'inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-md border px-2 text-[11px] font-bold disabled:cursor-not-allowed disabled:opacity-40';
   const stateText =
-    fs.state === 'breach' ? 'BREACHED' : fs.state === 'on' ? 'ON' : fs.state === 'off' ? 'OFF' : fs.state === 'none' ? 'nothing to enforce' : 'unknown';
+    fs.state === 'breach'
+      ? 'BREACHED'
+      : fs.state === 'on'
+        ? 'ON'
+        : fs.state === 'off'
+          ? 'OFF'
+          : fs.state === 'none'
+            ? 'nothing to enforce'
+            : 'unknown';
   return (
     <div className={`space-y-1.5 text-[11px] ${compact ? '' : 'w-64'}`}>
       <div className="flex items-center justify-between gap-2">
         <span className="font-bold text-zinc-200">Fence</span>
-        <span className={`font-mono font-bold ${fs.state === 'breach' ? 'text-red-400' : isOn ? 'text-emerald-300' : 'text-zinc-400'}`}>{stateText}</span>
+        <span
+          className={`font-mono font-bold ${fs.state === 'breach' ? 'text-red-400' : isOn ? 'text-emerald-300' : 'text-zinc-400'}`}
+        >
+          {stateText}
+        </span>
       </div>
       <div className="space-y-0.5 text-[10px] leading-snug text-zinc-400">
         <div>
@@ -148,12 +178,20 @@ export const FenceControlBody: React.FC<{ compact?: boolean }> = ({ compact }) =
         </div>
         {isOn && breachCount > 0 && <div>Breaches this flight: {breachCount}</div>}
         <div className="text-zinc-500">
-          Until reboot; at boot the fence is {fenceEnableParam === undefined ? '(FENCE_ENABLE unknown)' : Math.round(fenceEnableParam) === 1 ? 'on' : 'off'} (FENCE_ENABLE).
+          Until reboot; at boot the fence is{' '}
+          {fenceEnableParam === undefined
+            ? '(FENCE_ENABLE unknown)'
+            : Math.round(fenceEnableParam) === 1
+              ? 'on'
+              : 'off'}{' '}
+          (FENCE_ENABLE).
         </div>
       </div>
 
       {!isOn && breaches.length > 0 && (
-        <div className={`rounded border px-1.5 py-1 text-[10px] leading-snug ${fires ? 'border-red-500/60 bg-red-950/50 text-red-200' : 'border-amber-500/40 bg-amber-950/40 text-amber-200'}`}>
+        <div
+          className={`rounded border px-1.5 py-1 text-[10px] leading-snug ${fires ? 'border-red-500/60 bg-red-950/50 text-red-200' : 'border-amber-500/40 bg-amber-950/40 text-amber-200'}`}
+        >
           The vehicle is {breaches.join(' and ')}.{' '}
           {fires
             ? `Armed: enabling breaches at once and the vehicle will ${action}${getVehicleCategory(vehicleType) === 'copter' ? ' (on the ground, it disarms)' : ''}.`
@@ -164,7 +202,8 @@ export const FenceControlBody: React.FC<{ compact?: boolean }> = ({ compact }) =
       )}
       {disable.armed && (
         <div className="rounded border border-amber-500/50 bg-amber-950/50 px-1.5 py-1 text-[10px] leading-snug text-amber-200">
-          Armed: the fence stops protecting the vehicle. An action it already took (e.g. RTL) carries on until you change mode.
+          Armed: the fence stops protecting the vehicle. An action it already took (e.g. RTL) carries on until you
+          change mode.
         </div>
       )}
 
@@ -172,12 +211,22 @@ export const FenceControlBody: React.FC<{ compact?: boolean }> = ({ compact }) =
         <button
           type="button"
           disabled={!fs.connected || nothing || isOn}
-          title={nothing ? 'Nothing to enforce: upload a fence, or configure FENCE_TYPE altitude or circle limits' : isOn ? 'The fence is on' : 'Enable the fence now'}
+          title={
+            nothing
+              ? 'Nothing to enforce: upload a fence, or configure FENCE_TYPE altitude or circle limits'
+              : isOn
+                ? 'The fence is on'
+                : 'Enable the fence now'
+          }
           onClick={onEnable}
           className={`${BTN} ${enable1.armed || enable2.armed ? 'border-red-500 bg-red-600 text-white' : 'border-emerald-700/70 text-emerald-300 hover:bg-emerald-950/50'}`}
         >
           <Shield className="h-3.5 w-3.5" />
-          {enable2.armed ? `Confirm again: it will ${action} now` : enable1.armed ? `Enable: it will ${action}` : 'Enable'}
+          {enable2.armed
+            ? `Confirm again: it will ${action} now`
+            : enable1.armed
+              ? `Enable: it will ${action}`
+              : 'Enable'}
         </button>
         <button
           type="button"
@@ -227,9 +276,17 @@ export const FenceChip: React.FC = () => {
   const breach = fs.state === 'breach';
   const on = fs.state === 'on' || breach;
   const Icon = breach ? ShieldAlert : on ? Shield : ShieldOff;
-  const label = breach ? 'FENCE BREACH' : on ? 'FENCE ON' : fs.state === 'none' ? 'NO FENCE' : fs.state === 'unknown' ? 'FENCE ?' : 'FENCE OFF';
+  const label = breach
+    ? 'FENCE BREACH'
+    : on
+      ? 'FENCE ON'
+      : fs.state === 'none'
+        ? 'NO FENCE'
+        : fs.state === 'unknown'
+          ? 'FENCE ?'
+          : 'FENCE OFF';
   return (
-    <div ref={ref} className="relative pointer-events-auto">
+    <div ref={ref} className="pointer-events-auto relative">
       <button
         type="button"
         aria-expanded={open}

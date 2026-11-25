@@ -3,22 +3,24 @@
 // segmented choice with the chosen option's meaning beneath it.
 
 import React, { useEffect, useRef, useState } from 'react';
+
 import { AlertTriangle, ExternalLink, Shield } from 'lucide-react';
-import { useConnectionStore } from '../../store/connectionStore';
-import { useUnitsStore, type AltitudeMode, type UnitSystem } from '../../store/unitsStore';
-import { useLayoutStore, type ContentWidth } from '../../store/layoutStore';
+
 import { useAudioAlertsStore, type VoiceEngine } from '../../lib/audioAlerts';
-import { isLoopbackWs, getWssHost, SERIAL_BAUD_RATES } from '../../mavlink/connection';
-import { getSerialApi, requestSerialDevice } from '../../mavlink/transport';
-import type { BandwidthProfile } from '../../mavlink/rateManager';
 import { BUILD, buildLabel } from '../../lib/updateCheck';
-import { Modal } from '../ui/modal';
+import { getWssHost, isLoopbackWs, SERIAL_BAUD_RATES } from '../../mavlink/connection';
+import type { BandwidthProfile } from '../../mavlink/rateManager';
+import { getSerialApi, requestSerialDevice } from '../../mavlink/transport';
+import { useConnectionStore } from '../../store/connectionStore';
+import { useLayoutStore, type ContentWidth } from '../../store/layoutStore';
+import { useUnitsStore, type AltitudeMode, type UnitSystem } from '../../store/unitsStore';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { TlogSettings } from './TlogSettings';
+import { Modal } from '../ui/modal';
 import { AdsbSettings } from './AdsbSettings';
-import { TerrainSettings } from './TerrainSettings';
 import { RestoreDefaults } from './RestoreDefaults';
+import { TerrainSettings } from './TerrainSettings';
+import { TlogSettings } from './TlogSettings';
 
 export type SettingsTab = 'link' | 'display' | 'alerts' | 'traffic' | 'data';
 const TABS: { id: SettingsTab; label: string }[] = [
@@ -95,13 +97,43 @@ interface Props {
   setDaylightMode: (on: boolean) => void;
 }
 
-export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'link', daylightMode, setDaylightMode }) => {
-  const { url, linkKind, serialBaud, setLinkKind, setSerialBaud, status, errorMessage, setUrl, gcsSystemId, setGcsSystemId, connect, disconnect, bandwidthProfile, setBandwidthProfile } =
-    useConnectionStore();
+export const SettingsDialog: React.FC<Props> = ({
+  open,
+  onClose,
+  initialTab = 'link',
+  daylightMode,
+  setDaylightMode,
+}) => {
+  const {
+    url,
+    linkKind,
+    serialBaud,
+    setLinkKind,
+    setSerialBaud,
+    status,
+    errorMessage,
+    setUrl,
+    gcsSystemId,
+    setGcsSystemId,
+    connect,
+    disconnect,
+    bandwidthProfile,
+    setBandwidthProfile,
+  } = useConnectionStore();
   const { system: unitSystem, setSystem: setUnitSystem, altitudeMode, setAltitudeMode } = useUnitsStore();
   const { contentWidth, setContentWidth } = useLayoutStore();
-  const { soundEnabled, voiceEnabled, waypointAnnounceEnabled, ttsStatus, voiceEngine, setVoiceEngine, ttsDownloadProgress, toggleSound, toggleVoice, toggleWaypointAnnounce } =
-    useAudioAlertsStore();
+  const {
+    soundEnabled,
+    voiceEnabled,
+    waypointAnnounceEnabled,
+    ttsStatus,
+    voiceEngine,
+    setVoiceEngine,
+    ttsDownloadProgress,
+    toggleSound,
+    toggleVoice,
+    toggleWaypointAnnounce,
+  } = useAudioAlertsStore();
   const serialApi = getSerialApi();
 
   const [tab, setTab] = useState<SettingsTab>(initialTab);
@@ -145,7 +177,9 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
       // The device picker needs the user gesture, so it must be the first thing awaited here.
       const picked = await requestSerialDevice();
       if (!picked) {
-        setSerialPickerNotice('No device selected. Choose the telemetry radio or flight controller in the browser prompt.');
+        setSerialPickerNotice(
+          'No device selected. Choose the telemetry radio or flight controller in the browser prompt.'
+        );
         return;
       }
       setSerialPickerNotice(null);
@@ -174,10 +208,19 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
           : 'Off (chimes are muted).';
 
   return (
-    <Modal isOpen={open} onClose={onClose} title="Settings" description="Link, display, alerts, traffic and terrain, and data kept in this browser.">
+    <Modal
+      isOpen={open}
+      onClose={onClose}
+      title="Settings"
+      description="Link, display, alerts, traffic and terrain, and data kept in this browser."
+    >
       <form onSubmit={handleConnect} className="space-y-4">
         {/* Stuck at the dialog's scroll edge (its 24 px padding), across its full width: nothing scrolls into view above it. */}
-        <div className="sticky -top-6 z-10 -mx-6 flex gap-1 overflow-x-auto border-b border-zinc-800 bg-zinc-950 px-6 pb-2 pt-2" role="tablist" aria-label="Settings sections">
+        <div
+          className="sticky -top-6 z-10 -mx-6 flex gap-1 overflow-x-auto border-b border-zinc-800 bg-zinc-950 px-6 pb-2 pt-2"
+          role="tablist"
+          aria-label="Settings sections"
+        >
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -209,14 +252,18 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
                 { value: 'websocket', label: 'WebSocket' },
                 { value: 'serial', label: serialApi === 'web-usb-serial' ? 'USB (WebUSB)' : 'USB serial' },
               ]}
-              aside={status === 'connected' ? <span className="text-[10px] text-zinc-500">Disconnect to change</span> : undefined}
+              aside={
+                status === 'connected' ? (
+                  <span className="text-[10px] text-zinc-500">Disconnect to change</span>
+                ) : undefined
+              }
             />
 
             {inputLinkKind === 'serial' &&
               (serialApi === null ? (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-950/25 p-2.5 text-[11px] leading-relaxed text-amber-200">
-                  This browser cannot open USB serial devices. Use Chrome or Edge on a desktop, or Chrome on Android, or connect
-                  through the companion bridge over WebSocket.
+                  This browser cannot open USB serial devices. Use Chrome or Edge on a desktop, or Chrome on Android, or
+                  connect through the companion bridge over WebSocket.
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -240,19 +287,22 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
                   <p className="text-[11px] leading-relaxed text-zinc-500">
                     {serialApi === 'web-serial' ? (
                       <>
-                        Telemetry radios (SiK) usually run at <code className="text-sky-400">57600</code>; a flight controller&apos;s
-                        own USB port ignores the baud rate. <strong>Connect</strong> opens the browser&apos;s port picker; reconnects
-                        reuse the chosen port.
+                        Telemetry radios (SiK) usually run at <code className="text-sky-400">57600</code>; a flight
+                        controller&apos;s own USB port ignores the baud rate. <strong>Connect</strong> opens the
+                        browser&apos;s port picker; reconnects reuse the chosen port.
                       </>
                     ) : (
                       <>
-                        Android has no Web Serial, so the board is opened over WebUSB. This reaches a flight controller&apos;s own USB
-                        port (a USB virtual COM port); FTDI and CP210x telemetry radios are not supported this way.
+                        Android has no Web Serial, so the board is opened over WebUSB. This reaches a flight
+                        controller&apos;s own USB port (a USB virtual COM port); FTDI and CP210x telemetry radios are
+                        not supported this way.
                       </>
                     )}
                   </p>
                   {serialPickerNotice && (
-                    <div className="rounded-lg border border-amber-500/30 bg-amber-950/25 p-2 text-[11px] text-amber-200">{serialPickerNotice}</div>
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-950/25 p-2 text-[11px] text-amber-200">
+                      {serialPickerNotice}
+                    </div>
                   )}
                 </div>
               ))}
@@ -261,25 +311,36 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
               <div className="space-y-2">
                 <label className="block space-y-1.5">
                   <span className="text-xs font-medium text-zinc-300">WebSocket URL or host:port</span>
-                  <Input type="text" value={inputUrl} onChange={(e) => setInputUrl(e.target.value)} placeholder="ws://localhost:56781" className="font-mono text-xs" />
+                  <Input
+                    type="text"
+                    value={inputUrl}
+                    onChange={(e) => setInputUrl(e.target.value)}
+                    placeholder="ws://localhost:56781"
+                    className="font-mono text-xs"
+                  />
                 </label>
                 <p className="text-[11px] text-zinc-500">
                   The companion bridge listens on <code className="text-sky-400">ws://localhost:56781</code> by default.
                 </p>
-                {typeof window !== 'undefined' && window.location.protocol === 'https:' && inputUrl.trim().startsWith('ws://') && !isLoopbackWs(inputUrl.trim()) && (
-                  <div className="space-y-1 rounded-lg border border-amber-500/30 bg-amber-950/25 p-2.5 text-xs text-amber-200">
-                    <div className="flex items-center gap-1.5 font-semibold text-amber-300">
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                      HTTPS blocks ws://
+                {typeof window !== 'undefined' &&
+                  window.location.protocol === 'https:' &&
+                  inputUrl.trim().startsWith('ws://') &&
+                  !isLoopbackWs(inputUrl.trim()) && (
+                    <div className="space-y-1 rounded-lg border border-amber-500/30 bg-amber-950/25 p-2.5 text-xs text-amber-200">
+                      <div className="flex items-center gap-1.5 font-semibold text-amber-300">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        HTTPS blocks ws://
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-zinc-300">
+                        This page is served over HTTPS, so the browser blocks unencrypted{' '}
+                        <code className="text-amber-300">ws://</code> links to other hosts. Use{' '}
+                        <code className="text-emerald-400">wss://</code> (the bridge with{' '}
+                        <code className="text-zinc-300">--ssl-cert</code>, or a reverse proxy). In Firefox,{' '}
+                        <code className="text-zinc-300">network.websocket.allowInsecureFromHTTPS</code> in about:config
+                        allows it.
+                      </p>
                     </div>
-                    <p className="text-[11px] leading-relaxed text-zinc-300">
-                      This page is served over HTTPS, so the browser blocks unencrypted <code className="text-amber-300">ws://</code> links
-                      to other hosts. Use <code className="text-emerald-400">wss://</code> (the bridge with <code className="text-zinc-300">--ssl-cert</code>,
-                      or a reverse proxy). In Firefox, <code className="text-zinc-300">network.websocket.allowInsecureFromHTTPS</code> in
-                      about:config allows it.
-                    </p>
-                  </div>
-                )}
+                  )}
                 {(() => {
                   const wssHost = getWssHost(inputUrl);
                   if (!wssHost) return null;
@@ -291,7 +352,12 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
                       </div>
                       <p className="text-[11px] leading-relaxed text-zinc-300">
                         With a self-signed certificate the browser needs a one-time trust step: open{' '}
-                        <a href={`https://${wssHost}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 font-mono text-sky-400 hover:underline">
+                        <a
+                          href={`https://${wssHost}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-0.5 font-mono text-sky-400 hover:underline"
+                        >
                           https://{wssHost}
                           <ExternalLink className="inline h-2.5 w-2.5" />
                         </a>{' '}
@@ -315,12 +381,20 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
 
             <label className="flex items-center justify-between gap-2">
               <span className="text-xs font-medium text-zinc-300">GCS system ID</span>
-              <Input type="number" min="1" max="255" value={inputGcsSysId} onChange={(e) => setInputGcsSysId(e.target.value)} className="h-8 w-24 font-mono text-xs" />
+              <Input
+                type="number"
+                min="1"
+                max="255"
+                value={inputGcsSysId}
+                onChange={(e) => setInputGcsSysId(e.target.value)}
+                className="h-8 w-24 font-mono text-xs"
+              />
             </label>
             <p className={`-mt-2 text-[11px] ${sysIdValid ? 'text-zinc-500' : 'text-amber-300'}`}>
               {sysIdValid ? (
                 <>
-                  255 matches ArduPilot&apos;s <code className="text-zinc-300">SYSID_MYGCS</code>; use 254 alongside Mission Planner on 255.
+                  255 matches ArduPilot&apos;s <code className="text-zinc-300">SYSID_MYGCS</code>; use 254 alongside
+                  Mission Planner on 255.
                 </>
               ) : (
                 `A whole number from 1 to 255; until then the ID stays ${gcsSystemId}.`
@@ -367,9 +441,21 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
               value={contentWidth}
               onChange={setContentWidth}
               options={[
-                { value: 'standard', label: 'Standard', hint: 'Scrolling (Flow) tabs up to 1280 px wide, centred: suits laptops and HD screens. Cockpit tabs always fill the window.' },
-                { value: 'wide', label: 'Wide', hint: 'Scrolling (Flow) tabs up to 1680 px: more room on large monitors. Cockpit tabs always fill the window.' },
-                { value: 'full', label: 'Full', hint: 'Scrolling (Flow) tabs across the whole window: for ultrawide and 4K screens.' },
+                {
+                  value: 'standard',
+                  label: 'Standard',
+                  hint: 'Scrolling (Flow) tabs up to 1280 px wide, centred: suits laptops and HD screens. Cockpit tabs always fill the window.',
+                },
+                {
+                  value: 'wide',
+                  label: 'Wide',
+                  hint: 'Scrolling (Flow) tabs up to 1680 px: more room on large monitors. Cockpit tabs always fill the window.',
+                },
+                {
+                  value: 'full',
+                  label: 'Full',
+                  hint: 'Scrolling (Flow) tabs across the whole window: for ultrawide and 4K screens.',
+                },
               ]}
             />
             <Segmented<boolean>
@@ -411,8 +497,16 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
               disabled={!voiceOn}
               onChange={setVoiceEngine}
               options={[
-                { value: 'neural', label: 'Neural (~60 MB)', hint: 'A natural voice: downloads a ~60 MB model once and uses 150-250 MB of memory.' },
-                { value: 'browser', label: 'Device voice', hint: "The browser's own speech: light, but varies by device." },
+                {
+                  value: 'neural',
+                  label: 'Neural (~60 MB)',
+                  hint: 'A natural voice: downloads a ~60 MB model once and uses 150-250 MB of memory.',
+                },
+                {
+                  value: 'browser',
+                  label: 'Device voice',
+                  hint: "The browser's own speech: light, but varies by device.",
+                },
               ]}
             />
             <Segmented<boolean>
@@ -458,11 +552,17 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
               onPointerDown={() => (connectPressedRef.current = true)}
               onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (connectPressedRef.current = true)}
               variant="default"
-              size="sm" disabled={inputLinkKind === 'serial' && serialApi === null} className="bg-sky-500 text-white hover:bg-sky-600">
+              size="sm"
+              disabled={inputLinkKind === 'serial' && serialApi === null}
+              className="bg-sky-500 text-white hover:bg-sky-600"
+            >
               Connect
             </Button>
           )}
-          <span className="font-mono text-[10px] text-zinc-500" title={BUILD.sha ? `Build ${BUILD.id} (commit ${BUILD.sha})` : `Build ${BUILD.id}`}>
+          <span
+            className="font-mono text-[10px] text-zinc-500"
+            title={BUILD.sha ? `Build ${BUILD.id} (commit ${BUILD.sha})` : `Build ${BUILD.id}`}
+          >
             Glareshield {buildLabel()}
           </span>
           <Button type="button" variant="ghost" size="sm" onClick={onClose}>
@@ -473,4 +573,3 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
     </Modal>
   );
 };
-

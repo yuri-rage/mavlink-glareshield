@@ -76,9 +76,7 @@ class Listener:
             c.settimeout(1)
             try:
                 self.received += c.recv(4096)
-                c.sendall(
-                    b"HTTP/1.0 200 OK\r\nX-Internal-Token: SECRET123\r\n\r\ninternal service body"
-                )
+                c.sendall(b"HTTP/1.0 200 OK\r\nX-Internal-Token: SECRET123\r\n\r\ninternal service body")
                 time.sleep(0.5)
             except OSError:
                 pass
@@ -101,9 +99,7 @@ async def handshake(url: str, origin: Any):
 async def ntrip_attempt(url: str, cmd: dict[str, Any], seconds: float = 2.5):
     """Send an ntrip_connect from an allowed Origin; return the text replies seen."""
     replies = []
-    async with websockets.connect(
-        url, origin=cast(Any, "http://localhost:3000"), open_timeout=3
-    ) as ws:
+    async with websockets.connect(url, origin=cast(Any, "http://localhost:3000"), open_timeout=3) as ws:
         await ws.send(json.dumps({"type": "ntrip_connect", **cmd}))
         end = time.monotonic() + seconds
         while time.monotonic() < end:
@@ -165,16 +161,13 @@ async def main(url):
     # 4: NTRIP client as a relay to an arbitrary local port
     port = free_port()
     lst = Listener(port)
-    replies = await ntrip_attempt(
-        url, {"host": "127.0.0.1", "port": port, "mountpoint": "admin"}
-    )
+    replies = await ntrip_attempt(url, {"host": "127.0.0.1", "port": port, "mountpoint": "admin"})
     lst.close()
     leaked = any(m.get("type") == "ntrip_data" for m in replies)
     check(
         f"NTRIP connect to a non-caster port ({port}) is refused before any connection is made",
         not lst.connected.is_set(),
-        f"service received {lst.received[:40]!r}"
-        + ("; response body relayed back to the page" if leaked else ""),
+        f"service received {lst.received[:40]!r}" + ("; response body relayed back to the page" if leaked else ""),
     )
 
     # 5: CRLF injection through the mountpoint (needs a listener on a standard caster port)
@@ -214,12 +207,8 @@ async def main(url):
         ("/dev/ttyUSB0:57600", ("/dev/ttyUSB0", 57600)),
         ("/dev/ttyUSB0", ("/dev/ttyUSB0", 57600)),
     ]
-    all_ok = all(
-        BridgeServer.parse_serial_target(target) == expected for target, expected in cases
-    )
-    check(
-        "Serial target rsplit correctly parses by-path device names with colons", all_ok
-    )
+    all_ok = all(BridgeServer.parse_serial_target(target) == expected for target, expected in cases)
+    check("Serial target rsplit correctly parses by-path device names with colons", all_ok)
 
 
 if __name__ == "__main__":
@@ -237,19 +226,11 @@ if __name__ == "__main__":
             except OSError:
                 time.sleep(0.1)
         else:
-            err = (
-                proc.stderr.read().decode(errors="replace")[-500:]
-                if proc.stderr is not None
-                else ""
-            )
+            err = proc.stderr.read().decode(errors="replace")[-500:] if proc.stderr is not None else ""
             sys.exit(f"bridge did not start: {err}")
         asyncio.run(main(f"ws://127.0.0.1:{port}"))
     finally:
         proc.terminate()
         proc.wait(timeout=5)
-    print(
-        f"\n{len(failures)} bridge security check(s) FAILED"
-        if failures
-        else "\nAll bridge security checks PASSED"
-    )
+    print(f"\n{len(failures)} bridge security check(s) FAILED" if failures else "\nAll bridge security checks PASSED")
     sys.exit(1 if failures else 0)

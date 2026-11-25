@@ -184,9 +184,15 @@ if __name__ == "__main__":
     res_mutate = run_stop_and_move(mode="mutate")
     res_shipped = run_stop_and_move(mode="push")
     res_unhandled = run_stop_and_move(mode="unhandled")
-    print(f"Mutate stationary: backward jumps: {res_mutate['backward_jumps_count']} (largest: {res_mutate['max_backward_jump_m']}), resume step: {res_mutate['max_resume_step_m']}")
-    print(f"Shipped push:      backward jumps: {res_shipped['backward_jumps_count']} (largest: {res_shipped['max_backward_jump_m']}), resume step: {res_shipped['max_resume_step_m']} (normal: {res_shipped['normal_frame_step_m']})")
-    print(f"Unhandled gap:     backward jumps: {res_unhandled['backward_jumps_count']}, resume step: {res_unhandled['max_resume_step_m']}")
+    print(
+        f"Mutate stationary: backward jumps: {res_mutate['backward_jumps_count']} (largest: {res_mutate['max_backward_jump_m']}), resume step: {res_mutate['max_resume_step_m']}"
+    )
+    print(
+        f"Shipped push:      backward jumps: {res_shipped['backward_jumps_count']} (largest: {res_shipped['max_backward_jump_m']}), resume step: {res_shipped['max_resume_step_m']} (normal: {res_shipped['normal_frame_step_m']})"
+    )
+    print(
+        f"Unhandled gap:     backward jumps: {res_unhandled['backward_jumps_count']}, resume step: {res_unhandled['max_resume_step_m']}"
+    )
 
     # --- Assertions: the shipped algorithm must keep these properties (exit 1 otherwise) --------------------------
     failures: list[str] = []
@@ -207,10 +213,14 @@ if __name__ == "__main__":
     if num(res_shipped["backward_jumps_count"]) != 0:
         failures.append(f"stop-and-move: {res_shipped['backward_jumps_count']} backward jumps (want 0)")
     if num(res_shipped["max_resume_step_m"]) > 2 * num(res_shipped["normal_frame_step_m"]):
-        failures.append(f"stop-and-move: resume step {res_shipped['max_resume_step_m']} (want <= 2x {res_shipped['normal_frame_step_m']})")
+        failures.append(
+            f"stop-and-move: resume step {res_shipped['max_resume_step_m']} (want <= 2x {res_shipped['normal_frame_step_m']})"
+        )
     # The simulation must still be able to see the problem the gap handling fixes.
     if num(res_mutate["backward_jumps_count"]) == 0:
-        failures.append("stop-and-move: the in-place stationary refresh no longer shows backward jumps; the simulation has lost its sensitivity")
+        failures.append(
+            "stop-and-move: the in-place stationary refresh no longer shows backward jumps; the simulation has lost its sensitivity"
+        )
 
     if failures:
         print("\nFAILED:\n  " + "\n  ".join(failures))

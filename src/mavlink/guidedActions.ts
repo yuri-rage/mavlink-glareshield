@@ -56,9 +56,17 @@ export function changeAltitude(
   const label = `Change altitude to ${fmtAlt(altRelM)}`;
   if (category === 'plane') {
     return {
-      spec: { command: MAV_CMD_DO_CHANGE_ALTITUDE, frame: MAV_FRAME_GLOBAL_RELATIVE_ALT, params: [altRelM, MAV_FRAME_GLOBAL_RELATIVE_ALT, 0, 0, 0, 0, 0], label },
+      spec: {
+        command: MAV_CMD_DO_CHANGE_ALTITUDE,
+        frame: MAV_FRAME_GLOBAL_RELATIVE_ALT,
+        params: [altRelM, MAV_FRAME_GLOBAL_RELATIVE_ALT, 0, 0, 0, 0, 0],
+        label,
+      },
       switchesToGuided: false,
-      note: modeName === 'AUTO' ? 'Changes the current target only: the next waypoint sets its own altitude.' : `Climbs or descends in ${modeName || 'the current mode'}.`,
+      note:
+        modeName === 'AUTO'
+          ? 'Changes the current target only: the next waypoint sets its own altitude.'
+          : `Climbs or descends in ${modeName || 'the current mode'}.`,
     };
   }
   if (category === 'copter') {
@@ -86,7 +94,14 @@ export function changeAltitude(
 export const canOrbit = (c: VehicleCategory) => c === 'plane';
 
 /** Plane: circle (lat, lon) at `altRelM` above home, radius `radiusM`, counter-clockwise when `ccw`. */
-export function orbit(lat: number, lon: number, altRelM: number, radiusM: number, ccw: boolean, fmtLen: (m: number) => string = (m) => `${Math.round(m)} m`): CommandIntSpec | null {
+export function orbit(
+  lat: number,
+  lon: number,
+  altRelM: number,
+  radiusM: number,
+  ccw: boolean,
+  fmtLen: (m: number) => string = (m) => `${Math.round(m)} m`
+): CommandIntSpec | null {
   if (!Number.isFinite(radiusM) || radiusM <= 0 || !Number.isFinite(altRelM) || altRelM <= 0) return null;
   return {
     command: MAV_CMD_DO_REPOSITION,
@@ -99,8 +114,18 @@ export function orbit(lat: number, lon: number, altRelM: number, radiusM: number
 /** Home at (lat, lon), `altMslM` above sea level; or, with no point, at the vehicle's own position. */
 export function setHome(at: { lat: number; lon: number; altMslM: number } | null): CommandIntSpec {
   return at
-    ? { command: MAV_CMD_DO_SET_HOME, frame: MAV_FRAME_GLOBAL, params: [0, 0, 0, 0, e7(at.lat), e7(at.lon), at.altMslM], label: `Set home (${at.lat.toFixed(5)}, ${at.lon.toFixed(5)})` }
-    : { command: MAV_CMD_DO_SET_HOME, frame: MAV_FRAME_GLOBAL, params: [1, 0, 0, 0, 0, 0, 0], label: 'Set home to the vehicle position' };
+    ? {
+        command: MAV_CMD_DO_SET_HOME,
+        frame: MAV_FRAME_GLOBAL,
+        params: [0, 0, 0, 0, e7(at.lat), e7(at.lon), at.altMslM],
+        label: `Set home (${at.lat.toFixed(5)}, ${at.lon.toFixed(5)})`,
+      }
+    : {
+        command: MAV_CMD_DO_SET_HOME,
+        frame: MAV_FRAME_GLOBAL,
+        params: [1, 0, 0, 0, 0, 0, 0],
+        label: 'Set home to the vehicle position',
+      };
 }
 
 // - Change speed: DO_CHANGE_SPEED, honoured only in AUTO and GUIDED on every vehicle (others fail it). Copter and
@@ -141,10 +166,14 @@ export function changeSpeed(
   const plane = category === 'plane';
   if (speedMs === null && !plane) return null;
   const kind = plane ? 'airspeed' : 'groundspeed';
-  let warning: string | null = speedModes(modeName) ? null : `Only in AUTO or GUIDED: ${modeName || 'this mode'} will refuse it.`;
+  let warning: string | null = speedModes(modeName)
+    ? null
+    : `Only in AUTO or GUIDED: ${modeName || 'this mode'} will refuse it.`;
   if (!warning && plane && speedMs !== null) {
-    if (limits.min !== undefined && speedMs < limits.min) warning = `Below the minimum airspeed (${fmt(limits.min)}): Plane will refuse it.`;
-    else if (limits.max !== undefined && speedMs > limits.max) warning = `Above the maximum airspeed (${fmt(limits.max)}): Plane will refuse it.`;
+    if (limits.min !== undefined && speedMs < limits.min)
+      warning = `Below the minimum airspeed (${fmt(limits.min)}): Plane will refuse it.`;
+    else if (limits.max !== undefined && speedMs > limits.max)
+      warning = `Above the maximum airspeed (${fmt(limits.max)}): Plane will refuse it.`;
   }
   return {
     spec: {
@@ -162,5 +191,10 @@ export const canPause = (c: VehicleCategory, modeName: string) => c === 'copter'
 
 /** Copter: pause (hold where it is) or resume the mission / guided target. */
 export function pauseContinue(pause: boolean): CommandIntSpec {
-  return { command: MAV_CMD_DO_PAUSE_CONTINUE, frame: 0, params: [pause ? 0 : 1, 0, 0, 0, 0, 0, 0], label: pause ? 'Pause' : 'Resume' };
+  return {
+    command: MAV_CMD_DO_PAUSE_CONTINUE,
+    frame: 0,
+    params: [pause ? 0 : 1, 0, 0, 0, 0, 0, 0],
+    label: pause ? 'Pause' : 'Resume',
+  };
 }

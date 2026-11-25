@@ -1,11 +1,17 @@
+import {
+  applyHomeFromMissionItem0,
+  FencePoint,
+  MissionWaypoint,
+  RallyPoint,
+  useTelemetryStore,
+} from '../store/telemetryStore';
 import { mavlinkConnection } from './connection';
-import { getActiveSystemId, onActiveVehicleChange } from './vehicleRoster';
-import { MAVLINK_MSG_ID, cmdHasLocation } from './messages';
-import { decodePayload, MavlinkPacket } from './parser';
-import { mavFtpClient } from './ftp';
 import { MissionItemIntData } from './encoder';
-import { parseDroppedMissionFile, packDatFile, readDat, MissionFileType } from './missionFileParser';
-import { useTelemetryStore, applyHomeFromMissionItem0, MissionWaypoint, FencePoint, RallyPoint } from '../store/telemetryStore';
+import { mavFtpClient } from './ftp';
+import { cmdHasLocation, MAVLINK_MSG_ID } from './messages';
+import { MissionFileType, packDatFile, parseDroppedMissionFile, readDat } from './missionFileParser';
+import { decodePayload, MavlinkPacket } from './parser';
+import { getActiveSystemId, onActiveVehicleChange } from './vehicleRoster';
 
 export interface MissionManagerStatus {
   isFetching: boolean;
@@ -48,7 +54,8 @@ const RALLY_TYPE = 2;
 
 /** The vehicle said it doesn't take rally points: remember it for this vehicle (cleared on vehicle change). */
 function markRallyUnsupported() {
-  if (useTelemetryStore.getState().rallySupport !== 'unsupported') useTelemetryStore.setState({ rallySupport: 'unsupported' });
+  if (useTelemetryStore.getState().rallySupport !== 'unsupported')
+    useTelemetryStore.setState({ rallySupport: 'unsupported' });
 }
 
 /** A transfer's error when a switch to another vehicle stopped it. */
@@ -76,7 +83,9 @@ export class MissionManager {
   private lastUploadRejection: number | null = null;
   private legacyAbort: (() => void) | null = null;
   private messageClearTimer: any = null;
-  private listeners: Set<(isFetching: boolean, count?: number, method?: string, status?: MissionManagerStatus) => void> = new Set();
+  private listeners: Set<
+    (isFetching: boolean, count?: number, method?: string, status?: MissionManagerStatus) => void
+  > = new Set();
   private statusListeners: Set<(status: MissionManagerStatus) => void> = new Set();
 
   public scheduleMessageClear(delayMs = 5000) {
@@ -119,11 +128,19 @@ export class MissionManager {
       this.legacyAbort();
       this.legacyAbort = null;
     }
-    this.setStatus({ isFetching: false, isUploading: false, method: 'idle', uploadProgress: undefined, message: 'Mission transfer stopped: switched to another vehicle' });
+    this.setStatus({
+      isFetching: false,
+      isUploading: false,
+      method: 'idle',
+      uploadProgress: undefined,
+      message: 'Mission transfer stopped: switched to another vehicle',
+    });
     this.scheduleMessageClear(6000);
   }
 
-  public onStateChange(listener: (isFetching: boolean, count?: number, method?: string, status?: MissionManagerStatus) => void): () => void {
+  public onStateChange(
+    listener: (isFetching: boolean, count?: number, method?: string, status?: MissionManagerStatus) => void
+  ): () => void {
     this.listeners.add(listener);
     listener(this.status.isFetching, this.status.waypointCount, this.status.method, this.status);
     return () => this.listeners.delete(listener);
@@ -152,7 +169,9 @@ export class MissionManager {
   }
 
   private notify() {
-    this.listeners.forEach((l) => l(this.status.isFetching, this.status.waypointCount, this.status.method, this.status));
+    this.listeners.forEach((l) =>
+      l(this.status.isFetching, this.status.waypointCount, this.status.method, this.status)
+    );
     this.statusListeners.forEach((l) => l(this.status));
   }
 
@@ -202,7 +221,9 @@ export class MissionManager {
           if (isDone) return;
           if (retryCount < 3) {
             retryCount++;
-            console.log(`[MissionManager] Retrying legacy upload for type=${missionType} (attempt ${retryCount + 1})...`);
+            console.log(
+              `[MissionManager] Retrying legacy upload for type=${missionType} (attempt ${retryCount + 1})...`
+            );
             fn();
           } else {
             console.warn(`[MissionManager] Timeout waiting for legacy upload type=${missionType}.`);
@@ -265,17 +286,22 @@ export class MissionManager {
           // requesting the next one (seen against SITL while armed in AUTO). Ignore it; a real stall still ends in
           // the retry timeouts.
           if (data.type === MAV_MISSION_INVALID_SEQUENCE) {
-            console.warn(`[MissionManager] Vehicle refused an out-of-sequence item for type=${missionType} (a duplicate); continuing.`);
+            console.warn(
+              `[MissionManager] Vehicle refused an out-of-sequence item for type=${missionType} (a duplicate); continuing.`
+            );
             return;
           }
 
           retryCount = 0;
           if (data.type === 0) {
             console.log(`[MissionManager] Vehicle accepted all ${items.length} items for mission_type=${missionType}!`);
-            if (missionType === RALLY_TYPE && this.isActive(targetSys)) useTelemetryStore.setState({ rallySupport: 'supported' });
+            if (missionType === RALLY_TYPE && this.isActive(targetSys))
+              useTelemetryStore.setState({ rallySupport: 'supported' });
             finish(true);
           } else {
-            console.warn(`[MissionManager] Vehicle rejected mission upload for type=${missionType} with ACK code ${data.type}`);
+            console.warn(
+              `[MissionManager] Vehicle rejected mission upload for type=${missionType} with ACK code ${data.type}`
+            );
             this.lastUploadRejection = data.type;
             if (missionType === RALLY_TYPE && data.type === MAV_MISSION_UNSUPPORTED) markRallyUnsupported();
             finish(false);
@@ -358,7 +384,8 @@ export class MissionManager {
     const sysId = targetSys ?? (hb.systemId > 0 ? hb.systemId : 1);
     const compId = targetComp ?? (hb.componentId > 0 ? hb.componentId : 1);
     const typeName = type === 'mission' ? 'Mission' : type === 'fence' ? 'Geofence' : 'Rally points';
-    const ftpPath = type === 'mission' ? '@MISSION/mission.dat' : type === 'fence' ? '@MISSION/fence.dat' : '@MISSION/rally.dat';
+    const ftpPath =
+      type === 'mission' ? '@MISSION/mission.dat' : type === 'fence' ? '@MISSION/fence.dat' : '@MISSION/rally.dat';
 
     // Not a mission over MAVFTP while armed in AUTO / AUTO_RTL. ArduPilot's mission.dat upload clears the mission first,
     // but AP_Mission::clear() refuses while armed with the mission running, and the items are then written by index: a
@@ -393,20 +420,12 @@ export class MissionManager {
     if (useFtp) {
       try {
         console.log(`[MissionManager] Attempting MAVFTP upload to ${ftpPath} (${datBuffer.length} bytes)...`);
-        ftpSuccess = await mavFtpClient.writeFile(
-          sysId,
-          compId,
-          ftpPath,
-          datBuffer,
-          239,
-          1500,
-          (written, total) => {
-            const pct = total > 0 ? Math.round((written / total) * 100) : 0;
-            this.setStatus({
-              message: `MAVFTP Upload: ${(written / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} KB (${pct}%)`,
-            });
-          }
-        );
+        ftpSuccess = await mavFtpClient.writeFile(sysId, compId, ftpPath, datBuffer, 239, 1500, (written, total) => {
+          const pct = total > 0 ? Math.round((written / total) * 100) : 0;
+          this.setStatus({
+            message: `MAVFTP Upload: ${(written / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} KB (${pct}%)`,
+          });
+        });
       } catch (err) {
         console.warn(`[MissionManager] MAVFTP upload failed with exception:`, err);
         ftpSuccess = false;
@@ -424,9 +443,13 @@ export class MissionManager {
 
     // 2. Fall back to MAVLink item-by-item protocol
     if (useFtp) {
-      console.warn(`[MissionManager] MAVFTP upload unavailable or rejected for ${typeName}, falling back to legacy item-by-item stream...`);
+      console.warn(
+        `[MissionManager] MAVFTP upload unavailable or rejected for ${typeName}, falling back to legacy item-by-item stream...`
+      );
     } else {
-      console.log(`[MissionManager] Vehicle armed in ${hb.modeName}: uploading the ${typeName.toLowerCase()} item-by-item, not via MAVFTP.`);
+      console.log(
+        `[MissionManager] Vehicle armed in ${hb.modeName}: uploading the ${typeName.toLowerCase()} item-by-item, not via MAVFTP.`
+      );
     }
     this.setStatus({
       isUploading: true,
@@ -440,24 +463,17 @@ export class MissionManager {
       },
     });
 
-    const legacySuccess = await this.uploadLegacyItems(
-      missionType,
-      items,
-      sysId,
-      compId,
-      2000,
-      (sent, total) => {
-        this.setStatus({
-          message: `Uploading ${typeName} item-by-item: ${sent} / ${total}`,
-          uploadProgress: {
-            type,
-            current: sent,
-            total,
-            method: 'legacy',
-          },
-        });
-      }
-    );
+    const legacySuccess = await this.uploadLegacyItems(missionType, items, sysId, compId, 2000, (sent, total) => {
+      this.setStatus({
+        message: `Uploading ${typeName} item-by-item: ${sent} / ${total}`,
+        uploadProgress: {
+          type,
+          current: sent,
+          total,
+          method: 'legacy',
+        },
+      });
+    });
 
     if (legacySuccess) {
       console.log(`[MissionManager] Legacy item-by-item upload for ${typeName} completed successfully!`);
@@ -492,7 +508,13 @@ export class MissionManager {
     items: MissionItemIntData[],
     targetSys?: number,
     targetComp?: number
-  ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: MissionWaypoint[]; readOk: boolean; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    method: 'ftp' | 'legacy';
+    readBack: MissionWaypoint[];
+    readOk: boolean;
+    error?: string;
+  }> {
     // A mission always reads back at least home, so an empty read-back already means the read failed.
     return this.uploadAndReadBack(
       'mission',
@@ -561,7 +583,13 @@ export class MissionManager {
   ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: T[]; readOk: boolean; error?: string }> {
     const name = type === 'mission' ? 'Mission' : type === 'fence' ? 'Geofence' : 'Rally points';
     if (this.status.isFetching || this.status.isUploading) {
-      return { success: false, method: 'legacy', readBack: [], readOk: false, error: 'A mission transfer is already in progress.' };
+      return {
+        success: false,
+        method: 'legacy',
+        readBack: [],
+        readOk: false,
+        error: 'A mission transfer is already in progress.',
+      };
     }
     const hb = useTelemetryStore.getState().heartbeat;
     const sysId = targetSys ?? (hb.systemId > 0 ? hb.systemId : 1);
@@ -572,7 +600,8 @@ export class MissionManager {
       const res = await this.uploadSection(type, missionType, items, undefined, sysId, compId);
       if (!res.success) {
         // Stopped by a switch: its own message stands.
-        if (res.error === STOPPED_BY_SWITCH) return { success: false, method: res.method, readBack: [], readOk: false, error: res.error };
+        if (res.error === STOPPED_BY_SWITCH)
+          return { success: false, method: res.method, readBack: [], readOk: false, error: res.error };
         this.setStatus({ message: res.error || `${name} upload failed.` });
         this.scheduleMessageClear(8000);
         return { success: false, method: res.method, readBack: [], readOk: false, error: res.error };
@@ -586,7 +615,8 @@ export class MissionManager {
         message: `Reading the ${type === 'mission' ? 'mission' : type === 'fence' ? 'geofence' : 'rally points'} back from the vehicle...`,
       });
       const { items: readBack, ok: readOk } = await read(sysId, compId);
-      if (this.isCancelled || !this.isActive(sysId)) return { success: false, method: res.method, readBack: [], readOk: false, error: STOPPED_BY_SWITCH };
+      if (this.isCancelled || !this.isActive(sysId))
+        return { success: false, method: res.method, readBack: [], readOk: false, error: STOPPED_BY_SWITCH };
       if (!readOk) {
         // The read failed. The vehicle acknowledged the upload, so keep showing what was uploaded rather than a
         // partial list or nothing.
@@ -651,9 +681,22 @@ export class MissionManager {
 
       for (const section of parsed.sections) {
         if (this.isCancelled) {
-          return { success: false, type: parsed.type, count: totalCount, method: finalMethod, error: 'Upload cancelled.' };
+          return {
+            success: false,
+            type: parsed.type,
+            count: totalCount,
+            method: finalMethod,
+            error: 'Upload cancelled.',
+          };
         }
-        const res = await this.uploadSection(section.type, section.missionType, section.items, section.rawDat, sysId, compId);
+        const res = await this.uploadSection(
+          section.type,
+          section.missionType,
+          section.items,
+          section.rawDat,
+          sysId,
+          compId
+        );
         if (!res.success) {
           this.setStatus({
             isUploading: false,
@@ -715,7 +758,12 @@ export class MissionManager {
    * Universal sequential MAVLink Mission protocol downloader for a specific mission_type.
    * missionType: 0 = Waypoints, 1 = Geofence, 2 = Rally points.
    */
-  public fetchLegacyItems(missionType: number, targetSys: number, targetComp: number, timeoutMs = 2000): Promise<any[]> {
+  public fetchLegacyItems(
+    missionType: number,
+    targetSys: number,
+    targetComp: number,
+    timeoutMs = 2000
+  ): Promise<any[]> {
     if (this.isCancelled) return Promise.resolve([]);
 
     this.lastLegacyComplete = false;
@@ -752,7 +800,9 @@ export class MissionManager {
           if (isDone) return;
           if (retryCount < 2) {
             retryCount++;
-            console.log(`[MissionManager] Retrying legacy request for type=${missionType} (attempt ${retryCount + 1})...`);
+            console.log(
+              `[MissionManager] Retrying legacy request for type=${missionType} (attempt ${retryCount + 1})...`
+            );
             fn();
           } else {
             console.warn(`[MissionManager] Timeout waiting for legacy items type=${missionType}.`);
@@ -785,7 +835,9 @@ export class MissionManager {
         if (packet.messageId === MAVLINK_MSG_ID.MISSION_ACK) {
           const data = decodePayload(packet.messageId, packet.payload);
           if ((data.mission_type ?? 0) !== missionType || data.type === 0) return;
-          console.warn(`[MissionManager] Vehicle refused the download for mission_type=${missionType} with ACK code ${data.type}`);
+          console.warn(
+            `[MissionManager] Vehicle refused the download for mission_type=${missionType} with ACK code ${data.type}`
+          );
           if (missionType === RALLY_TYPE && data.type === MAV_MISSION_UNSUPPORTED) markRallyUnsupported();
           finish(items);
           return;
@@ -798,7 +850,9 @@ export class MissionManager {
 
           retryCount = 0;
           expectedCount = data.count;
-          console.log(`[MissionManager] Vehicle reported MISSION_COUNT=${expectedCount} for mission_type=${missionType}`);
+          console.log(
+            `[MissionManager] Vehicle reported MISSION_COUNT=${expectedCount} for mission_type=${missionType}`
+          );
 
           if (expectedCount === 0) {
             const ack = encoder.createMissionAck(targetSys, targetComp, 0, missionType);
@@ -837,7 +891,9 @@ export class MissionManager {
 
           if (items.length >= expectedCount) {
             items.sort((a, b) => a.seq - b.seq);
-            console.log(`[MissionManager] Successfully streamed all ${items.length} items for mission_type=${missionType}`);
+            console.log(
+              `[MissionManager] Successfully streamed all ${items.length} items for mission_type=${missionType}`
+            );
             const ack = encoder.createMissionAck(targetSys, targetComp, 0, missionType);
             mavlinkConnection.send(ack);
             this.lastLegacyComplete = true;
@@ -870,7 +926,9 @@ export class MissionManager {
     const onProgress = (received: number, total: number) => {
       if (total > 0) {
         const pct = Math.round((received / total) * 100);
-        this.setStatus({ message: `MAVFTP Waypoints: ${(received / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} KB (${pct}%)` });
+        this.setStatus({
+          message: `MAVFTP Waypoints: ${(received / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} KB (${pct}%)`,
+        });
       } else if (received > 0) {
         this.setStatus({ message: `MAVFTP Waypoints: ${(received / 1024).toFixed(1)} KB received...` });
       }
@@ -944,7 +1002,9 @@ export class MissionManager {
     const onProgress = (received: number, total: number) => {
       if (total > 0) {
         const pct = Math.round((received / total) * 100);
-        this.setStatus({ message: `MAVFTP Fence: ${(received / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} KB (${pct}%)` });
+        this.setStatus({
+          message: `MAVFTP Fence: ${(received / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} KB (${pct}%)`,
+        });
       }
     };
 
@@ -991,7 +1051,8 @@ export class MissionManager {
     if (legacyFence && legacyFence.length > 0) {
       const fencePoints: FencePoint[] = legacyFence.map((data) => {
         const isCircle = data.command === 5004 || data.command === 5005 || (data.command === 5003 && data.param1 > 0);
-        const isInclusion = data.command === 5001 || data.command === 5005 || (data.command === 5003 && data.param1 > 0);
+        const isInclusion =
+          data.command === 5001 || data.command === 5005 || (data.command === 5003 && data.param1 > 0);
         return {
           seq: data.seq,
           command: data.command,
@@ -1038,7 +1099,9 @@ export class MissionManager {
     const onProgress = (received: number, total: number) => {
       if (total > 0) {
         const pct = Math.round((received / total) * 100);
-        this.setStatus({ message: `MAVFTP Rally: ${(received / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} KB (${pct}%)` });
+        this.setStatus({
+          message: `MAVFTP Rally: ${(received / 1024).toFixed(1)} / ${(total / 1024).toFixed(1)} KB (${pct}%)`,
+        });
       }
     };
 
@@ -1058,7 +1121,10 @@ export class MissionManager {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} rally points via MAVFTP!`);
           // Read from a vehicle no longer commanded (a switch while it ran): nothing of it goes to the store, home or counts.
           if (!this.isActive(sysId)) return [];
-          useTelemetryStore.setState({ rallyPoints: unpacked, ...(unpacked.length > 0 ? { rallySupport: 'supported' as const } : {}) });
+          useTelemetryStore.setState({
+            rallyPoints: unpacked,
+            ...(unpacked.length > 0 ? { rallySupport: 'supported' as const } : {}),
+          });
           this.setStatus({ rallyCount: unpacked.length });
           this.lastRallyReadOk = true;
           return unpacked;
@@ -1071,7 +1137,9 @@ export class MissionManager {
     if (this.isCancelled) return [];
 
     // 2. Fall back to MAVLink mission protocol (mission_type = 2)
-    console.log('[MissionManager] MAVFTP rally.dat not found, requesting rally points via MISSION_REQUEST_LIST(type=2)...');
+    console.log(
+      '[MissionManager] MAVFTP rally.dat not found, requesting rally points via MISSION_REQUEST_LIST(type=2)...'
+    );
     this.setStatus({ method: 'legacy', message: 'Requesting rally points via MAVLink stream...' });
     const legacyRally = await this.fetchLegacyItems(2, sysId, compId);
     if (this.isCancelled) return [];
@@ -1094,7 +1162,10 @@ export class MissionManager {
     }
     // Read from a vehicle no longer commanded (a switch while it ran): nothing of it goes to the store, home or counts.
     if (!this.isActive(sysId)) return [];
-    useTelemetryStore.setState({ rallyPoints, ...(rallyPoints.length > 0 ? { rallySupport: 'supported' as const } : {}) });
+    useTelemetryStore.setState({
+      rallyPoints,
+      ...(rallyPoints.length > 0 ? { rallySupport: 'supported' as const } : {}),
+    });
     this.setStatus({ rallyCount: rallyPoints.length });
     this.lastRallyReadOk = true;
     return rallyPoints;
@@ -1284,10 +1355,7 @@ export function groupFencePolygons(fencePoints: FencePoint[]): FencePolygon[] {
         startNew = true;
       } else if (currentPoly.command !== fp.command) {
         startNew = true;
-      } else if (
-        currentPoly.expectedCount !== undefined &&
-        currentPoly.points.length >= currentPoly.expectedCount
-      ) {
+      } else if (currentPoly.expectedCount !== undefined && currentPoly.points.length >= currentPoly.expectedCount) {
         startNew = true;
       } else if (
         declaredCount !== undefined &&
@@ -1316,10 +1384,7 @@ export function groupFencePolygons(fencePoints: FencePoint[]): FencePolygon[] {
       // Add valid coordinates (filter out null/zero coordinates and consecutive identical coordinates)
       if ((fp.lat !== 0 || fp.lon !== 0) && !isNaN(fp.lat) && !isNaN(fp.lon)) {
         const lastPt = currentPoly!.points[currentPoly!.points.length - 1];
-        const isDuplicateOfLast =
-          lastPt &&
-          Math.abs(lastPt[0] - fp.lat) < 1e-7 &&
-          Math.abs(lastPt[1] - fp.lon) < 1e-7;
+        const isDuplicateOfLast = lastPt && Math.abs(lastPt[0] - fp.lat) < 1e-7 && Math.abs(lastPt[1] - fp.lon) < 1e-7;
 
         if (!isDuplicateOfLast) {
           currentPoly!.points.push([fp.lat, fp.lon]);
@@ -1328,10 +1393,7 @@ export function groupFencePolygons(fencePoints: FencePoint[]): FencePolygon[] {
       }
 
       // If current polygon has reached the point count described by the fence file, close it
-      if (
-        currentPoly!.expectedCount !== undefined &&
-        currentPoly!.points.length >= currentPoly!.expectedCount
-      ) {
+      if (currentPoly!.expectedCount !== undefined && currentPoly!.points.length >= currentPoly!.expectedCount) {
         polygons.push(currentPoly!);
         currentPoly = null;
       }

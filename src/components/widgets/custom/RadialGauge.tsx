@@ -1,7 +1,16 @@
 import React from 'react';
+
+import {
+  arcPath,
+  niceStep,
+  niceTicks,
+  polar,
+  stepDecimals,
+  thresholdZones,
+  valueToAngle,
+} from '../../../lib/gaugeGeometry';
 import type { WidgetDataBinding, WidgetGaugeConfig } from '../../../types/widget';
-import { arcPath, niceStep, niceTicks, polar, stepDecimals, thresholdZones, valueToAngle } from '../../../lib/gaugeGeometry';
-import { ZONE_HEX, useChromeColors, useSmoothedValue } from './palette';
+import { useChromeColors, useSmoothedValue, ZONE_HEX } from './palette';
 
 export interface RadialGaugeProps {
   /** Values below are all in display units. */
@@ -84,12 +93,18 @@ export const RadialGauge: React.FC<RadialGaugeProps> = ({
       // 16 units of side margin so long tick labels ("3500") are not clipped at 3 and 9 o'clock.
       viewBox={`-16 0 232 ${viewHeight}`}
       preserveAspectRatio={alignTop ? 'xMidYMin meet' : 'xMidYMid meet'}
-      className={`absolute inset-0 w-full h-full transition-opacity ${dimmed ? 'opacity-40' : ''}`}
+      className={`absolute inset-0 h-full w-full transition-opacity ${dimmed ? 'opacity-40' : ''}`}
       role="img"
       aria-label={`${text} ${unit}`}
     >
       {/* Track */}
-      <path d={arcPath(CX, CY, R, -half, half)} stroke={colors.track} strokeWidth={9} fill="none" strokeLinecap="butt" />
+      <path
+        d={arcPath(CX, CY, R, -half, half)}
+        stroke={colors.track}
+        strokeWidth={9}
+        fill="none"
+        strokeLinecap="butt"
+      />
 
       {/* Threshold zones, as a thin band inside the track */}
       {zones.map((z) => (
@@ -124,17 +139,19 @@ export const RadialGauge: React.FC<RadialGaugeProps> = ({
         return (
           <g key={`M${v}`}>
             <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={colors.tick} strokeWidth={1.6} />
-            {showLabel && <text
-              x={lp.x}
-              y={lp.y}
-              fill={colors.label}
-              fontSize={compact ? 12 : 10}
-              fontFamily="ui-monospace, monospace"
-              textAnchor="middle"
-              dominantBaseline="central"
-            >
-              {v.toFixed(labelDecimals)}
-            </text>}
+            {showLabel && (
+              <text
+                x={lp.x}
+                y={lp.y}
+                fill={colors.label}
+                fontSize={compact ? 12 : 10}
+                fontFamily="ui-monospace, monospace"
+                textAnchor="middle"
+                dominantBaseline="central"
+              >
+                {v.toFixed(labelDecimals)}
+              </text>
+            )}
           </g>
         );
       })}

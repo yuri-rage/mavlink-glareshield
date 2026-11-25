@@ -29,7 +29,10 @@ export class InspectorCollector {
   private users = 0;
   private unsubscribe: (() => void) | null = null;
 
-  constructor(private subscribe: (fn: (p: MavlinkPacket) => void) => () => void, private now: () => number = () => Date.now()) {}
+  constructor(
+    private subscribe: (fn: (p: MavlinkPacket) => void) => () => void,
+    private now: () => number = () => Date.now()
+  ) {}
 
   /** Start collecting (an Inspector opened); returns the stop for it. */
   start(): () => void {
@@ -64,7 +67,17 @@ export class InspectorCollector {
     const t = this.now();
     let e = this.entries.get(key);
     if (!e) {
-      e = { key, sysId: p.systemId, compId: p.componentId, msgId: p.messageId, count: 0, times: [], lastAt: t, lastPayload: p.payload, version: p.version };
+      e = {
+        key,
+        sysId: p.systemId,
+        compId: p.componentId,
+        msgId: p.messageId,
+        count: 0,
+        times: [],
+        lastAt: t,
+        lastPayload: p.payload,
+        version: p.version,
+      };
       this.entries.set(key, e);
     }
     e.count++;

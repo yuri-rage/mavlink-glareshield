@@ -4,8 +4,9 @@
 // the parameter on each new connection and only counts a value that arrives afterwards.
 
 import { useEffect, useState } from 'react';
-import { useTelemetryStore } from '../store/telemetryStore';
+
 import { paramManager } from '../mavlink/paramManager';
+import { useTelemetryStore } from '../store/telemetryStore';
 
 export function useConnectionParam(name: string, enabled: boolean): number | undefined {
   const sysId = useTelemetryStore((s) => s.heartbeat.systemId);

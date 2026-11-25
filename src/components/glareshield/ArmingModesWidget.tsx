@@ -1,41 +1,43 @@
-import { feedbackBadge, feedbackRing } from './commandFeedback';
-import { useInHeaderSlot } from '../dashboard/paneContext';
-import React, { useState, useEffect, useRef } from 'react';
-import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
-import { useUnitsStore } from '../../store/unitsStore';
-import { mavlinkConnection } from '../../mavlink/connection';
-import { useConfirmStep } from '../../lib/useWaypointNavigation';
-import { useConnectionParam } from '../../lib/useConnectionParam';
-import { Card, CardContent } from '../ui/card';
-import { Button } from '../ui/button';
+import React, { useEffect, useRef, useState } from 'react';
+
 import {
+  AlertTriangle,
+  Anchor,
+  ArrowUp,
+  CheckCircle2,
+  CircleStop,
+  Loader2,
+  Navigation,
+  PlaneLanding,
+  PlaneTakeoff,
+  Play,
+  Radio,
+  Shield,
+  ShieldAlert,
+  Sliders,
+  X,
+  XCircle,
+  Zap,
+} from 'lucide-react';
+
+import { useConnectionParam } from '../../lib/useConnectionParam';
+import { useConfirmStep } from '../../lib/useWaypointNavigation';
+import { mavlinkConnection } from '../../mavlink/connection';
+import {
+  getAutoModeNum,
+  getGuidedModeNum,
+  getVehicleCategory,
+  isVtolPlane,
   MAV_CMD,
   MAV_TYPE,
   PLANE_MODE,
-  getVehicleCategory,
-  getGuidedModeNum,
-  getAutoModeNum,
-  isVtolPlane,
 } from '../../mavlink/messages';
-import {
-  Shield,
-  ShieldAlert,
-  ArrowUp,
-  Navigation,
-  Anchor,
-  PlaneLanding,
-  PlaneTakeoff,
-  CircleStop,
-  Play,
-  Sliders,
-  Radio,
-  Zap,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  Loader2,
-  X,
-} from 'lucide-react';
+import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
+import { useUnitsStore } from '../../store/unitsStore';
+import { useInHeaderSlot } from '../dashboard/paneContext';
+import { Button } from '../ui/button';
+import { Card, CardContent } from '../ui/card';
+import { feedbackBadge, feedbackRing } from './commandFeedback';
 
 export const ArmingModesWidget: React.FC = () => {
   // Pinned above a Cockpit tab's panes: the Takeoff checklist floats over the panes instead of pushing them down.
@@ -174,7 +176,11 @@ export const ArmingModesWidget: React.FC = () => {
       handleSetMode(PLANE_MODE.QLAND, 'Land (QLAND)', 'mode-land');
       return;
     }
-    const cmd = encoder.createCommandLong(sysId, compId, landsHow === 'mission' ? MAV_CMD.DO_LAND_START : MAV_CMD.NAV_LAND);
+    const cmd = encoder.createCommandLong(
+      sysId,
+      compId,
+      landsHow === 'mission' ? MAV_CMD.DO_LAND_START : MAV_CMD.NAV_LAND
+    );
     void sendTrackedCommand(cmd, {
       label: landsHow === 'mission' ? 'Land: mission landing sequence' : 'Land Now',
       targetKey: 'mode-land',
@@ -219,10 +225,10 @@ export const ArmingModesWidget: React.FC = () => {
       const st1 = useTelemetryStore.getState();
       if (st1.heartbeat.customMode !== targetTakeoffModeNum) {
         setAutoSeqStep(`Step 1/${fixedWing ? '2' : '3'}: Switching to ${targetTakeoffModeLabel} mode…`);
-        const modeAck = await sendTrackedCommand(
-          encoder.createSetMode(sysId, compId, targetTakeoffModeNum),
-          { label: `Auto-Takeoff: Switch to ${targetTakeoffModeLabel}`, targetKey: 'mode-takeoff' }
-        );
+        const modeAck = await sendTrackedCommand(encoder.createSetMode(sysId, compId, targetTakeoffModeNum), {
+          label: `Auto-Takeoff: Switch to ${targetTakeoffModeLabel}`,
+          targetKey: 'mode-takeoff',
+        });
         if (abortAutoSeqRef.current) {
           await safetyDisarmIfArmedBySeq();
           return;
@@ -246,18 +252,16 @@ export const ArmingModesWidget: React.FC = () => {
       const st2 = useTelemetryStore.getState();
       if (!st2.heartbeat.isArmed) {
         setAutoSeqStep(`Step 2/${fixedWing ? '2' : '3'}: Arming motors…`);
-        const armAck = await sendTrackedCommand(
-          encoder.createArmDisarm(sysId, compId, true),
-          { label: 'Auto-Takeoff: Arm Motors', targetKey: 'mode-takeoff' }
-        );
+        const armAck = await sendTrackedCommand(encoder.createArmDisarm(sysId, compId, true), {
+          label: 'Auto-Takeoff: Arm Motors',
+          targetKey: 'mode-takeoff',
+        });
         if (abortAutoSeqRef.current) {
           await safetyDisarmIfArmedBySeq();
           return;
         }
         if (armAck.result !== 0 && armAck.result !== 5) {
-          setAutoSeqError(
-            `Arming rejected (${armAck.resultText})${armAck.reason ? `: ${armAck.reason}` : ''}`
-          );
+          setAutoSeqError(`Arming rejected (${armAck.resultText})${armAck.reason ? `: ${armAck.reason}` : ''}`);
           setAutoSeqStep(null);
           await safetyDisarmIfArmedBySeq();
           return;
@@ -282,9 +286,7 @@ export const ArmingModesWidget: React.FC = () => {
           return;
         }
         if (toAck.result !== 0 && toAck.result !== 5) {
-          setAutoSeqError(
-            `Takeoff rejected (${toAck.resultText})${toAck.reason ? `: ${toAck.reason}` : ''}`
-          );
+          setAutoSeqError(`Takeoff rejected (${toAck.resultText})${toAck.reason ? `: ${toAck.reason}` : ''}`);
           setAutoSeqStep(null);
           await safetyDisarmIfArmedBySeq();
           return;
@@ -314,14 +316,15 @@ export const ArmingModesWidget: React.FC = () => {
       armedBySequenceRef.current = false;
     } else {
       // A VTOL aborting its takeoff holds its hover (QLOITER), never fixed-wing LOITER (a transition near the ground).
-      handleSetMode(isVtol ? PLANE_MODE.QLOITER : fixedWing ? PLANE_MODE.LOITER : 5, 'Abort Takeoff (Loiter)', 'mode-loiter');
+      handleSetMode(
+        isVtol ? PLANE_MODE.QLOITER : fixedWing ? PLANE_MODE.LOITER : 5,
+        'Abort Takeoff (Loiter)',
+        'mode-loiter'
+      );
     }
   };
 
-  const displayTakeoffAlt =
-    altUnit === 'ft'
-      ? Math.round(takeoffAltMeters * 3.28084)
-      : Math.round(takeoffAltMeters);
+  const displayTakeoffAlt = altUnit === 'ft' ? Math.round(takeoffAltMeters * 3.28084) : Math.round(takeoffAltMeters);
 
   const handleTakeoffAltInputChange = (val: number) => {
     if (!Number.isFinite(val) || val <= 0) return;
@@ -331,7 +334,8 @@ export const ArmingModesWidget: React.FC = () => {
 
   // Active mode helpers
   const isHoldActive = isVehicleConnected && heartbeat.customMode === 4;
-  const isManualActive = isVehicleConnected && (category === 'sub' ? heartbeat.customMode === 19 : heartbeat.customMode === 0);
+  const isManualActive =
+    isVehicleConnected && (category === 'sub' ? heartbeat.customMode === 19 : heartbeat.customMode === 0);
   const isSteeringActive = isVehicleConnected && category === 'rover' && !isBoat && heartbeat.customMode === 3;
   const isLoiterActive =
     isVehicleConnected &&
@@ -343,49 +347,51 @@ export const ArmingModesWidget: React.FC = () => {
   const isAcroActive = isVehicleConnected && heartbeat.customMode === 1;
   const isAutoActive = isVehicleConnected && heartbeat.customMode === autoModeNum;
   const isRtlActive =
-    isVehicleConnected &&
-    (category === 'copter' ? heartbeat.customMode === 6 : heartbeat.customMode === 11);
+    isVehicleConnected && (category === 'copter' ? heartbeat.customMode === 6 : heartbeat.customMode === 11);
   const isLandActive =
-    isVehicleConnected &&
-    (category === 'plane' ? heartbeat.customMode === 20 : heartbeat.customMode === 9);
+    isVehicleConnected && (category === 'plane' ? heartbeat.customMode === 20 : heartbeat.customMode === 9);
 
   return (
     // A size container: the arm block and the mode buttons sit side by side by the widget's own width, so it lays out
     // right as a Flow card, a pinned bar or a narrow Cockpit pane.
-    <Card className={`@container relative border-sky-500/20 bg-zinc-950/90 shadow-xl ${pinned ? 'overflow-visible' : 'overflow-hidden'}`}>
+    <Card
+      className={`relative border-sky-500/20 bg-zinc-950/90 shadow-xl @container ${pinned ? 'overflow-visible' : 'overflow-hidden'}`}
+    >
       <CardContent className={`${pinned ? 'p-1.5 sm:p-1.5' : 'p-2 sm:p-2.5'} space-y-2.5`}>
         {/* Top Control Bar: Arming Slider & 5 Quick Mode Buttons */}
         {/* The arm block takes a third on medium screens and a fixed width on large ones: on a wide screen the room
             goes to the quick actions, not to a slider over 1000 px long. */}
-        <div className="grid grid-cols-1 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] @6xl:grid-cols-[28rem_minmax(0,1fr)] gap-2 sm:gap-2.5 items-center">
+        <div className="grid grid-cols-1 items-center gap-2 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] @6xl:grid-cols-[28rem_minmax(0,1fr)] sm:gap-2.5">
           {/* Arm / Disarm Interlock */}
           {/* Pinned, it's one row: the state beside the slider rather than above it (the bar is on every Cockpit tab, so
               its height counts). */}
           <div
-            className={`bg-zinc-900/80 border border-zinc-800 rounded-xl transition-opacity ${pinned ? 'flex items-center gap-2 p-1 pl-2' : 'p-2'} ${
+            className={`rounded-xl border border-zinc-800 bg-zinc-900/80 transition-opacity ${pinned ? 'flex items-center gap-2 p-1 pl-2' : 'p-2'} ${
               !isVehicleConnected ? 'opacity-65' : ''
             } ${getFeedbackRing('arm')}`}
           >
             <div className={`flex items-center justify-between gap-2 ${pinned ? 'shrink-0' : 'mb-1'}`}>
-              <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5 min-w-0">
+              <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-zinc-300">
                 {!isVehicleConnected ? (
-                  <Shield className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+                  <Shield className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
                 ) : heartbeat.isArmed ? (
-                  <ShieldAlert className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                  <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-red-400" />
                 ) : (
-                  <Shield className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                  <Shield className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
                 )}
                 <span className="truncate">
                   {pinned ? '' : 'Master: '}
                   {!isVehicleConnected
                     ? 'NO LINK'
                     : heartbeat.isArmed
-                      ? pinned ? 'ARMED' : 'ARMED (Live)'
+                      ? pinned
+                        ? 'ARMED'
+                        : 'ARMED (Live)'
                       : 'DISARMED'}
                 </span>
                 {getFeedbackBadge('arm')}
               </span>
-              <span className={`text-[10px] text-zinc-500 font-sans hidden shrink-0 ${pinned ? '' : 'sm:inline'}`}>
+              <span className={`hidden shrink-0 font-sans text-[10px] text-zinc-500 ${pinned ? '' : 'sm:inline'}`}>
                 {isVehicleConnected ? 'Slide right' : 'Offline'}
               </span>
             </div>
@@ -404,20 +410,16 @@ export const ArmingModesWidget: React.FC = () => {
                 onMouseUp={handleSliderRelease}
                 onTouchEnd={handleSliderRelease}
                 onKeyDown={(e) => e.preventDefault()}
-                className={`w-full ${pinned ? 'h-7' : 'h-8'} rounded-lg appearance-none transition-all select-none ${
+                className={`w-full ${pinned ? 'h-7' : 'h-8'} select-none appearance-none rounded-lg transition-all ${
                   !isVehicleConnected
-                    ? 'cursor-not-allowed accent-zinc-600 bg-zinc-950/60 border border-zinc-800'
+                    ? 'cursor-not-allowed border border-zinc-800 bg-zinc-950/60 accent-zinc-600'
                     : heartbeat.isArmed
-                      ? 'cursor-pointer accent-red-500 bg-red-950/40 border border-red-800/60'
-                      : 'cursor-pointer accent-emerald-500 bg-emerald-950/40 border border-emerald-800/60'
+                      ? 'cursor-pointer border border-red-800/60 bg-red-950/40 accent-red-500'
+                      : 'cursor-pointer border border-emerald-800/60 bg-emerald-950/40 accent-emerald-500'
                 }`}
               />
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-xs font-bold uppercase tracking-wider text-zinc-200">
-                {!isVehicleConnected
-                  ? 'NO LINK — Locked'
-                  : heartbeat.isArmed
-                    ? 'Slide to DISARM'
-                    : 'Slide to ARM'}
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs font-bold uppercase tracking-wider text-zinc-200">
+                {!isVehicleConnected ? 'NO LINK — Locked' : heartbeat.isArmed ? 'Slide to DISARM' : 'Slide to ARM'}
               </div>
             </div>
           </div>
@@ -428,7 +430,7 @@ export const ArmingModesWidget: React.FC = () => {
             // took three rows, ~140 px, above the HUD and map). There, a label too long for the button is cut short
             // with an ellipsis, and the command's progress/result icon (after the label) sits in the top-right corner
             // rather than as a third row.
-            className={`grid grid-cols-5 gap-1 sm:gap-2 [&>button]:relative [&>button]:min-w-0 [&>button]:h-12 [&>button]:flex-col [&>button]:gap-0.5 [&>button]:px-0.5 [&>button]:text-[10px] [&>button>span]:max-w-full [&>button>span~svg]:absolute [&>button>span~svg]:right-0.5 [&>button>span~svg]:top-0.5 [&>button>span~svg]:h-3 [&>button>span~svg]:w-3 ${pinned ? 'sm:[&>button]:h-9' : 'sm:[&>button]:h-10'} sm:[&>button]:flex-row sm:[&>button]:gap-1 sm:[&>button]:px-3 sm:[&>button]:text-xs sm:[&>button>span~svg]:static sm:[&>button>span~svg]:h-3.5 sm:[&>button>span~svg]:w-3.5 ${
+            className={`grid grid-cols-5 gap-1 sm:gap-2 [&>button>span]:max-w-full [&>button>span~svg]:absolute [&>button>span~svg]:right-0.5 [&>button>span~svg]:top-0.5 [&>button>span~svg]:h-3 [&>button>span~svg]:w-3 [&>button]:relative [&>button]:h-12 [&>button]:min-w-0 [&>button]:flex-col [&>button]:gap-0.5 [&>button]:px-0.5 [&>button]:text-[10px] ${pinned ? 'sm:[&>button]:h-9' : 'sm:[&>button]:h-10'} sm:[&>button>span~svg]:static sm:[&>button>span~svg]:h-3.5 sm:[&>button>span~svg]:w-3.5 sm:[&>button]:flex-row sm:[&>button]:gap-1 sm:[&>button]:px-3 sm:[&>button]:text-xs ${
               !isVehicleConnected ? 'opacity-65' : ''
             }`}
           >
@@ -440,11 +442,11 @@ export const ArmingModesWidget: React.FC = () => {
                   size="sm"
                   disabled={!isVehicleConnected}
                   onClick={() => handleSetMode(4, 'Rover Hold', 'mode-4')}
-                  className={`border-rose-600/60 text-rose-300 hover:bg-rose-950/40 gap-1 font-bold h-10 ${
-                    isHoldActive ? 'bg-rose-950/60 border-rose-400 ring-1 ring-rose-400 shadow-sm' : ''
+                  className={`h-10 gap-1 border-rose-600/60 font-bold text-rose-300 hover:bg-rose-950/40 ${
+                    isHoldActive ? 'border-rose-400 bg-rose-950/60 shadow-sm ring-1 ring-rose-400' : ''
                   } ${getFeedbackRing('mode-4')}`}
                 >
-                  <CircleStop className="h-4 w-4 text-rose-400 shrink-0" />
+                  <CircleStop className="h-4 w-4 shrink-0 text-rose-400" />
                   <span className="truncate">Hold</span>
                   {getFeedbackBadge('mode-4')}
                 </Button>
@@ -455,11 +457,11 @@ export const ArmingModesWidget: React.FC = () => {
                   size="sm"
                   disabled={!isVehicleConnected}
                   onClick={() => handleSetMode(0, 'Rover Manual', 'mode-0')}
-                  className={`border-zinc-700 hover:bg-zinc-800 text-zinc-200 gap-1 font-bold h-10 ${
-                    isManualActive ? 'bg-zinc-800 border-sky-400 ring-1 ring-sky-400 text-white shadow-sm' : ''
+                  className={`h-10 gap-1 border-zinc-700 font-bold text-zinc-200 hover:bg-zinc-800 ${
+                    isManualActive ? 'border-sky-400 bg-zinc-800 text-white shadow-sm ring-1 ring-sky-400' : ''
                   } ${getFeedbackRing('mode-0')}`}
                 >
-                  <Radio className="h-4 w-4 text-sky-400 shrink-0" />
+                  <Radio className="h-4 w-4 shrink-0 text-sky-400" />
                   <span className="truncate">Manual</span>
                   {getFeedbackBadge('mode-0')}
                 </Button>
@@ -471,11 +473,11 @@ export const ArmingModesWidget: React.FC = () => {
                     size="sm"
                     disabled={!isVehicleConnected}
                     onClick={() => handleSetMode(5, 'Boat Loiter', 'mode-5')}
-                    className={`border-cyan-600/50 text-cyan-300 hover:bg-cyan-950/40 gap-1 font-bold h-10 ${
-                      isLoiterActive ? 'bg-cyan-950/60 border-cyan-400 ring-1 ring-cyan-400 shadow-sm' : ''
+                    className={`h-10 gap-1 border-cyan-600/50 font-bold text-cyan-300 hover:bg-cyan-950/40 ${
+                      isLoiterActive ? 'border-cyan-400 bg-cyan-950/60 shadow-sm ring-1 ring-cyan-400' : ''
                     } ${getFeedbackRing('mode-5')}`}
                   >
-                    <Anchor className="h-4 w-4 text-cyan-400 shrink-0" />
+                    <Anchor className="h-4 w-4 shrink-0 text-cyan-400" />
                     <span className="truncate">Loiter</span>
                     {getFeedbackBadge('mode-5')}
                   </Button>
@@ -485,11 +487,11 @@ export const ArmingModesWidget: React.FC = () => {
                     size="sm"
                     disabled={!isVehicleConnected}
                     onClick={() => handleSetMode(3, 'Rover Steering', 'mode-3')}
-                    className={`border-sky-600/50 text-sky-300 hover:bg-sky-950/40 gap-1 font-bold h-10 ${
-                      isSteeringActive ? 'bg-sky-950/60 border-sky-400 ring-1 ring-sky-400 shadow-sm' : ''
+                    className={`h-10 gap-1 border-sky-600/50 font-bold text-sky-300 hover:bg-sky-950/40 ${
+                      isSteeringActive ? 'border-sky-400 bg-sky-950/60 shadow-sm ring-1 ring-sky-400' : ''
                     } ${getFeedbackRing('mode-3')}`}
                   >
-                    <Navigation className="h-4 w-4 text-sky-400 shrink-0" />
+                    <Navigation className="h-4 w-4 shrink-0 text-sky-400" />
                     <span className="truncate">Steering</span>
                     {getFeedbackBadge('mode-3')}
                   </Button>
@@ -501,11 +503,11 @@ export const ArmingModesWidget: React.FC = () => {
                   size="sm"
                   disabled={!isVehicleConnected}
                   onClick={() => handleSetMode(1, 'Rover Acro', 'mode-1')}
-                  className={`border-amber-600/50 text-amber-300 hover:bg-amber-950/40 gap-1 font-bold h-10 ${
-                    isAcroActive ? 'bg-amber-950/60 border-amber-400 ring-1 ring-amber-400 shadow-sm' : ''
+                  className={`h-10 gap-1 border-amber-600/50 font-bold text-amber-300 hover:bg-amber-950/40 ${
+                    isAcroActive ? 'border-amber-400 bg-amber-950/60 shadow-sm ring-1 ring-amber-400' : ''
                   } ${getFeedbackRing('mode-1')}`}
                 >
-                  <Zap className="h-4 w-4 text-amber-400 shrink-0" />
+                  <Zap className="h-4 w-4 shrink-0 text-amber-400" />
                   <span className="truncate">Acro</span>
                   {getFeedbackBadge('mode-1')}
                 </Button>
@@ -516,11 +518,11 @@ export const ArmingModesWidget: React.FC = () => {
                   size="sm"
                   disabled={!isVehicleConnected}
                   onClick={() => handleSetMode(10, 'Rover Auto', 'mode-10')}
-                  className={`border-emerald-600/50 text-emerald-300 hover:bg-emerald-950/40 gap-1 font-bold h-10 ${
-                    isAutoActive ? 'bg-emerald-950/60 border-emerald-400 ring-1 ring-emerald-400 shadow-sm' : ''
+                  className={`h-10 gap-1 border-emerald-600/50 font-bold text-emerald-300 hover:bg-emerald-950/40 ${
+                    isAutoActive ? 'border-emerald-400 bg-emerald-950/60 shadow-sm ring-1 ring-emerald-400' : ''
                   } ${getFeedbackRing('mode-10')}`}
                 >
-                  <Play className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <Play className="h-4 w-4 shrink-0 text-emerald-400" />
                   <span className="truncate">Auto</span>
                   {getFeedbackBadge('mode-10')}
                 </Button>
@@ -532,9 +534,9 @@ export const ArmingModesWidget: React.FC = () => {
                   size="sm"
                   disabled={!isVehicleConnected}
                   onClick={() => handleSetMode(9, 'Sub Surface', 'mode-9')}
-                  className={`border-amber-600/50 text-amber-300 hover:bg-amber-950/40 gap-1 font-bold h-10 ${getFeedbackRing('mode-9')}`}
+                  className={`h-10 gap-1 border-amber-600/50 font-bold text-amber-300 hover:bg-amber-950/40 ${getFeedbackRing('mode-9')}`}
                 >
-                  <ArrowUp className="h-4 w-4 text-amber-400 shrink-0" />
+                  <ArrowUp className="h-4 w-4 shrink-0 text-amber-400" />
                   <span className="truncate">Surface</span>
                   {getFeedbackBadge('mode-9')}
                 </Button>
@@ -544,9 +546,9 @@ export const ArmingModesWidget: React.FC = () => {
                   size="sm"
                   disabled={!isVehicleConnected}
                   onClick={() => handleSetMode(16, 'Sub PosHold', 'mode-16')}
-                  className={`border-sky-600/50 text-sky-300 hover:bg-sky-950/40 gap-1 font-bold h-10 ${getFeedbackRing('mode-16')}`}
+                  className={`h-10 gap-1 border-sky-600/50 font-bold text-sky-300 hover:bg-sky-950/40 ${getFeedbackRing('mode-16')}`}
                 >
-                  <Anchor className="h-4 w-4 text-sky-400 shrink-0" />
+                  <Anchor className="h-4 w-4 shrink-0 text-sky-400" />
                   <span className="truncate">PosHold</span>
                   {getFeedbackBadge('mode-16')}
                 </Button>
@@ -556,9 +558,9 @@ export const ArmingModesWidget: React.FC = () => {
                   size="sm"
                   disabled={!isVehicleConnected}
                   onClick={() => handleSetMode(2, 'Sub Depth Hold', 'mode-2')}
-                  className={`border-emerald-600/50 text-emerald-300 hover:bg-emerald-950/40 gap-1 font-bold h-10 ${getFeedbackRing('mode-2')}`}
+                  className={`h-10 gap-1 border-emerald-600/50 font-bold text-emerald-300 hover:bg-emerald-950/40 ${getFeedbackRing('mode-2')}`}
                 >
-                  <Sliders className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <Sliders className="h-4 w-4 shrink-0 text-emerald-400" />
                   <span className="truncate">Depth</span>
                   {getFeedbackBadge('mode-2')}
                 </Button>
@@ -568,11 +570,11 @@ export const ArmingModesWidget: React.FC = () => {
                   size="sm"
                   disabled={!isVehicleConnected}
                   onClick={() => handleSetMode(19, 'Sub Manual', 'mode-19')}
-                  className={`border-zinc-700 hover:bg-zinc-800 text-zinc-200 gap-1 font-bold h-10 ${
-                    isManualActive ? 'bg-zinc-800 border-sky-400 ring-1 ring-sky-400 shadow-sm' : ''
+                  className={`h-10 gap-1 border-zinc-700 font-bold text-zinc-200 hover:bg-zinc-800 ${
+                    isManualActive ? 'border-sky-400 bg-zinc-800 shadow-sm ring-1 ring-sky-400' : ''
                   } ${getFeedbackRing('mode-19')}`}
                 >
-                  <Radio className="h-4 w-4 text-sky-400 shrink-0" />
+                  <Radio className="h-4 w-4 shrink-0 text-sky-400" />
                   <span className="truncate">Manual</span>
                   {getFeedbackBadge('mode-19')}
                 </Button>
@@ -582,11 +584,11 @@ export const ArmingModesWidget: React.FC = () => {
                   size="sm"
                   disabled={!isVehicleConnected}
                   onClick={() => handleSetMode(3, 'Sub Auto', 'mode-3')}
-                  className={`border-emerald-600/50 text-emerald-300 hover:bg-emerald-950/40 gap-1 font-bold h-10 ${
-                    isAutoActive ? 'bg-emerald-950/60 border-emerald-400 ring-1 ring-emerald-400 shadow-sm' : ''
+                  className={`h-10 gap-1 border-emerald-600/50 font-bold text-emerald-300 hover:bg-emerald-950/40 ${
+                    isAutoActive ? 'border-emerald-400 bg-emerald-950/60 shadow-sm ring-1 ring-emerald-400' : ''
                   } ${getFeedbackRing('mode-3')}`}
                 >
-                  <Play className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <Play className="h-4 w-4 shrink-0 text-emerald-400" />
                   <span className="truncate">Auto</span>
                   {getFeedbackBadge('mode-3')}
                 </Button>
@@ -603,11 +605,11 @@ export const ArmingModesWidget: React.FC = () => {
                     setAutoSeqError(null);
                     setShowTakeoffPanel((prev) => !prev);
                   }}
-                  className={`border-sky-600/50 text-sky-300 hover:bg-sky-950/40 gap-1 font-bold h-10 ${
-                    showTakeoffPanel ? 'bg-sky-950/60 border-sky-400 ring-1 ring-sky-400 shadow-sm' : ''
+                  className={`h-10 gap-1 border-sky-600/50 font-bold text-sky-300 hover:bg-sky-950/40 ${
+                    showTakeoffPanel ? 'border-sky-400 bg-sky-950/60 shadow-sm ring-1 ring-sky-400' : ''
                   } ${getFeedbackRing('mode-takeoff')}`}
                 >
-                  <PlaneTakeoff className="h-4 w-4 text-sky-400 shrink-0" />
+                  <PlaneTakeoff className="h-4 w-4 shrink-0 text-sky-400" />
                   <span className="truncate">Takeoff</span>
                   {getFeedbackBadge('mode-takeoff')}
                 </Button>
@@ -618,11 +620,11 @@ export const ArmingModesWidget: React.FC = () => {
                   size="sm"
                   disabled={!isVehicleConnected}
                   onClick={() => handleSetMode(autoModeNum, 'Auto Mission', 'mode-auto')}
-                  className={`border-emerald-600/50 text-emerald-300 hover:bg-emerald-950/40 gap-1 font-bold h-10 ${
-                    isAutoActive ? 'bg-emerald-950/60 border-emerald-400 ring-1 ring-emerald-400 shadow-sm' : ''
+                  className={`h-10 gap-1 border-emerald-600/50 font-bold text-emerald-300 hover:bg-emerald-950/40 ${
+                    isAutoActive ? 'border-emerald-400 bg-emerald-950/60 shadow-sm ring-1 ring-emerald-400' : ''
                   } ${getFeedbackRing('mode-auto')}`}
                 >
-                  <Play className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <Play className="h-4 w-4 shrink-0 text-emerald-400" />
                   <span className="truncate">Auto</span>
                   {getFeedbackBadge('mode-auto')}
                 </Button>
@@ -633,13 +635,17 @@ export const ArmingModesWidget: React.FC = () => {
                   size="sm"
                   disabled={!isVehicleConnected}
                   onClick={() =>
-                    handleSetMode(loiterModeNum, loiterModeNum === PLANE_MODE.QLOITER ? 'Hover (QLOITER)' : 'Pause / Loiter', 'mode-loiter')
+                    handleSetMode(
+                      loiterModeNum,
+                      loiterModeNum === PLANE_MODE.QLOITER ? 'Hover (QLOITER)' : 'Pause / Loiter',
+                      'mode-loiter'
+                    )
                   }
-                  className={`border-cyan-600/50 text-cyan-300 hover:bg-cyan-950/40 gap-1 font-bold h-10 ${
-                    isLoiterActive ? 'bg-cyan-950/60 border-cyan-400 ring-1 ring-cyan-400 shadow-sm' : ''
+                  className={`h-10 gap-1 border-cyan-600/50 font-bold text-cyan-300 hover:bg-cyan-950/40 ${
+                    isLoiterActive ? 'border-cyan-400 bg-cyan-950/60 shadow-sm ring-1 ring-cyan-400' : ''
                   } ${getFeedbackRing('mode-loiter')}`}
                 >
-                  <Anchor className="h-4 w-4 text-cyan-400 shrink-0" />
+                  <Anchor className="h-4 w-4 shrink-0 text-cyan-400" />
                   <span className="truncate">{loiterModeNum === PLANE_MODE.QLOITER ? 'QLoiter' : 'Loiter'}</span>
                   {getFeedbackBadge('mode-loiter')}
                 </Button>
@@ -650,11 +656,11 @@ export const ArmingModesWidget: React.FC = () => {
                   size="sm"
                   disabled={!isVehicleConnected}
                   onClick={triggerRTL}
-                  className={`border-amber-600/50 text-amber-300 hover:bg-amber-950/40 gap-1 font-bold h-10 ${
-                    isRtlActive ? 'bg-amber-950/60 border-amber-400 ring-1 ring-amber-400 shadow-sm' : ''
+                  className={`h-10 gap-1 border-amber-600/50 font-bold text-amber-300 hover:bg-amber-950/40 ${
+                    isRtlActive ? 'border-amber-400 bg-amber-950/60 shadow-sm ring-1 ring-amber-400' : ''
                   } ${getFeedbackRing('mode-rtl')}`}
                 >
-                  <Navigation className="h-4 w-4 text-amber-400 shrink-0" />
+                  <Navigation className="h-4 w-4 shrink-0 text-amber-400" />
                   <span className="truncate">RTL</span>
                   {getFeedbackBadge('mode-rtl')}
                 </Button>
@@ -666,19 +672,19 @@ export const ArmingModesWidget: React.FC = () => {
                   disabled={!isVehicleConnected || landsHow === null}
                   title={
                     landsHow === 'mission'
-                      ? 'Fly the mission\'s landing sequence (AUTO from the nearest DO_LAND_START; refused without one)'
+                      ? "Fly the mission's landing sequence (AUTO from the nearest DO_LAND_START; refused without one)"
                       : landsHow === 'qland'
                         ? 'Land vertically where it is (QLAND)'
                         : landsHow === null
-                          ? 'This vehicle doesn\'t land'
+                          ? "This vehicle doesn't land"
                           : 'Land where it is'
                   }
                   onClick={triggerLand}
-                  className={`border-amber-600/50 text-amber-300 hover:bg-amber-950/40 gap-1 font-bold h-10 ${
-                    isLandActive ? 'bg-amber-950/60 border-amber-400 ring-1 ring-amber-400 shadow-sm' : ''
+                  className={`h-10 gap-1 border-amber-600/50 font-bold text-amber-300 hover:bg-amber-950/40 ${
+                    isLandActive ? 'border-amber-400 bg-amber-950/60 shadow-sm ring-1 ring-amber-400' : ''
                   } ${getFeedbackRing('mode-land')}`}
                 >
-                  <PlaneLanding className="h-4 w-4 text-amber-400 shrink-0" />
+                  <PlaneLanding className="h-4 w-4 shrink-0 text-amber-400" />
                   <span className="truncate">{landsHow === 'qland' ? 'QLand' : 'Land'}</span>
                   {getFeedbackBadge('mode-land')}
                 </Button>
@@ -691,11 +697,27 @@ export const ArmingModesWidget: React.FC = () => {
         {isVtol && isVehicleConnected && (
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 px-2.5 py-1.5 text-xs">
             <span className="text-[11px] font-bold uppercase text-zinc-400">VTOL</span>
-            <span className={`font-mono font-bold ${vtolState === 4 ? 'text-sky-300' : vtolState === 3 ? 'text-emerald-300' : vtolState === 1 || vtolState === 2 ? 'text-amber-300' : 'text-zinc-500'}`}>
-              {vtolState === 3 ? 'HOVER' : vtolState === 4 ? 'FORWARD FLIGHT' : vtolState === 1 ? 'TRANSITION → FORWARD' : vtolState === 2 ? 'TRANSITION → HOVER' : 'STATE UNKNOWN'}
+            <span
+              className={`font-mono font-bold ${vtolState === 4 ? 'text-sky-300' : vtolState === 3 ? 'text-emerald-300' : vtolState === 1 || vtolState === 2 ? 'text-amber-300' : 'text-zinc-500'}`}
+            >
+              {vtolState === 3
+                ? 'HOVER'
+                : vtolState === 4
+                  ? 'FORWARD FLIGHT'
+                  : vtolState === 1
+                    ? 'TRANSITION → FORWARD'
+                    : vtolState === 2
+                      ? 'TRANSITION → HOVER'
+                      : 'STATE UNKNOWN'}
             </span>
             <span className="ml-auto flex gap-1.5">
-              <Button variant="outline" size="sm" className="h-7 border-emerald-700/60 text-emerald-300" title="Hover in place (QLOITER): back-transitions from forward flight" onClick={() => handleSetMode(PLANE_MODE.QLOITER, 'Hover (QLOITER)', 'mode-loiter')}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 border-emerald-700/60 text-emerald-300"
+                title="Hover in place (QLOITER): back-transitions from forward flight"
+                onClick={() => handleSetMode(PLANE_MODE.QLOITER, 'Hover (QLOITER)', 'mode-loiter')}
+              >
                 Hover
               </Button>
               <Button
@@ -723,7 +745,7 @@ export const ArmingModesWidget: React.FC = () => {
           <div
             role={pinned ? 'dialog' : undefined}
             aria-label={pinned ? 'Guided takeoff' : undefined}
-            className={`bg-zinc-900/95 border border-sky-500/40 rounded-xl p-3 space-y-3 shadow-lg ${
+            className={`space-y-3 rounded-xl border border-sky-500/40 bg-zinc-900/95 p-3 shadow-lg ${
               pinned ? 'absolute inset-x-2 top-full z-30 mt-1.5 shadow-2xl backdrop-blur-sm sm:inset-x-2.5' : ''
             }`}
           >
@@ -737,21 +759,18 @@ export const ArmingModesWidget: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowTakeoffPanel(false)}
-                className="text-zinc-400 hover:text-white p-1 rounded"
+                className="rounded p-1 text-zinc-400 hover:text-white"
                 title="Close Takeoff panel"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+            <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-12">
               {/* Target Altitude Input & Quick Presets */}
-              <div className="md:col-span-5 bg-zinc-950/70 border border-zinc-800 rounded-lg p-2.5 space-y-2">
+              <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950/70 p-2.5 md:col-span-5">
                 <div className="flex items-center justify-between gap-2">
-                  <label
-                    htmlFor="takeoff-alt-input"
-                    className="text-[11px] font-bold uppercase text-zinc-400"
-                  >
+                  <label htmlFor="takeoff-alt-input" className="text-[11px] font-bold uppercase text-zinc-400">
                     Target Altitude ({altUnit})
                   </label>
                   <div className="flex items-center gap-1.5">
@@ -763,25 +782,24 @@ export const ArmingModesWidget: React.FC = () => {
                       step={1}
                       value={displayTakeoffAlt}
                       onChange={(e) => handleTakeoffAltInputChange(Number(e.target.value))}
-                      className="w-20 h-7 px-2 rounded bg-zinc-900 border border-zinc-700 text-right font-mono text-sm font-bold text-zinc-100 focus:outline-none focus:border-sky-500"
+                      className="h-7 w-20 rounded border border-zinc-700 bg-zinc-900 px-2 text-right font-mono text-sm font-bold text-zinc-100 focus:border-sky-500 focus:outline-none"
                     />
-                    <span className="text-xs font-mono text-zinc-400">{altUnit}</span>
+                    <span className="font-mono text-xs text-zinc-400">{altUnit}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 flex-wrap">
+                <div className="flex flex-wrap items-center gap-1">
                   {[5, 10, 15, 25, 50].map((presetM) => {
-                    const presetVal =
-                      altUnit === 'ft' ? Math.round(presetM * 3.28084) : presetM;
+                    const presetVal = altUnit === 'ft' ? Math.round(presetM * 3.28084) : presetM;
                     const active = Math.abs(takeoffAltMeters - presetM) < 0.5;
                     return (
                       <button
                         key={presetM}
                         type="button"
                         onClick={() => setTakeoffAltMeters(presetM)}
-                        className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border transition-colors ${
+                        className={`rounded border px-2 py-0.5 font-mono text-[11px] font-bold transition-colors ${
                           active
-                            ? 'bg-sky-600 border-sky-400 text-white'
-                            : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                            ? 'border-sky-400 bg-sky-600 text-white'
+                            : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200'
                         }`}
                       >
                         {presetVal}
@@ -793,23 +811,25 @@ export const ArmingModesWidget: React.FC = () => {
               </div>
 
               {/* Readiness Checklist: Mode + ARMED */}
-              <div className="md:col-span-4 bg-zinc-950/70 border border-zinc-800 rounded-lg p-2.5 space-y-1.5">
+              <div className="space-y-1.5 rounded-lg border border-zinc-800 bg-zinc-950/70 p-2.5 md:col-span-4">
                 <div className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-1.5">
                     {isInTakeoffMode ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
                     ) : (
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
                     )}
-                    <span className={isInTakeoffMode ? 'text-emerald-300 font-semibold' : 'text-amber-200'}>
+                    <span className={isInTakeoffMode ? 'font-semibold text-emerald-300' : 'text-amber-200'}>
                       1. Flight Mode: {targetTakeoffModeLabel}
                     </span>
                   </span>
                   {!isInTakeoffMode && (
                     <button
                       type="button"
-                      onClick={() => handleSetMode(targetTakeoffModeNum, `Switch to ${targetTakeoffModeLabel}`, 'mode-takeoff')}
-                      className="px-2 py-0.5 rounded bg-sky-600/30 hover:bg-sky-600/50 border border-sky-500/50 text-sky-200 text-[10px] font-bold uppercase"
+                      onClick={() =>
+                        handleSetMode(targetTakeoffModeNum, `Switch to ${targetTakeoffModeLabel}`, 'mode-takeoff')
+                      }
+                      className="rounded border border-sky-500/50 bg-sky-600/30 px-2 py-0.5 text-[10px] font-bold uppercase text-sky-200 hover:bg-sky-600/50"
                     >
                       Switch
                     </button>
@@ -819,11 +839,11 @@ export const ArmingModesWidget: React.FC = () => {
                 <div className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-1.5">
                     {heartbeat.isArmed ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
                     ) : (
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
                     )}
-                    <span className={heartbeat.isArmed ? 'text-emerald-300 font-semibold' : 'text-amber-200'}>
+                    <span className={heartbeat.isArmed ? 'font-semibold text-emerald-300' : 'text-amber-200'}>
                       2. Motors: {heartbeat.isArmed ? 'ARMED' : 'DISARMED'}
                     </span>
                   </span>
@@ -831,7 +851,7 @@ export const ArmingModesWidget: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleArm(true)}
-                      className="px-2 py-0.5 rounded bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/50 text-emerald-200 text-[10px] font-bold uppercase"
+                      className="rounded border border-emerald-500/50 bg-emerald-600/30 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-200 hover:bg-emerald-600/50"
                     >
                       Arm Now
                     </button>
@@ -840,13 +860,13 @@ export const ArmingModesWidget: React.FC = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="md:col-span-3 flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5 md:col-span-3">
                 {autoSeqStep ? (
                   <Button
                     variant="destructive"
                     size="sm"
                     onClick={handleAbortAutoSeq}
-                    className="w-full font-bold h-9 gap-1.5"
+                    className="h-9 w-full gap-1.5 font-bold"
                   >
                     <XCircle className="h-4 w-4" />
                     Abort Sequence
@@ -858,7 +878,7 @@ export const ArmingModesWidget: React.FC = () => {
                       size="sm"
                       disabled={!isVehicleConnected}
                       onClick={runAutoTakeoffSequence}
-                      className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold h-9 text-xs gap-1.5"
+                      className="h-9 w-full gap-1.5 bg-sky-600 text-xs font-bold text-white hover:bg-sky-500"
                       title={
                         fixedWing
                           ? 'Switches to TAKEOFF mode and arms motors for launch'
@@ -878,7 +898,7 @@ export const ArmingModesWidget: React.FC = () => {
                         size="sm"
                         disabled={!isVehicleConnected}
                         onClick={() => triggerTakeoff(takeoffAltMeters)}
-                        className="w-full border-zinc-700 text-zinc-300 hover:bg-zinc-800 h-7 text-[11px]"
+                        className="h-7 w-full border-zinc-700 text-[11px] text-zinc-300 hover:bg-zinc-800"
                       >
                         {fixedWing ? 'TAKEOFF Mode Only' : 'Send NAV_TAKEOFF Only'}
                       </Button>
@@ -889,23 +909,19 @@ export const ArmingModesWidget: React.FC = () => {
             </div>
 
             {autoSeqStep && (
-              <div className="flex items-center gap-2 text-xs text-sky-300 font-mono bg-sky-950/40 border border-sky-800/60 rounded-lg px-2.5 py-1.5">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400 shrink-0" />
+              <div className="flex items-center gap-2 rounded-lg border border-sky-800/60 bg-sky-950/40 px-2.5 py-1.5 font-mono text-xs text-sky-300">
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-sky-400" />
                 <span>{autoSeqStep}</span>
               </div>
             )}
 
             {autoSeqError && (
-              <div className="flex items-center justify-between gap-2 text-xs text-rose-200 bg-rose-950/60 border border-rose-700/60 rounded-lg px-2.5 py-1.5">
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-rose-700/60 bg-rose-950/60 px-2.5 py-1.5 text-xs text-rose-200">
                 <span className="flex items-center gap-1.5">
-                  <AlertTriangle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-400" />
                   <span>{autoSeqError}</span>
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setAutoSeqError(null)}
-                  className="text-rose-300 hover:text-white"
-                >
+                <button type="button" onClick={() => setAutoSeqError(null)} className="text-rose-300 hover:text-white">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>

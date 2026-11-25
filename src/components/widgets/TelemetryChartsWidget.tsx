@@ -3,20 +3,31 @@
 // same field share one history.
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useUnitsStore } from '../../store/unitsStore';
-import { messageRateManager } from '../../mavlink/rateManager';
-import { MAVLINK_MSG_ID } from '../../mavlink/messages';
+
+import { LineChart as ChartIcon, Combine, Layers } from 'lucide-react';
+
 import { valueSampler } from '../../lib/valueSampler';
 import { bindingUnit, toDisplayUnits, type UnitSystem } from '../../lib/widgetValues';
+import { MAVLINK_MSG_ID } from '../../mavlink/messages';
+import { messageRateManager } from '../../mavlink/rateManager';
+import { useUnitsStore } from '../../store/unitsStore';
 import type { WidgetDataBinding } from '../../types/widget';
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ChartControls, TimeSeriesChart, type ChartSeries } from './custom/TimeSeriesChart';
-import { LineChart as ChartIcon, Layers, Combine } from 'lucide-react';
 
 const SERIES: { binding: WidgetDataBinding; color: string }[] = [
-  { binding: { messageName: 'VFR_HUD', fieldName: 'alt', unitKind: 'altitude', label: 'Alt', decimals: 1 }, color: '#10b981' },
-  { binding: { messageName: 'VFR_HUD', fieldName: 'groundspeed', unitKind: 'speed', label: 'Speed', decimals: 1 }, color: '#38bdf8' },
-  { binding: { messageName: 'SYS_STATUS', fieldName: 'current_battery', unit: 'A', label: 'Current', decimals: 1 }, color: '#f59e0b' },
+  {
+    binding: { messageName: 'VFR_HUD', fieldName: 'alt', unitKind: 'altitude', label: 'Alt', decimals: 1 },
+    color: '#10b981',
+  },
+  {
+    binding: { messageName: 'VFR_HUD', fieldName: 'groundspeed', unitKind: 'speed', label: 'Speed', decimals: 1 },
+    color: '#38bdf8',
+  },
+  {
+    binding: { messageName: 'SYS_STATUS', fieldName: 'current_battery', unit: 'A', label: 'Current', decimals: 1 },
+    color: '#f59e0b',
+  },
 ];
 
 export const TelemetryChartsWidget: React.FC = () => {
@@ -55,14 +66,14 @@ export const TelemetryChartsWidget: React.FC = () => {
   );
 
   return (
-    <Card className="h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
-      <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
-        <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center justify-between gap-2 flex-wrap">
+    <Card className="flex h-full flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
+      <CardHeader className="border-b border-zinc-800 bg-zinc-900/60 px-3 py-1.5 sm:px-3.5">
+        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold uppercase tracking-wider text-zinc-300">
           <span className="flex items-center gap-1.5">
             <ChartIcon className="h-4 w-4 text-sky-400" />
             Telemetry Charts
           </span>
-          <div className="flex items-center gap-1.5 normal-case tracking-normal font-normal">
+          <div className="flex items-center gap-1.5 font-normal normal-case tracking-normal">
             <ChartControls
               windowSec={windowSec}
               onWindow={setWindowSec}
@@ -72,13 +83,16 @@ export const TelemetryChartsWidget: React.FC = () => {
             <button
               type="button"
               onClick={() => setViewMode((m) => (m === 'stacked' ? 'combined' : 'stacked'))}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-zinc-800 hover:bg-zinc-800 text-[11px] font-bold text-zinc-300 uppercase"
-              title={viewMode === 'stacked' ? 'One axis per value (click for a single shared axis)' : 'One shared axis (click for an axis per value)'}
+              className="inline-flex items-center gap-1 rounded-md border border-zinc-800 px-2 py-0.5 text-[11px] font-bold uppercase text-zinc-300 hover:bg-zinc-800"
+              title={
+                viewMode === 'stacked'
+                  ? 'One axis per value (click for a single shared axis)'
+                  : 'One shared axis (click for an axis per value)'
+              }
             >
               {viewMode === 'stacked' ? (
                 <>
-                  <Layers className="h-3 w-3 text-sky-400" />
-                  3 axes
+                  <Layers className="h-3 w-3 text-sky-400" />3 axes
                 </>
               ) : (
                 <>
@@ -90,10 +104,13 @@ export const TelemetryChartsWidget: React.FC = () => {
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="p-2.5 sm:p-3 flex-1 flex flex-col gap-2 min-h-0">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 p-2.5 sm:p-3">
         {viewMode === 'stacked' ? (
           series.map((s, i) => (
-            <div key={s.key} className={`flex-1 flex flex-col min-h-0 ${i > 0 ? 'border-t border-zinc-900 pt-1.5' : ''}`}>
+            <div
+              key={s.key}
+              className={`flex min-h-0 flex-1 flex-col ${i > 0 ? 'border-t border-zinc-900 pt-1.5' : ''}`}
+            >
               <TimeSeriesChart
                 series={[s]}
                 config={{ yScale: 'auto' }}

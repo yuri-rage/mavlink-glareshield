@@ -4,17 +4,19 @@
 // value of every panel on one clock and hands each panel its share. What each display type draws, and the controls'
 // own state, live in the panel components under ./custom.
 
-import { useInPane } from '../dashboard/paneContext';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import type { CustomWidgetDefinition, WidgetDataBinding } from '../../types/widget';
+
+import { valueSampler } from '../../lib/valueSampler';
+import type { AlertState, BindingReading, UnitSystem } from '../../lib/widgetValues';
+import { messageRateManager } from '../../mavlink/rateManager';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
-import { messageRateManager } from '../../mavlink/rateManager';
-import type { AlertState, BindingReading, UnitSystem } from '../../lib/widgetValues';
-import { valueSampler } from '../../lib/valueSampler';
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
+import type { CustomWidgetDefinition, WidgetDataBinding } from '../../types/widget';
+import { useInPane } from '../dashboard/paneContext';
 import { Badge } from '../ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ACCENT_HEX } from './custom/palette';
+import { SCHEME_CLASSES, useBindingReadings, type PanelProps } from './custom/panelKit';
 import {
   cardPanels,
   effectiveScheme,
@@ -26,8 +28,7 @@ import {
   staleSummary,
   worstAlert,
 } from './custom/panelModel';
-import { SCHEME_CLASSES, useBindingReadings, type PanelProps } from './custom/panelKit';
-import { WidgetPanel, panelFills, panelIcon } from './custom/WidgetPanel';
+import { panelFills, panelIcon, WidgetPanel } from './custom/WidgetPanel';
 
 valueSampler.setStateGetter(() => useTelemetryStore.getState());
 
@@ -77,9 +78,15 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
       return entry;
     });
   }, [definition]);
-  const allBindings = useMemo(() => layout.flatMap((p) => (p.feedback ? [...p.bindings, p.feedback] : p.bindings)), [layout]);
+  const allBindings = useMemo(
+    () => layout.flatMap((p) => (p.feedback ? [...p.bindings, p.feedback] : p.bindings)),
+    [layout]
+  );
   const staleTimeouts = useMemo(
-    () => layout.flatMap((p) => Array<number | undefined>(p.bindings.length + (p.feedback ? 1 : 0)).fill(p.def.staleAfterSec)),
+    () =>
+      layout.flatMap((p) =>
+        Array<number | undefined>(p.bindings.length + (p.feedback ? 1 : 0)).fill(p.def.staleAfterSec)
+      ),
     [layout]
   );
   const allReadings = useBindingReadings(allBindings, system, staleTimeouts);
@@ -125,32 +132,39 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
 
   return (
     <Card
-      className={`h-full flex flex-col bg-zinc-950/90 shadow-md transition-colors ${
-        alert === 'crit' ? 'border-red-500/80 ring-1 ring-red-500/30' : alert === 'warn' ? 'border-amber-500/70' : 'border-zinc-800'
+      className={`flex h-full flex-col bg-zinc-950/90 shadow-md transition-colors ${
+        alert === 'crit'
+          ? 'border-red-500/80 ring-1 ring-red-500/30'
+          : alert === 'warn'
+            ? 'border-amber-500/70'
+            : 'border-zinc-800'
       }`}
     >
-      <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
+      <CardHeader className="border-b border-zinc-800 bg-zinc-900/60 px-3 py-1.5 sm:px-3.5">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5 truncate">
+          <CardTitle className="flex items-center gap-1.5 truncate text-xs font-bold uppercase tracking-wider text-zinc-300">
             <HeaderIcon className={`h-3.5 w-3.5 shrink-0 ${cardScheme.icon}`} />
             <span className="truncate">{definition.name}</span>
           </CardTitle>
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex shrink-0 items-center gap-1">
             {stale.count > 0 && (
               <Badge
                 variant="secondary"
-                className="text-[10px] px-1.5 py-0 font-mono uppercase"
+                className="px-1.5 py-0 font-mono text-[10px] uppercase"
                 title={`No ${stale.messages.join(', ')} received for ${stale.ageSec}s`}
               >
                 Stale {stale.ageSec}s
               </Badge>
             )}
             {alert !== 'normal' && !stale.all && (
-              <Badge variant={alert === 'crit' ? 'destructive' : 'warning'} className="text-[10px] px-1.5 py-0 font-mono uppercase animate-pulse">
+              <Badge
+                variant={alert === 'crit' ? 'destructive' : 'warning'}
+                className="animate-pulse px-1.5 py-0 font-mono text-[10px] uppercase"
+              >
                 {alert === 'crit' ? 'CRIT' : 'WARN'}
               </Badge>
             )}
-            <Badge variant="secondary" className="text-[10px] font-sans font-semibold capitalize">
+            <Badge variant="secondary" className="font-sans text-[10px] font-semibold capitalize">
               {definition.category}
             </Badge>
           </div>
@@ -159,12 +173,12 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
 
       {isComposite ? (
         // In a pane, a composite taller than the pane scrolls inside the card (its header and border stay put).
-        <CardContent className={`p-2.5 sm:p-3 flex-1 min-h-0 ${inPane ? 'overflow-y-auto' : ''}`}>
+        <CardContent className={`min-h-0 flex-1 p-2.5 sm:p-3 ${inPane ? 'overflow-y-auto' : ''}`}>
           {/* In a Cockpit pane the rows share its height (each at least its content), so the card fills the pane rather
               than leaving a gap below or scrolling; elsewhere they keep their natural heights. */}
           <div
             ref={gridRef}
-            className={`grid grid-cols-12 gap-2.5 h-full ${inPane ? 'content-stretch [grid-auto-rows:minmax(min-content,1fr)]' : 'content-start'}`}
+            className={`grid h-full grid-cols-12 gap-2.5 ${inPane ? 'content-stretch [grid-auto-rows:minmax(min-content,1fr)]' : 'content-start'}`}
           >
             {panels.map((p, i) => {
               const span = stacked ? 12 : panelSpan(definition, i);
@@ -175,32 +189,42 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                   key={`${i}-${p.def.displayType}`}
                   style={{ gridColumn: `span ${span} / span ${span}` }}
                   // A size container: a panel's values scale with its own width (TelemetryPanels).
-                  className={`@container min-w-0 flex flex-col rounded-lg border bg-zinc-900/30 p-2.5 transition-colors ${
-                    p.alert === 'crit' ? 'border-red-500/60' : p.alert === 'warn' ? 'border-amber-500/50' : 'border-zinc-800/80'
+                  className={`flex min-w-0 flex-col rounded-lg border bg-zinc-900/30 p-2.5 transition-colors @container ${
+                    p.alert === 'crit'
+                      ? 'border-red-500/60'
+                      : p.alert === 'warn'
+                        ? 'border-amber-500/50'
+                        : 'border-zinc-800/80'
                   }`}
                   aria-label={title || undefined}
                 >
                   {/* A built-in widget brings its own title row. */}
                   {title && p.def.displayType !== 'builtin' && (
-                    <h4 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1 mb-1.5 truncate">
+                    <h4 className="mb-1.5 flex items-center gap-1 truncate text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
                       <Icon className={`h-3 w-3 shrink-0 ${p.scheme.icon}`} />
                       <span className="truncate">{title}</span>
                     </h4>
                   )}
-                  <div className={`flex-1 flex flex-col min-h-0 space-y-3 ${panelFills(p.def.displayType) ? '' : 'justify-center'}`}>
+                  <div
+                    className={`flex min-h-0 flex-1 flex-col space-y-3 ${panelFills(p.def.displayType) ? '' : 'justify-center'}`}
+                  >
                     <WidgetPanel {...p} />
                   </div>
                 </section>
               );
             })}
-            {panels.length === 0 && <p className="col-span-12 text-xs text-zinc-500 text-center py-4">No panels configured.</p>}
+            {panels.length === 0 && (
+              <p className="col-span-12 py-4 text-center text-xs text-zinc-500">No panels configured.</p>
+            )}
           </div>
         </CardContent>
       ) : (
         // In a pane, content taller than the pane scrolls inside the card. Centring uses my-auto on a wrapper, not
         // justify-center, which would push overflowing content's top out of reach.
-        <CardContent className={`p-3 sm:p-4 flex-1 flex flex-col min-h-0 ${inPane ? 'overflow-y-auto' : ''}`}>
-          <div className={`space-y-3 flex flex-col ${panelFills(definition.displayType) ? 'flex-1 min-h-0' : 'my-auto'}`}>
+        <CardContent className={`flex min-h-0 flex-1 flex-col p-3 sm:p-4 ${inPane ? 'overflow-y-auto' : ''}`}>
+          <div
+            className={`flex flex-col space-y-3 ${panelFills(definition.displayType) ? 'min-h-0 flex-1' : 'my-auto'}`}
+          >
             <WidgetPanel {...panels[0]} />
           </div>
         </CardContent>

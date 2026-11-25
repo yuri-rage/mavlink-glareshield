@@ -1,8 +1,26 @@
 // Picks the panel component for a display type.
 
 import React from 'react';
+
+import {
+  BarChart3,
+  Box,
+  Compass,
+  Gauge,
+  LayoutGrid,
+  List,
+  ListChecks,
+  Sliders,
+  TrendingUp,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
+
 import type { PanelDisplayType, WidgetDisplayType } from '../../../types/widget';
-import { BarChart3, Box, Compass, Gauge, LayoutGrid, List, ListChecks, Sliders, TrendingUp, Zap, type LucideIcon } from 'lucide-react';
+import { BuiltinPanel } from './BuiltinPanel';
+import { ActionButtonPanel, ParamPanel, SliderPanel, TogglePanel } from './ControlPanels';
+import type { PanelProps } from './panelKit';
+import { ParamSetPanel } from './ParamSetPanel';
 import {
   ChartPanel,
   CompassPanel,
@@ -14,10 +32,6 @@ import {
   TextPanel,
   ValueListPanel,
 } from './TelemetryPanels';
-import { ActionButtonPanel, ParamPanel, SliderPanel, TogglePanel } from './ControlPanels';
-import { ParamSetPanel } from './ParamSetPanel';
-import { BuiltinPanel } from './BuiltinPanel';
-import type { PanelProps } from './panelKit';
 
 const PANELS: Record<PanelDisplayType, React.FC<PanelProps>> = {
   'stat-card': StatPanel,
@@ -68,7 +82,13 @@ export function panelIcon(type: WidgetDisplayType): LucideIcon {
  * sits at the bottom of the cell and lines up with its neighbours'.
  */
 export function panelFills(type: WidgetDisplayType): boolean {
-  return type === 'gauge-radial' || type === 'sparkline' || type === 'builtin' || type === 'toggle-switch' || type === 'param-set';
+  return (
+    type === 'gauge-radial' ||
+    type === 'sparkline' ||
+    type === 'builtin' ||
+    type === 'toggle-switch' ||
+    type === 'param-set'
+  );
 }
 
 export const WidgetPanel: React.FC<PanelProps> = (props) => {

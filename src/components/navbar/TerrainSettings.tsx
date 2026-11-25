@@ -2,9 +2,10 @@
 // planning checks warn about (airborne vehicles only).
 
 import React from 'react';
+
+import { TERRAIN_ATTRIBUTION } from '../../mavlink/terrain';
 import { useTerrainStore } from '../../store/terrainStore';
 import { useUnitsStore } from '../../store/unitsStore';
-import { TERRAIN_ATTRIBUTION } from '../../mavlink/terrain';
 
 export const TerrainSettings: React.FC = () => {
   const { enabled, clearanceM, setEnabled, setClearanceM } = useTerrainStore();
@@ -13,7 +14,11 @@ export const TerrainSettings: React.FC = () => {
   return (
     <div className="space-y-2">
       <label className="text-xs font-medium text-zinc-300">Terrain</label>
-      <div className="grid grid-cols-2 gap-1 rounded-lg border border-zinc-800 bg-zinc-900 p-0.5" role="radiogroup" aria-label="Terrain data">
+      <div
+        className="grid grid-cols-2 gap-1 rounded-lg border border-zinc-800 bg-zinc-900 p-0.5"
+        role="radiogroup"
+        aria-label="Terrain data"
+      >
         {[true, false].map((on) => (
           <button
             key={String(on)}
@@ -21,7 +26,10 @@ export const TerrainSettings: React.FC = () => {
             role="radio"
             aria-checked={enabled === on}
             onClick={() => setEnabled(on)}
-            className={'rounded-md py-1.5 text-xs transition-colors ' + (enabled === on ? 'bg-sky-500/20 font-medium text-sky-300' : 'text-zinc-400 hover:text-zinc-200')}
+            className={
+              'rounded-md py-1.5 text-xs transition-colors ' +
+              (enabled === on ? 'bg-sky-500/20 font-medium text-sky-300' : 'text-zinc-400 hover:text-zinc-200')
+            }
           >
             {on ? 'Terrain data on' : 'Off'}
           </button>

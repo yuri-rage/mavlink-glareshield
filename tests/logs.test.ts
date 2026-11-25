@@ -8,7 +8,8 @@
 export {};
 (globalThis as any).localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 
-const { logFileNumber, logFileName, downloadName, LogAssembler, logManager } = await import('../src/mavlink/logManager.ts');
+const { logFileNumber, logFileName, downloadName, LogAssembler, logManager } =
+  await import('../src/mavlink/logManager.ts');
 const { mavlinkConnection } = await import('../src/mavlink/connection.ts');
 const { mavFtpClient } = await import('../src/mavlink/ftp.ts');
 const { MAVLINK_MSG_ID } = await import('../src/mavlink/messages.ts');
@@ -26,7 +27,10 @@ check('file number: entries count back from LASTLOG', logFileNumber(1, 3, 9) ===
 check('file number: wraps at LOG_MAX_FILES', logFileNumber(1, 5, 2) === 498 && logFileNumber(1, 5, 2, 100) === 98);
 check('file name is 8 digits', logFileName(7) === '00000007.BIN');
 check('download name without a time', downloadName({ id: 4, size: 1, timeUtc: 0 }) === 'log_4.bin');
-check('download name with the start time', /^log_4_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.bin$/.test(downloadName({ id: 4, size: 1, timeUtc: 1762500000 })));
+check(
+  'download name with the start time',
+  /^log_4_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.bin$/.test(downloadName({ id: 4, size: 1, timeUtc: 1762500000 }))
+);
 
 // ------------------------------------------------------------------------------------------------
 // Assembler
@@ -41,7 +45,10 @@ check('download name with the start time', /^log_4_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}
   check('assembler: a duplicate adds nothing', a.add(0, block(0)) === false && a.received === 160);
   check('assembler: a misaligned offset is ignored', a.add(45, block(0)) === false);
   a.add(90, block(90));
-  check('assembler: complete, bytes in place', a.complete && a.firstGap() === null && a.data[0] === 1 && a.data[90] === 2 && a.data[249] === 3);
+  check(
+    'assembler: complete, bytes in place',
+    a.complete && a.firstGap() === null && a.data[0] === 1 && a.data[90] === 2 && a.data[249] === 3
+  );
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -49,7 +56,16 @@ check('download name with the start time', /^log_4_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}
 // ------------------------------------------------------------------------------------------------
 const conn = mavlinkConnection as any;
 const emit = (messageId: number, payload: Uint8Array) => {
-  const packet = { version: 2, sequence: 0, systemId: 1, componentId: 1, messageId, payload, crc: 0, raw: new Uint8Array() };
+  const packet = {
+    version: 2,
+    sequence: 0,
+    systemId: 1,
+    componentId: 1,
+    messageId,
+    payload,
+    crc: 0,
+    raw: new Uint8Array(),
+  };
   conn.packetListeners.forEach((l: (p: unknown) => void) => l(packet));
 };
 interface FakeLog {
@@ -140,7 +156,15 @@ conn.send = (d: Uint8Array) => {
 
 // MAVFTP: files 7, 8, 9 under /APM/LOGS, LASTLOG 9; file 9 (the active log) has grown since it was listed.
 const ftpReads: string[] = [];
-(mavFtpClient as any).readFile = async (_s: number, _c: number, path: string, _cs: number, _t: number, onProgress?: (r: number, t: number) => void, opts: { expectedSize?: number } = {}) => {
+(mavFtpClient as any).readFile = async (
+  _s: number,
+  _c: number,
+  path: string,
+  _cs: number,
+  _t: number,
+  onProgress?: (r: number, t: number) => void,
+  opts: { expectedSize?: number } = {}
+) => {
   ftpReads.push(path);
   if (path === '/APM/LOGS/LASTLOG.TXT') return new TextEncoder().encode('9\r\n');
   const m = path.match(/^\/APM\/LOGS\/0000000(\d)\.BIN$/);
@@ -156,13 +180,21 @@ const same = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every(
 
 // List, with one entry lost on the first pass.
 const list = await logManager.listLogs(1, 1);
-check('list: every entry, the lost one asked for again', list.numLogs === 3 && list.entries.map((e) => e.id).join(',') === '1,2,3' && sent.includes('list 2-2'), sent.join(' | '));
+check(
+  'list: every entry, the lost one asked for again',
+  list.numLogs === 3 && list.entries.map((e) => e.id).join(',') === '1,2,3' && sent.includes('list 2-2'),
+  sent.join(' | ')
+);
 check('list: ends with LOG_REQUEST_END so logging resumes', sent[sent.length - 1] === 'end');
 
 // Entry 1 = file 7, sizes match: MAVFTP.
 let lastProgress = { received: 0, total: 0, method: '' };
 const r1 = await logManager.download(list.entries[0], list, 1, 1, (p) => (lastProgress = p));
-check('download: MAVFTP when the file matches', r1.method === 'mavftp' && same(r1.data, logs[0].data) && ftpReads.includes('/APM/LOGS/00000007.BIN'), ftpReads.join(' '));
+check(
+  'download: MAVFTP when the file matches',
+  r1.method === 'mavftp' && same(r1.data, logs[0].data) && ftpReads.includes('/APM/LOGS/00000007.BIN'),
+  ftpReads.join(' ')
+);
 check('download: MAVFTP progress reported', lastProgress.method === 'mavftp' && lastProgress.received === logs[0].size);
 
 // Entry 3 = file 9, still growing: MAVFTP refused, LOG_DATA with lost packets.
@@ -171,7 +203,11 @@ dropEvery = 7;
 dataRequests = 0;
 const r3 = await logManager.download(list.entries[2], list, 1, 1, () => {});
 check('download: falls back to LOG_DATA when the file size differs', r3.method === 'mavlink');
-check('download: lost LOG_DATA packets are asked for again, bytes exact', same(r3.data, logs[2].data) && sent.filter((s) => s.startsWith('data 3')).length > 1, sent.join(' | '));
+check(
+  'download: lost LOG_DATA packets are asked for again, bytes exact',
+  same(r3.data, logs[2].data) && sent.filter((s) => s.startsWith('data 3')).length > 1,
+  sent.join(' | ')
+);
 check('download: LOG_DATA ends with LOG_REQUEST_END', sent[sent.length - 1] === 'end');
 
 // Cancel during a LOG_DATA download.
@@ -189,7 +225,11 @@ try {
 } catch (e) {
   cancelErr = (e as Error).message;
 }
-check('cancel: rejects with Cancelled and sends LOG_REQUEST_END', cancelErr === 'Cancelled' && sent.includes('end') && !logManager.busy, `${cancelErr} | ${sent.join(' | ')}`);
+check(
+  'cancel: rejects with Cancelled and sends LOG_REQUEST_END',
+  cancelErr === 'Cancelled' && sent.includes('end') && !logManager.busy,
+  `${cancelErr} | ${sent.join(' | ')}`
+);
 
 // A vehicle that never answers (armed).
 conn.send = () => {};

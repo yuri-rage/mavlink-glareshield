@@ -5,28 +5,30 @@
 // Values are plotted as each message arrives (lib/pidTuningRecorder.ts), in the units the firmware reports.
 
 import React, { useEffect, useMemo, useState } from 'react';
+
 import { Activity, Eraser, Loader2, Radio } from 'lucide-react';
-import { useTelemetryStore } from '../../store/telemetryStore';
-import { useParamMetaStore } from '../../store/paramMetaStore';
+
+import { pidTuningRecorder } from '../../lib/pidTuningRecorder';
+import { cn } from '../../lib/utils';
 import { mavlinkConnection } from '../../mavlink/connection';
-import { messageRateManager } from '../../mavlink/rateManager';
-import { paramManager } from '../../mavlink/paramManager';
 import { getVehicleCategory, MAVLINK_MSG_ID, type VehicleCategory } from '../../mavlink/messages';
+import { paramManager } from '../../mavlink/paramManager';
 import { getParamMetadata } from '../../mavlink/paramMetadata';
 import {
   maskHasBit,
   pidControllersFor,
-  pidPresenceParams,
   pidPickerAxes,
+  pidPresenceParams,
   withMaskBit,
   type PidController,
   type PidTuningField,
 } from '../../mavlink/pidTuning';
-import { pidTuningRecorder } from '../../lib/pidTuningRecorder';
-import { cn } from '../../lib/utils';
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { ChartControls, TimeSeriesChart, type ChartSeries } from './custom/TimeSeriesChart';
+import { messageRateManager } from '../../mavlink/rateManager';
+import { useParamMetaStore } from '../../store/paramMetaStore';
+import { useTelemetryStore } from '../../store/telemetryStore';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useVehicleTarget } from './custom/panelKit';
+import { ChartControls, TimeSeriesChart, type ChartSeries } from './custom/TimeSeriesChart';
 
 const MASK_PARAM = 'GCS_PID_MASK';
 const ECHO_TIMEOUT_MS = 4000;
@@ -77,7 +79,11 @@ function series(axis: number, field: PidTuningField): ChartSeries {
 }
 
 /** Tracking error (achieved − desired) over the visible window: RMS and the largest magnitude. */
-function trackingError(axis: number, windowSec: number, pausedAt: number | null): { rms: number; peak: number; n: number } {
+function trackingError(
+  axis: number,
+  windowSec: number,
+  pausedAt: number | null
+): { rms: number; peak: number; n: number } {
   const des = pidTuningRecorder.ring(axis, 'desired');
   const ach = pidTuningRecorder.ring(axis, 'achieved');
   const end = pausedAt ?? Date.now();
@@ -111,7 +117,7 @@ export const PidTuningWidget: React.FC = () => {
   useEffect(() => {
     if (linked) ensureMeta(category, firmwareVersion);
   }, [linked, category, firmwareVersion, ensureMeta]);
-  const maskBitmask = useMemo(() => (catalog ? getParamMetadata(MASK_PARAM)?.bitmask ?? null : null), [catalog]);
+  const maskBitmask = useMemo(() => (catalog ? (getParamMetadata(MASK_PARAM)?.bitmask ?? null) : null), [catalog]);
   // Metadata comes from published releases, so it can lag firmware built from source: a controller whose own
   // parameter the vehicle reports (e.g. ATC_STAN_USE) is offered regardless.
   const presenceParams = useMemo(() => pidPresenceParams(category), [category]);
@@ -179,7 +185,9 @@ export const PidTuningWidget: React.FC = () => {
   const writeMask = (value: number) => {
     if (!maskEntry || maskEntry.type === undefined) return;
     setWriteError(null);
-    mavlinkConnection.send(mavlinkConnection.getEncoder().createParamSet(sysId, compId, MASK_PARAM, value, maskEntry.type));
+    mavlinkConnection.send(
+      mavlinkConnection.getEncoder().createParamSet(sysId, compId, MASK_PARAM, value, maskEntry.type)
+    );
     setPending({ value, since: Date.now() });
   };
 
@@ -201,13 +209,13 @@ export const PidTuningWidget: React.FC = () => {
   const termSeries = useMemo(() => (axis ? terms.map((f) => series(axis, f)) : []), [axis, terms]);
 
   const header = (
-    <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
-      <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center justify-between gap-2 flex-wrap">
+    <CardHeader className="border-b border-zinc-800 bg-zinc-900/60 px-3 py-1.5 sm:px-3.5">
+      <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold uppercase tracking-wider text-zinc-300">
         <span className="flex items-center gap-1.5">
           <Activity className="h-4 w-4 text-sky-400" />
           PID Tuning
         </span>
-        <div className="flex items-center gap-1.5 normal-case tracking-normal font-normal">
+        <div className="flex items-center gap-1.5 font-normal normal-case tracking-normal">
           <ChartControls
             windowSec={windowSec}
             onWindow={setWindowSec}
@@ -217,7 +225,7 @@ export const PidTuningWidget: React.FC = () => {
           <button
             type="button"
             onClick={() => pidTuningRecorder.clear()}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-zinc-800 hover:bg-zinc-800 text-[11px] font-bold text-zinc-300 uppercase"
+            className="inline-flex items-center gap-1 rounded-md border border-zinc-800 px-2 py-0.5 text-[11px] font-bold uppercase text-zinc-300 hover:bg-zinc-800"
             title="Clear the recorded history"
           >
             <Eraser className="h-3 w-3" />
@@ -230,7 +238,7 @@ export const PidTuningWidget: React.FC = () => {
 
   if (axes.length === 0) {
     return (
-      <Card className="h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
+      <Card className="flex h-full flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
         {header}
         <CardContent className="p-3 text-xs text-zinc-500">
           {linked
@@ -242,11 +250,11 @@ export const PidTuningWidget: React.FC = () => {
   }
 
   return (
-    <Card className="h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
+    <Card className="flex h-full flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
       {header}
-      <CardContent className="p-2.5 sm:p-3 flex-1 flex flex-col gap-2 min-h-0">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 p-2.5 sm:p-3">
         {/* Controller picker: one button per controller this vehicle can report. */}
-        <div className="flex items-center gap-1 flex-wrap" role="tablist" aria-label="Controller">
+        <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Controller">
           {axes.map((a) => {
             const on = a.bit >= 0 && maskKnown && maskHasBit(mask, a.bit);
             const streaming = Date.now() - pidTuningRecorder.lastSeen(a.axis) < LIVE_MS;
@@ -259,14 +267,17 @@ export const PidTuningWidget: React.FC = () => {
                 onClick={() => pick(a.axis)}
                 title={`${a.description}${a.bit >= 0 ? ` · GCS_PID_MASK bit ${a.bit}` : ''}`}
                 className={cn(
-                  'inline-flex items-center gap-1.5 px-2 py-1 rounded-md border text-[11px] font-semibold',
+                  'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold',
                   a.axis === axis
                     ? 'border-sky-500/60 bg-sky-500/15 text-sky-200'
                     : 'border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
                 )}
               >
                 <span
-                  className={cn('h-1.5 w-1.5 rounded-full', streaming ? 'bg-emerald-400' : on ? 'bg-amber-400' : 'bg-zinc-700')}
+                  className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    streaming ? 'bg-emerald-400' : on ? 'bg-amber-400' : 'bg-zinc-700'
+                  )}
                   aria-hidden
                 />
                 {a.label}
@@ -276,8 +287,8 @@ export const PidTuningWidget: React.FC = () => {
         </div>
 
         {/* Reporting switch for the chosen controller (GCS_PID_MASK). */}
-        <div className="flex items-center justify-between gap-2 flex-wrap rounded-md border border-zinc-800 bg-zinc-900/40 px-2 py-1.5 text-[11px]">
-          <div className="flex items-center gap-1.5 min-w-0 text-zinc-400">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-zinc-800 bg-zinc-900/40 px-2 py-1.5 text-[11px]">
+          <div className="flex min-w-0 items-center gap-1.5 text-zinc-400">
             <Radio className={cn('h-3.5 w-3.5 shrink-0', live ? 'text-emerald-400' : 'text-zinc-600')} />
             <span className="truncate">
               <span className="font-mono text-zinc-300">GCS_PID_MASK</span>{' '}
@@ -295,13 +306,15 @@ export const PidTuningWidget: React.FC = () => {
           </div>
           {current && current.bit >= 0 && (
             <div className="flex items-center gap-1.5">
-              {pending && <Loader2 className="h-3 w-3 animate-spin text-zinc-400" aria-label="Waiting for the vehicle" />}
+              {pending && (
+                <Loader2 className="h-3 w-3 animate-spin text-zinc-400" aria-label="Waiting for the vehicle" />
+              )}
               <button
                 type="button"
                 disabled={!linked || !maskKnown || maskEntry?.type === undefined || pending !== null}
                 onClick={() => maskKnown && writeMask(withMaskBit(mask, current.bit, !reporting))}
                 className={cn(
-                  'px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase disabled:opacity-40 disabled:cursor-not-allowed',
+                  'rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase disabled:cursor-not-allowed disabled:opacity-40',
                   reporting
                     ? 'border-amber-600/50 text-amber-300 hover:bg-amber-500/10'
                     : 'border-emerald-600/50 text-emerald-300 hover:bg-emerald-500/10'
@@ -315,7 +328,7 @@ export const PidTuningWidget: React.FC = () => {
                   type="button"
                   disabled={!linked || pending !== null}
                   onClick={() => writeMask(0)}
-                  className="px-2 py-0.5 rounded-md border border-zinc-700 text-[10px] font-bold uppercase text-zinc-400 hover:bg-zinc-800 disabled:opacity-40"
+                  className="rounded-md border border-zinc-700 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-400 hover:bg-zinc-800 disabled:opacity-40"
                   title="Set GCS_PID_MASK to 0: stop all PID_TUNING reporting"
                 >
                   Stop all
@@ -327,7 +340,7 @@ export const PidTuningWidget: React.FC = () => {
         {writeError && <p className="text-[11px] text-amber-400">{writeError}</p>}
 
         {/* Desired vs achieved. */}
-        <div className="flex-[3] flex flex-col min-h-0">
+        <div className="flex min-h-0 flex-[3] flex-col">
           <TimeSeriesChart
             series={mainSeries}
             config={{ yScale: 'auto' }}
@@ -359,8 +372,8 @@ export const PidTuningWidget: React.FC = () => {
         </div>
 
         {/* Controller terms. */}
-        <div className="flex-[2] flex flex-col min-h-0 border-t border-zinc-900 pt-1.5 gap-1">
-          <div className="flex items-center gap-1 flex-wrap">
+        <div className="flex min-h-0 flex-[2] flex-col gap-1 border-t border-zinc-900 pt-1.5">
+          <div className="flex flex-wrap items-center gap-1">
             {TERMS.map((f) => {
               const on = terms.includes(f);
               return (
@@ -368,14 +381,21 @@ export const PidTuningWidget: React.FC = () => {
                   key={f}
                   type="button"
                   aria-pressed={on}
-                  onClick={() => setTerms((t) => (on ? t.filter((x) => x !== f) : TERMS.filter((x) => x === f || t.includes(x))))}
+                  onClick={() =>
+                    setTerms((t) => (on ? t.filter((x) => x !== f) : TERMS.filter((x) => x === f || t.includes(x))))
+                  }
                   title={TERM_STYLE[f].title}
                   className={cn(
-                    'inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-semibold',
-                    on ? 'border-zinc-600 text-zinc-200 bg-zinc-800/60' : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'
+                    'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold',
+                    on
+                      ? 'border-zinc-600 bg-zinc-800/60 text-zinc-200'
+                      : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'
                   )}
                 >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: on ? TERM_STYLE[f].color : '#3f3f46' }} />
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ background: on ? TERM_STYLE[f].color : '#3f3f46' }}
+                  />
                   {TERM_STYLE[f].label}
                 </button>
               );
@@ -393,7 +413,7 @@ export const PidTuningWidget: React.FC = () => {
               plotMinHeight={90}
             />
           ) : (
-            <p className="text-[11px] text-zinc-500 py-2">Pick terms to plot.</p>
+            <p className="py-2 text-[11px] text-zinc-500">Pick terms to plot.</p>
           )}
         </div>
       </CardContent>

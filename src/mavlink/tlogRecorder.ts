@@ -10,20 +10,20 @@
 // log starts, the oldest logs are deleted to keep the total under the cap (kept logs never). If storage is full, or
 // the browser can't store files, recording stops and says so.
 
+import { loadTlogIndex, metaFromFile, saveTlogIndex, TlogStorageError, type TlogStorage } from '../lib/tlogStorage';
+import { useTlogStore } from '../store/tlogStore';
+import { isVehicleAutopilotHeartbeat, MAVLINK_MSG_ID } from './messages';
+import type { MavlinkPacket } from './parser';
 import {
   BOOT_TOLERANCE_MS,
-  TLOG_RESUME_GAP_MS,
-  TlogFrameSplitter,
   encodeTlogRecord,
+  TLOG_RESUME_GAP_MS,
   tlogFileName,
+  TlogFrameSplitter,
   tlogResumeDecision,
   tlogsToPrune,
   type TlogMeta,
 } from './tlog';
-import { isVehicleAutopilotHeartbeat, MAVLINK_MSG_ID } from './messages';
-import type { MavlinkPacket } from './parser';
-import { TlogStorageError, loadTlogIndex, metaFromFile, saveTlogIndex, type TlogStorage } from '../lib/tlogStorage';
-import { useTlogStore } from '../store/tlogStore';
 
 export interface TlogRecorderDeps {
   storage: TlogStorage | null;
@@ -188,7 +188,11 @@ export class TlogRecorder {
       const autopilot = pl[5];
       if (!isVehicleAutopilotHeartbeat(type, autopilot, p.componentId)) return;
       const now = this.nowMs();
-      if (this.vehicle && p.systemId !== this.vehicle.sysId && now - this.vehicle.lastHeardMs > VEHICLE_SWAP_SILENCE_MS) {
+      if (
+        this.vehicle &&
+        p.systemId !== this.vehicle.sysId &&
+        now - this.vehicle.lastHeardMs > VEHICLE_SWAP_SILENCE_MS
+      ) {
         // The link stayed up but the vehicle changed: this one gets its own log.
         this.rotate();
       }
@@ -202,7 +206,12 @@ export class TlogRecorder {
       return;
     }
     // Time since boot: ATTITUDE and GLOBAL_POSITION_INT start with time_boot_ms.
-    if (this.vehicle && p.systemId === this.vehicle.sysId && (p.messageId === MAVLINK_MSG_ID.ATTITUDE || p.messageId === MAVLINK_MSG_ID.GLOBAL_POSITION_INT) && pl.length >= 4) {
+    if (
+      this.vehicle &&
+      p.systemId === this.vehicle.sysId &&
+      (p.messageId === MAVLINK_MSG_ID.ATTITUDE || p.messageId === MAVLINK_MSG_ID.GLOBAL_POSITION_INT) &&
+      pl.length >= 4
+    ) {
       const bootMs = new DataView(pl.buffer, pl.byteOffset, 4).getUint32(0, true);
       if (bootMs > 0) {
         const boot = this.nowMs() - bootMs;
@@ -250,7 +259,8 @@ export class TlogRecorder {
     // Not yet chosen: hold it (the most recent few MB).
     this.pending.push(rec);
     this.pendingBytes += rec.length;
-    while (this.pendingBytes > PENDING_MAX_BYTES && this.pending.length > 1) this.pendingBytes -= this.pending.shift()!.length;
+    while (this.pendingBytes > PENDING_MAX_BYTES && this.pending.length > 1)
+      this.pendingBytes -= this.pending.shift()!.length;
   }
 
   private clearPending() {
@@ -290,7 +300,13 @@ export class TlogRecorder {
       const now = this.nowMs();
       const candidates = Object.values(this.index).sort((a, b) => b.lastWriteMs - a.lastWriteMs);
       const last = (this.openName && this.index[this.openName]) || candidates[0] || null;
-      const d = tlogResumeDecision(last, { timeMs: now, sysId: v.sysId, vehicleType: v.type, armed: v.armed, bootEpochMs: this.bootEpochMs });
+      const d = tlogResumeDecision(last, {
+        timeMs: now,
+        sysId: v.sysId,
+        vehicleType: v.type,
+        armed: v.armed,
+        bootEpochMs: this.bootEpochMs,
+      });
       let name: string | null = null;
       let reason = d.reason;
       if (d.resume && last) {
@@ -315,7 +331,16 @@ export class TlogRecorder {
           this.fail(err);
           return;
         }
-        this.index[name] = { name, sysId: v.sysId, vehicleType: v.type, startMs: now, lastWriteMs: now, bytes: 0, closed: false, kept: false };
+        this.index[name] = {
+          name,
+          sysId: v.sysId,
+          vehicleType: v.type,
+          startMs: now,
+          lastWriteMs: now,
+          bytes: 0,
+          closed: false,
+          kept: false,
+        };
         // Only the newest log can ever be continued.
         for (const m of Object.values(this.index)) if (m.name !== name) m.closed = true;
       } else {
@@ -329,7 +354,13 @@ export class TlogRecorder {
       this.pending = [];
       this.pendingBytes = 0;
       this.recording = true;
-      useTlogStore.setState({ phase: 'recording', active: name, activeBytes: this.index[name].bytes, decision: reason, error: null });
+      useTlogStore.setState({
+        phase: 'recording',
+        active: name,
+        activeBytes: this.index[name].bytes,
+        decision: reason,
+        error: null,
+      });
       await this.prune();
       await this.flush();
     }
@@ -405,12 +436,20 @@ export class TlogRecorder {
 
   /** The list for the UI: copies, so the store never shares objects the recorder changes. */
   private publish() {
-    useTlogStore.setState({ logs: Object.values(this.index).map((m) => ({ ...m })).sort((a, b) => b.startMs - a.startMs) });
+    useTlogStore.setState({
+      logs: Object.values(this.index)
+        .map((m) => ({ ...m }))
+        .sort((a, b) => b.startMs - a.startMs),
+    });
   }
 
   private fail(err: unknown) {
     const quota = err instanceof TlogStorageError ? err.quota : (err as any)?.name === 'QuotaExceededError';
-    this.stop(quota ? 'Browser storage is full: telemetry logging stopped. Delete old logs or lower the cap.' : `Telemetry logging stopped: ${(err as any)?.message || err}`);
+    this.stop(
+      quota
+        ? 'Browser storage is full: telemetry logging stopped. Delete old logs or lower the cap.'
+        : `Telemetry logging stopped: ${(err as any)?.message || err}`
+    );
   }
 
   private stop(message: string) {

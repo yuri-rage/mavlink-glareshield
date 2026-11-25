@@ -9,15 +9,29 @@
 // Every edit goes through the draft model (missionDraft.ts), so home and DO_JUMP targets are kept.
 
 import { useEffect, useRef } from 'react';
+
 import L from 'leaflet';
+
 import { cmdHasLocation, getVehicleCategory } from '../../mavlink/messages';
-import { insertWaypointAfter, insertWaypointBefore, setItemPosition, type MissionDraft } from '../../mavlink/missionDraft';
-import { fliesSplines, joinLegs, legMidpoint, missionPathLegs, routeIndices, type PathItem } from '../../mavlink/missionPath';
-import { useTelemetryStore } from '../../store/telemetryStore';
-import { useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
+import {
+  insertWaypointAfter,
+  insertWaypointBefore,
+  setItemPosition,
+  type MissionDraft,
+} from '../../mavlink/missionDraft';
+import {
+  fliesSplines,
+  joinLegs,
+  legMidpoint,
+  missionPathLegs,
+  routeIndices,
+  type PathItem,
+} from '../../mavlink/missionPath';
 import { addRallyPoint, moveRallyPoint, type RallyDraft } from '../../mavlink/rallyDraft';
+import { planningVehicle, RADIUS_PARAMS, useLastVehicleStore } from '../../store/lastVehicleStore';
+import { useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
+import { useTelemetryStore } from '../../store/telemetryStore';
 import { radiusCircle } from './radiusCircle';
-import { RADIUS_PARAMS, planningVehicle, useLastVehicleStore } from '../../store/lastVehicleStore';
 
 const DRAFT_LINES_PANE = 'draftLinesPane';
 const DRAFT_MARKERS_PANE = 'draftMarkersPane';
@@ -119,7 +133,10 @@ export function useDraftLayer(
   const splines = useTelemetryStore((s) => fliesSplines(getVehicleCategory(s.heartbeat.type)));
   // The vehicle the radii are drawn for: the connected one, else the last one connected (remembered in this
   // browser), so planning offline shows the same circles. Redrawn when either changes.
-  const liveRadius = useTelemetryStore((s) => `${s.heartbeat.type}:${s.heartbeat.modeName === 'DISCONNECTED'}:${RADIUS_PARAMS.map((n) => s.parameters[n]?.value ?? '').join(',')}`);
+  const liveRadius = useTelemetryStore(
+    (s) =>
+      `${s.heartbeat.type}:${s.heartbeat.modeName === 'DISCONNECTED'}:${RADIUS_PARAMS.map((n) => s.parameters[n]?.value ?? '').join(',')}`
+  );
   const lastVehicle = useLastVehicleStore();
   const layer = useMissionPlanStore((s) => s.layer);
   const draft = useMissionPlanStore((s) => s.history.present);
@@ -158,13 +175,26 @@ export function useDraftLayer(
       .filter((r) => drawablePosition(r.command, r.lat, r.lon));
     /** The route as the vehicle flies it (missionPath): home first, then each navigation item with a position, an
      *  ROI or landing-start point getting a pin but no leg; spline legs curved when the vehicle flies splines. */
-    const pathItems: PathItem[] = draft.items.map((it) => ({ command: it.command, lat: it.x, lon: it.y, alt: it.z, frame: it.frame, param1: it.param1 }));
+    const pathItems: PathItem[] = draft.items.map((it) => ({
+      command: it.command,
+      lat: it.x,
+      lon: it.y,
+      alt: it.z,
+      frame: it.frame,
+      param1: it.param1,
+    }));
     const route = routeIndices(pathItems, splines);
     const legs = missionPathLegs(pathItems, route, splines);
 
     const line =
       legs.length > 0
-        ? L.polyline(joinLegs(legs), { pane: DRAFT_LINES_PANE, color: '#f59e0b', weight: 3, opacity: editing ? 0.95 : 0.4, interactive: false }).addTo(map)
+        ? L.polyline(joinLegs(legs), {
+            pane: DRAFT_LINES_PANE,
+            color: '#f59e0b',
+            weight: 3,
+            opacity: editing ? 0.95 : 0.4,
+            interactive: false,
+          }).addTo(map)
         : null;
     if (line) layersRef.current.push(line);
 
@@ -192,7 +222,13 @@ export function useDraftLayer(
         if (pa.distanceTo(pb) < MIN_HANDLE_LEG_PX) continue;
         // Halfway along the leg as drawn: on the curve for a spline leg.
         const [midLat, midLon] = legMidpoint(leg);
-        const h = L.marker([midLat, midLon], { icon: handleIcon, pane: DRAFT_MARKERS_PANE, zIndexOffset: 50, keyboard: false, title: `Insert a waypoint before #${leg.to}` })
+        const h = L.marker([midLat, midLon], {
+          icon: handleIcon,
+          pane: DRAFT_MARKERS_PANE,
+          zIndexOffset: 50,
+          keyboard: false,
+          title: `Insert a waypoint before #${leg.to}`,
+        })
           .on('click', () => commit((d) => insertWaypointBefore(d, leg.to, midLat, midLon)))
           .addTo(map);
         handlesRef.current.push(h);

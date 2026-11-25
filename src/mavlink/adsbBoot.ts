@@ -2,16 +2,24 @@
 // reports as they expire, and speaks a warning for traffic at alert level (through the app's audio callouts and
 // their on/off settings). Imported once at startup, so traffic and its warning don't depend on which widgets show.
 
-import { mavlinkConnection } from './connection';
-import { decodePayload } from './parser';
-import { MAVLINK_MSG_ID } from './messages';
-import { messageRateManager } from './rateManager';
-import { compassPoint, emergencySquawk, ownForThreat, rankTraffic, trafficFromMessage, trafficToAnnounce, type Threat } from './adsb';
-import { useTrafficStore } from '../store/trafficStore';
-import { useTelemetryStore } from '../store/telemetryStore';
-import { useUnitsStore } from '../store/unitsStore';
-import { useAudioAlertsStore, playAlertChime, speakCallout } from '../lib/audioAlerts';
+import { playAlertChime, speakCallout, useAudioAlertsStore } from '../lib/audioAlerts';
 import { useAdsbSettingsStore } from '../store/adsbSettingsStore';
+import { useTelemetryStore } from '../store/telemetryStore';
+import { useTrafficStore } from '../store/trafficStore';
+import { useUnitsStore } from '../store/unitsStore';
+import {
+  compassPoint,
+  emergencySquawk,
+  ownForThreat,
+  rankTraffic,
+  trafficFromMessage,
+  trafficToAnnounce,
+  type Threat,
+} from './adsb';
+import { mavlinkConnection } from './connection';
+import { MAVLINK_MSG_ID } from './messages';
+import { decodePayload } from './parser';
+import { messageRateManager } from './rateManager';
 
 mavlinkConnection.onPacket((p) => {
   if (p.messageId !== MAVLINK_MSG_ID.ADSB_VEHICLE) return;
@@ -42,7 +50,10 @@ function calloutText(t: Threat, squawk: number | null): string {
       : Math.abs(t.relAltM) < 15
         ? 'same altitude'
         : `${Math.round((Math.abs(t.relAltM) * (imperial ? 3.28084 : 1)) / 10) * 10} ${imperial ? 'feet' : 'meters'} ${t.relAltM > 0 ? 'above' : 'below'}`;
-  const dir = compassPoint(t.bearingDeg).split('').map((c) => WORDS[c]).join(' ');
+  const dir = compassPoint(t.bearingDeg)
+    .split('')
+    .map((c) => WORDS[c])
+    .join(' ');
   const emergency = emergencySquawk(squawk);
   return `Traffic, ${dir}, ${dist}, ${rel}${t.closing ? ', closing' : ''}${emergency ? `, squawking ${emergency}` : ''}`;
 }

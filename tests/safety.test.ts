@@ -92,8 +92,14 @@ const ack = (command: number, result: number) => {
 
   // The link drops.
   conn.setStatus('disconnected');
-  check('after a disconnect the count resets and values are flagged as old', status.paramCount === 0 && status.fromPreviousConnection === true);
-  check('…and the values are kept for the same vehicle', Object.keys(useTelemetryStore.getState().parameters).length === 2);
+  check(
+    'after a disconnect the count resets and values are flagged as old',
+    status.paramCount === 0 && status.fromPreviousConnection === true
+  );
+  check(
+    '…and the values are kept for the same vehicle',
+    Object.keys(useTelemetryStore.getState().parameters).length === 2
+  );
 
   // Same vehicle back: a background read is started (MAVFTP), which clears the flag.
   const reads: string[] = [];
@@ -105,18 +111,28 @@ const ack = (command: number, result: number) => {
   conn.status = 'connected';
   heartbeat(1, 10);
   await wait(400);
-  check('same vehicle back: values are read again in the background', reads.some((r) => r.includes('param.pck')), reads.join(' '));
+  check(
+    'same vehicle back: values are read again in the background',
+    reads.some((r) => r.includes('param.pck')),
+    reads.join(' ')
+  );
   check('…and stay flagged until that succeeds', status.fromPreviousConnection === true);
 
   // A second vehicle heard alongside the first (a shared network) doesn't touch the list.
   heartbeat(2, 10);
-  check('a second vehicle heard at the same time keeps the list', Object.keys(useTelemetryStore.getState().parameters).length === 2);
+  check(
+    'a second vehicle heard at the same time keeps the list',
+    Object.keys(useTelemetryStore.getState().parameters).length === 2
+  );
 
   // The first quiet, the second still heard: with two seen together, that alone isn't a replacement (vehicleRoster
   // offers the switch rather than taking it), so the list stays.
   pm.ownerSeenAt = Date.now() - 6000;
   heartbeat(2, 10);
-  check('the first quiet, the second heard: list kept until a switch', Object.keys(useTelemetryStore.getState().parameters).length === 2);
+  check(
+    'the first quiet, the second heard: list kept until a switch',
+    Object.keys(useTelemetryStore.getState().parameters).length === 2
+  );
   // Switched to the other vehicle: its list is not the stored one.
   switchToVehicle(2);
   check('another vehicle clears the stored values', Object.keys(useTelemetryStore.getState().parameters).length === 0);
@@ -129,41 +145,84 @@ const ack = (command: number, result: number) => {
 {
   const profile = {
     customWidgets: [
-      { id: 'a', name: 'Plain readout', category: 'custom', displayType: 'stat-card', binding: { messageName: 'VFR_HUD', fieldName: 'groundspeed' } },
-      { id: 'b', name: 'Speed knob', category: 'control', displayType: 'param-control', paramControl: { paramId: 'WP_SPEED', confirmation: false } },
-      { id: 'c', name: 'Tuning set', category: 'control', displayType: 'param-set', paramSet: { params: ['ATC_STR_RAT_*'], confirmation: false } },
+      {
+        id: 'a',
+        name: 'Plain readout',
+        category: 'custom',
+        displayType: 'stat-card',
+        binding: { messageName: 'VFR_HUD', fieldName: 'groundspeed' },
+      },
+      {
+        id: 'b',
+        name: 'Speed knob',
+        category: 'control',
+        displayType: 'param-control',
+        paramControl: { paramId: 'WP_SPEED', confirmation: false },
+      },
+      {
+        id: 'c',
+        name: 'Tuning set',
+        category: 'control',
+        displayType: 'param-set',
+        paramSet: { params: ['ATC_STR_RAT_*'], confirmation: false },
+      },
       {
         id: 'd',
         name: 'Combo',
         category: 'custom',
         displayType: 'composite',
         panels: [
-          { displayType: 'action-button', action: { label: 'Relay on', commandId: 181, params: [0, 1, 0, 0, 0, 0, 0] } },
+          {
+            displayType: 'action-button',
+            action: { label: 'Relay on', commandId: 181, params: [0, 1, 0, 0, 0, 0, 0] },
+          },
           { displayType: 'builtin', widgetId: 'built-in-glareshield' },
         ],
       },
     ],
-    tabs: [{ id: 't', title: 'T', widgets: [{ instanceId: 'x', widgetId: 'built-in-logs' }, { instanceId: 'y', widgetId: 'built-in-hud' }] }],
+    tabs: [
+      {
+        id: 't',
+        title: 'T',
+        widgets: [
+          { instanceId: 'x', widgetId: 'built-in-logs' },
+          { instanceId: 'y', widgetId: 'built-in-hud' },
+        ],
+      },
+    ],
   } as any;
   const found = profileVehicleControls(profile);
   const byName = Object.fromEntries(found.map((f) => [f.name, f]));
   check('import warning: a plain readout is not listed', !byName['Plain readout']);
   check('import warning: parameter control', byName['Speed knob']?.controls.join() === 'writes parameter WP_SPEED');
-  check('import warning: parameter set', /writes parameters ATC_STR_RAT_\*/.test(byName['Tuning set']?.controls.join() ?? ''));
-  check('import warning: composite panels, including a built-in with controls', byName['Combo']?.controls.length === 2, JSON.stringify(byName['Combo']));
-  check('import warning: built-ins with controls placed on tabs', byName['Onboard Logs']?.builtin === true && !byName['Heads-Up Display (HUD)']);
+  check(
+    'import warning: parameter set',
+    /writes parameters ATC_STR_RAT_\*/.test(byName['Tuning set']?.controls.join() ?? '')
+  );
+  check(
+    'import warning: composite panels, including a built-in with controls',
+    byName['Combo']?.controls.length === 2,
+    JSON.stringify(byName['Combo'])
+  );
+  check(
+    'import warning: built-ins with controls placed on tabs',
+    byName['Onboard Logs']?.builtin === true && !byName['Heads-Up Display (HUD)']
+  );
   check('widget import uses the same detection', widgetVehicleControls(profile.customWidgets[1]).length === 1);
 
   // Sanitizing: imports force confirmation; loading your own saved widgets keeps your setting.
   const imported = sanitizeWidgetDefinition(profile.customWidgets[1]);
   const loaded = sanitizeWidgetDefinition(profile.customWidgets[1], { forceConfirmation: false });
   check('import forces confirmation on parameter writes', imported.paramControl?.confirmation === true);
-  check('loading a saved widget keeps its owner\'s choice', loaded.paramControl?.confirmation === false);
+  check("loading a saved widget keeps its owner's choice", loaded.paramControl?.confirmation === false);
   const loadedSet = sanitizeWidgetDefinition(profile.customWidgets[2], { forceConfirmation: false });
   check('…for parameter sets too', loadedSet.paramSet?.confirmation === false);
   const importedCombo = sanitizeWidgetDefinition(profile.customWidgets[3]);
   check('import forces confirmation inside composite panels', importedCombo.panels?.[0].action?.confirmation === true);
-  const broken = sanitizeWidgetDefinition({ id: 'z', name: 'z', category: 'custom', displayType: 'param-control', paramControl: 'nonsense' } as any, { forceConfirmation: false });
+  const broken = sanitizeWidgetDefinition(
+    { id: 'z', name: 'z', category: 'custom', displayType: 'param-control', paramControl: 'nonsense' } as any,
+    { forceConfirmation: false }
+  );
   check('a malformed saved parameter control is dropped, not loaded as is', broken.paramControl === undefined);
 }
 

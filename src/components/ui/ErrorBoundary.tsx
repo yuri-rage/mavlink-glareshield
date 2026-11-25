@@ -1,7 +1,9 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+
 import { AlertTriangle, RotateCcw } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from './card';
+
 import { Button } from './button';
+import { Card, CardContent, CardHeader, CardTitle } from './card';
 
 interface Props {
   children: ReactNode;
@@ -31,27 +33,27 @@ export class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <Card className="h-full border-red-900/60 bg-red-950/20 text-red-200 p-4 flex flex-col justify-between">
+        <Card className="flex h-full flex-col justify-between border-red-900/60 bg-red-950/20 p-4 text-red-200">
           <CardHeader className="p-0 pb-2">
-            <CardTitle className="text-xs font-bold text-red-400 flex items-center gap-1.5 uppercase">
+            <CardTitle className="flex items-center gap-1.5 text-xs font-bold uppercase text-red-400">
               <AlertTriangle className="h-4 w-4 text-red-400" />
               {this.props.fallbackTitle || 'Widget Error'}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0 text-xs font-mono space-y-2 flex-1">
+          <CardContent className="flex-1 space-y-2 p-0 font-mono text-xs">
             <p className="text-red-300">This widget encountered an error and was safely isolated.</p>
-            <p className="text-[10px] text-zinc-500 break-all">{this.state.error?.message}</p>
+            <p className="break-all text-[10px] text-zinc-500">{this.state.error?.message}</p>
           </CardContent>
           <Button
             size="sm"
             variant="outline"
-            className="mt-3 text-xs border-red-800 text-red-300 hover:bg-red-950/50"
+            className="mt-3 border-red-800 text-xs text-red-300 hover:bg-red-950/50"
             onClick={() => {
               this.setState({ hasError: false, error: null });
               this.props.onReset?.();
             }}
           >
-            <RotateCcw className="h-3 w-3 mr-1" /> Retry
+            <RotateCcw className="mr-1 h-3 w-3" /> Retry
           </Button>
         </Card>
       );

@@ -5,11 +5,21 @@
 
 import React, { Fragment, useEffect, useState } from 'react';
 import { Group, Panel, Separator, useGroupRef } from 'react-resizable-panels';
+
 import { EyeOff, GripVertical, Lock, Pin, PinOff, Sliders, Trash2 } from 'lucide-react';
-import type { CockpitNode, CustomWidgetDefinition, DashboardTab, PlacedWidget } from '../../types/widget';
-import { QUICK_ACTIONS, isPane, minLayoutSize, panesInOrder, widgetMinSize, type DropZone, type Size } from '../../lib/cockpitLayout';
+
 import { BUILTIN_PANELS } from '../../lib/builtinWidgets';
+import {
+  isPane,
+  minLayoutSize,
+  panesInOrder,
+  QUICK_ACTIONS,
+  widgetMinSize,
+  type DropZone,
+  type Size,
+} from '../../lib/cockpitLayout';
 import { useDashboardStore } from '../../store/dashboardStore';
+import type { CockpitNode, CustomWidgetDefinition, DashboardTab, PlacedWidget } from '../../types/widget';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { HeaderSlotContext, PaneContext } from './paneContext';
 
@@ -124,17 +134,36 @@ const EDGES: [Side, string][] = [
   ['left', 'Down the whole left:'],
   ['right', 'Down the whole right:'],
 ];
-const EDGE_TEXT: Record<Side, string> = { top: 'Across the whole top', bottom: 'Across the whole bottom', left: 'Down the whole left side', right: 'Down the whole right side' };
+const EDGE_TEXT: Record<Side, string> = {
+  top: 'Across the whole top',
+  bottom: 'Across the whole bottom',
+  left: 'Down the whole left side',
+  right: 'Down the whole right side',
+};
 /** How far (px) the pointer moves from the drag's start before the edge strips appear. */
 const ARM_DISTANCE_PX = 40;
-const EDGE_STRIP: Record<Side, string> = { top: 'inset-x-0 top-0 h-4', bottom: 'inset-x-0 bottom-0 h-4', left: 'inset-y-0 left-0 w-4', right: 'inset-y-0 right-0 w-4' };
-const EDGE_PREVIEW: Record<Side, string> = { top: 'inset-x-0 top-0 h-1/4', bottom: 'inset-x-0 bottom-0 h-1/4', left: 'inset-y-0 left-0 w-1/4', right: 'inset-y-0 right-0 w-1/4' };
+const EDGE_STRIP: Record<Side, string> = {
+  top: 'inset-x-0 top-0 h-4',
+  bottom: 'inset-x-0 bottom-0 h-4',
+  left: 'inset-y-0 left-0 w-4',
+  right: 'inset-y-0 right-0 w-4',
+};
+const EDGE_PREVIEW: Record<Side, string> = {
+  top: 'inset-x-0 top-0 h-1/4',
+  bottom: 'inset-x-0 bottom-0 h-1/4',
+  left: 'inset-y-0 left-0 w-1/4',
+  right: 'inset-y-0 right-0 w-1/4',
+};
 
 /**
  * While a pane is dragged, a strip along each outer edge of the layout: dropped there, the pane goes across the
  * whole top or bottom (or down a whole side), not just beside one pane. The band it would take is previewed.
  */
-const EdgeTargets: React.FC<{ tabId: string; dragging: string; onDone: () => void }> = ({ tabId, dragging, onDone }) => {
+const EdgeTargets: React.FC<{ tabId: string; dragging: string; onDone: () => void }> = ({
+  tabId,
+  dragging,
+  onDone,
+}) => {
   const moveToEdge = useDashboardStore((s) => s.moveToEdgeInCockpit);
   const [over, setOver] = useState<Side | null>(null);
   // The strips appear only once the pointer has moved away from where the drag began: a top-row pane's grip is at the
@@ -156,8 +185,12 @@ const EdgeTargets: React.FC<{ tabId: string; dragging: string; onDone: () => voi
   return (
     <>
       {over && (
-        <div className={`pointer-events-none absolute z-40 ${EDGE_PREVIEW[over]} flex items-center justify-center rounded-lg border-2 border-emerald-400 bg-emerald-500/20`}>
-          <span className="rounded bg-emerald-950/95 px-2 py-0.5 text-[11px] font-bold text-emerald-200">{EDGE_TEXT[over]}</span>
+        <div
+          className={`pointer-events-none absolute z-40 ${EDGE_PREVIEW[over]} flex items-center justify-center rounded-lg border-2 border-emerald-400 bg-emerald-500/20`}
+        >
+          <span className="rounded bg-emerald-950/95 px-2 py-0.5 text-[11px] font-bold text-emerald-200">
+            {EDGE_TEXT[over]}
+          </span>
         </div>
       )}
       {(['top', 'bottom', 'left', 'right'] as Side[]).map((side) => (
@@ -193,7 +226,13 @@ const ZONE_CLASS: Record<DropZone, string> = {
   bottom: 'inset-x-0 bottom-0 h-1/2',
   center: 'inset-3',
 };
-const ZONE_TEXT: Record<DropZone, string> = { left: 'Put it on the left', right: 'Put it on the right', top: 'Put it above', bottom: 'Put it below', center: 'Swap places' };
+const ZONE_TEXT: Record<DropZone, string> = {
+  left: 'Put it on the left',
+  right: 'Put it on the right',
+  top: 'Put it above',
+  bottom: 'Put it below',
+  center: 'Swap places',
+};
 
 interface OverlayProps {
   tab: DashboardTab;
@@ -214,7 +253,16 @@ interface OverlayProps {
  * one stays on the tab, hidden); Hide takes it out of the layout, Delete off the tab. In a narrow pane the bar keeps
  * to one row (the title folds to its grip).
  */
-export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, titleOf, min, dragging, setDragging, onEditCustomWidget }) => {
+export const PaneEditOverlay: React.FC<OverlayProps> = ({
+  tab,
+  placed,
+  title,
+  titleOf,
+  min,
+  dragging,
+  setDragging,
+  onEditCustomWidget,
+}) => {
   const id = placed.instanceId;
   const customWidgets = useDashboardStore((s) => s.profile.customWidgets);
   const customDef = customWidgets.find((w) => w.id === placed.widgetId);
@@ -225,7 +273,15 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
     const other = s.editVariant === 'wide' ? full.cockpit : full.cockpitWide;
     return panesInOrder(other).includes(placed.instanceId);
   });
-  const { unplaceFromCockpit, splitInCockpit, addAtEdgeInCockpit, replaceInCockpit, moveInCockpit, removeWidgetFromActiveTab, pinInCockpit } = useDashboardStore.getState();
+  const {
+    unplaceFromCockpit,
+    splitInCockpit,
+    addAtEdgeInCockpit,
+    replaceInCockpit,
+    moveInCockpit,
+    removeWidgetFromActiveTab,
+    pinInCockpit,
+  } = useDashboardStore.getState();
   // The quick-actions bar as a pane can be pinned above the panes again (when nothing else is).
   const canPin = QUICK_ACTIONS.has(placed.widgetId) && !tab.cockpit?.header;
   const [zone, setZone] = useState<DropZone | null>(null);
@@ -260,7 +316,8 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
     ['top', 'Above it:'],
     ['bottom', 'Below it:'],
   ] as const;
-  const selectClass = 'h-6 w-[4.75rem] rounded border border-zinc-700 bg-zinc-950 px-1 text-[10px] font-semibold text-zinc-300';
+  const selectClass =
+    'h-6 w-[4.75rem] rounded border border-zinc-700 bg-zinc-950 px-1 text-[10px] font-semibold text-zinc-300';
   const startDrag = (e: React.DragEvent) => {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData(PANE_DRAG_TYPE, id);
@@ -274,7 +331,7 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
 
   return (
     <div
-      className="@container absolute inset-0 z-20 flex flex-col rounded-xl bg-zinc-950/55 ring-1 ring-dashed ring-sky-500/50 select-none"
+      className="ring-dashed absolute inset-0 z-20 flex select-none flex-col rounded-xl bg-zinc-950/55 ring-1 ring-sky-500/50 @container"
       onDragOver={(e) => {
         // A pane being dragged (its own data type: known before any re-render; not some other drag, e.g. a file).
         if (!e.dataTransfer.types.includes(PANE_DRAG_TYPE) || dragging === id) return;
@@ -319,7 +376,8 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
               const bar = v.indexOf('|');
               if (bar <= 0) return;
               const where = v.slice(0, bar);
-              if (where.startsWith('edge-')) addAtEdgeInCockpit(tab.id, where.slice(5) as Side, source(v.slice(bar + 1)));
+              if (where.startsWith('edge-'))
+                addAtEdgeInCockpit(tab.id, where.slice(5) as Side, source(v.slice(bar + 1)));
               else splitInCockpit(tab.id, id, where as Side, source(v.slice(bar + 1)));
             }}
           >
@@ -395,7 +453,9 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
                 type="button"
                 onClick={() => removeWidgetFromActiveTab(id)}
                 className="rounded bg-red-600 px-1 font-bold text-white"
-                title={inOther ? `Delete ${title} from the tab: it leaves both layouts` : `Delete ${title} from the tab`}
+                title={
+                  inOther ? `Delete ${title} from the tab: it leaves both layouts` : `Delete ${title} from the tab`
+                }
               >
                 {inOther ? 'Delete (both layouts)' : 'Delete'}
               </button>
@@ -423,19 +483,32 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
         onDragEnd={() => setDragging(null)}
         className="flex flex-1 cursor-grab items-center justify-center px-2 text-center text-[10px] text-zinc-400 active:cursor-grabbing"
       >
-        {dragging && dragging !== id ? 'Drop on an edge to put it there, in the middle to swap' : `Drag to move · dividers resize · min ${min.w}×${min.h}`}
+        {dragging && dragging !== id
+          ? 'Drop on an edge to put it there, in the middle to swap'
+          : `Drag to move · dividers resize · min ${min.w}×${min.h}`}
       </div>
       {/* Where it would go, over the whole pane (what's highlighted is what the drop hits). */}
       {dropping && (
-        <div className={`pointer-events-none absolute z-30 ${ZONE_CLASS[zone!]} flex items-center justify-center rounded-lg border-2 border-sky-400 bg-sky-500/25`}>
-          <span className="rounded bg-sky-950/95 px-2 py-0.5 text-[11px] font-bold text-sky-200">{ZONE_TEXT[zone!]}</span>
+        <div
+          className={`pointer-events-none absolute z-30 ${ZONE_CLASS[zone!]} flex items-center justify-center rounded-lg border-2 border-sky-400 bg-sky-500/25`}
+        >
+          <span className="rounded bg-sky-950/95 px-2 py-0.5 text-[11px] font-bold text-sky-200">
+            {ZONE_TEXT[zone!]}
+          </span>
         </div>
       )}
     </div>
   );
 };
 
-export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, titleOf, headerRef, onEditCustomWidget }) => {
+export const CockpitView: React.FC<Props> = ({
+  tab,
+  isEditing,
+  renderWidget,
+  titleOf,
+  headerRef,
+  onEditCustomWidget,
+}) => {
   const unplace = useDashboardStore((s) => s.unplaceFromCockpit);
   const unpin = useDashboardStore((s) => s.unpinInCockpit);
   /** The pane being dragged (Edit mode), by instance ID. */
@@ -445,7 +518,10 @@ export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, tit
   // A custom widget's minimum comes from its definition (a composite's panels), others' from their type.
   const minFor = (id: string) => {
     const widgetId = byId.get(id)?.widgetId ?? '';
-    return widgetMinSize(widgetId, customWidgets.find((c) => c.id === widgetId));
+    return widgetMinSize(
+      widgetId,
+      customWidgets.find((c) => c.id === widgetId)
+    );
   };
   const layout = tab.cockpit!;
   const header = layout.header ? byId.get(layout.header) : undefined;
@@ -458,7 +534,7 @@ export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, tit
       // widget scrolls inside it.
       // Keyed by widget: a pane showing another widget (Change) starts afresh (error state, open prompts).
       <div key={id} className="relative h-full w-full overflow-hidden rounded-xl">
-        <div className="@container h-full w-full overflow-auto">
+        <div className="h-full w-full overflow-auto @container">
           <PaneContext.Provider value={true}>
             <ErrorBoundary fallbackTitle={titleOf(placed.widgetId)}>{renderWidget(placed)}</ErrorBoundary>
           </PaneContext.Provider>
@@ -483,7 +559,15 @@ export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, tit
     isPane(n) ? (
       pane(n.pane)
     ) : (
-      <SplitView key={shapeKey(n)} tab={tab} node={n} path={path} isEditing={isEditing} minFor={minFor} renderChild={renderNode} />
+      <SplitView
+        key={shapeKey(n)}
+        tab={tab}
+        node={n}
+        path={path}
+        isEditing={isEditing}
+        minFor={minFor}
+        renderChild={renderNode}
+      />
     );
 
   return (
@@ -494,7 +578,7 @@ export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, tit
             <ErrorBoundary fallbackTitle={titleOf(header.widgetId)}>{renderWidget(header)}</ErrorBoundary>
           </HeaderSlotContext.Provider>
           {isEditing && (
-            <div className="absolute inset-0 z-20 flex items-start justify-between gap-2 rounded-xl bg-zinc-950/55 p-1.5 ring-1 ring-dashed ring-sky-500/50 select-none">
+            <div className="ring-dashed absolute inset-0 z-20 flex select-none items-start justify-between gap-2 rounded-xl bg-zinc-950/55 p-1.5 ring-1 ring-sky-500/50">
               <span className="flex items-center gap-1.5 rounded bg-zinc-900/95 px-2 py-0.5 text-[11px] font-bold text-sky-300">
                 <Lock className="h-3 w-3 text-amber-400" />
                 {titleOf(header.widgetId)} · pinned above the panes
@@ -524,7 +608,9 @@ export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, tit
         </div>
       )}
       <div className="relative min-h-0 flex-1">
-        {dragging && isEditing && layout.root && !isPane(layout.root) && <EdgeTargets tabId={tab.id} dragging={dragging} onDone={() => setDragging(null)} />}
+        {dragging && isEditing && layout.root && !isPane(layout.root) && (
+          <EdgeTargets tabId={tab.id} dragging={dragging} onDone={() => setDragging(null)} />
+        )}
         {layout.root ? (
           renderNode(layout.root, [])
         ) : (

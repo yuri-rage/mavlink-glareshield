@@ -1,8 +1,11 @@
 // Must stay first: a pending "Restore defaults" clears saved settings before the stores load them.
 import './lib/restoreDefaultsBoot';
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+
 import App from './App';
+
 import './index.css';
 // Telemetry logging starts with the app, before any connection.
 import './mavlink/tlogBoot';
@@ -14,8 +17,9 @@ import './mavlink/gimbalBoot';
 import './mavlink/terrainBoot';
 // Remembers the last vehicle's type and waypoint radii, for planning offline.
 import './store/lastVehicleStore';
-import { useTelemetryStore } from './store/telemetryStore';
+
 import { BUILD, buildLabel, checkForUpdate, startUpdateChecks, useUpdateStore } from './lib/updateCheck';
+import { useTelemetryStore } from './store/telemetryStore';
 
 console.info(`Glareshield ${buildLabel()}${BUILD.sha ? ` (${BUILD.sha})` : ''}`);
 

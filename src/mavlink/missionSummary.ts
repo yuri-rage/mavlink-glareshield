@@ -14,8 +14,8 @@
 // an estimate, said so where it's shown.
 
 import type { VehicleCategory } from './messages';
-import { fliesSplines, type PathLeg } from './missionPath';
 import { isRoutePoint } from './missionDraft';
+import { fliesSplines, type PathLeg } from './missionPath';
 
 export interface SummaryItem {
   command: number;
@@ -84,24 +84,40 @@ const pos = (v: number | undefined) => (v !== undefined && Number.isFinite(v) &&
 /** The vehicle's mission speeds, from its parameters (or the firmware defaults). */
 export function vehicleSpeeds(category: VehicleCategory, param: ParamLookup): VehicleSpeeds {
   if (category === 'plane') {
-    const cruise = pos(param('AIRSPEED_CRUISE')) ?? (pos(param('TRIM_ARSPD_CM')) !== undefined ? param('TRIM_ARSPD_CM')! / 100 : undefined);
+    const cruise =
+      pos(param('AIRSPEED_CRUISE')) ??
+      (pos(param('TRIM_ARSPD_CM')) !== undefined ? param('TRIM_ARSPD_CM')! / 100 : undefined);
     return {
       horizontal: cruise ?? 12,
       up: pos(param('TECS_CLMB_MAX')) ?? 5,
       down: pos(param('TECS_SINK_MAX')) ?? 5,
-      source: pos(param('AIRSPEED_CRUISE')) !== undefined ? 'AIRSPEED_CRUISE' : cruise !== undefined ? 'TRIM_ARSPD_CM' : 'default cruise (12 m/s)',
+      source:
+        pos(param('AIRSPEED_CRUISE')) !== undefined
+          ? 'AIRSPEED_CRUISE'
+          : cruise !== undefined
+            ? 'TRIM_ARSPD_CM'
+            : 'default cruise (12 m/s)',
     };
   }
   if (category === 'rover') {
     const wp = pos(param('WP_SPEED'));
     const cruise = pos(param('CRUISE_SPEED'));
-    return { horizontal: wp ?? cruise ?? 2, up: 1, down: 1, source: wp !== undefined ? 'WP_SPEED' : cruise !== undefined ? 'CRUISE_SPEED' : 'default (2 m/s)' };
+    return {
+      horizontal: wp ?? cruise ?? 2,
+      up: 1,
+      down: 1,
+      source: wp !== undefined ? 'WP_SPEED' : cruise !== undefined ? 'CRUISE_SPEED' : 'default (2 m/s)',
+    };
   }
   // Copter (and anything else flying waypoints the same way)
   const m = pos(param('WP_SPD'));
   const cm = pos(param('WPNAV_SPEED'));
-  const up = pos(param('WP_SPD_UP')) ?? (pos(param('WPNAV_SPEED_UP')) !== undefined ? param('WPNAV_SPEED_UP')! / 100 : undefined);
-  const dn = pos(param('WP_SPD_DN')) ?? (pos(param('WPNAV_SPEED_DN')) !== undefined ? param('WPNAV_SPEED_DN')! / 100 : undefined);
+  const up =
+    pos(param('WP_SPD_UP')) ??
+    (pos(param('WPNAV_SPEED_UP')) !== undefined ? param('WPNAV_SPEED_UP')! / 100 : undefined);
+  const dn =
+    pos(param('WP_SPD_DN')) ??
+    (pos(param('WPNAV_SPEED_DN')) !== undefined ? param('WPNAV_SPEED_DN')! / 100 : undefined);
   const accM = pos(param('WP_ACC'));
   const accCm = pos(param('WPNAV_ACCEL'));
   const rtlLoit = param('RTL_LOIT_TIME');
@@ -123,7 +139,8 @@ function distanceM(lat1: number, lon1: number, lat2: number, lon2: number): numb
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
-const polylineM = (pts: [number, number][]) => pts.reduce((sum, p, i) => (i === 0 ? 0 : sum + distanceM(pts[i - 1][0], pts[i - 1][1], p[0], p[1])), 0);
+const polylineM = (pts: [number, number][]) =>
+  pts.reduce((sum, p, i) => (i === 0 ? 0 : sum + distanceM(pts[i - 1][0], pts[i - 1][1], p[0], p[1])), 0);
 
 /** The last few metres of a Copter landing, at its landing speed (LAND_SPEED default 0.5 m/s below 10 m). */
 const COPTER_LAND_FINAL_M = 10;
@@ -147,10 +164,24 @@ export interface FlownLeg {
  * is measured straight. Heights are above home: an MSL item's altitude less home's when home is MSL; terrain-
  * relative items as given.
  */
-export function missionSummary(items: SummaryItem[], category: VehicleCategory, param: ParamLookup, legs: PathLeg[] = []): MissionSummary {
+export function missionSummary(
+  items: SummaryItem[],
+  category: VehicleCategory,
+  param: ParamLookup,
+  legs: PathLeg[] = []
+): MissionSummary {
   const speeds = vehicleSpeeds(category, param);
   const home = items[0];
-  const out: MissionSummary = { distanceM: 0, timeS: 0, openEnded: null, maxAltM: 0, farthestM: null, jumps: false, speeds, legs: [] };
+  const out: MissionSummary = {
+    distanceM: 0,
+    timeS: 0,
+    openEnded: null,
+    maxAltM: 0,
+    farthestM: null,
+    jumps: false,
+    speeds,
+    legs: [],
+  };
   if (!home || items.length < 2) return out;
   const hasHome = home.x !== 0 || home.y !== 0;
   if (hasHome) out.farthestM = 0;
@@ -170,7 +201,10 @@ export function missionSummary(items: SummaryItem[], category: VehicleCategory, 
   const climbTime = (to: number) => (to > alt ? (to - alt) / speeds.up : (alt - to) / speeds.down);
   /** A vertical landing (Copter, a QuadPlane's VTOL land): the last few metres at the landing speed. */
   const verticalLandTime = (from: number) =>
-    from <= 0 ? 0 : Math.max(0, from - COPTER_LAND_FINAL_M) / speeds.down + Math.min(from, COPTER_LAND_FINAL_M) / COPTER_LAND_FINAL_SPEED;
+    from <= 0
+      ? 0
+      : Math.max(0, from - COPTER_LAND_FINAL_M) / speeds.down +
+        Math.min(from, COPTER_LAND_FINAL_M) / COPTER_LAND_FINAL_SPEED;
   // A Copter run between stops: speeding up from and slowing down to a stop adds speed / acceleration.
   let running = false;
   const stop = () => {
@@ -188,7 +222,12 @@ export function missionSummary(items: SummaryItem[], category: VehicleCategory, 
       return;
     }
     running = true;
-    const pts = drawn.get(`${at.index}>${index}`) ?? ([[at.lat, at.lon], [lat, lon]] as [number, number][]);
+    const pts =
+      drawn.get(`${at.index}>${index}`) ??
+      ([
+        [at.lat, at.lon],
+        [lat, lon],
+      ] as [number, number][]);
     const h = polylineM(pts);
     out.distanceM += h;
     out.timeS += Math.max(h / speed, category === 'rover' ? 0 : climbTime(toAlt));
@@ -223,10 +262,22 @@ export function missionSummary(items: SummaryItem[], category: VehicleCategory, 
           if (at && target >= 1 && target < items.length) {
             for (let k = target; k < items.length; k++) {
               const t = items[k];
-              if (isRoutePoint(t.command) && (splines || t.command !== CMD.SPLINE_WAYPOINT) && (t.x !== 0 || t.y !== 0)) {
+              if (
+                isRoutePoint(t.command) &&
+                (splines || t.command !== CMD.SPLINE_WAYPOINT) &&
+                (t.x !== 0 || t.y !== 0)
+              ) {
                 const key = `${at.index}>${k}`;
                 if (!seenLegs.has(key)) {
-                  out.legs.push({ from: at.index, to: k, at: seq, latLngs: drawn.get(key) ?? [[at.lat, at.lon], [t.x, t.y]] });
+                  out.legs.push({
+                    from: at.index,
+                    to: k,
+                    at: seq,
+                    latLngs: drawn.get(key) ?? [
+                      [at.lat, at.lon],
+                      [t.x, t.y],
+                    ],
+                  });
                 }
                 break;
               }

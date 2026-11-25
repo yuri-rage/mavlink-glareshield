@@ -20,6 +20,7 @@
 // the whole flow is testable against a fake device -- the pattern the DFU
 // flasher already uses.
 
+import type { FrameListener, StatusListener, Transport, TransportStatus, Unsubscribe } from './types';
 import {
   alignReadSize,
   findCdcSerialPorts,
@@ -27,7 +28,6 @@ import {
   type CdcSerialPort,
   type UsbConfigurationLike,
 } from './webUsbCdc';
-import type { FrameListener, StatusListener, Transport, TransportStatus, Unsubscribe } from './types';
 
 export interface UsbInTransferResultLike {
   data?: { buffer: ArrayBufferLike; byteOffset: number; byteLength: number };

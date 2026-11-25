@@ -12,7 +12,9 @@ export type ParamUnits = 'user' | 'raw';
 
 function getStoredParamUnits(): ParamUnits {
   try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY_PARAM_UNITS) === 'raw' ? 'raw' : 'user';
+    return typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY_PARAM_UNITS) === 'raw'
+      ? 'raw'
+      : 'user';
   } catch {
     return 'user';
   }
@@ -188,7 +190,7 @@ export const useUnitsStore = create<UnitsState>((set, get) => ({
 
   formatHomeVector: (bearingDeg: number | null, distanceM: number | null) => {
     if (distanceM === null || isNaN(distanceM)) return 'H ---°/--';
-    const brg = Math.round(((bearingDeg ?? 0) % 360 + 360)) % 360;
+    const brg = Math.round(((bearingDeg ?? 0) % 360) + 360) % 360;
     const brgStr = `${brg.toString().padStart(3, '0')}°`;
     const distStr = get().formatDistance(distanceM).full;
     return `H ${brgStr}/${distStr}`;
