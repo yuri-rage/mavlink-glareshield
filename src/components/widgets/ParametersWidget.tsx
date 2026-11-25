@@ -21,6 +21,7 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Sliders, RefreshCw, Check, Search, Zap, X, Download, Upload, AlertTriangle, Info, Loader2, Lock, ChevronDown } from 'lucide-react';
 import { downloadFile } from '../../lib/download';
+import { compareParams, filterEntries, writeOutcome, type CompareResult, type WriteOutcome } from '../../lib/paramCompare';
 
 const ROW_HEIGHT = 38;
 const DEFAULT_VIEWPORT_HEIGHT = 440;
@@ -28,12 +29,8 @@ const BUFFER = 10;
 
 export { formatParamValue };
 
-interface ParamDiffEntry {
-  name: string;
-  currentValue: number | undefined;
-  fileValue: number;
-  selected: boolean;
-}
+/** A write's state in the compare dialog: under way, or what it came to. */
+type WriteState = 'writing' | WriteOutcome;
 
 export const ParametersWidget: React.FC = () => {
   // Use selector so this component ONLY re-renders when parameters or connection state change,
@@ -62,7 +59,10 @@ export const ParametersWidget: React.FC = () => {
   // .param file compare/load state
   const [diffModalOpen, setDiffModalOpen] = useState(false);
   const [diffFileName, setDiffFileName] = useState('');
-  const [diffEntries, setDiffEntries] = useState<ParamDiffEntry[]>([]);
+  const [compare, setCompare] = useState<CompareResult | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [writeStates, setWriteStates] = useState<Record<string, WriteState>>({});
+  const [diffFilter, setDiffFilter] = useState('');
   const [batchWriteStatus, setBatchWriteStatus] = useState<string | null>(null);
   const [isBatchWriting, setIsBatchWriting] = useState(false);
   const abortBatchRef = useRef<boolean>(false);
@@ -187,91 +187,85 @@ export const ParametersWidget: React.FC = () => {
 
     const text = await file.text();
     const parsed = parseParamFile(text);
-    const diffs: ParamDiffEntry[] = [];
-
-    for (const [name, fileVal] of Object.entries(parsed)) {
-      const current = parameters[name]?.value;
-      const isDifferent = current === undefined || areParamsDifferent(current, fileVal);
-      if (isDifferent) {
-        diffs.push({
-          name,
-          currentValue: current,
-          fileValue: fileVal,
-          selected: current !== undefined, // default select existing differing params
-        });
-      }
-    }
-
-    diffs.sort((a, b) => a.name.localeCompare(b.name));
+    // Missing (not on this vehicle) only once its full list is read; until then, not read yet.
+    const listComplete = paramManager.hasParamList(paramKeys) && !paramStatus.fromPreviousConnection;
+    const result = compareParams(parsed, parameters, listComplete, getParamMetadata);
     setDiffFileName(file.name);
-    setDiffEntries(diffs);
+    setCompare(result);
+    // Selected to start: what differs on the vehicle (not what's unread, missing or read-only).
+    setSelected(new Set(result.entries.filter((e) => e.writable && e.status === 'differs').map((e) => e.name)));
+    setWriteStates({});
+    setDiffFilter('');
     setBatchWriteStatus(null);
     setDiffModalOpen(true);
   };
 
-  const handleWriteSelectedDiffs = async () => {
-    const selected = diffEntries.filter((d) => d.selected);
-    if (selected.length === 0) return;
-    setIsBatchWriting(true);
-    abortBatchRef.current = false;
+  /**
+   * Write one parameter and wait for the vehicle's echo; once more if none comes (a slow or lossy link). The echoed
+   * value tells whether it took (the vehicle may refuse or clamp it).
+   */
+  const writeOne = async (name: string, value: number): Promise<WriteOutcome> => {
     const hb = useTelemetryStore.getState().heartbeat;
     const sysId = hb.systemId || 1;
     const compId = hb.componentId || 1;
-
-    let confirmed = 0;
-    for (let i = 0; i < selected.length; i++) {
-      if (abortBatchRef.current) {
-        setBatchWriteStatus(`Batch write aborted (${confirmed}/${selected.length} confirmed).`);
-        setIsBatchWriting(false);
-        return;
-      }
-      const entry = selected[i];
-      setBatchWriteStatus(`Writing ${i + 1}/${selected.length}: ${entry.name} (${entry.fileValue})…`);
-
-      const existing = parameters[entry.name];
-      const pType = existing ? existing.type : 9;
-
-      const success = await new Promise<boolean>((resolve) => {
-        let timer: any = null;
-        let unsub: (() => void) | null = null;
-        const finish = (ok: boolean) => {
-          if (timer) clearTimeout(timer);
-          if (unsub) unsub();
-          resolve(ok);
-        };
-
-        unsub = mavlinkConnection.onPacket((packet) => {
-          if (packet.messageId === 22) {
-            // PARAM_VALUE
-            const data = decodePayload(packet.messageId, packet.payload);
-            const pId = data?.param_id?.trim();
-            if (pId === entry.name) {
-              finish(true);
-            }
-          }
+    const pType = parameters[name]?.type ?? 9;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const echoed = await new Promise<number | undefined>((resolve) => {
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const unsub = mavlinkConnection.onPacket((packet) => {
+          if (packet.messageId !== 22) return; // PARAM_VALUE
+          const data = decodePayload(packet.messageId, packet.payload);
+          if (data?.param_id?.trim() === name) finish(data.param_value);
         });
-
-        timer = setTimeout(() => {
-          finish(false);
-        }, 850);
-
-        const cmd = encoder.createParamSet(sysId, compId, entry.name, entry.fileValue, pType);
-        const sent = mavlinkConnection.send(cmd);
-        if (!sent) finish(false);
+        const finish = (v: number | undefined) => {
+          if (timer) clearTimeout(timer);
+          unsub();
+          resolve(v);
+        };
+        timer = setTimeout(() => finish(undefined), 1500);
+        if (!mavlinkConnection.send(encoder.createParamSet(sysId, compId, name, value, pType))) finish(undefined);
       });
-
-      if (success) confirmed++;
-      await new Promise((r) => setTimeout(r, 60));
+      if (echoed !== undefined) return writeOutcome(value, echoed);
     }
+    return 'no-answer';
+  };
 
+  const handleWriteSelectedDiffs = async () => {
+    if (!compare) return;
+    const todo = compare.entries.filter((e) => e.writable && selected.has(e.name));
+    if (todo.length === 0) return;
+    setIsBatchWriting(true);
+    abortBatchRef.current = false;
+    const outcomes: Record<string, WriteOutcome> = {};
+    for (let i = 0; i < todo.length; i++) {
+      if (abortBatchRef.current) break;
+      const e = todo[i];
+      setBatchWriteStatus(`Writing ${i + 1}/${todo.length}: ${e.name} = ${formatParamValue(e.file)}…`);
+      setWriteStates((prev) => ({ ...prev, [e.name]: 'writing' }));
+      const outcome = await writeOne(e.name, e.file);
+      outcomes[e.name] = outcome;
+      setWriteStates((prev) => ({ ...prev, [e.name]: outcome }));
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    const done = Object.values(outcomes);
+    const ok = done.filter((o) => o === 'ok').length;
+    const kept = done.filter((o) => o === 'kept').length;
+    const none = done.filter((o) => o === 'no-answer').length;
+    const reboot = todo.filter((e) => outcomes[e.name] === 'ok' && e.rebootRequired).map((e) => e.name);
     setIsBatchWriting(false);
-    setBatchWriteStatus(`Batch write finished: ${confirmed}/${selected.length} confirmed by vehicle.`);
-    setTimeout(() => {
-      if (!abortBatchRef.current) {
-        setDiffModalOpen(false);
-        setBatchWriteStatus(null);
-      }
-    }, 2000);
+    setBatchWriteStatus(
+      `${abortBatchRef.current ? 'Stopped. ' : ''}${ok} written${kept ? `, ${kept} kept another value (refused or limited)` : ''}${none ? `, ${none} not answered` : ''}` +
+        `${reboot.length ? `. Reboot to apply: ${reboot.join(', ')}` : ''}.`
+    );
+  };
+
+  /** The vehicle's current values of the selected parameters, as a .param file: a backup before writing. */
+  const backupSelected = () => {
+    if (!compare) return;
+    const values: Record<string, number> = {};
+    for (const e of compare.entries) if (selected.has(e.name) && e.vehicle !== undefined) values[e.name] = e.vehicle;
+    if (Object.keys(values).length === 0) return;
+    downloadFile(`vehicle-before-${diffFileName.replace(/\.param$/i, '')}-${new Date().toISOString().slice(0, 10)}.param`, serializeParamFile(values, firmwareVersion), 'text/plain;charset=utf-8');
   };
 
   const searchQuery = useMemo(() => parseParamQuery(search), [search]);
@@ -761,104 +755,130 @@ export const ParametersWidget: React.FC = () => {
       </CardContent>
 
       {/* Parameter File Compare & Batch Load Modal */}
-      {diffModalOpen && (
+      {diffModalOpen && compare && (() => {
+        const shown = filterEntries(compare.entries, diffFilter, getParamMetadata);
+        const writableShown = shown.filter((e) => e.writable);
+        const selectedCount = compare.entries.filter((e) => e.writable && selected.has(e.name)).length;
+        const withVehicle = compare.entries.filter((e) => selected.has(e.name) && e.vehicle !== undefined).length;
+        const toggle = (name: string, on: boolean) =>
+          setSelected((prev) => {
+            const next = new Set(prev);
+            if (on) next.add(name);
+            else next.delete(name);
+            return next;
+          });
+        const RESULT: Record<WriteState, { text: string; cls: string }> = {
+          writing: { text: 'writing…', cls: 'text-sky-300' },
+          ok: { text: '✓ written', cls: 'text-emerald-400' },
+          kept: { text: 'kept its value', cls: 'text-amber-300' },
+          'no-answer': { text: 'no answer', cls: 'text-red-300' },
+        };
+        return (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden">
             <div className="px-4 py-3 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Upload className="h-4 w-4 text-amber-400" />
-                <h3 className="text-sm font-bold text-zinc-100">
+              <div className="flex items-center gap-2 min-w-0">
+                <Upload className="h-4 w-4 text-amber-400 shrink-0" />
+                <h3 className="text-sm font-bold text-zinc-100 truncate">
                   Compare Parameter File: <span className="font-mono text-sky-400">{diffFileName}</span>
                 </h3>
               </div>
-              <button
-                onClick={() => setDiffModalOpen(false)}
-                className="text-zinc-400 hover:text-zinc-200 p-1 rounded"
-              >
+              <button onClick={() => setDiffModalOpen(false)} className="text-zinc-400 hover:text-zinc-200 p-1 rounded" aria-label="Close" disabled={isBatchWriting}>
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             <div className="p-4 flex-1 overflow-y-auto space-y-3">
-              {diffEntries.length === 0 ? (
+              <div className="text-[11px] text-zinc-400 flex flex-wrap gap-x-3 gap-y-1">
+                <span>
+                  <strong className="text-zinc-100">{compare.entries.length}</strong> differ
+                </span>
+                <span>
+                  <strong className="text-zinc-100">{compare.same}</strong> same
+                </span>
+                {compare.notInFile > 0 && (
+                  <span title="The vehicle's parameters this file doesn't mention (a partial file, or another vehicle's)">
+                    <strong className="text-zinc-100">{compare.notInFile}</strong> on the vehicle not in the file
+                  </span>
+                )}
+              </div>
+              {compare.entries.length === 0 ? (
                 <div className="text-center py-8 text-xs text-emerald-400 flex flex-col items-center gap-2">
                   <Check className="h-6 w-6" />
                   <span>All parameters in {diffFileName} match the current vehicle values.</span>
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between text-xs text-zinc-400 bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800">
-                    <span className="flex items-center gap-1.5">
-                      <Info className="h-3.5 w-3.5 text-sky-400 shrink-0" />
-                      Found <strong className="text-zinc-100">{diffEntries.length}</strong> differing parameter(s). Select parameters to write to the vehicle.
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() =>
-                          setDiffEntries((prev) => prev.map((e) => ({ ...e, selected: true })))
-                        }
-                        className="text-[11px] text-sky-400 hover:underline font-semibold"
-                      >
-                        Select All
-                      </button>
-                      <span className="text-zinc-700">·</span>
-                      <button
-                        onClick={() =>
-                          setDiffEntries((prev) => prev.map((e) => ({ ...e, selected: false })))
-                        }
-                        className="text-[11px] text-zinc-400 hover:underline"
-                      >
-                        Clear
-                      </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 min-w-[160px]">
+                      <Search className="h-3.5 w-3.5 text-zinc-500 absolute left-2 top-1/2 -translate-y-1/2" />
+                      <Input value={diffFilter} onChange={(e) => setDiffFilter(e.target.value)} placeholder="Filter by name or description" className="h-8 pl-7 text-xs" />
                     </div>
+                    <button onClick={() => setSelected((prev) => new Set([...prev, ...writableShown.map((e) => e.name)]))} className="text-[11px] text-sky-400 hover:underline font-semibold" disabled={isBatchWriting}>
+                      Select {diffFilter.trim() ? 'shown' : 'all'}
+                    </button>
+                    <span className="text-zinc-700">·</span>
+                    <button onClick={() => setSelected((prev) => new Set([...prev].filter((n) => !shown.some((e) => e.name === n))))} className="text-[11px] text-zinc-400 hover:underline" disabled={isBatchWriting}>
+                      Clear {diffFilter.trim() ? 'shown' : ''}
+                    </button>
                   </div>
 
-                  <div className="border border-zinc-800 rounded-lg overflow-hidden">
-                    <table className="w-full text-xs sm:text-[13px] font-mono">
+                  <div className="border border-zinc-800 rounded-lg overflow-x-auto">
+                    <table className="w-full text-xs font-mono">
                       <thead className="bg-zinc-900 text-zinc-400 border-b border-zinc-800 text-left">
                         <tr>
-                          <th className="py-1.5 px-3 w-8">Write</th>
-                          <th className="py-1.5 px-3">Parameter</th>
-                          <th className="py-1.5 px-3 text-right">Vehicle</th>
-                          <th className="py-1.5 px-3 text-right">File Value</th>
+                          <th className="py-1.5 px-2 w-8">Write</th>
+                          <th className="py-1.5 px-2">Parameter</th>
+                          <th className="py-1.5 px-2 text-right">Vehicle</th>
+                          <th className="py-1.5 px-2 text-right">File</th>
+                          <th className="py-1.5 px-2 text-right">Default</th>
+                          <th className="py-1.5 px-2 text-right">Result</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-900">
-                        {diffEntries.map((entry, idx) => {
+                        {shown.map((entry) => {
                           const meta = getParamMetadata(entry.name);
+                          const state = writeStates[entry.name];
+                          const why = entry.status === 'missing' ? 'not on this vehicle' : entry.readOnly ? 'read-only' : null;
                           return (
-                            <tr key={entry.name} className="hover:bg-zinc-900/50">
-                              <td className="py-1.5 px-3">
+                            <tr key={entry.name} className={`hover:bg-zinc-900/50 ${entry.writable ? '' : 'opacity-60'}`}>
+                              <td className="py-1.5 px-2">
                                 <input
                                   type="checkbox"
-                                  checked={entry.selected}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    setDiffEntries((prev) =>
-                                      prev.map((item, i) => (i === idx ? { ...item, selected: checked } : item))
-                                    );
-                                  }}
+                                  checked={entry.writable && selected.has(entry.name)}
+                                  disabled={!entry.writable || isBatchWriting}
+                                  title={why ?? undefined}
+                                  aria-label={`Write ${entry.name}`}
+                                  onChange={(e) => toggle(entry.name, e.target.checked)}
                                   className="rounded border-zinc-700 bg-zinc-900 text-sky-500"
                                 />
                               </td>
-                              <td className="py-1.5 px-3">
-                                <div className="font-semibold text-zinc-200">{entry.name}</div>
-                                {meta?.description && (
-                                  <div className="text-[11px] text-zinc-500 font-sans truncate max-w-[260px]">
-                                    {meta.description}
-                                  </div>
-                                )}
+                              <td className="py-1.5 px-2">
+                                <div className="font-semibold text-zinc-200 flex items-center gap-1.5">
+                                  {entry.name}
+                                  {entry.rebootRequired && <span className="text-[9px] font-sans font-bold text-amber-300" title="Takes effect after a reboot">↻ reboot</span>}
+                                  {why && <span className="text-[9px] font-sans text-zinc-500">{why}</span>}
+                                  {entry.status === 'unread' && <span className="text-[9px] font-sans text-zinc-500" title="The vehicle's full parameter list isn't read: it may or may not have this">not read yet</span>}
+                                </div>
+                                {meta?.description && <div className="text-[11px] text-zinc-500 font-sans truncate max-w-[260px]">{meta.description}</div>}
                               </td>
-                              <td className="py-1.5 px-3 text-right text-zinc-400">
-                                {entry.currentValue !== undefined ? formatParamValue(entry.currentValue) : 'Not Loaded'}
+                              <td className="py-1.5 px-2 text-right text-zinc-400">{entry.vehicle !== undefined ? formatParamValue(entry.vehicle) : '—'}</td>
+                              <td className="py-1.5 px-2 text-right text-amber-300 font-bold">
+                                {formatParamValue(entry.file)}
+                                {entry.units ? <span className="font-normal text-zinc-500"> {entry.units}</span> : null}
                               </td>
-                              <td className="py-1.5 px-3 text-right text-amber-300 font-bold">
-                                {formatParamValue(entry.fileValue)}
-                                {meta?.units ? ` ${meta.units}` : ''}
-                              </td>
+                              <td className="py-1.5 px-2 text-right text-zinc-500">{entry.defaultValue !== undefined ? formatParamValue(entry.defaultValue) : ''}</td>
+                              <td className={`py-1.5 px-2 text-right text-[11px] ${state ? RESULT[state].cls : ''}`}>{state ? RESULT[state].text : ''}</td>
                             </tr>
                           );
                         })}
+                        {shown.length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="py-3 text-center text-zinc-500 font-sans">
+                              Nothing matches "{diffFilter.trim()}".
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -868,69 +888,54 @@ export const ParametersWidget: React.FC = () => {
               {batchWriteStatus && (
                 <div
                   className={`p-2.5 rounded-lg border text-xs flex items-center gap-2 ${
-                    isBatchWriting
-                      ? 'bg-sky-950/60 border-sky-500/40 text-sky-300'
-                      : 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                    isBatchWriting ? 'bg-sky-950/60 border-sky-500/40 text-sky-300' : 'bg-zinc-900 border-zinc-700 text-zinc-200'
                   }`}
                 >
-                  {isBatchWriting ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-sky-400 shrink-0" />
-                  ) : (
-                    <Check className="h-4 w-4 text-emerald-400 shrink-0" />
-                  )}
+                  {isBatchWriting ? <Loader2 className="h-4 w-4 animate-spin text-sky-400 shrink-0" /> : <Check className="h-4 w-4 text-emerald-400 shrink-0" />}
                   <span>{batchWriteStatus}</span>
                 </div>
               )}
             </div>
 
-            <div className="px-4 py-3 bg-zinc-900 border-t border-zinc-800 flex items-center justify-between">
+            <div className="px-4 py-3 bg-zinc-900 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px] text-zinc-400 flex items-center gap-1">
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
                 Review safety-critical parameters before writing to an active vehicle.
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {compare.entries.length > 0 && (
+                  <Button variant="outline" size="sm" disabled={withVehicle === 0 || isBatchWriting} onClick={backupSelected} className="h-8 text-xs gap-1.5" title="Save the vehicle's current values of the selected parameters (.param)">
+                    <Download className="h-3.5 w-3.5" />
+                    Back up these first
+                  </Button>
+                )}
                 {isBatchWriting ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => {
-                      abortBatchRef.current = true;
-                    }}
-                    className="h-8 text-xs font-bold"
-                  >
-                    Abort Write
+                  <Button variant="destructive" size="sm" onClick={() => (abortBatchRef.current = true)} className="h-8 text-xs font-bold">
+                    Stop writing
                   </Button>
                 ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDiffModalOpen(false)}
-                    className="h-8 text-xs"
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => setDiffModalOpen(false)} className="h-8 text-xs">
                     Close
                   </Button>
                 )}
-                {diffEntries.length > 0 && (
+                {compare.entries.length > 0 && (
                   <Button
                     variant="default"
                     size="sm"
-                    disabled={
-                      !connected ||
-                      isBatchWriting ||
-                      diffEntries.filter((d) => d.selected).length === 0
-                    }
+                    disabled={!connected || isBatchWriting || selectedCount === 0}
                     onClick={handleWriteSelectedDiffs}
                     className="h-8 text-xs bg-sky-600 hover:bg-sky-500 text-white font-bold gap-1.5"
                   >
                     {isBatchWriting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                    Write Selected ({diffEntries.filter((d) => d.selected).length}) to Vehicle
+                    Write Selected ({selectedCount}) to Vehicle
                   </Button>
                 )}
               </div>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </Card>
   );
 };
