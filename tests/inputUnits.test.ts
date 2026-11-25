@@ -24,5 +24,24 @@ check('relabel keeps the rest: (ft, 0 stops)', relabel('Distance (m, 0 stops)', 
 check('"(ms)" (shutter time) is not metres', paramUnitKind('Shutter (ms)') === null);
 check('relabel: (m) to (ft), (m/s) to (kts)', relabel('Abort alt (m)', 'ft') === 'Abort alt (ft)' && relabel('Speed (m/s)', 'kts') === 'Speed (kts)');
 
+// Settings round trip: a clearance typed in feet is stored in metres and shown again as typed (it was stored in whole
+// metres: 50 ft -> 15 m -> 49 ft).
+{
+  (globalThis as any).localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+  const { useTerrainStore } = await import('../src/store/terrainStore.ts');
+  const shownFt = () => Math.round(useTerrainStore.getState().clearanceM * 3.28084);
+  let allBack = true;
+  let bad = '';
+  for (let ft = 0; ft <= 500; ft++) {
+    useTerrainStore.getState().setClearanceM(ft / 3.28084);
+    if (shownFt() !== ft) { allBack = false; bad = `${ft} ft -> ${shownFt()} ft`; break; }
+  }
+  check('terrain clearance: every whole foot 0-500 shows as typed', allBack, bad);
+  useTerrainStore.getState().setClearanceM(30);
+  check('metres unchanged (30 m stays 30)', useTerrainStore.getState().clearanceM === 30);
+  useTerrainStore.getState().setClearanceM(12.5);
+  check('half metres kept (12.5 m)', useTerrainStore.getState().clearanceM === 12.5);
+}
+
 console.log(failures.length ? `\n${failures.length} input-unit check(s) FAILED` : '\nAll input-unit checks PASSED');
 if (failures.length) process.exit(1);

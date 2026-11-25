@@ -91,7 +91,8 @@ export const AdsbSettings: React.FC = () => {
       </div>
       <div className="flex items-start justify-between gap-2 text-[10px] leading-snug text-zinc-500">
         <span>
-          Hiding aircraft doesn&apos;t silence warnings. The vehicle forwards only traffic within ADSB_LIST_RADIUS (Copter
+          Hiding aircraft doesn&apos;t silence warnings. Ranges are at least {h.fromM(50)} {h.unit} and heights{' '}
+          {v.fromM(10)} {v.unit} (smaller values are raised to these). The vehicle forwards only traffic within ADSB_LIST_RADIUS (Copter
           2 km, Plane 10 km by default).
           {odd && <span className="text-amber-300"> The alert limits are wider than the caution limits.</span>}
         </span>
