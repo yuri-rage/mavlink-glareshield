@@ -356,3 +356,17 @@ export function placedOrUnchanged(layout: CockpitLayout, next: CockpitLayout | n
   const shown = new Set(panesInOrder(next));
   return [...panesInOrder(layout), ...added].every((id) => shown.has(id)) ? next : layout;
 }
+
+// ------------------------------------------------------------------------------------------------
+// The wide layout (ultrawide screens)
+// ------------------------------------------------------------------------------------------------
+
+/** Width / height above which a tab's wide layout (if it has one) is used: an ultrawide (21:9 and wider). */
+export const WIDE_ASPECT = 2.2;
+
+export type CockpitVariant = 'standard' | 'wide';
+
+/** Which of a tab's layouts a window of this shape shows: the wide one only when the tab has it and it's wide. */
+export function variantFor(hasWide: boolean, width: number, height: number): CockpitVariant {
+  return hasWide && height > 0 && width / height > WIDE_ASPECT ? 'wide' : 'standard';
+}
