@@ -10,15 +10,16 @@
 //   (WP_ACC m/s², WPNAV_ACCEL cm/s²), and RTL waits RTL_LOIT_TIME (ms) over home before descending.
 // - Plane: AIRSPEED_CRUISE (m/s; TRIM_ARSPD_CM in cm/s before), climbing and sinking at TECS_CLMB_MAX, TECS_SINK_MAX.
 // - Rover: WP_SPEED (m/s; CRUISE_SPEED when 0).
-// A leg takes the longer of its horizontal and vertical times (both happen together). No wind, no acceleration: an
-// estimate, said so where it's shown.
+// A leg takes the longer of its horizontal and vertical times (both happen together). No wind, turns at full speed:
+// an estimate, said so where it's shown.
 
 import type { VehicleCategory } from './messages';
-import type { PathLeg } from './missionPath';
-import { cmdHasLocation } from './messages';
+import { fliesSplines, type PathLeg } from './missionPath';
+import { isRoutePoint } from './missionDraft';
 
 export interface SummaryItem {
   command: number;
+  frame: number;
   param1: number;
   param2: number;
   param3: number;
@@ -49,12 +50,16 @@ export interface MissionSummary {
   openEnded: string | null;
   /** Highest item altitude (as entered, above home for relative items), m. */
   maxAltM: number;
-  /** Farthest item from home, m. */
-  farthestM: number;
+  /** Farthest item from home, m; null with home unknown. */
+  farthestM: number | null;
   /** DO_JUMPs were followed (repeats counted). */
   jumps: boolean;
   speeds: VehicleSpeeds;
+  /** Each distinct leg flown (jump returns and RTL included), for the fence check. */
+  legs: FlownLeg[];
 }
+
+const isMsl = (frame: number) => frame === 0 || frame === 5;
 
 const CMD = {
   WAYPOINT: 16,
@@ -84,7 +89,7 @@ export function vehicleSpeeds(category: VehicleCategory, param: ParamLookup): Ve
       horizontal: cruise ?? 12,
       up: pos(param('TECS_CLMB_MAX')) ?? 5,
       down: pos(param('TECS_SINK_MAX')) ?? 5,
-      source: cruise !== undefined ? 'AIRSPEED_CRUISE' : 'default cruise (12 m/s)',
+      source: pos(param('AIRSPEED_CRUISE')) !== undefined ? 'AIRSPEED_CRUISE' : cruise !== undefined ? 'TRIM_ARSPD_CM' : 'default cruise (12 m/s)',
     };
   }
   if (category === 'rover') {
@@ -126,54 +131,87 @@ const COPTER_LAND_FINAL_SPEED = 0.5;
 /** Steps through the mission before giving up (a jump loop with huge repeat counts). */
 const MAX_STEPS = 20000;
 
+/** A leg the vehicle flies, as walked (jumps and RTL included): for the route-vs-fence check. */
+export interface FlownLeg {
+  /** Item indices: start and end (0 for home). */
+  from: number;
+  to: number;
+  /** The item the leg belongs to (its end, or the RTL that flies it). */
+  at: number;
+  latLngs: [number, number][];
+}
+
 /**
- * The summary of `items` (items[0] is home), for a vehicle of `category`. `legs` are the route as drawn
- * (missionPathLegs), used for the length of each leg between consecutive route items; any other pair is measured
- * straight.
+ * The summary of `items` (items[0] is home, unknown when at 0,0), for a vehicle of `category`. `legs` are the route
+ * as drawn (missionPathLegs), used for each leg between consecutive route items; any other pair (a jump back, RTL)
+ * is measured straight. Heights are above home: an MSL item's altitude less home's when home is MSL; terrain-
+ * relative items as given.
  */
 export function missionSummary(items: SummaryItem[], category: VehicleCategory, param: ParamLookup, legs: PathLeg[] = []): MissionSummary {
   const speeds = vehicleSpeeds(category, param);
   const home = items[0];
-  const out: MissionSummary = { distanceM: 0, timeS: 0, openEnded: null, maxAltM: 0, farthestM: 0, jumps: false, speeds };
+  const out: MissionSummary = { distanceM: 0, timeS: 0, openEnded: null, maxAltM: 0, farthestM: null, jumps: false, speeds, legs: [] };
   if (!home || items.length < 2) return out;
-  const drawn = new Map(legs.map((l) => [`${l.from}>${l.to}`, polylineM(l.latLngs)]));
+  const hasHome = home.x !== 0 || home.y !== 0;
+  if (hasHome) out.farthestM = 0;
+  const homeMsl = hasHome && isMsl(home.frame) ? home.z : null;
+  const drawn = new Map(legs.map((l) => [`${l.from}>${l.to}`, l.latLngs]));
+  const splines = fliesSplines(category);
   const copter = category !== 'plane' && category !== 'rover';
   let speed = speeds.horizontal;
-  let at = { lat: home.x, lon: home.y, index: 0 };
+  // Where the vehicle is: home, or with home unknown, nowhere yet (the first item with a position sets it).
+  let at: { lat: number; lon: number; index: number } | null = hasHome ? { lat: home.x, lon: home.y, index: 0 } : null;
   let alt = 0;
   const jumpCounts = new Map<number, number>();
+  const seenLegs = new Set<string>();
 
+  /** An item's height above home; with an MSL altitude and no MSL home, unknown (the height stays as it was). */
+  const heightOf = (it: SummaryItem): number => (isMsl(it.frame) ? (homeMsl === null ? alt : it.z - homeMsl) : it.z);
   const climbTime = (to: number) => (to > alt ? (to - alt) / speeds.up : (alt - to) / speeds.down);
-  const landTime = (from: number) =>
-    copter
-      ? Math.max(0, from - COPTER_LAND_FINAL_M) / speeds.down + Math.min(from, COPTER_LAND_FINAL_M) / COPTER_LAND_FINAL_SPEED
-      : category === 'plane'
-        ? 0 // a plane's landing approach is its leg
-        : 0;
+  /** A vertical landing (Copter, a QuadPlane's VTOL land): the last few metres at the landing speed. */
+  const verticalLandTime = (from: number) =>
+    Math.max(0, from - COPTER_LAND_FINAL_M) / speeds.down + Math.min(from, COPTER_LAND_FINAL_M) / COPTER_LAND_FINAL_SPEED;
   // A Copter run between stops: speeding up from and slowing down to a stop adds speed / acceleration.
   let running = false;
   const stop = () => {
     if (copter && running && speeds.accel) out.timeS += speed / speeds.accel;
     running = false;
   };
-  const goTo = (index: number, lat: number, lon: number, toAlt: number) => {
+  const goTo = (index: number, lat: number, lon: number, toAlt: number, attach = index) => {
+    out.maxAltM = Math.max(out.maxAltM, toAlt);
+    if (hasHome) out.farthestM = Math.max(out.farthestM ?? 0, distanceM(home.x, home.y, lat, lon));
+    if (!at) {
+      // Home unknown: start at the first position (its height reached as from the ground).
+      out.timeS += category === 'rover' ? 0 : climbTime(toAlt);
+      at = { lat, lon, index };
+      if (category !== 'rover') alt = toAlt;
+      return;
+    }
     running = true;
-    const key = `${at.index}>${index}`;
-    const h = drawn.get(key) ?? distanceM(at.lat, at.lon, lat, lon);
-    const hTime = h / speed;
-    const vTime = category === 'rover' ? 0 : climbTime(toAlt);
+    const pts = drawn.get(`${at.index}>${index}`) ?? ([[at.lat, at.lon], [lat, lon]] as [number, number][]);
+    const h = polylineM(pts);
     out.distanceM += h;
-    out.timeS += Math.max(hTime, vTime);
+    out.timeS += Math.max(h / speed, category === 'rover' ? 0 : climbTime(toAlt));
+    const key = `${at.index}>${index}`;
+    if (!seenLegs.has(key)) {
+      seenLegs.add(key);
+      out.legs.push({ from: at.index, to: index, at: attach, latLngs: pts });
+    }
     at = { lat, lon, index };
     if (category !== 'rover') alt = toAlt;
-    out.maxAltM = Math.max(out.maxAltM, toAlt);
-    out.farthestM = Math.max(out.farthestM, distanceM(home.x, home.y, lat, lon));
   };
 
   let seq = 1;
   for (let steps = 0; seq < items.length && steps < MAX_STEPS; steps++) {
     const it = items[seq];
-    const hasPos = cmdHasLocation(it.command) && (it.x !== 0 || it.y !== 0);
+    // A point the vehicle flies to: a navigation command with a position (not an ROI or a landing-start marker),
+    // spline waypoints only on a vehicle that flies them (others skip the command, as the map draws it).
+    const flies = isRoutePoint(it.command) && (splines || it.command !== CMD.SPLINE_WAYPOINT);
+    const hasPos = flies && (it.x !== 0 || it.y !== 0);
+    if (!flies && it.command === CMD.SPLINE_WAYPOINT) {
+      seq++;
+      continue;
+    }
     switch (it.command) {
       case CMD.DO_JUMP: {
         out.jumps = true;
@@ -199,33 +237,37 @@ export function missionSummary(items: SummaryItem[], category: VehicleCategory, 
         break;
       }
       case CMD.TAKEOFF:
-      case CMD.VTOL_TAKEOFF:
-        if (hasPos) goTo(seq, it.x, it.y, it.z);
+      case CMD.VTOL_TAKEOFF: {
+        const h = heightOf(it);
+        if (hasPos) goTo(seq, it.x, it.y, h);
         else {
-          out.timeS += it.z > alt ? (it.z - alt) / speeds.up : 0;
-          alt = Math.max(alt, it.z);
-          out.maxAltM = Math.max(out.maxAltM, it.z);
+          out.timeS += h > alt ? (h - alt) / speeds.up : 0;
+          alt = Math.max(alt, h);
+          out.maxAltM = Math.max(out.maxAltM, h);
         }
         break;
+      }
       case CMD.DELAY:
         if (it.param1 > 0) out.timeS += it.param1;
         break;
       case CMD.RTL:
         stop(); // the mission's last leg ends; RTL sets off from a stop
-        goTo(0, home.x, home.y, alt);
+        if (hasHome) goTo(0, home.x, home.y, alt, seq); // home unknown: no return leg to measure
         stop();
         if (copter) out.timeS += speeds.rtlLoiterS ?? 0;
-        out.timeS += landTime(alt);
+        if (copter) out.timeS += verticalLandTime(alt);
         return out;
       case CMD.LAND:
       case CMD.VTOL_LAND:
         if (hasPos) goTo(seq, it.x, it.y, alt);
         stop();
-        out.timeS += category === 'plane' && it.command === CMD.LAND ? 0 : landTime(alt);
+        // A plane's landing approach is its leg; a copter's, or a QuadPlane's VTOL landing, descends vertically.
+        if (copter || it.command === CMD.VTOL_LAND) out.timeS += verticalLandTime(alt);
         return out;
-      default:
-        if (!hasPos) break;
-        goTo(seq, it.x, it.y, it.z);
+      default: {
+        if (!flies) break;
+        if (hasPos) goTo(seq, it.x, it.y, heightOf(it));
+        // Holds and loiters count where the vehicle is, given a position or not (0,0: "here").
         if (it.command === CMD.WAYPOINT || it.command === CMD.SPLINE_WAYPOINT) {
           // Copter and Rover hold for param1 seconds; Plane keeps its accept/pass radius there instead.
           if (category !== 'plane' && it.param1 > 0) {
@@ -240,9 +282,11 @@ export function missionSummary(items: SummaryItem[], category: VehicleCategory, 
           const r = Math.abs(it.param3) || (category === 'plane' ? Math.abs(param('WP_LOITER_RAD') ?? 60) : 0);
           if (r > 0 && it.param1 > 0) out.timeS += (it.param1 * 2 * Math.PI * r) / speed;
         } else if (it.command === CMD.LOITER_UNLIM) {
+          stop();
           out.openEnded = `loiters at #${seq} until switched`;
           return out;
         }
+      }
     }
     seq++;
   }

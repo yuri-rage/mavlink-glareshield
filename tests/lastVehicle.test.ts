@@ -51,5 +51,17 @@ hb(2);
 param('WPNAV_RADIUS', 150);
 check('an older Copter\'s WPNAV_RADIUS replaces the remembered WP_RADIUS_M', planningVehicle().params.WPNAV_RADIUS === 150 && planningVehicle().params.WP_RADIUS_M === undefined, JSON.stringify(planningVehicle()));
 
+// Renamed speeds: a master Copter's WP_SPD, then a 4.6 Copter's WPNAV_SPEED: the old name doesn't shadow it.
+hb(0, false);
+hb(2);
+param('WP_SPD', 12);
+hb(0, false);
+hb(2);
+param('WPNAV_SPEED', 800);
+check('a 4.6 Copter\'s WPNAV_SPEED replaces the remembered WP_SPD', planningVehicle().params.WPNAV_SPEED === 800 && planningVehicle().params.WP_SPD === undefined, JSON.stringify(planningVehicle()));
+param('RTL_LOIT_TIME', 2000);
+param('WP_ACC', 3);
+check('acceleration and RTL wait are remembered', planningVehicle().params.RTL_LOIT_TIME === 2000 && planningVehicle().params.WP_ACC === 3);
+
 console.log(failures.length ? `\n${failures.length} last-vehicle check(s) FAILED` : '\nAll last-vehicle checks PASSED');
 if (failures.length) process.exit(1);

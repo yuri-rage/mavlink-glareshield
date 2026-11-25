@@ -24,7 +24,7 @@ check('copter: 1 km route', near(s.distanceM, 1000, 1), s.distanceM.toFixed(1));
 // 20/2.5 = 8 s climb + 100 s + land: 10 m at 1.5 m/s (6.7 s) + 10 m at 0.5 m/s (20 s) = 134.7 s
 // + speeding up and slowing down once (10 m/s / 2.5 m/s² = 4 s) for the one run before landing
 check('copter: time = climb + leg at WP_SPD + one stop + landing', near(s.timeS, 8 + 100 + 4 + 10 / 1.5 + 20, 0.5), s.timeS.toFixed(1));
-check('copter: max altitude, farthest from home', s.maxAltM === 20 && near(s.farthestM, 1000, 1), `${s.maxAltM} ${s.farthestM.toFixed(0)}`);
+check('copter: max altitude, farthest from home', s.maxAltM === 20 && near(s.farthestM!, 1000, 1), `${s.maxAltM} ${s.farthestM?.toFixed(0)}`);
 check('copter speeds: master WP_SPD (m/s) over 4.6 WPNAV_SPEED (cm/s)', vehicleSpeeds('copter', params({ WP_SPD: 5, WPNAV_SPEED: 1500 })).horizontal === 5 && vehicleSpeeds('copter', params({ WPNAV_SPEED: 1500 })).horizontal === 15);
 check('copter climb/descent from WPNAV_SPEED_UP/DN (cm/s) on 4.6', vehicleSpeeds('copter', params({ WPNAV_SPEED_UP: 300, WPNAV_SPEED_DN: 200 })).up === 3 && vehicleSpeeds('copter', params({ WPNAV_SPEED_UP: 300, WPNAV_SPEED_DN: 200 })).down === 2);
 
@@ -72,6 +72,61 @@ check('FENCE_TYPE without polygons: shapes not checked', !iss.some((x) => /inclu
 iss = routeFenceIssues(legs, route, fence, { home: { lat: L0, lon: O0 }, enabled: false });
 check('fencing off: said so', iss.length > 0 && iss.every((x) => /fencing is off/.test(x.message)));
 check('no fence: nothing', routeFenceIssues(legs, route, { shapes: [], returnPoint: null }, { home: { lat: L0, lon: O0 } }).length === 0);
+
+// --- Review fixes ---
+// Home unknown (planning offline, a file without home): no leg from (0,0), no "from home"; the fence shapes are still checked.
+{
+  const NOHOME = it(16, 0, 0, 0);
+  const items2 = [NOHOME, it(16, north(100), O0, 20), it(16, north(600), O0, 20)];
+  const s2 = missionSummary(items2, 'copter', none);
+  check('home unknown: distance only between the items (no Null Island)', near(s2.distanceM, 500, 1), s2.distanceM.toFixed(0));
+  check('home unknown: no "from home"', s2.farthestM === null);
+  const iss2 = routeFenceIssues(s2.legs, items2, fence, {});
+  check('home unknown: the fence shapes are still checked', iss2.some((x) => /outside inclusion zone F1/.test(x.message)), JSON.stringify(iss2));
+  const rtl = missionSummary([NOHOME, it(16, north(100), O0, 20), it(20)], 'copter', none);
+  check('home unknown: RTL adds no return leg', near(rtl.distanceM, 0, 1), rtl.distanceM.toFixed(0));
+}
+// Only route points are flown to: an ROI is not; Plane skips spline waypoints (its mission does).
+{
+  const roi = missionSummary([HOME, it(16, north(100), O0, 20), it(201, north(5000), O0, 0), it(16, north(200), O0, 20)], 'copter', none);
+  check('DO_SET_ROI not flown to', near(roi.distanceM, 200, 1) && near(roi.farthestM!, 200, 1), `${roi.distanceM.toFixed(0)} ${roi.farthestM}`);
+  const pl = missionSummary([HOME, it(16, north(1000), O0, 50), it(82, north(9000), O0, 50), it(16, north(2000), O0, 50)], 'plane', params({ AIRSPEED_CRUISE: 20 }));
+  check('Plane skips a spline waypoint', near(pl.distanceM, 2000, 1), pl.distanceM.toFixed(0));
+}
+// Loiters "here" (0,0) still count.
+{
+  const lt = missionSummary([HOME, it(22, 0, 0, 20), it(19, 0, 0, 20, 60)], 'copter', none);
+  check('loiter time "here": 60 s counted', lt.timeS >= 8 + 60, lt.timeS.toFixed(1));
+  const lu = missionSummary([HOME, it(22, 0, 0, 20), it(17, 0, 0, 20)], 'copter', none);
+  check('unlimited loiter "here": open-ended', /until switched/.test(lu.openEnded ?? ''), String(lu.openEnded));
+}
+// MSL altitudes measured from home's (an elevated site), not from sea level.
+{
+  const mslHome = { ...it(16, L0, O0, 1600), frame: 0 };
+  const wp = { ...it(16, north(1000), O0, 1650), frame: 0 };
+  const sm = missionSummary([mslHome, it(22, 0, 0, 50), wp, it(21)], 'copter', none);
+  check('MSL mission: heights above home', sm.maxAltM === 50, String(sm.maxAltM));
+  check('MSL mission: no climb from sea level', sm.timeS < 8 * 50, sm.timeS.toFixed(0));
+}
+// Jump returns and RTL legs are checked against the fence too.
+{
+  const items3 = [it(16, L0, O0, 0), it(16, north(200), O0, 20), it(16, north(200), east(250), 20), it(16, north(-250), east(250), 20), it(177, 0, 0, 0, 1, 1), it(20)];
+  const s3 = missionSummary(items3, 'copter', none);
+  check('flown legs include the jump return (3 -> 1)', s3.legs.some((l) => l.from === 3 && l.to === 1), JSON.stringify(s3.legs.map((l) => `${l.from}>${l.to}`)));
+  const sq2: FenceDraft = { shapes: [{ kind: 'circle', inclusion: false, center: { lat: north(-20), lon: east(100) }, radius: 40 }], returnPoint: null };
+  const iss3 = routeFenceIssues(s3.legs, items3, sq2, { home: { lat: L0, lon: O0 } });
+  check('the jump return leg (through an exclusion zone) is warned', iss3.some((x) => /#3 to #1/.test(x.message)), JSON.stringify(iss3.map((x) => x.message)));
+  const rtlLeg = s3.legs.find((l) => l.to === 0);
+  check('the RTL leg is checked, its warning on the RTL item', rtlLeg?.at === 5, JSON.stringify(rtlLeg && { from: rtlLeg.from, at: rtlLeg.at }));
+}
+// A long curved leg is sampled to its end.
+{
+  const far: [number, number][] = [];
+  for (let k = 0; k <= 32; k++) far.push([north(k * 600), east(k % 2 ? 50 : 0)]);
+  const ex: FenceDraft = { shapes: [{ kind: 'circle', inclusion: false, center: { lat: north(19000), lon: O0 }, radius: 100 }], returnPoint: null };
+  const iss4 = routeFenceIssues([{ from: 0, to: 1, latLngs: far }], [it(16), it(16, north(19200), O0, 50)], ex, {});
+  check('a 19 km, 32-segment leg is checked to its end', iss4.length === 1, JSON.stringify(iss4.map((x) => x.message)));
+}
 
 console.log(failures.length ? `\n${failures.length} summary check(s) FAILED` : '\nAll summary checks PASSED');
 process.exit(failures.length ? 1 : 0);
