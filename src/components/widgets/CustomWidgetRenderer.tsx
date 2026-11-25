@@ -158,7 +158,8 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
       </CardHeader>
 
       {isComposite ? (
-        <CardContent className="p-2.5 sm:p-3 flex-1 min-h-0">
+        // In a pane, a composite taller than the pane scrolls inside the card (its header and border stay put).
+        <CardContent className={`p-2.5 sm:p-3 flex-1 min-h-0 ${inPane ? 'overflow-y-auto' : ''}`}>
           {/* In a Cockpit pane the rows share its height (each at least its content), so the card fills the pane rather
               than leaving a gap below or scrolling; elsewhere they keep their natural heights. */}
           <div

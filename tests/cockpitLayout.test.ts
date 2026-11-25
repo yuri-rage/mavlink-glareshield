@@ -182,6 +182,16 @@ check('sizes always sum to exactly 100', [[1, 1, 1], [1, 2, 3, 4, 5, 6, 7], [3, 
   check('a composite with panels side by side: wide enough not to stack, two rows tall', twoUp.w === 360 && twoUp.h >= 70 + 130 + 40, J(twoUp));
   const withHud = customWidgetMinSize({ id: 'z', name: 'z', category: 'telemetry', displayType: 'composite', panels: [{ displayType: 'builtin', widgetId: 'built-in-hud' }] } as any);
   check('a composite holding the HUD: at least the HUD panel\'s own minimum', withHud.h >= 300, J(withHud));
+  const { widgetMinSize, CUSTOM_MIN_H_CAP } = await import('../src/lib/cockpitLayout.ts');
+  const params = customWidgetMinSize({ id: 'p', name: 'p', category: 'custom', displayType: 'composite', panels: [{ displayType: 'builtin', widgetId: 'built-in-parameters' }] } as any);
+  check('a built-in panel asks what the widget asks in a pane (not its Flow-card minimum)', params.h <= widgetMinSize('built-in-parameters').h + 100, J(params));
+  const tall = customWidgetMinSize({ id: 't', name: 't', category: 'custom', displayType: 'composite', panels: [1, 2, 3, 4].map(() => ({ displayType: 'sparkline' })) } as any);
+  check('a tall composite is capped (the pane scrolls it, the tab doesn\'t stack)', tall.h === CUSTOM_MIN_H_CAP, J(tall));
+  const longList = customWidgetMinSize({ id: 'l', name: 'l', category: 'telemetry', displayType: 'value-list', binding: {}, bindings: Array.from({ length: 15 }, () => ({})) } as any);
+  check('a long value list is capped too', longList.h === CUSTOM_MIN_H_CAP, J(longList));
+  const rc = customWidgetMinSize({ id: 'r', name: 'r', category: 'telemetry', displayType: 'composite', panels: [{ displayType: 'multi-bar', multiBarConfig: { group: 'rc-8' } }] } as any);
+  const one = customWidgetMinSize({ id: 'o', name: 'o', category: 'telemetry', displayType: 'composite', panels: [{ displayType: 'stat-card' }] } as any);
+  check('eight RC bars ask for eight bars\' height (from the group, not the bindings)', rc.h - one.h > 120, `${rc.h} vs ${one.h}`);
 }
 
 console.log(failures.length ? `\n${failures.length} cockpit-layout check(s) FAILED` : '\nAll cockpit-layout checks PASSED');

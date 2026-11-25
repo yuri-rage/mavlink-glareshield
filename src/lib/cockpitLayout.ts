@@ -7,7 +7,6 @@
 // bounded depth and pane count, sizes that sum to 100.
 
 import type { CockpitLayout, CockpitNode, CustomWidgetDefinition, PlacedWidget, WidgetPanelDefinition } from '../types/widget';
-import { BUILTIN_PANELS, builtinPanelId } from './builtinWidgets';
 
 export const MAX_DEPTH = 6;
 export const MAX_PANES = 24;
@@ -142,26 +141,29 @@ export interface Size {
 }
 
 /** Roughly how tall a custom widget panel's content is at its smallest (px), by type and how many values it shows. */
-function panelMinHeight(p: Pick<WidgetPanelDefinition, 'displayType' | 'widgetId' | 'bindings'>): number {
+function panelMinHeight(p: Pick<WidgetPanelDefinition, 'displayType' | 'widgetId' | 'bindings' | 'gauge' | 'multiBarConfig'>): number {
   const n = 1 + (p.bindings?.length ?? 0);
   switch (p.displayType) {
-    case 'builtin': {
-      const id = builtinPanelId(p.widgetId);
-      return (id && BUILTIN_PANELS[id]?.minHeightPx) || 140;
-    }
+    // A built-in widget as it is in a pane (not its taller Flow-card minimum).
+    case 'builtin':
+      return widgetMinSize(p.widgetId ?? '').h;
+    // TelemetryPanels' own minimums: 190 px a gauge (240 px for more than four side by side), 170 px a chart.
     case 'gauge-radial':
+      return p.gauge?.layout === 'multiple' && n > 4 ? 240 : 190;
     case 'compass-rose':
-      return 150;
+      return 190;
     case 'sparkline':
-      return 130;
+      return 170;
     case 'param-set':
       return 180;
     case 'value-list':
       return 22 * n + 16;
+    // The bars come from the group, not the bindings: eight RC or servo channels, a few ESCs, cells or axes.
     case 'multi-bar':
-      return 26 * n + 16;
+      return 26 * multiBarCount(p.multiBarConfig?.group) + 16;
+    // One bar per value only with layout 'multiple' (otherwise further values are markers on one bar).
     case 'gauge-linear':
-      return 40 * n + 10;
+      return 40 * (p.gauge?.layout === 'multiple' ? n : 1) + 10;
     case 'param-control':
       return 90;
     case 'slider-control':
@@ -171,6 +173,19 @@ function panelMinHeight(p: Pick<WidgetPanelDefinition, 'displayType' | 'widgetId
       return 60;
   }
 }
+
+function multiBarCount(group: string | undefined): number {
+  if (!group) return 4;
+  if (group.startsWith('rc-') || group.startsWith('servo-')) return 8;
+  if (group === 'vibration-xyz' || group === 'ekf-variances') return 3;
+  return 4;
+}
+
+/**
+ * The most a custom widget asks for (px). Past it the pane scrolls the card rather than a tall composite or a long
+ * value list sending the whole tab to the stacked layout.
+ */
+export const CUSTOM_MIN_H_CAP = 360;
 
 /** Card header and content padding around a custom widget's panels (px). */
 const CARD_CHROME = 38 + 24;
@@ -182,7 +197,7 @@ const COMPOSITE_STACK_PX = 360;
  * needed to keep panels side by side), each row as tall as its tallest panel; a single panel by its type.
  */
 export function customWidgetMinSize(def: CustomWidgetDefinition): Size {
-  if (def.displayType !== 'composite') return { w: 220, h: panelMinHeight(def as WidgetPanelDefinition) + CARD_CHROME };
+  if (def.displayType !== 'composite') return { w: 220, h: Math.min(CUSTOM_MIN_H_CAP, panelMinHeight(def as WidgetPanelDefinition) + CARD_CHROME) };
   const panels = def.panels ?? [];
   if (panels.length === 0) return { w: 220, h: 140 };
   // Panels fill rows of twelve columns, left to right.
@@ -201,7 +216,8 @@ export function customWidgetMinSize(def: CustomWidgetDefinition): Size {
       multi = true;
     }
   }
-  return { w: multi ? COMPOSITE_STACK_PX : 240, h: rows.reduce((a, b) => a + b, 0) + 10 * (rows.length - 1) + CARD_CHROME };
+  const h = rows.reduce((a, b) => a + b, 0) + 10 * (rows.length - 1) + CARD_CHROME;
+  return { w: multi ? COMPOSITE_STACK_PX : 240, h: Math.min(CUSTOM_MIN_H_CAP, h) };
 }
 
 /** The smallest a pane showing this widget may be (px): what it needs to stay readable and usable. */
