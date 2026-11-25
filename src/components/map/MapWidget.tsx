@@ -3,6 +3,10 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { useTelemetryStore, sendTrackedCommand, computeDistanceAndBearing } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { lengthUnit, useLengthUnit } from '../../lib/inputUnits';
+import { offlineAwareTileLayer } from './offlineTileLayer';
+import { useOfflineMapStore } from '../../store/offlineMapStore';
+import { IMPORT_HOST } from '../../lib/offlineTiles';
+import { OfflineMapsPanel } from './OfflineMapsPanel';
 import { AltitudeAction, PointGuidedActions } from './GuidedActions';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { missionManager, MissionManagerStatus, groupFencePolygons } from '../../mavlink/missionManager';
@@ -242,6 +246,24 @@ function initialZoom(): number {
   return 17;
 }
 
+/** While an area is being kept: what's been kept so far, and a stop. */
+const KeepingChip: React.FC = () => {
+  const keeping = useOfflineMapStore((s) => s.keeping);
+  const stop = useOfflineMapStore((s) => s.stopKeeping);
+  if (!keeping) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => void stop()}
+      title="Tiles the map loads are being kept for offline use. Click to stop and save."
+      className="pointer-events-auto flex items-center gap-1.5 rounded-md border border-emerald-600/70 bg-zinc-950/85 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-300 shadow-md backdrop-blur-md"
+    >
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+      KEEPING {keeping.name.toUpperCase()}: {keeping.tiles} · STOP
+    </button>
+  );
+};
+
 /** The live position readout over the map: its own subscription, so a fix re-renders this, not the map. */
 const PositionReadout: React.FC<{ show: boolean }> = ({ show }) => {
   const position = useTelemetryStore((s) => s.position);
@@ -362,6 +384,18 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
   const [followVehicle, setFollowVehicle] = useState(() => savedMapView?.follow ?? true);
   const [mapLayer, setMapLayer] = useState<MapLayerType>(() => savedMapView?.layer ?? 'satellite');
+  const [offlineOpen, setOfflineOpen] = useState(false);
+  // What the layer is made from, for a custom source or an imported set: a change rebuilds the layer.
+  const offlineLayerKey = useOfflineMapStore((s) =>
+    mapLayer === 'custom'
+      ? JSON.stringify(s.customSource)
+      : mapLayer.startsWith('import:')
+        ? (s.areas.find((a) => `import:${a.id}` === mapLayer)?.id ?? 'missing')
+        : ''
+  );
+  useEffect(() => {
+    void useOfflineMapStore.getState().refresh();
+  }, []);
   const mapLayerRef = useRef(mapLayer);
   mapLayerRef.current = mapLayer;
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -810,10 +844,35 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     }
   };
 
+  // Every layer looks in the offline store first (kept, downloaded and imported tiles), then loads as usual.
   const createTileLayer = (layerType: MapLayerType): L.TileLayer => {
+    const offline = useOfflineMapStore.getState();
+    if (layerType === 'custom' && offline.customSource) {
+      const src = offline.customSource;
+      return offlineAwareTileLayer(src.url, {
+        attribution: src.attribution || src.name,
+        subdomains: src.subdomains || 'abc',
+        maxNativeZoom: src.maxZoom,
+        maxZoom: MAP_MAX_ZOOM,
+        crossOrigin: true,
+      });
+    }
+    if (layerType.startsWith('import:')) {
+      const area = offline.areas.find((a) => `import:${a.id}` === layerType);
+      if (area) {
+        return offlineAwareTileLayer(`${IMPORT_HOST}/${area.id}/{z}/{x}/{y}`, {
+          attribution: area.attribution || area.name,
+          minNativeZoom: area.minZoom,
+          maxNativeZoom: area.maxZoom,
+          maxZoom: MAP_MAX_ZOOM,
+          // A set covers its own area: no requests (that would fail) outside it.
+          bounds: area.bounds ? L.latLngBounds([area.bounds.south, area.bounds.west], [area.bounds.north, area.bounds.east]) : undefined,
+        });
+      }
+    }
     switch (layerType) {
       case 'street':
-        return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        return offlineAwareTileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
           maxNativeZoom: 19,
           maxZoom: MAP_MAX_ZOOM,
@@ -821,13 +880,23 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         });
       case 'satellite':
       default:
-        return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        return offlineAwareTileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
           attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA',
           maxNativeZoom: 19,
           maxZoom: MAP_MAX_ZOOM,
           crossOrigin: true,
         });
     }
+  };
+
+  /** While an area is being kept, every tile this layer loads goes into it (imported sets are offline already). */
+  const keepTilesFrom = (layer: L.TileLayer, type: MapLayerType): L.TileLayer => {
+    if (type.startsWith('import:')) return layer;
+    layer.on('tileload', (e: L.TileEvent) => {
+      const keeper = useOfflineMapStore.getState().keeper;
+      if (keeper) void keeper.keepTile(layer.getTileUrl(e.coords));
+    });
+    return layer;
   };
 
   const openFlyToPrompt = (lat: number, lon: number, accuracyM?: number) => {
@@ -923,7 +992,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       } catch {}
     });
 
-    const tileLayer = createTileLayer(mapLayerRef.current);
+    const tileLayer = keepTilesFrom(createTileLayer(mapLayerRef.current), mapLayerRef.current);
     tileLayer.addTo(map);
     activeTileLayerRef.current = tileLayer;
 
@@ -1539,7 +1608,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     }
   };
 
-  // Update Tile Layer when layerType changes
+  // Update Tile Layer when layerType changes (or the source behind it: your tile source edited, an imported set
+  // listed once the stored areas load or deleted)
   useEffect(() => {
     if (!mapInstanceRef.current) return;
 
@@ -1547,10 +1617,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       mapInstanceRef.current.removeLayer(activeTileLayerRef.current);
     }
 
-    const newLayer = createTileLayer(mapLayer);
+    const newLayer = keepTilesFrom(createTileLayer(mapLayer), mapLayer);
     newLayer.addTo(mapInstanceRef.current);
     activeTileLayerRef.current = newLayer;
-  }, [mapLayer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapLayer, offlineLayerKey]);
 
   // Sync followVehicleRef with followVehicle state
   useEffect(() => {
@@ -2411,6 +2482,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               onAspect={isFullWidth ? handleAspectChange : undefined}
               onFit={handleFitBounds}
               onClearTrace={clearTrace}
+              onOffline={() => setOfflineOpen(true)}
             />
 
             <MissionMenu
@@ -2532,6 +2604,24 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             <GimbalChip />
             {/* Only once the vehicle reports terrain. */}
             <TerrainChip />
+            <KeepingChip />
+            <OfflineMapsPanel
+              isOpen={offlineOpen}
+              onClose={() => setOfflineOpen(false)}
+              getView={() => {
+                const m = mapInstanceRef.current;
+                if (!m) return null;
+                const b = m.getBounds();
+                return { bounds: { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() }, zoom: m.getZoom() };
+              }}
+              layerName={mapLayer === 'street' ? 'street map' : mapLayer === 'custom' ? (useOfflineMapStore.getState().customSource?.name ?? 'custom') : mapLayer.startsWith('import:') ? 'imported' : 'satellite'}
+              onShowLayer={setMapLayer}
+              onFitBounds={(b) => {
+                setFollowVehicle(false);
+                followVehicleRef.current = false;
+                mapInstanceRef.current?.fitBounds(L.latLngBounds([b.south, b.west], [b.north, b.east]));
+              }}
+            />
           </div>
           {/* The worst ADS-B traffic threat, if any. */}
           <TrafficBanner onFocus={(lat, lon) => mapInstanceRef.current?.panTo([lat, lon], { animate: true })} />
