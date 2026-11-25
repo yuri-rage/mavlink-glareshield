@@ -500,6 +500,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
             renderWidget={renderWidgetContent}
             titleOf={getWidgetTitle}
             headerRef={headerRef}
+            onEditCustomWidget={onEditCustomWidget}
           />
         </div>
       ) : isCockpit ? (
@@ -545,6 +546,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                       min={widgetMinSize(w.widgetId)}
                       dragging={stackDragging}
                       setDragging={setStackDragging}
+                      onEditCustomWidget={onEditCustomWidget}
                     />
                   ))}
               </div>
