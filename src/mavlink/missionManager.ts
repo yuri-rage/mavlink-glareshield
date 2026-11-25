@@ -890,7 +890,9 @@ export class MissionManager {
         const unpacked = this.unpackMissionDat(datData);
         if (unpacked !== null) {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} waypoints via MAVFTP!`);
-          if (this.isActive(sysId)) useTelemetryStore.setState({ missionWaypoints: unpacked });
+          // Read from a vehicle no longer commanded (a switch while it ran): nothing of it goes to the store, home or counts.
+          if (!this.isActive(sysId)) return [];
+          useTelemetryStore.setState({ missionWaypoints: unpacked });
           applyHomeFromMissionItem0(unpacked);
           this.setStatus({ waypointCount: unpacked.length });
           return unpacked;
@@ -924,7 +926,9 @@ export class MissionManager {
     }));
 
     waypoints.sort((a, b) => a.seq - b.seq);
-    if (this.isActive(sysId)) useTelemetryStore.setState({ missionWaypoints: waypoints });
+    // Read from a vehicle no longer commanded (a switch while it ran): nothing of it goes to the store, home or counts.
+    if (!this.isActive(sysId)) return [];
+    useTelemetryStore.setState({ missionWaypoints: waypoints });
     this.setStatus({ waypointCount: waypoints.length });
     return waypoints;
   }
@@ -958,7 +962,9 @@ export class MissionManager {
         const unpacked = this.unpackFenceDat(fenceData);
         if (unpacked !== null) {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} fence items via MAVFTP!`);
-          if (this.isActive(sysId)) useTelemetryStore.setState({ fencePoints: unpacked });
+          // Read from a vehicle no longer commanded (a switch while it ran): nothing of it goes to the store, home or counts.
+          if (!this.isActive(sysId)) return [];
+          useTelemetryStore.setState({ fencePoints: unpacked });
           this.setStatus({ fenceCount: unpacked.length });
           this.lastFenceReadOk = true;
           return unpacked;
@@ -1001,13 +1007,17 @@ export class MissionManager {
 
       fencePoints.sort((a, b) => a.seq - b.seq);
       console.log(`[MissionManager] Successfully downloaded ${fencePoints.length} fence points via MAVLink stream!`);
-      if (this.isActive(sysId)) useTelemetryStore.setState({ fencePoints });
+      // Read from a vehicle no longer commanded (a switch while it ran): nothing of it goes to the store, home or counts.
+      if (!this.isActive(sysId)) return [];
+      useTelemetryStore.setState({ fencePoints });
       this.setStatus({ fenceCount: fencePoints.length });
       this.lastFenceReadOk = true;
       return fencePoints;
     }
     // A complete read of no items: the vehicle has no fence.
-    if (this.isActive(sysId)) useTelemetryStore.setState({ fencePoints: [] });
+    // Read from a vehicle no longer commanded (a switch while it ran): nothing of it goes to the store, home or counts.
+    if (!this.isActive(sysId)) return [];
+    useTelemetryStore.setState({ fencePoints: [] });
     this.setStatus({ fenceCount: 0 });
     this.lastFenceReadOk = true;
     return [];
@@ -1046,7 +1056,9 @@ export class MissionManager {
         const unpacked = this.unpackRallyDat(rallyData);
         if (unpacked !== null) {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} rally points via MAVFTP!`);
-          if (this.isActive(sysId)) useTelemetryStore.setState({ rallyPoints: unpacked, ...(unpacked.length > 0 ? { rallySupport: 'supported' as const } : {}) });
+          // Read from a vehicle no longer commanded (a switch while it ran): nothing of it goes to the store, home or counts.
+          if (!this.isActive(sysId)) return [];
+          useTelemetryStore.setState({ rallyPoints: unpacked, ...(unpacked.length > 0 ? { rallySupport: 'supported' as const } : {}) });
           this.setStatus({ rallyCount: unpacked.length });
           this.lastRallyReadOk = true;
           return unpacked;
@@ -1080,7 +1092,9 @@ export class MissionManager {
       console.warn('[MissionManager] Rally point stream incomplete; keeping the rally points already known.');
       return useTelemetryStore.getState().rallyPoints;
     }
-    if (this.isActive(sysId)) useTelemetryStore.setState({ rallyPoints, ...(rallyPoints.length > 0 ? { rallySupport: 'supported' as const } : {}) });
+    // Read from a vehicle no longer commanded (a switch while it ran): nothing of it goes to the store, home or counts.
+    if (!this.isActive(sysId)) return [];
+    useTelemetryStore.setState({ rallyPoints, ...(rallyPoints.length > 0 ? { rallySupport: 'supported' as const } : {}) });
     this.setStatus({ rallyCount: rallyPoints.length });
     this.lastRallyReadOk = true;
     return rallyPoints;
