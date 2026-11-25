@@ -7,7 +7,7 @@
 
 import type { MissionItemIntData } from './encoder';
 import type { RallyPoint } from '../store/telemetryStore';
-import { MAV_FRAME, normalFrame, type History } from './missionDraft';
+import { MAV_FRAME, normalFrame } from './missionDraft';
 
 export const CMD_NAV_RALLY_POINT = 5100;
 
@@ -34,7 +34,6 @@ export interface RallyDraft {
   points: RallyItem[];
 }
 
-export type RallyHistory = History<RallyDraft>;
 
 const finiteOr = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 

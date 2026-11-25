@@ -18,7 +18,6 @@ import {
   setReturnPoint,
   type FenceDraft,
   type FenceIssue,
-  type FenceShape,
 } from '../../mavlink/fenceDraft';
 import { isFenceDirty, useMissionPlanStore } from '../../store/missionPlanStore';
 import { paramManager } from '../../mavlink/paramManager';
@@ -44,11 +43,6 @@ interface FencePlanBodyProps {
   onRequestUpload?: () => void;
   /** Why uploading is not possible now, or null. */
   uploadBlocked: string | null;
-}
-
-/** "F1 inclusion polygon" and its one-line summary. */
-export function fenceShapeLabel(shape: FenceShape, i: number): string {
-  return `F${i + 1} ${shape.inclusion ? 'inclusion' : 'exclusion'} ${shape.kind}`;
 }
 
 function IssueList({ issues }: { issues: FenceIssue[] }) {

@@ -275,15 +275,6 @@ export interface HomePositionInfo {
   source: 'home_msg' | 'wp0' | 'arm_pos' | 'none';
 }
 
-export interface RadioStatusInfo {
-  rssi: number;
-  remrssi: number;
-  txbuf: number;
-  noise: number;
-  remnoise: number;
-  rxerrors: number;
-  fixed: number;
-}
 
 export interface BaseStationPosition {
   lat: number;
@@ -319,7 +310,6 @@ interface TelemetryState {
   extendedState: VehicleExtendedState;
   power: VehiclePower;
   pressure: VehiclePressure;
-  radioStatus: RadioStatusInfo;
   homePosition: HomePositionInfo;
   /**
    * Where home was when the app was last open, for centring the map before a fix. Never the live home: a saved
@@ -471,7 +461,6 @@ const HANDLED_MESSAGE_IDS = new Set<number>([
   // Without this the REACHED case below never ran: arrivals were only inferred from MISSION_CURRENT.
   MAVLINK_MSG_ID.MISSION_ITEM_REACHED,
   MAVLINK_MSG_ID.COMMAND_ACK,
-  MAVLINK_MSG_ID.RADIO_STATUS,
   MAVLINK_MSG_ID.HOME_POSITION,
 ]);
 
@@ -591,6 +580,10 @@ const SEVERITY_LABELS: Record<number, string> = {
   7: 'DEBUG',
 };
 
+/** How many recent lines, and how recent, an informational repeat is looked for in (appendStatusMessage). */
+const REPEAT_LOOKBACK = 8;
+const REPEAT_WINDOW_MS = 10_000;
+
 export function appendStatusMessage(
   existing: StatusMessage[],
   msg: { severity: number; severityLabel: string; text: string },
@@ -606,6 +599,19 @@ export function appendStatusMessage(
       count: (first.count ?? 1) + 1,
     };
     return [updated, ...existing.slice(1)];
+  }
+  // A repeated informational line from a few lines back: the version banner (several lines) comes again whenever the
+  // parameter file is opened by MAVFTP, besides when asked for. Counted on the earlier copy, in place, rather than
+  // listed again. Warnings and worse always come to the top.
+  if (msg.severity >= 5) {
+    const i = existing.slice(0, REPEAT_LOOKBACK).findIndex(
+      (m) => m.text === msg.text && m.severity === msg.severity && m.timestamp !== undefined && now - m.timestamp <= REPEAT_WINDOW_MS
+    );
+    if (i > 0) {
+      const next = existing.slice();
+      next[i] = { ...existing[i], count: (existing[i].count ?? 1) + 1 };
+      return next;
+    }
   }
   const newMsg: StatusMessage = {
     id: `${now}-${Math.random()}`,
@@ -888,15 +894,6 @@ export const useTelemetryStore = create<TelemetryState>()(batchedNotify((set) =>
     pressAbs: 1013.25,
     pressDiff: 0,
     temperature: 25.0,
-  },
-  radioStatus: {
-    rssi: 0,
-    remrssi: 0,
-    txbuf: 100,
-    noise: 0,
-    remnoise: 0,
-    rxerrors: 0,
-    fixed: 0,
   },
   homePosition: (() => {
     const wp0 = initialNav.missionWaypoints?.find(
@@ -1660,20 +1657,6 @@ export const useTelemetryStore = create<TelemetryState>()(batchedNotify((set) =>
             lastReachedWaypointSeq: data.seq,
             lastReachedAt: now,
             missionItemReachedSeen: true,
-          };
-        }
-
-        case MAVLINK_MSG_ID.RADIO_STATUS: {
-          return {
-            radioStatus: {
-              rssi: data.rssi ?? 0,
-              remrssi: data.remrssi ?? 0,
-              txbuf: data.txbuf ?? 100,
-              noise: data.noise ?? 0,
-              remnoise: data.remnoise ?? 0,
-              rxerrors: data.rxerrors ?? 0,
-              fixed: data.fixed ?? 0,
-            },
           };
         }
 
