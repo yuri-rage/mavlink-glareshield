@@ -128,5 +128,15 @@ check('no fence: nothing', routeFenceIssues(legs, route, { shapes: [], returnPoi
   check('a 19 km, 32-segment leg is checked to its end', iss4.length === 1, JSON.stringify(iss4.map((x) => x.message)));
 }
 
+// Second review: below-home landings, an endless jump's return leg, a loiter-to-altitude "here".
+{
+  const valley = missionSummary([HOME, it(16, north(100), O0, -20), it(21)], 'copter', none);
+  check('landing below home elevation adds no negative time', valley.timeS >= 100 / 10, valley.timeS.toFixed(1));
+  const loop = missionSummary([HOME, it(16, north(200), O0, 20), it(16, north(400), O0, 20), it(177, 0, 0, 0, 1, -1)], 'copter', none);
+  check('endless jump: its return leg (2 -> 1) is recorded for the fence check', loop.legs.some((l) => l.from === 2 && l.to === 1 && l.at === 3), JSON.stringify(loop.legs.map((l) => `${l.from}>${l.to}@${l.at}`)));
+  const lta = missionSummary([HOME, it(22, 0, 0, 20), it(31, 0, 0, 80)], 'plane', params({ AIRSPEED_CRUISE: 20, TECS_CLMB_MAX: 5 }));
+  check('loiter to altitude "here": its climb and height count', lta.maxAltM === 80 && near(lta.timeS, 20 / 5 + 60 / 5, 0.5), `${lta.maxAltM} m, ${lta.timeS.toFixed(1)} s`);
+}
+
 console.log(failures.length ? `\n${failures.length} summary check(s) FAILED` : '\nAll summary checks PASSED');
 process.exit(failures.length ? 1 : 0);

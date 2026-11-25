@@ -427,8 +427,10 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
                 : false;
     return {
       summary,
+      // The legs flown (jump returns, RTL's), plus any drawn leg the walk didn't reach (a landing sequence after RTL
+      // or an unlimited loiter, entered by DO_LAND_START or by hand).
       routeIssues: summary
-        ? routeFenceIssues(summary.legs, draft.items, fenceDraft, {
+        ? routeFenceIssues([...summary.legs, ...legs.filter((l) => !summary.legs.some((f) => f.from === l.from && f.to === l.to))], draft.items, fenceDraft, {
             home: home && (home.x !== 0 || home.y !== 0) ? { lat: home.x, lon: home.y } : undefined,
             types: param('FENCE_TYPE'),
             inclusionUnion: fenceOptions !== undefined ? (Math.round(fenceOptions) & 2) !== 0 : undefined,
