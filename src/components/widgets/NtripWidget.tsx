@@ -275,7 +275,7 @@ export const NtripWidget: React.FC = () => {
             {sourceMode === 'ntrip' ? (
               <div className="space-y-2 bg-zinc-900/40 border border-zinc-800/60 p-2.5 rounded-lg">
                 <div className="grid grid-cols-1 @md:grid-cols-3 gap-2">
-                  <div className="sm:col-span-2 space-y-1">
+                  <div className="@md:col-span-2 space-y-1">
                     <label className="text-[10px] text-zinc-400 uppercase font-bold">Caster Host / IP</label>
                     <input
                       type="text"
@@ -353,7 +353,7 @@ export const NtripWidget: React.FC = () => {
                     />
                   </div>
 
-                  <div className="sm:col-span-2 flex items-center justify-between pt-0.5">
+                  <div className="@md:col-span-2 flex items-center justify-between pt-0.5">
                     <span className="text-[11px] text-zinc-300">
                       Send NMEA GGA VRS Feedback (Every 10s)
                     </span>

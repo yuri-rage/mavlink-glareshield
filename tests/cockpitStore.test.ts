@@ -25,6 +25,13 @@ check('a widget added to a Cockpit tab gets a pane', panesInOrder(hud().cockpit)
 st().removeWidgetFromActiveTab(added);
 check('a removed widget loses its pane', !panesInOrder(hud().cockpit).includes(added) && !hud().widgets.some((w) => w.instanceId === added));
 
+// Quick actions added to a Cockpit tab with no header: pinned as the header.
+st().unplaceFromCockpit('tab-flight', 'w-glareshield');
+st().removeWidgetFromActiveTab('w-glareshield');
+st().addWidgetToActiveTab('built-in-glareshield');
+const qa = hud().widgets[hud().widgets.length - 1].instanceId;
+check('quick actions added to a headerless Cockpit tab are pinned as its header', hud().cockpit?.header === qa);
+
 st().unplaceFromCockpit('tab-flight', 'w-gps');
 check('hidden: off the layout, still on the tab', !panesInOrder(hud().cockpit).includes('w-gps') && hud().widgets.some((w) => w.instanceId === 'w-gps'));
 st().placeInCockpit('tab-flight', 'w-gps');

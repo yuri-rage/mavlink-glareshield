@@ -456,7 +456,7 @@ export const ParametersWidget: React.FC = () => {
         )}
       </CardHeader>
 
-      <CardContent className="p-3 flex-1 flex flex-col space-y-2">
+      <CardContent className="p-3 flex-1 min-h-0 flex flex-col space-y-2">
         {/* Search & filter row */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1">

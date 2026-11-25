@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useInPane } from '../dashboard/paneContext';
 import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
 import { formatEta, useConfirmStep, useWaypointNavigation } from '../../lib/useWaypointNavigation';
 import { useUnitsStore } from '../../store/unitsStore';
@@ -23,6 +24,8 @@ import {
 } from 'lucide-react';
 
 export const WaypointControlWidget: React.FC = () => {
+  // In a Cockpit pane: the card fills it and its content scrolls under the pinned title.
+  const inPane = useInPane();
   const {
     heartbeat,
     showAltitude,
@@ -133,7 +136,7 @@ export const WaypointControlWidget: React.FC = () => {
         </div>
       </CardHeader>
 
-      <CardContent className="p-3 sm:p-3.5 space-y-3 flex-1 flex flex-col justify-between">
+      <CardContent className={`p-3 sm:p-3.5 space-y-3 flex-1 flex flex-col justify-between min-h-0 ${inPane ? 'overflow-y-auto' : ''}`}>
         {userWpCount === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-4 border border-dashed border-zinc-800 rounded-lg space-y-2">
             <Milestone className="h-6 w-6 text-zinc-600" />

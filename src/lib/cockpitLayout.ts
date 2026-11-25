@@ -23,7 +23,12 @@ export function normalizeSizes(sizes: unknown, n: number): number[] {
   const ok = Array.isArray(sizes) && sizes.length === n && sizes.every((v) => typeof v === 'number' && Number.isFinite(v) && v > 0);
   const raw = ok ? (sizes as number[]) : Array(n).fill(1);
   const total = raw.reduce((a, b) => a + b, 0);
-  return raw.map((v) => Math.round((v / total) * 100 * 100) / 100);
+  // Each at least 0.5 (a zero would read as invalid next time, resetting the split), to the hundredth.
+  const out = raw.map((v) => Math.max(0.5, Math.round((v / total) * 100 * 100) / 100));
+  // The sum exactly 100 (three thirds round to 99.99): the difference goes to the largest.
+  const big = out.indexOf(Math.max(...out));
+  out[big] = Math.round((out[big] + 100 - out.reduce((a, b) => a + b, 0)) * 100) / 100;
+  return out;
 }
 
 /**
@@ -127,7 +132,7 @@ export function widgetMinSize(widgetId: string): Size {
       // At this size the HUD's readouts are at 0.8x and its compass tape narrowed (HudWidget), clear of each other.
       return { w: 380, h: 250 };
     case 'built-in-map':
-      return { w: 320, h: 260 };
+      return { w: 320, h: 240 };
     case 'built-in-charts':
     case 'built-in-parameters':
     case 'built-in-inspector':
@@ -197,8 +202,15 @@ const QUICK_ACTIONS = new Set(['built-in-glareshield', 'built-in-arm-modes']);
 export function buildPreset(preset: CockpitPresetId, existing: PlacedWidget[], newId: () => string): { widgets: PlacedWidget[]; layout: CockpitLayout } {
   const widgets = [...existing];
   const taken = new Set<string>();
+  // A widget the preset wants, by any of its names (older profiles have built-in-arm-modes for the quick actions,
+  // built-in-pfd for the HUD): the tab's own instance when it has one, else a new one under the first name.
+  const ALIASES: Record<string, string[]> = {
+    'built-in-glareshield': ['built-in-glareshield', 'built-in-arm-modes'],
+    'built-in-hud': ['built-in-hud', 'built-in-pfd'],
+  };
   const use = (widgetId: string): string => {
-    const have = widgets.find((w) => w.widgetId === widgetId && !taken.has(w.instanceId));
+    const names = ALIASES[widgetId] ?? [widgetId];
+    const have = widgets.find((w) => names.includes(w.widgetId) && !taken.has(w.instanceId));
     if (have) {
       taken.add(have.instanceId);
       return have.instanceId;

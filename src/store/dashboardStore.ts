@@ -310,8 +310,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const newTabs = state.profile.tabs.map((tab) => {
         if (tab.id !== activeTabId) return tab;
         const newWidget: PlacedWidget = { instanceId, widgetId, colSpan };
-        // A Cockpit tab shows it as a new pane.
-        const cockpit = tab.mode === 'cockpit' ? appendPane(tab.cockpit ?? { header: null, root: null }, instanceId) : tab.cockpit;
+        // A Cockpit tab shows it as a new pane; the quick-actions bar, if the tab has none pinned, as the header.
+        const current = tab.cockpit ?? { header: null, root: null };
+        const quickActions = widgetId === 'built-in-glareshield' || widgetId === 'built-in-arm-modes';
+        const cockpit =
+          tab.mode !== 'cockpit'
+            ? tab.cockpit
+            : quickActions && !current.header
+              ? { ...current, header: instanceId }
+              : appendPane(current, instanceId);
         return reconcileTab({ ...tab, widgets: [...tab.widgets, newWidget], ...(cockpit ? { cockpit } : {}) });
       });
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };

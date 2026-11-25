@@ -87,14 +87,22 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
   // ----------------------------------------------------------------------------------------------
   // Cockpit tabs: panes filling the window, when the window holds the layout's minimums; stacked (like a Flow tab)
   // when it doesn't (a phone, a small window). The room is measured from where the content starts, which is the same
-  // either way, so switching between the two doesn't change the measurement (no flicker).
+  // either way (same padding), so it doesn't depend on the choice: no feedback, no flicker, and no margin needed
+  // (a margin would keep a window with just enough room stacked after leaving Edit mode).
   // ----------------------------------------------------------------------------------------------
-  const cockpit = activeTab?.mode === 'cockpit' ? activeTab.cockpit : undefined;
-  const isCockpit = Boolean(cockpit && (cockpit.root || cockpit.header));
+  const isCockpit = activeTab?.mode === 'cockpit';
+  const cockpit = isCockpit ? (activeTab.cockpit ?? { header: null, root: null }) : undefined;
   const contentRef = useRef<HTMLDivElement | null>(null);
   const headerRef = useRef<HTMLDivElement | null>(null);
-  /** The pinned header's height, as last measured (it isn't shown while stacked). */
-  const headerHeightRef = useRef(100);
+  /**
+   * The pinned header's resting height: the least seen for this layout. Its Takeoff checklist opening grows it for a
+   * while (the panes give way); that mustn't count, or the tab would stack, unmounting the checklist mid-sequence.
+   */
+  const headerHeightRef = useRef<number | null>(null);
+  const layoutKey = `${activeTab?.id}|${cockpit?.header ?? ''}`;
+  useEffect(() => {
+    headerHeightRef.current = null;
+  }, [layoutKey]);
   const [stacked, setStacked] = useState(false);
   useLayoutEffect(() => {
     if (!isCockpit || !cockpit) {
@@ -106,28 +114,39 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
     const measure = () => {
       const el = contentRef.current;
       if (!el) return;
-      if (headerRef.current) headerHeightRef.current = headerRef.current.offsetHeight + 6;
+      if (headerRef.current) {
+        const h = headerRef.current.offsetHeight + 6;
+        headerHeightRef.current = headerHeightRef.current === null ? h : Math.min(headerHeightRef.current, h);
+      }
       const rect = el.getBoundingClientRect();
       const top = rect.top + window.scrollY;
-      const room = { w: rect.width, h: window.innerHeight - top - 16 - (cockpit.header ? headerHeightRef.current : 0) };
+      // Before the header is first measured, a generous guess: measuring can only lower it (the least is kept), so
+      // the choice can't flip back and forth.
+      const header = cockpit.header ? (headerHeightRef.current ?? 110) : 0;
+      // Less the container's bottom padding (12 px).
+      const room = { w: rect.width, h: window.innerHeight - top - 12 - header };
       setStacked(!layoutFits(need, room));
     };
     measure();
     window.addEventListener('resize', measure);
-    // Banners and the edit toolbar above move the content: watch the page.
+    // What's above the content changes its room: while stacked the page grows (watch the page); as panes the page is
+    // the window's height and the content area itself shrinks (watch it): banners, the edit toolbar, the not-shown
+    // list.
     const ro = new ResizeObserver(measure);
     ro.observe(document.body);
+    if (contentRef.current) ro.observe(contentRef.current);
     return () => {
       window.removeEventListener('resize', measure);
       ro.disconnect();
     };
-  }, [isCockpit, cockpit, activeTab]);
+  }, [isCockpit, cockpit, activeTab, isEditing]);
   const fill = isCockpit && !stacked;
   useEffect(() => {
     useLayoutStore.setState({ cockpitFill: fill });
     return () => useLayoutStore.setState({ cockpitFill: false });
   }, [fill]);
   const placedIds = new Set(panesInOrder(cockpit));
+  const emptyCockpit = isCockpit && !cockpit?.root && !cockpit?.header;
   const unplaced = isCockpit ? activeTab.widgets.filter((w) => !placedIds.has(w.instanceId)) : [];
 
   const getWidgetTitle = (widgetId: string): string => {
@@ -455,9 +474,23 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
         </div>
       )}
 
-      {isCockpit && fill ? (
+      {emptyCockpit ? (
+        <div ref={contentRef} className="flex min-h-0 flex-1 items-center justify-center rounded-2xl border-2 border-dashed border-zinc-800 p-6 text-center">
+          <div>
+            <LayoutPanelTop className="mx-auto mb-2 h-8 w-8 text-zinc-600" />
+            <p className="text-sm font-bold text-zinc-300">This Cockpit tab shows no panes</p>
+            <p className="mt-1 text-xs text-zinc-500">In Edit mode, pick a preset, Show a widget listed above, or Add Widget.</p>
+          </div>
+        </div>
+      ) : isCockpit && fill ? (
         <div ref={contentRef} className="flex min-h-0 flex-1 flex-col">
-          <CockpitView tab={activeTab} isEditing={isEditing} renderWidget={renderWidgetContent} titleOf={getWidgetTitle} headerRef={headerRef} />
+          <CockpitView
+            tab={{ ...activeTab, cockpit }}
+            isEditing={isEditing}
+            renderWidget={renderWidgetContent}
+            titleOf={getWidgetTitle}
+            headerRef={headerRef}
+          />
         </div>
       ) : isCockpit ? (
         // Too small for the panes: the same widgets, stacked in reading order.
