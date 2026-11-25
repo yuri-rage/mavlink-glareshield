@@ -6,7 +6,7 @@ This guide explains how to connect Glareshield to your telemetry bridge (`bridge
 
 ## Quick Start
 
-To explore the features of Glareshield, start a SITL session in Mission Planner or connect it to a live vehicle (Mission Planner automatically opens a WebSocket server on port 56781). On the same computer, open [Glareshield](https://glareshield.yurirage.com) in any modern web browser, click "Connect" in the upper right corner, enter `ws://localhost:56781` as the host:port, and click "Connect Now."
+To explore the features of Glareshield, start a SITL session in Mission Planner or connect it to a live vehicle (Mission Planner automatically opens a WebSocket server on port 56781). On the same computer, open [Glareshield](https://glareshield.yurirage.com) in any modern web browser, click the connection pill in the upper right corner (or **Settings**) to open the **Link** tab, enter `ws://localhost:56781` as the address, and click **Connect**.
 
 > [!NOTE]
 > **Chrome Local Network Access**:
@@ -164,7 +164,7 @@ Whether generated automatically via Docker Compose (Method A) or manually with O
    - **Safari (iOS / iPadOS / macOS)**: Tap **Show Details → visit this website** (and confirm when prompted).
    > [!NOTE]
    > The browser will display: `Failed to open a WebSocket connection: missing Connection header`. **This is expected and normal!** It confirms the browser completed the TLS handshake with the bridge before reaching the WebSocket endpoint.
-3. Close the tab, open [https://glareshield.yurirage.com](https://glareshield.yurirage.com), and in **Link Settings** connect to:
+3. Close the tab, open [https://glareshield.yurirage.com](https://glareshield.yurirage.com), and in **Settings → Link** connect to:
    ```text
    wss://192.168.1.69:56781/
    ```
@@ -189,7 +189,7 @@ Whether generated automatically via Docker Compose (Method A) or manually with O
    ```
 4. Double-click to toggle the value to **`true`**.
 5. Reload [https://glareshield.yurirage.com](https://glareshield.yurirage.com).
-6. Open **Link Settings** (gear icon) and connect to:
+6. Open **Settings → Link** (the gear icon) and connect to:
    ```text
    ws://192.168.1.69:56781/
    ```
@@ -286,10 +286,10 @@ For remote internet access, use a **Named Cloudflare Tunnel** protected by **Clo
 Chromium browsers can open a USB serial device themselves, so a telemetry radio or a flight controller's USB port can connect to Glareshield with no bridge, no certificates, and no mixed-content restrictions (the link never leaves the browser).
 
 1. Plug in the telemetry radio or flight controller.
-2. Open **Link & Display Settings**, choose **Link Type → USB Serial**, and pick a baud rate (SiK radios usually use `57600`; a flight controller's own USB port ignores it).
-3. Click **Connect Now** and choose the device in the browser's prompt.
+2. Open **Settings → Link**, choose **Link type → USB serial**, and pick a baud rate (SiK radios usually use `57600`; a flight controller's own USB port ignores it).
+3. Click **Connect** and choose the device in the browser's prompt.
 
-Glareshield remembers the device: automatic reconnects after a cable blip, and later page loads, reopen it without asking again. To use a different device, click **Connect Now** again and pick it.
+Glareshield remembers the device: automatic reconnects after a cable blip, and later page loads, reopen it without asking again. To use a different device, disconnect, click **Connect** again and pick it.
 
 | Browser | How serial works | What it reaches |
 |---|---|---|
@@ -301,6 +301,17 @@ Limitations:
 - **NTRIP via the bridge** needs the bridge's WebSocket side channel, so it is not available on a serial link. A USB RTK base station (RTK widget → serial) still works alongside a serial telemetry link.
 - One program at a time can own a serial port. Close Mission Planner (or any other app or tab) that has the port open first.
 - On Android, some devices ship a driver that permanently claims the board's USB interface; there is no way around that from a web page, so use the bridge there.
+
+---
+
+## Several Vehicles on One Link
+
+Glareshield lists every autopilot it hears on the link and commands one at a time (a **SYS n / N** chip appears in the navbar; the others show on the map). See [Several vehicles on one link](user-guide.md#several-vehicles-on-one-link) for switching.
+
+- **Give each vehicle its own system ID** (`MAV_SYSID` on current ArduPilot, `SYSID_THISMAV` on older releases). Vehicles sharing an ID can't be told apart.
+- **UDP**: in UDP mode the bridge serves several vehicle endpoints at once, so point every vehicle (or SITL instance) at the bridge's UDP port, e.g. `--serial0 udpclient:<bridge-ip>:14550` for SITL.
+- **One radio, several aircraft**: anything that merges their MAVLink streams onto one link (MAVProxy, a mesh radio network) works the same way.
+- The commanded vehicle gets the telemetry rates Glareshield asks for; the others' positions are only as frequent as their own stream settings send them.
 
 ---
 
