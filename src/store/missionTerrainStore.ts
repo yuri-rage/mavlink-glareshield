@@ -13,6 +13,12 @@ interface MissionTerrainState {
   /** The strip is shown (planning, mission layer). */
   showProfile: boolean;
   setShowProfile: (on: boolean) => void;
+  /**
+   * The profile point pointed at (index into profile.points), from the strip or from the route on the map: each
+   * shows it (the strip's cursor line, a marker on the map). Null when nothing is pointed at.
+   */
+  hover: number | null;
+  setHover: (i: number | null) => void;
 }
 
 const KEY = 'mavlink_glareshield_profile_shown';
@@ -28,6 +34,8 @@ export const useMissionTerrainStore = create<MissionTerrainState>((set) => ({
   issues: [],
   loading: false,
   showProfile: shown,
+  hover: null,
+  setHover: (i) => set({ hover: i }),
   setShowProfile: (on) => {
     set({ showProfile: on });
     try {

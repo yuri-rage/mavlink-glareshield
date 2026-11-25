@@ -1,9 +1,10 @@
 // The mission's altitude profile, along the bottom of the map while planning (aircraft, terrain data on): distance
 // along the route against altitude above sea level. Terrain as a filled area with the clearance as a faint line above
 // it, the planned route over it (red where it is within the clearance or below the terrain), the route's items
-// marked. Hover for distance, planned altitude, terrain and height above it there.
+// marked. Hover for distance, planned altitude, terrain and height above it there; the point is marked on the map too
+// (and pointing at the route on the map marks it here); click to bring it into view on the map.
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Mountain, X } from 'lucide-react';
 import { useMissionTerrainStore } from '../../store/missionTerrainStore';
 import { useTerrainStore } from '../../store/terrainStore';
@@ -14,14 +15,16 @@ import { usePanelWidth } from '../widgets/custom/panelKit';
 const H = 120;
 const PAD = { l: 44, r: 8, t: 8, b: 16 };
 
-export const MissionProfileStrip: React.FC<{ style?: React.CSSProperties }> = ({ style }) => {
+export const MissionProfileStrip: React.FC<{ style?: React.CSSProperties; onShowPoint?: (lat: number, lon: number) => void }> = ({ style, onShowPoint }) => {
   const profile = useMissionTerrainStore((s) => s.profile);
   const loading = useMissionTerrainStore((s) => s.loading);
   const issues = useMissionTerrainStore((s) => s.issues);
   const clearance = useTerrainStore((s) => s.clearanceM);
   const { formatAltitude, formatDistance } = useUnitsStore();
   const { ref, width } = usePanelWidth<HTMLDivElement>();
-  const [hover, setHover] = useState<number | null>(null);
+  // Shared with the map: pointing here marks the point there, and the other way round.
+  const hover = useMissionTerrainStore((s) => s.hover);
+  const setHover = useMissionTerrainStore((s) => s.setHover);
   const W = Math.max(200, width ?? 600);
 
   const chart = useMemo(() => {
@@ -117,6 +120,11 @@ export const MissionProfileStrip: React.FC<{ style?: React.CSSProperties }> = ({
               });
               setHover(best);
             }}
+            onClick={() => {
+              const q = hover !== null && profile ? profile.points[hover] : null;
+              if (q) onShowPoint?.(q.lat, q.lon);
+            }}
+            style={{ cursor: onShowPoint ? 'pointer' : undefined }}
           >
             {chart.ticks.map((t, i) => (
               <g key={i}>
