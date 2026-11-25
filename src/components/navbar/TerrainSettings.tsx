@@ -39,7 +39,9 @@ export const TerrainSettings: React.FC = () => {
             onBlur={(e) => {
               const v = Number(e.target.value);
               if (Number.isFinite(v) && v >= 0) setClearanceM(imperial ? v / 3.28084 : v);
-              else e.target.value = String(shown);
+              // Show what's stored (clamped to 0-1000 m): a clamp to the value already there doesn't re-render.
+              const m = useTerrainStore.getState().clearanceM;
+              e.target.value = String(imperial ? Math.round(m * 3.28084) : m);
             }}
             onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
             className="w-16 rounded-md border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-right font-mono text-xs text-zinc-200"
