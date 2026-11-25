@@ -20,7 +20,7 @@ export const UpdateButton: React.FC = () => {
           ? 'A newer version is available. Reload after disarming: reloading drops the vehicle link for a few seconds.'
           : `A newer version is available${available !== 'unknown' ? ` (${available})` : ''}. Reload to use it; the link reconnects.`
       }
-      aria-label="Update: reload into the newer version"
+      aria-label={armed ? 'Update available: reload after disarming' : 'Update: reload into the newer version'}
       className="h-7 shrink-0 inline-flex items-center gap-1 rounded-lg border border-sky-500/60 bg-sky-950/60 px-2 text-xs font-semibold text-sky-200 hover:bg-sky-900/70 disabled:cursor-not-allowed disabled:opacity-50"
     >
       <RefreshCw className="h-3.5 w-3.5 shrink-0" />
