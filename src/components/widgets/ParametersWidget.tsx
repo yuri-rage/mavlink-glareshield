@@ -29,8 +29,8 @@ const BUFFER = 10;
 
 export { formatParamValue };
 
-/** A write's state in the compare dialog: under way, or what it came to. */
-type WriteState = 'writing' | WriteOutcome;
+/** A write's state in the compare dialog: under way, or what it came to (with the value kept, when another). */
+type WriteState = { state: 'writing' } | { state: WriteOutcome; echoed?: number };
 
 export const ParametersWidget: React.FC = () => {
   // Use selector so this component ONLY re-renders when parameters or connection state change,
@@ -92,7 +92,12 @@ export const ParametersWidget: React.FC = () => {
   });
 
   useEffect(() => {
-    return paramManager.onStatusChange((st) => setParamStatus(st));
+    const unsubscribe = paramManager.onStatusChange((st) => setParamStatus(st));
+    return () => {
+      unsubscribe();
+      // Gone (layout changed, widget removed) mid-batch: stop writing rather than carry on unseen.
+      abortBatchRef.current = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -188,7 +193,8 @@ export const ParametersWidget: React.FC = () => {
     const text = await file.text();
     const parsed = parseParamFile(text);
     // Missing (not on this vehicle) only once its full list is read; until then, not read yet.
-    const listComplete = paramManager.hasParamList(paramKeys) && !paramStatus.fromPreviousConnection;
+    // Only a list read whole this connection, and not being fetched now (a partial stream isn't the whole list).
+    const listComplete = paramStatus.listComplete === true && !paramStatus.isFetching && !paramStatus.fromPreviousConnection;
     const result = compareParams(parsed, parameters, listComplete, getParamMetadata);
     setDiffFileName(file.name);
     setCompare(result);
@@ -204,18 +210,22 @@ export const ParametersWidget: React.FC = () => {
    * Write one parameter and wait for the vehicle's echo; once more if none comes (a slow or lossy link). The echoed
    * value tells whether it took (the vehicle may refuse or clamp it).
    */
-  const writeOne = async (name: string, value: number): Promise<WriteOutcome> => {
+  const writeOne = async (name: string, value: number): Promise<{ outcome: WriteOutcome; echoed?: number }> => {
     const hb = useTelemetryStore.getState().heartbeat;
     const sysId = hb.systemId || 1;
     const compId = hb.componentId || 1;
     const pType = parameters[name]?.type ?? 9;
     for (let attempt = 0; attempt < 2; attempt++) {
+      // Stopped between tries: no second one.
+      if (abortBatchRef.current) return { outcome: 'no-answer' };
+      let sent = true;
       const echoed = await new Promise<number | undefined>((resolve) => {
         let timer: ReturnType<typeof setTimeout> | null = null;
+        // The vehicle's own echo only: a gimbal, companion or another vehicle may have a parameter of that name.
         const unsub = mavlinkConnection.onPacket((packet) => {
-          if (packet.messageId !== 22) return; // PARAM_VALUE
+          if (packet.messageId !== 22 || packet.systemId !== sysId || packet.componentId !== compId) return; // PARAM_VALUE
           const data = decodePayload(packet.messageId, packet.payload);
-          if (data?.param_id?.trim() === name) finish(data.param_value);
+          if (data?.param_id?.trim().toUpperCase() === name.toUpperCase()) finish(data.param_value);
         });
         const finish = (v: number | undefined) => {
           if (timer) clearTimeout(timer);
@@ -223,11 +233,16 @@ export const ParametersWidget: React.FC = () => {
           resolve(v);
         };
         timer = setTimeout(() => finish(undefined), 1500);
-        if (!mavlinkConnection.send(encoder.createParamSet(sysId, compId, name, value, pType))) finish(undefined);
+        if (!mavlinkConnection.send(encoder.createParamSet(sysId, compId, name, value, pType))) {
+          sent = false;
+          finish(undefined);
+        }
       });
-      if (echoed !== undefined) return writeOutcome(value, echoed);
+      if (echoed !== undefined) return { outcome: writeOutcome(value, echoed), echoed };
+      // Not sent (no link): retrying won't help.
+      if (!sent) return { outcome: 'no-answer' };
     }
-    return 'no-answer';
+    return { outcome: 'no-answer' };
   };
 
   const handleWriteSelectedDiffs = async () => {
@@ -241,10 +256,10 @@ export const ParametersWidget: React.FC = () => {
       if (abortBatchRef.current) break;
       const e = todo[i];
       setBatchWriteStatus(`Writing ${i + 1}/${todo.length}: ${e.name} = ${formatParamValue(e.file)}…`);
-      setWriteStates((prev) => ({ ...prev, [e.name]: 'writing' }));
-      const outcome = await writeOne(e.name, e.file);
+      setWriteStates((prev) => ({ ...prev, [e.name]: { state: 'writing' } }));
+      const { outcome, echoed } = await writeOne(e.name, e.file);
       outcomes[e.name] = outcome;
-      setWriteStates((prev) => ({ ...prev, [e.name]: outcome }));
+      setWriteStates((prev) => ({ ...prev, [e.name]: { state: outcome, echoed } }));
       await new Promise((r) => setTimeout(r, 40));
     }
     const done = Object.values(outcomes);
@@ -767,12 +782,21 @@ export const ParametersWidget: React.FC = () => {
             else next.delete(name);
             return next;
           });
-        const RESULT: Record<WriteState, { text: string; cls: string }> = {
-          writing: { text: 'writing…', cls: 'text-sky-300' },
-          ok: { text: '✓ written', cls: 'text-emerald-400' },
-          kept: { text: 'kept its value', cls: 'text-amber-300' },
-          'no-answer': { text: 'no answer', cls: 'text-red-300' },
+        // What a write came to: a clamped or refused write shows the value the vehicle kept.
+        const resultOf = (w: WriteState): { text: string; cls: string } =>
+          w.state === 'writing'
+            ? { text: 'writing…', cls: 'text-sky-300' }
+            : w.state === 'ok'
+              ? { text: '✓ written', cls: 'text-emerald-400' }
+              : w.state === 'kept'
+                ? { text: `kept ${w.echoed !== undefined ? formatParamValue(w.echoed) : 'its value'}`, cls: 'text-amber-300' }
+                : { text: 'no answer', cls: 'text-red-300' };
+        const counts = {
+          differs: compare.entries.filter((e) => e.status === 'differs').length,
+          missing: compare.entries.filter((e) => e.status === 'missing').length,
+          unread: compare.entries.filter((e) => e.status === 'unread').length,
         };
+        const nothingInFile = compare.entries.length === 0 && compare.same === 0;
         return (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden">
@@ -791,8 +815,18 @@ export const ParametersWidget: React.FC = () => {
             <div className="p-4 flex-1 overflow-y-auto space-y-3">
               <div className="text-[11px] text-zinc-400 flex flex-wrap gap-x-3 gap-y-1">
                 <span>
-                  <strong className="text-zinc-100">{compare.entries.length}</strong> differ
+                  <strong className="text-zinc-100">{counts.differs}</strong> differ
                 </span>
+                {counts.missing > 0 && (
+                  <span title="In the file but not a parameter of this vehicle (another firmware or vehicle type)">
+                    <strong className="text-zinc-100">{counts.missing}</strong> not on this vehicle
+                  </span>
+                )}
+                {counts.unread > 0 && (
+                  <span title="The vehicle's full list isn't read yet: these may or may not exist">
+                    <strong className="text-zinc-100">{counts.unread}</strong> not read yet
+                  </span>
+                )}
                 <span>
                   <strong className="text-zinc-100">{compare.same}</strong> same
                 </span>
@@ -802,7 +836,12 @@ export const ParametersWidget: React.FC = () => {
                   </span>
                 )}
               </div>
-              {compare.entries.length === 0 ? (
+              {nothingInFile ? (
+                <div className="text-center py-8 text-xs text-amber-300 flex flex-col items-center gap-2">
+                  <AlertTriangle className="h-6 w-6" />
+                  <span>No parameters found in {diffFileName}: is it a .param file (NAME,VALUE or NAME VALUE lines)?</span>
+                </div>
+              ) : compare.entries.length === 0 ? (
                 <div className="text-center py-8 text-xs text-emerald-400 flex flex-col items-center gap-2">
                   <Check className="h-6 w-6" />
                   <span>All parameters in {diffFileName} match the current vehicle values.</span>
@@ -868,7 +907,7 @@ export const ParametersWidget: React.FC = () => {
                                 {entry.units ? <span className="font-normal text-zinc-500"> {entry.units}</span> : null}
                               </td>
                               <td className="py-1.5 px-2 text-right text-zinc-500">{entry.defaultValue !== undefined ? formatParamValue(entry.defaultValue) : ''}</td>
-                              <td className={`py-1.5 px-2 text-right text-[11px] ${state ? RESULT[state].cls : ''}`}>{state ? RESULT[state].text : ''}</td>
+                              <td className={`py-1.5 px-2 text-right text-[11px] ${state ? resultOf(state).cls : ''}`}>{state ? resultOf(state).text : ''}</td>
                             </tr>
                           );
                         })}

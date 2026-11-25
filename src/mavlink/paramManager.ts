@@ -15,6 +15,12 @@ export interface ParamManagerStatus {
    * GCS or the vehicle itself may have changed them since).
    */
   fromPreviousConnection?: boolean;
+  /**
+   * The vehicle's whole list has been read this connection (MAVFTP, or every streamed index): a name not in it isn't
+   * a parameter of this vehicle. False while a fetch runs, after one is cancelled or gave up with gaps, and after a
+   * disconnect.
+   */
+  listComplete?: boolean;
 }
 
 /** One parameter as unpacked from param.pck. */
@@ -67,7 +73,7 @@ export class ParamManager {
       }
       const hasValues = Object.keys(useTelemetryStore.getState().parameters).length > 0;
       if (this.status.paramCount > 0 || this.status.isFetching || hasValues) {
-        this.setStatus({ isFetching: false, method: 'idle', paramCount: 0, fromPreviousConnection: hasValues });
+        this.setStatus({ isFetching: false, method: 'idle', paramCount: 0, fromPreviousConnection: hasValues, listComplete: false });
       }
     });
   }
@@ -97,6 +103,7 @@ export class ParamManager {
       this.setStatus({
         isFetching: false,
         method: 'idle',
+        listComplete: true,
         message: `Loaded all ${this.legacyExpected} params via stream`,
       });
       return;
@@ -107,6 +114,7 @@ export class ParamManager {
       this.setStatus({
         isFetching: false,
         method: 'idle',
+        listComplete: false,
         message: `Loaded ${this.legacyIndices.size} / ${this.legacyExpected} params (${missing.length} missed)`,
       });
       return;
@@ -206,6 +214,7 @@ export class ParamManager {
       this.setStatus({
         isFetching: false,
         method: 'idle',
+        listComplete: true,
         message: `Loaded all ${this.legacyExpected} params via stream`,
       });
       return;
@@ -268,7 +277,7 @@ export class ParamManager {
     this.singleReads.clear();
     this.listOwner = this.currentVehicleKey();
     this.ownerSeenAt = Date.now();
-    this.setStatus({ isFetching: false, method, paramCount: count, hasDefaults, message, fromPreviousConnection: false });
+    this.setStatus({ isFetching: false, method, paramCount: count, hasDefaults, message, fromPreviousConnection: false, listComplete: true });
     return hasDefaults;
   }
 
@@ -317,6 +326,7 @@ export class ParamManager {
     this.setStatus({
       isFetching: false,
       method: 'idle',
+      listComplete: false,
       message: 'Parameter fetch cancelled',
     });
   }
@@ -336,7 +346,7 @@ export class ParamManager {
     // A background read of the same file is already under way: wait for it instead of downloading it twice.
     // Cancel aborts it (MAVFTP abort) like a normal download.
     if (this.backgroundLoad) {
-      this.setStatus({ isFetching: true, method: 'ftp', message: 'Downloading params via MAVFTP…' });
+      this.setStatus({ isFetching: true, listComplete: false, method: 'ftp', message: 'Downloading params via MAVFTP…' });
       const loaded = await this.backgroundLoad;
       if (loaded || this.isCancelled) return; // loaded, or the user cancelled while waiting
       this.setStatus({ isFetching: false, method: 'idle' });
@@ -350,7 +360,7 @@ export class ParamManager {
     const fallbackPath = withDefaults ? '@PARAM/param.pck' : '@PARAM/param.pck?withdefaults=1';
 
     this.setStatus({
-      isFetching: true,
+      isFetching: true, listComplete: false,
       method: 'ftp',
       message: `Connecting to MAVFTP (${primaryPath})...`,
     });
@@ -419,7 +429,7 @@ export class ParamManager {
     this.legacyIndices.clear();
     this.legacyRetries = 0;
     this.setStatus({
-      isFetching: true,
+      isFetching: true, listComplete: false,
       method: 'legacy',
       message: 'Requesting parameters via PARAM_REQUEST_LIST...',
     });
