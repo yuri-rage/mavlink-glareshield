@@ -10,7 +10,7 @@ import { getVehicleCategory } from '../mavlink/messages';
 const KEY = 'mavlink_glareshield_last_vehicle';
 
 /** The parameters the waypoint radii come from. */
-export const RADIUS_PARAMS = ['WP_RADIUS', 'WP_LOITER_RAD', 'WPNAV_RADIUS_M', 'WPNAV_RADIUS'] as const;
+export const RADIUS_PARAMS = ['WP_RADIUS', 'WP_LOITER_RAD', 'WP_RADIUS_M', 'WPNAV_RADIUS_M', 'WPNAV_RADIUS'] as const;
 
 export interface LastVehicle {
   /** MAV_TYPE, 0 when none has connected in this browser. */
@@ -56,10 +56,10 @@ export function planningVehicle(): LastVehicle {
   return last.type === t.heartbeat.type ? last : { type: t.heartbeat.type, params: {} };
 }
 
-/** The radius parameters a vehicle has (Copter before 4.7 has WPNAV_RADIUS in cm, later WPNAV_RADIUS_M). */
+/** The radius parameters a vehicle has (Copter: WP_RADIUS_M on master, WPNAV_RADIUS in cm on 4.6 and before). */
 function radiusParamsFor(type: number): string[] {
   const cat = getVehicleCategory(type);
-  return cat === 'plane' ? ['WP_RADIUS', 'WP_LOITER_RAD'] : cat === 'copter' ? ['WPNAV_RADIUS_M', 'WPNAV_RADIUS'] : cat === 'rover' ? ['WP_RADIUS'] : [];
+  return cat === 'plane' ? ['WP_RADIUS', 'WP_LOITER_RAD'] : cat === 'copter' ? ['WP_RADIUS_M', 'WPNAV_RADIUS'] : cat === 'rover' ? ['WP_RADIUS'] : [];
 }
 
 /** The vehicle (sysid:type) asked for its radius parameters this connection. */
@@ -88,10 +88,10 @@ useTelemetryStore.subscribe((s, prev) => {
       const p = s.parameters[n];
       if (p && p !== prev.parameters[n] && p.value !== next.params[n]) {
         const params = { ...next.params, [n]: p.value };
-        // A Copter has one or the other (WPNAV_RADIUS in cm before 4.7, WPNAV_RADIUS_M after): the other is a
-        // previous vehicle's, and WPNAV_RADIUS_M would be read first.
-        if (n === 'WPNAV_RADIUS') delete params.WPNAV_RADIUS_M;
-        if (n === 'WPNAV_RADIUS_M') delete params.WPNAV_RADIUS;
+        // A Copter has one of them (WP_RADIUS_M on master, WPNAV_RADIUS in cm on 4.6 and before; WPNAV_RADIUS_M in
+        // between): the others are a previous vehicle's, and would be read first.
+        const copterRadius = ['WP_RADIUS_M', 'WPNAV_RADIUS_M', 'WPNAV_RADIUS'];
+        if (copterRadius.includes(n)) for (const o of copterRadius) if (o !== n) delete params[o];
         next = { ...next, params };
       }
     }
