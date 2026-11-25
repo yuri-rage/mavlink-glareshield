@@ -290,7 +290,8 @@ export const COCKPIT_PRESETS: { id: CockpitPresetId; name: string; description: 
 
 /** Widgets that want room (instruments, maps, lists) rather than a card's worth. */
 const LARGE = new Set(['built-in-hud', 'built-in-pfd', 'built-in-map', 'built-in-charts', 'built-in-parameters', 'built-in-statustext', 'built-in-inspector', 'built-in-logs', 'built-in-pid-tuning', 'built-in-ntrip']);
-const QUICK_ACTIONS = new Set(['built-in-glareshield', 'built-in-arm-modes']);
+/** The quick-actions bar (Flight Controls), by either of its names: the one widget that can be pinned above the panes. */
+export const QUICK_ACTIONS = new Set(['built-in-glareshield', 'built-in-arm-modes']);
 
 /**
  * A preset applied to a tab: the widgets it uses (the tab's own where it has them, new instances otherwise; the
@@ -485,4 +486,32 @@ export function movePaneToEdge(layout: CockpitLayout, srcId: string, side: Exclu
   const ids = [...widgetIds];
   const without = removeFromLayout(layout, srcId, ids);
   return placedOrUnchanged(layout, sanitizeCockpit(addAtEdge(without, srcId, side), ids));
+}
+
+/**
+ * The pinned bar made a pane: across the whole bottom of the layout (a bar's natural place), at a modest height (it
+ * can be moved and resized like any other pane).
+ */
+export function unpinHeader(layout: CockpitLayout, widgetIds: Iterable<string>): CockpitLayout {
+  const id = layout.header;
+  if (!id) return layout;
+  const ids = [...widgetIds];
+  const placed = addAtEdge({ ...layout, header: null }, id, 'bottom');
+  const root = placed.root;
+  // A bar needs little height: an eighth of the room, not the usual quarter.
+  if (root && !isPane(root) && root.split === 'column' && root.children[root.children.length - 1] && isPane(root.children[root.children.length - 1]) && (root.children[root.children.length - 1] as { pane: string }).pane === id) {
+    const n = root.sizes.length;
+    const rest = root.sizes.slice(0, -1);
+    const sum = rest.reduce((a, b) => a + b, 0) || 1;
+    root.sizes = normalizeSizes([...rest.map((s) => (s / sum) * 88), 12], n);
+  }
+  return placedOrUnchanged(layout, sanitizeCockpit(placed, ids));
+}
+
+/** A pane pinned above the others as the bar (only the quick-actions bar, and only when nothing is pinned). */
+export function pinAsHeader(layout: CockpitLayout, id: string, widgetIds: Iterable<string>): CockpitLayout {
+  if (layout.header) return layout;
+  const ids = [...widgetIds];
+  const without = removeFromLayout(layout, id, ids);
+  return sanitizeCockpit({ ...without, header: id }, ids) ?? layout;
 }

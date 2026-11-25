@@ -114,6 +114,18 @@ check('and Cockpit again restores it', JSON.stringify(hud().cockpit) === kept);
   st().removeWidgetFromActiveTab(charts);
 }
 
+// Unpin and pin the quick-actions bar.
+{
+  st().applyCockpitPreset('tab-flight', 'hd');
+  const qa = hud().cockpit!.header!;
+  st().unpinInCockpit('tab-flight');
+  check('unpinned: the bar is a pane, nothing pinned', hud().cockpit!.header === null && panesInOrder(hud().cockpit).includes(qa));
+  st().pinInCockpit('tab-flight', 'w-hud');
+  check('only the quick-actions bar can be pinned', hud().cockpit!.header === null);
+  st().pinInCockpit('tab-flight', qa);
+  check('pinned again', hud().cockpit!.header === qa && panesInOrder(hud().cockpit).filter((x) => x === qa).length === 1);
+}
+
 // A custom widget placed in the layout, then deleted: gone from the tab and the layout.
 const customId = st().profile.customWidgets[0].id;
 st().addWidgetToActiveTab(customId);

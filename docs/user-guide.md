@@ -53,8 +53,9 @@ height either way.
 
 A Cockpit tab fills the window below the navbar, with no page scroll: a glass cockpit. Its widgets sit in panes
 side by side and stacked, sized in proportion, so one layout scales from an HD laptop to a 4K screen. The flight
-controls (arming and quick modes) are pinned above the panes; their Takeoff checklist opens over the panes rather than
-squeezing them.
+controls (arming and quick modes) are pinned above the panes as a single slim bar; their Takeoff checklist opens over
+the panes rather than squeezing them. In Edit Mode, **Unpin** makes the bar a pane like any other (it starts across
+the bottom; move and resize it from there), and the pane's pin button puts it back on top.
 
 Each widget has a minimum size (the HUD 380×250, the map 320×240, a telemetry card 240×110, and so on). When the
 window can't hold the layout at those sizes (a phone, a small window), the same widgets are shown stacked in reading

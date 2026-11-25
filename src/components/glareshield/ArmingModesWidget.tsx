@@ -350,19 +350,23 @@ export const ArmingModesWidget: React.FC = () => {
     (category === 'plane' ? heartbeat.customMode === 20 : heartbeat.customMode === 9);
 
   return (
-    <Card className={`relative border-sky-500/20 bg-zinc-950/90 shadow-xl ${pinned ? 'overflow-visible' : 'overflow-hidden'}`}>
-      <CardContent className="p-2 sm:p-2.5 space-y-2.5">
+    // A size container: the arm block and the mode buttons sit side by side by the widget's own width, so it lays out
+    // right as a Flow card, a pinned bar or a narrow Cockpit pane.
+    <Card className={`@container relative border-sky-500/20 bg-zinc-950/90 shadow-xl ${pinned ? 'overflow-visible' : 'overflow-hidden'}`}>
+      <CardContent className={`${pinned ? 'p-1.5 sm:p-1.5' : 'p-2 sm:p-2.5'} space-y-2.5`}>
         {/* Top Control Bar: Arming Slider & 5 Quick Mode Buttons */}
         {/* The arm block takes a third on medium screens and a fixed width on large ones: on a wide screen the room
             goes to the quick actions, not to a slider over 1000 px long. */}
-        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] xl:grid-cols-[28rem_minmax(0,1fr)] gap-2 sm:gap-2.5 items-center">
+        <div className="grid grid-cols-1 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] @6xl:grid-cols-[28rem_minmax(0,1fr)] gap-2 sm:gap-2.5 items-center">
           {/* Arm / Disarm Interlock */}
+          {/* Pinned, it's one row: the state beside the slider rather than above it (the bar is on every Cockpit tab, so
+              its height counts). */}
           <div
-            className={`bg-zinc-900/80 border border-zinc-800 rounded-xl p-2 transition-opacity ${
+            className={`bg-zinc-900/80 border border-zinc-800 rounded-xl transition-opacity ${pinned ? 'flex items-center gap-2 p-1 pl-2' : 'p-2'} ${
               !isVehicleConnected ? 'opacity-65' : ''
             } ${getFeedbackRing('arm')}`}
           >
-            <div className="flex items-center justify-between mb-1 gap-2">
+            <div className={`flex items-center justify-between gap-2 ${pinned ? 'shrink-0' : 'mb-1'}`}>
               <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5 min-w-0">
                 {!isVehicleConnected ? (
                   <Shield className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
@@ -372,21 +376,21 @@ export const ArmingModesWidget: React.FC = () => {
                   <Shield className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                 )}
                 <span className="truncate">
-                  Master:{' '}
+                  {pinned ? '' : 'Master: '}
                   {!isVehicleConnected
                     ? 'NO LINK'
                     : heartbeat.isArmed
-                      ? 'ARMED (Live)'
+                      ? pinned ? 'ARMED' : 'ARMED (Live)'
                       : 'DISARMED'}
                 </span>
                 {getFeedbackBadge('arm')}
               </span>
-              <span className="text-[10px] text-zinc-500 font-sans hidden sm:inline shrink-0">
+              <span className={`text-[10px] text-zinc-500 font-sans hidden shrink-0 ${pinned ? '' : 'sm:inline'}`}>
                 {isVehicleConnected ? 'Slide right' : 'Offline'}
               </span>
             </div>
 
-            <div className="relative flex items-center">
+            <div className={`relative flex items-center ${pinned ? 'min-w-0 flex-1' : ''}`}>
               <input
                 type="range"
                 min="0"
@@ -400,7 +404,7 @@ export const ArmingModesWidget: React.FC = () => {
                 onMouseUp={handleSliderRelease}
                 onTouchEnd={handleSliderRelease}
                 onKeyDown={(e) => e.preventDefault()}
-                className={`w-full h-8 rounded-lg appearance-none transition-all select-none ${
+                className={`w-full ${pinned ? 'h-7' : 'h-8'} rounded-lg appearance-none transition-all select-none ${
                   !isVehicleConnected
                     ? 'cursor-not-allowed accent-zinc-600 bg-zinc-950/60 border border-zinc-800'
                     : heartbeat.isArmed
@@ -424,7 +428,7 @@ export const ArmingModesWidget: React.FC = () => {
             // took three rows, ~140 px, above the HUD and map). There, a label too long for the button is cut short
             // with an ellipsis, and the command's progress/result icon (after the label) sits in the top-right corner
             // rather than as a third row.
-            className={`grid grid-cols-5 gap-1 sm:gap-2 [&>button]:relative [&>button]:min-w-0 [&>button]:h-12 [&>button]:flex-col [&>button]:gap-0.5 [&>button]:px-0.5 [&>button]:text-[10px] [&>button>span]:max-w-full [&>button>span~svg]:absolute [&>button>span~svg]:right-0.5 [&>button>span~svg]:top-0.5 [&>button>span~svg]:h-3 [&>button>span~svg]:w-3 sm:[&>button]:h-10 sm:[&>button]:flex-row sm:[&>button]:gap-1 sm:[&>button]:px-3 sm:[&>button]:text-xs sm:[&>button>span~svg]:static sm:[&>button>span~svg]:h-3.5 sm:[&>button>span~svg]:w-3.5 ${
+            className={`grid grid-cols-5 gap-1 sm:gap-2 [&>button]:relative [&>button]:min-w-0 [&>button]:h-12 [&>button]:flex-col [&>button]:gap-0.5 [&>button]:px-0.5 [&>button]:text-[10px] [&>button>span]:max-w-full [&>button>span~svg]:absolute [&>button>span~svg]:right-0.5 [&>button>span~svg]:top-0.5 [&>button>span~svg]:h-3 [&>button>span~svg]:w-3 ${pinned ? 'sm:[&>button]:h-9' : 'sm:[&>button]:h-10'} sm:[&>button]:flex-row sm:[&>button]:gap-1 sm:[&>button]:px-3 sm:[&>button]:text-xs sm:[&>button>span~svg]:static sm:[&>button>span~svg]:h-3.5 sm:[&>button>span~svg]:w-3.5 ${
               !isVehicleConnected ? 'opacity-65' : ''
             }`}
           >
