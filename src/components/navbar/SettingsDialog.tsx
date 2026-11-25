@@ -1,8 +1,8 @@
 // Settings, in tabs: Link (how to reach the vehicle), Display (units, altitude, theme), Alerts (chimes and voice),
 // Traffic & terrain (ADS-B, terrain data), Data (telemetry logs, restore defaults). One control style throughout: a
-// segmented choice with the chosen option's meaning beneath it. Loaded on first open (Navbar lazy-loads it).
+// segmented choice with the chosen option's meaning beneath it.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ExternalLink, Shield } from 'lucide-react';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useUnitsStore, type AltitudeMode, type UnitSystem } from '../../store/unitsStore';
@@ -102,6 +102,8 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
   const serialApi = getSerialApi();
 
   const [tab, setTab] = useState<SettingsTab>(initialTab);
+  /** Connect itself was pressed (pointer, or Enter/Space on it), not submitted by Enter in a field. */
+  const connectPressedRef = useRef(false);
   // The link form: what's typed, applied by Connect.
   const [inputUrl, setInputUrl] = useState(url);
   const [inputLinkKind, setInputLinkKind] = useState(linkKind);
@@ -130,6 +132,11 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
 
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Enter in a field connects only on the Link tab: in another tab (a threshold, a clearance) it isn't a Connect.
+    // The browser reports such an implicit submit as a click of the Connect button, so a real press of it is marked.
+    const pressed = connectPressedRef.current;
+    connectPressedRef.current = false;
+    if (tab !== 'link' && !pressed) return;
     if (status === 'connected') return;
     if (inputLinkKind === 'serial') {
       // The device picker needs the user gesture, so it must be the first thing awaited here.
@@ -166,7 +173,8 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
   return (
     <Modal isOpen={open} onClose={onClose} title="Settings" description="Link, display, alerts, traffic and terrain, and data kept in this browser.">
       <form onSubmit={handleConnect} className="space-y-4">
-        <div className="sticky -top-1 z-10 -mx-1 flex gap-1 overflow-x-auto border-b border-zinc-800 bg-zinc-950 px-1 pb-2" role="tablist" aria-label="Settings sections">
+        {/* Stuck at the dialog's scroll edge (its 24 px padding), across its full width: nothing scrolls into view above it. */}
+        <div className="sticky -top-6 z-10 -mx-6 flex gap-1 overflow-x-auto border-b border-zinc-800 bg-zinc-950 px-6 pb-2 pt-2" role="tablist" aria-label="Settings sections">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -431,7 +439,13 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
               Disconnect
             </Button>
           ) : (
-            <Button key="connect" type="submit" variant="default" size="sm" disabled={inputLinkKind === 'serial' && serialApi === null} className="bg-sky-500 text-white hover:bg-sky-600">
+            <Button
+              key="connect"
+              type="submit"
+              onPointerDown={() => (connectPressedRef.current = true)}
+              onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (connectPressedRef.current = true)}
+              variant="default"
+              size="sm" disabled={inputLinkKind === 'serial' && serialApi === null} className="bg-sky-500 text-white hover:bg-sky-600">
               Connect
             </Button>
           )}
@@ -444,4 +458,3 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
   );
 };
 
-export default SettingsDialog;

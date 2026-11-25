@@ -41,7 +41,12 @@ const Field: React.FC<{ label: string; unit: string; value: number; step: number
           const v = Number(e.target.value);
           e.target.value = String(Number.isFinite(v) && v > 0 ? onCommit(v) : value);
         }}
-        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        onKeyDown={(e) => {
+              // Enter commits the value (on blur); it must not also submit the Settings form (which connects).
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              (e.target as HTMLInputElement).blur();
+            }}
         className="w-20 rounded-md border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-right font-mono text-xs text-zinc-200"
       />
       <span className="w-6 text-zinc-500">{unit}</span>
