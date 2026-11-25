@@ -408,7 +408,9 @@ export const ArmingModesWidget: React.FC = () => {
 
           {/* 5 Quick Action Modes (md:col-span-8) */}
           <div
-            className={`md:col-span-8 grid grid-cols-2 sm:grid-cols-5 gap-1.5 sm:gap-2 ${
+            // One row of five at every width: on phones each button stacks its icon over a small label (two to a row
+            // took three rows, ~140 px, above the HUD and map).
+            className={`md:col-span-8 grid grid-cols-5 gap-1 sm:gap-2 [&>button]:h-12 [&>button]:flex-col [&>button]:gap-0.5 [&>button]:px-0.5 [&>button]:text-[10px] sm:[&>button]:h-10 sm:[&>button]:flex-row sm:[&>button]:gap-1 sm:[&>button]:px-3 sm:[&>button]:text-xs ${
               !isVehicleConnected ? 'opacity-65' : ''
             }`}
           >
