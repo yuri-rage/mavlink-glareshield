@@ -14,7 +14,9 @@ import clsx from 'clsx';
 export interface HudVideoConfig {
   enabled: boolean;
   url: string;
-  type: 'mjpeg' | 'snapshot' | 'video';
+  type: 'mjpeg' | 'snapshot' | 'video' | 'whep';
+  /** WHEP: bearer token for the endpoint, if it needs one. */
+  whepToken?: string;
   fit: 'cover' | 'contain';
   opacity: number;
   darken: number;
@@ -1139,6 +1141,7 @@ export const HudWidget: React.FC = () => {
             <CameraFeed
               url={videoConfig.url.trim()}
               type={videoConfig.type}
+              token={videoConfig.whepToken}
               fit={videoConfig.fit}
               opacity={videoConfig.opacity}
               snapshotIntervalMs={videoConfig.snapshotIntervalMs}
@@ -1313,7 +1316,8 @@ export const HudWidget: React.FC = () => {
                 >
                   <option value="mjpeg">MJPEG Stream (HTTP)</option>
                   <option value="snapshot">Snapshot Polling (JPEG)</option>
-                  <option value="video">HTML5 Video (HLS/WebRTC)</option>
+                  <option value="whep">WebRTC (WHEP), low latency</option>
+                  <option value="video">HTML5 Video (MP4, HLS where the browser plays it)</option>
                 </select>
               </div>
 
@@ -1329,6 +1333,28 @@ export const HudWidget: React.FC = () => {
                 </select>
               </div>
             </div>
+
+            {/* WHEP: where to find the endpoint, and a token if it needs one */}
+            {videoConfig.type === 'whep' && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] leading-relaxed text-zinc-500">
+                  The stream's WHEP address: MediaMTX <code className="text-zinc-400">http://HOST:8889/STREAM/whep</code>, go2rtc{' '}
+                  <code className="text-zinc-400">http://HOST:1984/api/webrtc?src=STREAM</code>. Usually well under a second
+                  behind. The server must allow this page (CORS; MediaMTX and go2rtc do by default) and the browser must reach
+                  its WebRTC port (MediaMTX 8189/UDP).
+                </p>
+                <label className="block space-y-1">
+                  <span className="text-[11px] font-semibold text-zinc-300">Bearer token (optional)</span>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={videoConfig.whepToken ?? ''}
+                    onChange={(e) => handleUpdateConfig({ whepToken: e.target.value })}
+                    className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-200 focus:outline-none focus:border-sky-500"
+                  />
+                </label>
+              </div>
+            )}
 
             {/* Snapshot interval if snapshot */}
             {videoConfig.type === 'snapshot' && (

@@ -1,19 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { MjpegFrameExtractor, reconnectDelayMs } from '../../lib/mjpeg';
+import { WhepSession } from '../../lib/whep';
 
 export type CameraState = 'connecting' | 'live' | 'reconnecting' | 'error';
 
 export interface CameraStatus {
   state: CameraState;
   /** 'fetch': frames are read directly (stalls are detected). 'img': browser-managed stream (CORS not allowed). */
-  method: 'fetch' | 'img' | 'video' | 'snapshot';
+  method: 'fetch' | 'img' | 'video' | 'snapshot' | 'whep';
   detail?: string;
 }
 
 export interface CameraFeedProps {
   url: string;
-  type: 'mjpeg' | 'snapshot' | 'video';
+  type: 'mjpeg' | 'snapshot' | 'video' | 'whep';
+  /** WHEP: a bearer token for the endpoint, if it needs one. */
+  token?: string;
   fit: 'cover' | 'contain';
   opacity: number;
   snapshotIntervalMs: number;
@@ -34,7 +37,10 @@ const withCacheBuster = (url: string, n: number) => `${url}${url.includes('?') ?
 /** URLs whose server refused a CORS fetch: use <img> for them for the rest of the session. */
 const corsBlocked = new Set<string>();
 
-export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, fit, opacity, snapshotIntervalMs, reconnectKey, onStatus }) => {
+/** WHEP: a disconnected peer connection that hasn't recovered after this long is reconnected. */
+const WHEP_DISCONNECT_GRACE_MS = 4000;
+
+export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, token, fit, opacity, snapshotIntervalMs, reconnectKey, onStatus }) => {
   const imgRef = useRef<HTMLImageElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [imgSrc, setImgSrc] = useState('');
@@ -260,7 +266,103 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, fit, opacity,
     };
   }, [type, url, reconnectKey]);
 
-  return type === 'video' ? (
+  // ---------------------------------------------------------------------------------------------------------
+  // WHEP (WebRTC): connect, play the stream; reconnect when the connection fails, stays disconnected, or playback
+  // stops advancing. The session is ended on the server (DELETE) when leaving or reconnecting.
+  // ---------------------------------------------------------------------------------------------------------
+  useEffect(() => {
+    if (type !== 'whep' || !url) return;
+    const video = videoRef.current;
+    if (!video) return;
+    let cancelled = false;
+    let attempt = 0;
+    let session: WhepSession | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastTime = -1;
+    let lastProgressAt = Date.now();
+    let live = false;
+    const report = (s: CameraStatus) => !cancelled && statusRef.current(s);
+
+    const retry = (reason: string) => {
+      if (cancelled || retryTimer) return;
+      live = false;
+      const delay = reconnectDelayMs(attempt++);
+      report({ state: 'reconnecting', method: 'whep', detail: `${reason}; retrying in ${Math.round(delay / 1000)} s` });
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        void connect();
+      }, delay);
+    };
+    const connect = async () => {
+      if (cancelled) return;
+      const old = session;
+      session = new WhepSession(url, { fetch: window.fetch.bind(window), createPeerConnection: (c) => new RTCPeerConnection(c) }, { token: token || undefined });
+      void old?.stop();
+      const mine = session;
+      report({ state: attempt === 0 ? 'connecting' : 'reconnecting', method: 'whep' });
+      try {
+        const stream = await mine.start((state) => {
+          if (cancelled || mine !== session) return;
+          // Closed by the far end (the server ended the session: its source stopped), or failed: connect again.
+          if (state === 'failed' || state === 'closed') retry(state === 'closed' ? 'session ended' : 'connection failed');
+          else if (state === 'disconnected') {
+            disconnectTimer ??= setTimeout(() => {
+              disconnectTimer = null;
+              if (mine === session && mine.pc?.connectionState !== 'connected') retry('connection lost');
+            }, WHEP_DISCONNECT_GRACE_MS);
+          } else if (state === 'connected' && disconnectTimer) {
+            clearTimeout(disconnectTimer);
+            disconnectTimer = null;
+          }
+        });
+        if (cancelled || mine !== session) return;
+        lastProgressAt = Date.now();
+        // The server ending the track (its source gone) ends the stream: connect again.
+        for (const track of stream.getTracks()) track.addEventListener('ended', () => mine === session && retry('stream ended'));
+        video.srcObject = stream;
+        void video.play().catch(() => {});
+      } catch (e) {
+        if (cancelled || mine !== session) return;
+        retry(e instanceof Error ? e.message : 'connection failed');
+      }
+    };
+    const onPlaying = () => {
+      attempt = 0;
+      live = true;
+      report({ state: 'live', method: 'whep' });
+    };
+    // Frames stopped arriving (the camera or the server stalled, the network dropped without ICE noticing yet). Counted
+    // from the connection's statistics: a <video> playing a MediaStream keeps its clock running with no frames.
+    const watchdog = setInterval(async () => {
+      if (!live || !session) return;
+      const frames = await session.framesReceived();
+      if (cancelled || frames === null) return;
+      if (frames !== lastTime) {
+        lastTime = frames;
+        lastProgressAt = Date.now();
+      } else if (Date.now() - lastProgressAt > VIDEO_STALL_MS) {
+        retry('no frames');
+      }
+    }, 1000);
+    video.addEventListener('playing', onPlaying);
+    // Leaving the page doesn't unmount this: end the server's session then too, rather than leave it to time out.
+    const onPageHide = () => void session?.stop();
+    window.addEventListener('pagehide', onPageHide);
+    void connect();
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      cancelled = true;
+      clearInterval(watchdog);
+      if (retryTimer) clearTimeout(retryTimer);
+      if (disconnectTimer) clearTimeout(disconnectTimer);
+      video.removeEventListener('playing', onPlaying);
+      void session?.stop();
+      video.srcObject = null;
+    };
+  }, [type, url, token, reconnectKey]);
+
+  return type === 'video' || type === 'whep' ? (
     <video ref={videoRef} autoPlay playsInline muted className={className} style={{ opacity }} />
   ) : (
     // eslint-disable-next-line jsx-a11y/alt-text
