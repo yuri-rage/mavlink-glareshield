@@ -59,8 +59,7 @@ def main():
         f.write('// Every message: [name, CRC extra]. The field tables are in dialectFields.generated.ts (the Inspector).\n\n')
         f.write('export const DIALECT_NAME = ' + json.dumps(dialect) + ';\n\n')
         f.write('export const DIALECT_MESSAGES: Record<number, [string, number]> = {\n')
-        for mid in sorted(messages):
-            f.write(f'  {mid}: {json.dumps(messages[mid][:2], separators=(",", ":"))},\n')
+        f.writelines(f'  {mid}: {json.dumps(messages[mid][:2], separators=(",", ":"))},\n' for mid in sorted(messages))
         f.write('};\n')
     # Field tables: loaded only with the MAVLink Inspector.
     fields_out = os.path.join(root, 'src', 'mavlink', 'dialectFields.generated.ts')
@@ -69,8 +68,7 @@ def main():
         f.write('// Every message\'s fields in wire order: [name, type, array length (0 = not an array), units, 1 if an extension].\n\n')
         f.write('export type DialectField = [string, string, number, string, 0 | 1];\n\n')
         f.write('export const DIALECT_FIELDS: Record<number, DialectField[]> = {\n')
-        for mid in sorted(messages):
-            f.write(f'  {mid}: {json.dumps(messages[mid][2], separators=(",", ":"))},\n')
+        f.writelines(f'  {mid}: {json.dumps(messages[mid][2], separators=(",", ":"))},\n' for mid in sorted(messages))
         f.write('};\n')
     print(f'{len(messages)} messages -> {out}')
 
