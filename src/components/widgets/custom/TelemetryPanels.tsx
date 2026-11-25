@@ -1,5 +1,6 @@
 // Read-only custom widget panels: numbers, lists, gauges, charts, compass, bars and LEDs.
 
+import { useInPane } from '../../dashboard/paneContext';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useTelemetryStore } from '../../../store/telemetryStore';
 import { evaluateAlert, toDisplayUnits, type BindingReading } from '../../../lib/widgetValues';
@@ -64,9 +65,15 @@ function gaugeItems({ def, bindings, readings, system }: PanelProps): GridGauge[
 
 export const StatPanel: React.FC<PanelProps> = (props) => {
   const { boundText, unit } = primaryView(props);
+  // In a Cockpit pane the value grows with the room it has (its panel's or pane's width): a large pane reads at a
+  // glance. Elsewhere, the usual size.
+  const inPane = useInPane();
   return (
     <div className={`text-center py-2 transition-opacity ${props.staleAll ? 'opacity-40' : ''}`}>
-      <div className={`text-3xl font-mono font-bold ${props.scheme.valueText}`}>
+      <div
+        className={`${inPane ? '' : 'text-3xl'} font-mono font-bold leading-tight ${props.scheme.valueText}`}
+        style={inPane ? { fontSize: 'clamp(1.875rem, 13cqw, 4.5rem)' } : undefined}
+      >
         {boundText} <span className="text-sm font-normal text-zinc-400">{unit}</span>
       </div>
       {props.def.description && <p className="text-[11px] text-zinc-500 mt-1">{props.def.description}</p>}

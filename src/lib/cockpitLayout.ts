@@ -6,7 +6,8 @@
 // layout that comes in (saved, imported, edited) goes through sanitizeCockpit: only known widgets, each once, a
 // bounded depth and pane count, sizes that sum to 100.
 
-import type { CockpitLayout, CockpitNode, PlacedWidget } from '../types/widget';
+import type { CockpitLayout, CockpitNode, CustomWidgetDefinition, PlacedWidget, WidgetPanelDefinition } from '../types/widget';
+import { BUILTIN_PANELS, builtinPanelId } from './builtinWidgets';
 
 export const MAX_DEPTH = 6;
 export const MAX_PANES = 24;
@@ -140,8 +141,72 @@ export interface Size {
   h: number;
 }
 
+/** Roughly how tall a custom widget panel's content is at its smallest (px), by type and how many values it shows. */
+function panelMinHeight(p: Pick<WidgetPanelDefinition, 'displayType' | 'widgetId' | 'bindings'>): number {
+  const n = 1 + (p.bindings?.length ?? 0);
+  switch (p.displayType) {
+    case 'builtin': {
+      const id = builtinPanelId(p.widgetId);
+      return (id && BUILTIN_PANELS[id]?.minHeightPx) || 140;
+    }
+    case 'gauge-radial':
+    case 'compass-rose':
+      return 150;
+    case 'sparkline':
+      return 130;
+    case 'param-set':
+      return 180;
+    case 'value-list':
+      return 22 * n + 16;
+    case 'multi-bar':
+      return 26 * n + 16;
+    case 'gauge-linear':
+      return 40 * n + 10;
+    case 'param-control':
+      return 90;
+    case 'slider-control':
+    case 'stat-card':
+      return 70;
+    default:
+      return 60;
+  }
+}
+
+/** Card header and content padding around a custom widget's panels (px). */
+const CARD_CHROME = 38 + 24;
+/** A composite card narrower than this stacks its panels in one column (CustomWidgetRenderer). */
+const COMPOSITE_STACK_PX = 360;
+
+/**
+ * The smallest a custom widget may be (px), from its definition: a composite's panels in their rows (as wide as
+ * needed to keep panels side by side), each row as tall as its tallest panel; a single panel by its type.
+ */
+export function customWidgetMinSize(def: CustomWidgetDefinition): Size {
+  if (def.displayType !== 'composite') return { w: 220, h: panelMinHeight(def as WidgetPanelDefinition) + CARD_CHROME };
+  const panels = def.panels ?? [];
+  if (panels.length === 0) return { w: 220, h: 140 };
+  // Panels fill rows of twelve columns, left to right.
+  const rows: number[] = [];
+  let used = 12;
+  let multi = false;
+  for (const p of panels) {
+    const span = Math.max(1, Math.min(12, Math.round(p.span ?? 12)));
+    const h = panelMinHeight(p) + (p.title ? 18 : 0) + 20;
+    if (used + span > 12) {
+      rows.push(h);
+      used = span;
+    } else {
+      rows[rows.length - 1] = Math.max(rows[rows.length - 1], h);
+      used += span;
+      multi = true;
+    }
+  }
+  return { w: multi ? COMPOSITE_STACK_PX : 240, h: rows.reduce((a, b) => a + b, 0) + 10 * (rows.length - 1) + CARD_CHROME };
+}
+
 /** The smallest a pane showing this widget may be (px): what it needs to stay readable and usable. */
-export function widgetMinSize(widgetId: string): Size {
+export function widgetMinSize(widgetId: string, custom?: CustomWidgetDefinition): Size {
+  if (custom) return customWidgetMinSize(custom);
   switch (widgetId) {
     case 'built-in-hud':
     case 'built-in-pfd':
@@ -372,4 +437,36 @@ export const WIDE_MIN_WIDTH = 1200;
 /** Which of a tab's layouts a window of this shape shows: the wide one only when the tab has it and it's wide. */
 export function variantFor(hasWide: boolean, width: number, height: number): CockpitVariant {
   return hasWide && height > 0 && width >= WIDE_MIN_WIDTH && width / height > WIDE_ASPECT ? 'wide' : 'standard';
+}
+
+/**
+ * The layout with `id` along a whole edge of it: a full-width row at the top or bottom, or a full-height column at the
+ * left or right (e.g. a chart the width of the page under everything). It takes a quarter of the room; next to a root
+ * split of the same direction it becomes another of its children.
+ */
+export function addAtEdge(layout: CockpitLayout, id: string, side: Exclude<DropZone, 'center'>): CockpitLayout {
+  const fresh: CockpitNode = { pane: id };
+  if (!layout.root) return { ...layout, root: fresh };
+  const dir: 'row' | 'column' = side === 'left' || side === 'right' ? 'row' : 'column';
+  const first = side === 'left' || side === 'top';
+  const root = layout.root;
+  if (!isPane(root) && root.split === dir) {
+    const others = root.sizes.map((s) => s * 0.75);
+    return {
+      ...layout,
+      root: {
+        ...root,
+        children: first ? [fresh, ...root.children] : [...root.children, fresh],
+        sizes: normalizeSizes(first ? [25, ...others] : [...others, 25], root.children.length + 1),
+      },
+    };
+  }
+  return { ...layout, root: { split: dir, children: first ? [fresh, root] : [root, fresh], sizes: first ? [25, 75] : [75, 25] } };
+}
+
+/** The layout with the pane `srcId` moved to a whole edge of it (out of its place first; nothing lost, or no change). */
+export function movePaneToEdge(layout: CockpitLayout, srcId: string, side: Exclude<DropZone, 'center'>, widgetIds: Iterable<string>): CockpitLayout {
+  const ids = [...widgetIds];
+  const without = removeFromLayout(layout, srcId, ids);
+  return placedOrUnchanged(layout, sanitizeCockpit(addAtEdge(without, srcId, side), ids));
 }

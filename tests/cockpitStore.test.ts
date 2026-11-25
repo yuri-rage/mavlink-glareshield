@@ -97,6 +97,23 @@ check('and Cockpit again restores it', JSON.stringify(hud().cockpit) === kept);
   check('split with a widget not on the tab: nothing changes', JSON.stringify(hud()) === before);
 }
 
+// Whole edges.
+{
+  st().applyCockpitPreset('tab-flight', 'hd');
+  st().addAtEdgeInCockpit('tab-flight', 'bottom', { widgetId: 'built-in-charts' });
+  // The newest (an earlier check left another Charts widget on the tab, hidden).
+  const charts = hud().widgets[hud().widgets.length - 1].instanceId;
+  const root = hud().cockpit!.root as any;
+  check('a chart along the whole bottom: the last row of the root column, full width', root.split === 'column' && root.children[root.children.length - 1].pane === charts);
+  st().moveToEdgeInCockpit('tab-flight', 'w-gps', 'right');
+  const r2 = hud().cockpit!.root as any;
+  check('a pane moved down the whole right side', r2.split === 'row' && r2.children[r2.children.length - 1].pane === 'w-gps');
+  const before = JSON.stringify(hud());
+  st().addAtEdgeInCockpit('tab-flight', 'top', { instanceId: 'w-hud' });
+  check('a widget already shown can\'t be added again at an edge', JSON.stringify(hud()) === before);
+  st().removeWidgetFromActiveTab(charts);
+}
+
 // A custom widget placed in the layout, then deleted: gone from the tab and the layout.
 const customId = st().profile.customWidgets[0].id;
 st().addWidgetToActiveTab(customId);
