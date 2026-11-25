@@ -149,6 +149,7 @@ function ardupilotDualCdcConfiguration() {
 function fakeUsbDevice(serialNumber = 'ABC123') {
   const inbound: Uint8Array[] = [];
   let wake: (() => void) | undefined;
+  let abortRead = false;
   const device: any = {
     vendorId: 0x1209,
     productId: 0x5740,
@@ -179,7 +180,10 @@ function fakeUsbDevice(serialNumber = 'ABC123') {
       device.calls.push(`in:${ep}`);
       while (!inbound.length) {
         await new Promise<void>((r) => (wake = r));
-        if (!device.opened) return { status: 'ok' };
+        if (!device.opened || abortRead) {
+          abortRead = false;
+          return { status: 'ok' };
+        }
       }
       const next = inbound.shift()!;
       return { status: 'ok', data: new DataView(next.buffer, next.byteOffset, next.byteLength) };
@@ -194,6 +198,7 @@ function fakeUsbDevice(serialNumber = 'ABC123') {
       wake?.();
     },
     wakeIdle() {
+      abortRead = true;
       wake?.();
     },
   };
@@ -298,7 +303,7 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
 // B. MavlinkConnection over WebSocket (behaviour preserved from the pre-transport implementation)
 // ------------------------------------------------------------------------------------------------
 {
-  const conn = new MavlinkConnection('ws://bridge:56781');
+  const conn = new MavlinkConnection('ws://bridge:56781', { reconnectDelayMs: 50 });
   const statuses: string[] = [];
   const packets: any[] = [];
   const texts: string[] = [];
@@ -337,7 +342,7 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   conn.disconnect();
   check('MavlinkConnection/ws: manual disconnect', conn.getStatus() === 'disconnected' && conn.isManualDisconnect);
   const after = FakeWebSocket.instances.length;
-  await tick(2300);
+  await tick(150);
   check('MavlinkConnection/ws: no reconnect after a manual disconnect', FakeWebSocket.instances.length === after);
 }
 {
@@ -367,7 +372,7 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
 {
   // Silent-link watchdog: an open socket that delivers nothing is reopened, with growing patience.
   const { LINK_SILENCE_TIMEOUT_MS } = await import('../src/mavlink/connection.ts');
-  const conn = new MavlinkConnection('ws://silent:1');
+  const conn = new MavlinkConnection('ws://silent:1', { reconnectDelayMs: 50 });
   conn.connect();
   await waitFor(() => conn.getStatus() === 'connected');
   const t0 = Date.now();
@@ -412,7 +417,7 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   check('getSerialApi: web-serial when navigator.serial exists', getSerialApi() === 'web-serial');
   check('requestSerialDevice: picks a port', await requestSerialDevice());
 
-  const conn = new MavlinkConnection();
+  const conn = new MavlinkConnection(undefined, { reconnectDelayMs: 50 });
   const packets: any[] = [];
   conn.onPacket((p) => packets.push(p));
   conn.setLink({ kind: 'serial', baudRate: 57600 });
@@ -521,7 +526,7 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   check('getSerialApi: web-usb-serial when only WebUSB exists (Android)', getSerialApi() === 'web-usb-serial');
   check('requestSerialDevice: WebUSB picker is filtered to ArduPilot / CDC devices', (await requestSerialDevice()) && filters.some((f) => f.vendorId === 0x1209) && filters.some((f) => f.classCode === 0x02));
 
-  const conn = new MavlinkConnection();
+  const conn = new MavlinkConnection(undefined, { reconnectDelayMs: 50 });
   const packets: any[] = [];
   conn.onPacket((p) => packets.push(p));
   conn.setLink({ kind: 'serial', baudRate: 57600 });
@@ -548,8 +553,9 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
   const t = new WebUsbSerialTransport('usb', { device });
   await t.connect();
   check('WebUsbSerialTransport: falls back to the second CDC interface when the first is taken (upstream behaviour)', t.getStatus().kind === 'connected' && device.calls.includes('claim:3'));
-  await Promise.race([t.disconnect(), tick(1500)]);
+  const closing = t.disconnect();
   device.wakeIdle();
+  await Promise.race([closing, tick(1500)]);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -576,8 +582,9 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
     await t.connect();
     await Promise.all([1, 2, 3, 4, 5].map((n) => t.send(frame(n))));
     check('WebUSB: writes go out one at a time, in order', maxInFlight === 1 && device.written.map((w: Uint8Array) => w[1]).join() === '1,2,3,4,5');
-    await Promise.race([t.disconnect(), tick(1500)]);
+    const closing = t.disconnect();
     device.wakeIdle();
+    await Promise.race([closing, tick(1500)]);
   }
 
   // A wedged endpoint: frames that waited too long are dropped, and the queue is capped.
@@ -606,8 +613,9 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
     check('WebUSB: frames held up past the age limit are dropped, not sent late', device.written.length === 1, `${device.written.length} written`);
     await t.send(frame(200));
     check('WebUSB: writes flow again once the endpoint recovers', device.written.length === 2 && last(device.written as Uint8Array[])[1] === 200);
-    await Promise.race([t.disconnect(), tick(1500)]);
+    const closing = t.disconnect();
     device.wakeIdle();
+    await Promise.race([closing, tick(1500)]);
   }
 
   // A stall: the halt is cleared and writes continue; repeated stalls report the link as failed.
@@ -635,8 +643,9 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
     stalls = 10;
     for (let i = 0; i < 3; i++) await t.send(frame(10 + i)).catch(() => {});
     check('WebUSB: stalls that keep coming mark the link failed so it reconnects', t.getStatus().kind === 'error');
-    await Promise.race([t.disconnect(), tick(1500)]);
+    const closing = t.disconnect();
     device.wakeIdle();
+    await Promise.race([closing, tick(1500)]);
   }
 
   // A write that throws (device gone) takes the link off 'connected', as Web Serial does.
@@ -649,8 +658,9 @@ check('hasTextChannel: true for WebSocket, false for serial', hasTextChannel(new
     await t.connect();
     await t.send(frame(1)).catch(() => {});
     check('WebUSB: a failed write reports the link as failed', t.getStatus().kind === 'error');
-    await Promise.race([t.disconnect(), tick(1500)]);
+    const closing = t.disconnect();
     device.wakeIdle();
+    await Promise.race([closing, tick(1500)]);
   }
 }
 

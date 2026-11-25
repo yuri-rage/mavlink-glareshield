@@ -129,10 +129,12 @@ export class MavlinkConnection {
   /** When bytes last arrived on the current link. */
   private lastRxAt = 0;
   private silenceTimeoutMs = LINK_SILENCE_TIMEOUT_MS;
+  private reconnectDelayMs: number;
 
-  constructor(url = getDefaultWsUrl()) {
+  constructor(url = getDefaultWsUrl(), options?: { reconnectDelayMs?: number }) {
     this.url = url;
     this.link = { kind: 'websocket', url };
+    this.reconnectDelayMs = options?.reconnectDelayMs ?? 2000;
     if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       // Coming back from sleep or a network change: check the link now rather than waiting for timers.
       let hiddenAt = 0;
@@ -384,7 +386,7 @@ export class MavlinkConnection {
     this.setStatus('disconnected');
     if (this.shouldReconnect && !this.isReconnectPaused) {
       // If blocked by browser mixed content, back off to 10s to avoid spamming the console
-      const delay = this.isMixedContentBlocked() ? 10000 : 2000;
+      const delay = this.isMixedContentBlocked() ? 10000 : this.reconnectDelayMs;
       this.reconnectTimeout = setTimeout(() => this.connect(), delay);
     }
   }

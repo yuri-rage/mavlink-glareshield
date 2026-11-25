@@ -1823,11 +1823,18 @@ async function testMissionUploadFallback() {
     for (const pkt of packets) {
       if (pkt.messageId === MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL) {
         // Step 1: Vehicle NACKs CreateFile to simulate vehicle without MAVFTP mission support
+        const reqBuf = new Uint8Array(254);
+        reqBuf.set(pkt.payload.subarray(0, 254));
+        const reqDv = new DataView(reqBuf.buffer, 3, 251);
+        const reqSeq = reqDv.getUint16(0, true);
+        const reqOpcode = reqDv.getUint8(3);
+        if (reqOpcode !== FTP_OPCODE.CreateFile) continue;
+
         const nackPayload = new Uint8Array(254);
         nackPayload[1] = 255; // target system (GCS)
         nackPayload[2] = 190; // target component (GCS)
         const dv = new DataView(nackPayload.buffer, 3, 251);
-        dv.setUint16(0, 1, true); // seq
+        dv.setUint16(0, (reqSeq + 1) & 0xffff, true); // reply seq = req + 1
         dv.setUint8(2, 0); // session
         dv.setUint8(3, 129); // NACK opcode
         dv.setUint8(4, 1); // size
