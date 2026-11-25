@@ -170,7 +170,7 @@ export function missionSummary(items: SummaryItem[], category: VehicleCategory, 
   const climbTime = (to: number) => (to > alt ? (to - alt) / speeds.up : (alt - to) / speeds.down);
   /** A vertical landing (Copter, a QuadPlane's VTOL land): the last few metres at the landing speed. */
   const verticalLandTime = (from: number) =>
-    Math.max(0, from - COPTER_LAND_FINAL_M) / speeds.down + Math.min(from, COPTER_LAND_FINAL_M) / COPTER_LAND_FINAL_SPEED;
+    from <= 0 ? 0 : Math.max(0, from - COPTER_LAND_FINAL_M) / speeds.down + Math.min(from, COPTER_LAND_FINAL_M) / COPTER_LAND_FINAL_SPEED;
   // A Copter run between stops: speeding up from and slowing down to a stop adds speed / acceleration.
   let running = false;
   const stop = () => {
@@ -219,6 +219,19 @@ export function missionSummary(items: SummaryItem[], category: VehicleCategory, 
         const repeat = Math.round(it.param2);
         if (repeat < 0) {
           out.openEnded = `jump at #${seq} repeats forever`;
+          // The leg back is still flown (each time round): recorded for the fence check, not timed.
+          if (at && target >= 1 && target < items.length) {
+            for (let k = target; k < items.length; k++) {
+              const t = items[k];
+              if (isRoutePoint(t.command) && (splines || t.command !== CMD.SPLINE_WAYPOINT) && (t.x !== 0 || t.y !== 0)) {
+                const key = `${at.index}>${k}`;
+                if (!seenLegs.has(key)) {
+                  out.legs.push({ from: at.index, to: k, at: seq, latLngs: drawn.get(key) ?? [[at.lat, at.lon], [t.x, t.y]] });
+                }
+                break;
+              }
+            }
+          }
           return out;
         }
         const done = jumpCounts.get(seq) ?? 0;
@@ -267,6 +280,13 @@ export function missionSummary(items: SummaryItem[], category: VehicleCategory, 
       default: {
         if (!flies) break;
         if (hasPos) goTo(seq, it.x, it.y, heightOf(it));
+        else if (it.command === CMD.LOITER_TO_ALT) {
+          // "Here": no leg, but the climb (or descent) to its altitude.
+          const h = heightOf(it);
+          out.timeS += climbTime(h);
+          alt = h;
+          out.maxAltM = Math.max(out.maxAltM, h);
+        }
         // Holds and loiters count where the vehicle is, given a position or not (0,0: "here").
         if (it.command === CMD.WAYPOINT || it.command === CMD.SPLINE_WAYPOINT) {
           // Copter and Rover hold for param1 seconds; Plane keeps its accept/pass radius there instead.

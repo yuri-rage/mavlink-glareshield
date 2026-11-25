@@ -9,6 +9,7 @@
 // With FENCE_TYPE unknown, the drawn fence shapes are still checked (they're what the user is looking at).
 
 import type { DraftIssue } from './missionDraft';
+import { fenceBreachReasons, type FenceDraft } from './fenceDraft';
 
 /** A leg to check: item indices of its ends (0 is home), the item a warning goes on, and the route drawn. */
 export interface FenceLeg {
@@ -18,7 +19,6 @@ export interface FenceLeg {
   at?: number;
   latLngs: [number, number][];
 }
-import { fenceBreachReasons, type FenceDraft } from './fenceDraft';
 
 const FENCE_TYPE_ALT_MAX = 1;
 const FENCE_TYPE_CIRCLE = 2;
