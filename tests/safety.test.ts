@@ -87,7 +87,7 @@ const ack = (command: number, result: number) => {
   // A full list for vehicle 1 (Rover), as a download leaves it.
   heartbeat(1, 10);
   const list = { RTL_SPEED: { value: 2, type: 9, index: 0 }, WP_SPEED: { value: 1.6, type: 9, index: 1 } };
-  pm.applyFullList(list, 'ftp', 'test');
+  pm.applyFullList(list, 'ftp', 'test', 1);
   check('list loaded: counted, not old', status.paramCount === 2 && !status.fromPreviousConnection);
 
   // The link drops.

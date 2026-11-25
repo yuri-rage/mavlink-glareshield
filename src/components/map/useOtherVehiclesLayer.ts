@@ -37,6 +37,9 @@ function popupHtml(v: RosterVehicle, imperial: boolean): string {
     <button type="button" data-switch="${v.sysId}" style="margin-top:6px;padding:2px 8px;border-radius:6px;border:1px solid #8b5cf6;background:#2e1065;color:#ede9fe;font-size:11px;font-weight:700;cursor:pointer">Switch to vehicle ${v.sysId}</button>`;
 }
 
+/** The units chosen now (read when drawn, not captured when the marker was made). */
+const isImperial = () => ['mph', 'kts'].includes(useUnitsStore.getState().system);
+
 export function useOtherVehiclesLayer(mapRef: React.MutableRefObject<L.Map | null>, ready: boolean) {
   const markers = useRef(new Map<number, { marker: L.Marker; key: string }>());
 
@@ -46,7 +49,7 @@ export function useOtherVehiclesLayer(mapRef: React.MutableRefObject<L.Map | nul
     if (!map.getPane(PANE)) map.createPane(PANE).style.zIndex = '596';
     const draw = () => {
       const { vehicles, activeSystemId } = useVehicleRosterStore.getState();
-      const imperial = ['mph', 'kts'].includes(useUnitsStore.getState().system);
+      const imperial = isImperial();
       const now = Date.now();
       const seen = new Set<number>();
       for (const v of Object.values(vehicles)) {
@@ -69,7 +72,7 @@ export function useOtherVehiclesLayer(mapRef: React.MutableRefObject<L.Map | nul
           if (had.marker.isPopupOpen()) had.marker.setPopupContent(popupHtml(v, imperial));
         } else {
           const marker = L.marker([v.lat, v.lon], { icon: icon(v, stale), pane: PANE, keyboard: false, title: `Vehicle ${v.sysId}` })
-            .bindPopup(() => popupHtml(useVehicleRosterStore.getState().vehicles[v.sysId] ?? v, imperial), { pane: 'popupPane' })
+            .bindPopup(() => popupHtml(useVehicleRosterStore.getState().vehicles[v.sysId] ?? v, isImperial()), { pane: 'popupPane' })
             .addTo(map);
           markers.current.set(v.sysId, { marker, key });
         }

@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Download, FileText, Loader2, RefreshCw, Trash2, X } from 'lucide-react';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { downloadName, logManager, type LogEntry, type LogList, type LogTransferMethod } from '../../mavlink/logManager';
+import { onActiveVehicleChange } from '../../mavlink/vehicleRoster';
 import { cn } from '../../lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useVehicleTarget } from './custom/panelKit';
@@ -72,13 +73,27 @@ export const LogsWidget: React.FC = () => {
     setListError(null);
     try {
       const l = await logManager.listLogs(sysId, compId);
-      if (mounted.current) setList(l);
+      // Still the vehicle it was asked of (not switched meanwhile).
+      if (mounted.current && useTelemetryStore.getState().heartbeat.systemId === sysId) setList(l);
     } catch (e) {
       if (mounted.current) setListError(e instanceof Error ? e.message : String(e));
     } finally {
       if (mounted.current) setListing(false);
     }
   }, [linked, armed, listing, sysId, compId]);
+
+  // Another vehicle is commanded: the old one's list, results and an open erase prompt go (erasing would now act on
+  // the new vehicle's logs).
+  useEffect(
+    () =>
+      onActiveVehicleChange(() => {
+        setList(null);
+        setResults({});
+        setListError(null);
+        setConfirmErase(false);
+      }),
+    []
+  );
 
   // List once when the vehicle is there and disarmed.
   const listedFor = useRef<string | null>(null);

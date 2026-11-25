@@ -135,6 +135,7 @@ import { TERRAIN_ATTRIBUTION } from '../../mavlink/terrain';
 import { useTerrainStore } from '../../store/terrainStore';
 import { useGimbalLayer } from './useGimbalLayer';
 import { TrafficBanner } from './TrafficBanner';
+import { onActiveVehicleChange } from '../../mavlink/vehicleRoster';
 import { useOtherVehiclesLayer } from './useOtherVehiclesLayer';
 import { useTrafficLayer } from './useTrafficLayer';
 import {
@@ -1251,6 +1252,22 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   // Whether the vehicle's mission is known: a download has finished this session, or a mission is held (cached
   // from an earlier session, or uploaded). An empty list before any download is "unknown", not "empty mission".
   const missionFetchedRef = useRef(false);
+
+  // Another vehicle is commanded: nothing staged for the old one carries over (an upload or fly-to waiting for
+  // confirmation, the fly-to target shown), its mission counts as not yet downloaded, and the vehicle icon starts
+  // afresh at the new vehicle's first fix (not glides there from the old one: the two boot clocks are unrelated).
+  useEffect(
+    () =>
+      onActiveVehicleChange(() => {
+        missionFetchedRef.current = false;
+        setPendingUpload(null);
+        setPendingFlyTo(null);
+        setActiveFlyToTarget(null);
+        fixesRef.current = [];
+        displayPosRef.current = null;
+      }),
+    []
+  );
   const wasFetchingRef = useRef(false);
   useEffect(() => {
     if (wasFetchingRef.current && !missionStatus.isFetching) missionFetchedRef.current = true;

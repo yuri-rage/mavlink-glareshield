@@ -75,8 +75,11 @@ interface RosterState {
   multiSeen: boolean;
   /** Another vehicle heard while the active one is silent (after two were heard together): offered, not taken. */
   takeoverOffer: number | null;
-  /** A takeover offer the user turned down: not offered again until the active vehicle is heard again. */
-  offerDismissed: number | null;
+  /**
+   * The user chose to keep waiting for the active vehicle: no takeover is offered (of any vehicle on the link) until
+   * it is heard again.
+   */
+  keepWaiting: boolean;
   /** A switch the user asked for that needs confirming (armed, or something under way): the dialog shows it. */
   pendingSwitch: number | null;
   /** Work under way that a switch would stop, by label (registered by widgets: e.g. a parameter batch write). */
@@ -88,15 +91,14 @@ export const useVehicleRosterStore = create<RosterState>(() => ({
   activeSystemId: null,
   multiSeen: false,
   takeoverOffer: null,
-  offerDismissed: null,
+  keepWaiting: false,
   pendingSwitch: null,
   busy: [],
 }));
 
 /** Turn down the takeover offer (keep waiting for the active vehicle). */
 export function dismissTakeoverOffer(): void {
-  const offer = useVehicleRosterStore.getState().takeoverOffer;
-  useVehicleRosterStore.setState({ takeoverOffer: null, offerDismissed: offer });
+  useVehicleRosterStore.setState({ takeoverOffer: null, keepWaiting: true });
 }
 
 type SwitchListener = (to: number, from: number | null) => void;
@@ -120,7 +122,7 @@ export function getActiveSystemId(): number | null {
 export function switchToVehicle(sysId: number): void {
   const st = useVehicleRosterStore.getState();
   const from = st.activeSystemId;
-  useVehicleRosterStore.setState({ activeSystemId: sysId, takeoverOffer: null, offerDismissed: null, pendingSwitch: null });
+  useVehicleRosterStore.setState({ activeSystemId: sysId, takeoverOffer: null, keepWaiting: false, pendingSwitch: null });
   if (from === sysId) return;
   for (const l of [...switchListeners]) {
     try {
@@ -189,13 +191,13 @@ export function observePacket(packet: MavlinkPacket, data: any, now = Date.now()
     if (decision.kind === 'none') {
       if (decision.multi && !st.multiSeen) useVehicleRosterStore.setState({ multiSeen: true });
       // The active vehicle is back: an offer to leave it no longer stands.
-      if (packet.systemId === st.activeSystemId && (st.takeoverOffer !== null || st.offerDismissed !== null)) {
-        useVehicleRosterStore.setState({ takeoverOffer: null, offerDismissed: null });
+      if (packet.systemId === st.activeSystemId && (st.takeoverOffer !== null || st.keepWaiting)) {
+        useVehicleRosterStore.setState({ takeoverOffer: null, keepWaiting: false });
       }
     } else if (decision.kind === 'activate') {
       if (decision.first) useVehicleRosterStore.setState({ activeSystemId: packet.systemId });
       else switchToVehicle(packet.systemId);
-    } else if (st.takeoverOffer === null && st.offerDismissed !== packet.systemId) {
+    } else if (st.takeoverOffer === null && !st.keepWaiting) {
       useVehicleRosterStore.setState({ takeoverOffer: packet.systemId });
     }
     return getActiveSystemId();
@@ -221,7 +223,7 @@ export function observePacket(packet: MavlinkPacket, data: any, now = Date.now()
 export function resetRoster(): void {
   live.clear();
   lastPublish = 0;
-  useVehicleRosterStore.setState({ vehicles: {}, activeSystemId: null, multiSeen: false, takeoverOffer: null, offerDismissed: null, pendingSwitch: null, busy: [] });
+  useVehicleRosterStore.setState({ vehicles: {}, activeSystemId: null, multiSeen: false, takeoverOffer: null, keepWaiting: false, pendingSwitch: null, busy: [] });
 }
 
 mavlinkConnection.onStatus((status) => {

@@ -4,6 +4,7 @@
 // vehicle's mission, rally points or fence through an upload.
 
 import { create } from 'zustand';
+import { onActiveVehicleChange } from '../mavlink/vehicleRoster';
 import {
   draftsEqual,
   historyInit,
@@ -538,4 +539,15 @@ useMissionPlanStore.subscribe((s) => {
     fenceBase: s.fence.base,
   };
   save(s);
+});
+
+// Another vehicle is now commanded while planning: the plan stays open (it may be meant for this vehicle too), but
+// nothing is known yet of what this vehicle holds, so every layer is compared with nothing: the whole plan counts as
+// changes to upload, and a download of the vehicle's own mission is reported as a change (not taken over the draft).
+onActiveVehicleChange(() => {
+  const st = useMissionPlanStore.getState();
+  if (!st.active) return;
+  st.rebase({ items: [] });
+  st.rallyRebase({ points: [] });
+  st.fenceRebase(EMPTY_FENCE);
 });
