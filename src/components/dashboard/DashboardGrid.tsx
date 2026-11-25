@@ -132,7 +132,10 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       headerHeightRef.current = null;
     }
     const byId = new Map(activeTab.widgets.map((w) => [w.instanceId, w.widgetId]));
-    const need = minLayoutSize(cockpit.root, (id) => widgetMinSize(byId.get(id) ?? ''));
+    const need = minLayoutSize(cockpit.root, (id) => {
+      const widgetId = byId.get(id) ?? '';
+      return widgetMinSize(widgetId, profile.customWidgets.find((c) => c.id === widgetId));
+    });
     const measure = () => {
       const el = contentRef.current;
       if (!el) return;
@@ -164,7 +167,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       window.removeEventListener('resize', measure);
       ro.disconnect();
     };
-  }, [isCockpit, cockpit, activeTab, isEditing, layoutKey]);
+  }, [isCockpit, cockpit, activeTab, isEditing, layoutKey, profile.customWidgets]);
   const fill = isCockpit && !stacked;
   useEffect(() => {
     useLayoutStore.setState({ cockpitFill: fill });
@@ -176,6 +179,8 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
   const otherPlaced = new Set(panesInOrder(otherLayout));
   const otherName = variant === 'wide' ? 'standard' : 'wide';
   const [confirmDeleteHidden, setConfirmDeleteHidden] = useState<string | null>(null);
+  // A pending "Remove from both layouts?" doesn't outlive what it was about.
+  useEffect(() => setConfirmDeleteHidden(null), [activeTab?.id, variant, isEditing]);
   const emptyCockpit = isCockpit && !cockpit?.root && !cockpit?.header;
   const unplaced = isCockpit ? activeTab.widgets.filter((w) => !placedIds.has(w.instanceId)) : [];
 
@@ -290,6 +295,9 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                     onClick={() => {
                       removeTab(tab.id);
                       setConfirmDeleteTabId(null);
+                      // Deleting the open tab moves to another: edit the layout shown for that one.
+                      const st = useDashboardStore.getState();
+                      if (st.isEditing) st.setEditVariant(variantShownFor(st.activeTabId));
                     }}
                     className="px-1.5 py-0.5 bg-red-600 hover:bg-red-500 text-white rounded font-bold text-[10px]"
                   >
@@ -587,7 +595,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                       placed={w}
                       title={getWidgetTitle(w.widgetId)}
                       titleOf={getWidgetTitle}
-                      min={widgetMinSize(w.widgetId)}
+                      min={widgetMinSize(w.widgetId, profile.customWidgets.find((c) => c.id === w.widgetId))}
                       dragging={stackDragging}
                       setDragging={setStackDragging}
                       onEditCustomWidget={onEditCustomWidget}

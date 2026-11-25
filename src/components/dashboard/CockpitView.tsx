@@ -115,6 +115,58 @@ function zoneAt(rect: DOMRect, x: number, y: number): DropZone {
   return edge === fy ? 'top' : 'bottom';
 }
 
+type Side = Exclude<DropZone, 'center'>;
+
+/** The whole layout's edges: a pane there spans its full width (top, bottom) or height (left, right). */
+const EDGES: [Side, string][] = [
+  ['top', 'Along the whole top:'],
+  ['bottom', 'Along the whole bottom:'],
+  ['left', 'Down the whole left:'],
+  ['right', 'Down the whole right:'],
+];
+const EDGE_TEXT: Record<Side, string> = { top: 'Across the whole top', bottom: 'Across the whole bottom', left: 'Down the whole left side', right: 'Down the whole right side' };
+const EDGE_STRIP: Record<Side, string> = { top: 'inset-x-0 top-0 h-4', bottom: 'inset-x-0 bottom-0 h-4', left: 'inset-y-0 left-0 w-4', right: 'inset-y-0 right-0 w-4' };
+const EDGE_PREVIEW: Record<Side, string> = { top: 'inset-x-0 top-0 h-1/4', bottom: 'inset-x-0 bottom-0 h-1/4', left: 'inset-y-0 left-0 w-1/4', right: 'inset-y-0 right-0 w-1/4' };
+
+/**
+ * While a pane is dragged, a strip along each outer edge of the layout: dropped there, the pane goes across the
+ * whole top or bottom (or down a whole side), not just beside one pane. The band it would take is previewed.
+ */
+const EdgeTargets: React.FC<{ tabId: string; dragging: string; onDone: () => void }> = ({ tabId, dragging, onDone }) => {
+  const moveToEdge = useDashboardStore((s) => s.moveToEdgeInCockpit);
+  const [over, setOver] = useState<Side | null>(null);
+  return (
+    <>
+      {over && (
+        <div className={`pointer-events-none absolute z-40 ${EDGE_PREVIEW[over]} flex items-center justify-center rounded-lg border-2 border-emerald-400 bg-emerald-500/20`}>
+          <span className="rounded bg-emerald-950/95 px-2 py-0.5 text-[11px] font-bold text-emerald-200">{EDGE_TEXT[over]}</span>
+        </div>
+      )}
+      {(['top', 'bottom', 'left', 'right'] as Side[]).map((side) => (
+        <div
+          key={side}
+          className={`absolute z-40 ${EDGE_STRIP[side]} rounded bg-emerald-500/30`}
+          title={EDGE_TEXT[side]}
+          onDragOver={(e) => {
+            if (!e.dataTransfer.types.includes(PANE_DRAG_TYPE)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (over !== side) setOver(side);
+          }}
+          onDragLeave={() => setOver(null)}
+          onDrop={(e) => {
+            e.preventDefault();
+            const src = e.dataTransfer.getData(PANE_DRAG_TYPE) || dragging;
+            if (src) moveToEdge(tabId, src, side);
+            setOver(null);
+            onDone();
+          }}
+        />
+      ))}
+    </>
+  );
+};
+
 const ZONE_CLASS: Record<DropZone, string> = {
   left: 'inset-y-0 left-0 w-1/2',
   right: 'inset-y-0 right-0 w-1/2',
@@ -154,7 +206,7 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
     const other = s.editVariant === 'wide' ? full.cockpit : full.cockpitWide;
     return panesInOrder(other).includes(placed.instanceId);
   });
-  const { unplaceFromCockpit, splitInCockpit, replaceInCockpit, moveInCockpit, removeWidgetFromActiveTab } = useDashboardStore.getState();
+  const { unplaceFromCockpit, splitInCockpit, addAtEdgeInCockpit, replaceInCockpit, moveInCockpit, removeWidgetFromActiveTab } = useDashboardStore.getState();
   const [zone, setZone] = useState<DropZone | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const shown = new Set(panesInOrder(tab.cockpit));
@@ -244,13 +296,21 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
             onChange={(e) => {
               const v = e.target.value;
               const bar = v.indexOf('|');
-              if (bar > 0) splitInCockpit(tab.id, id, v.slice(0, bar) as 'left' | 'right' | 'top' | 'bottom', source(v.slice(bar + 1)));
+              if (bar <= 0) return;
+              const where = v.slice(0, bar);
+              if (where.startsWith('edge-')) addAtEdgeInCockpit(tab.id, where.slice(5) as Side, source(v.slice(bar + 1)));
+              else splitInCockpit(tab.id, id, where as Side, source(v.slice(bar + 1)));
             }}
           >
             <option value="">Add…</option>
             {SIDES.map(([side, label]) => (
               <optgroup key={side} label={label}>
                 {sourceOptions(`${side}|`)}
+              </optgroup>
+            ))}
+            {EDGES.map(([side, label]) => (
+              <optgroup key={`edge-${side}`} label={label}>
+                {sourceOptions(`edge-${side}|`)}
               </optgroup>
             ))}
           </select>
@@ -348,7 +408,12 @@ export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, tit
   /** The pane being dragged (Edit mode), by instance ID. */
   const [dragging, setDragging] = useState<string | null>(null);
   const byId = new Map(tab.widgets.map((w) => [w.instanceId, w]));
-  const minFor = (id: string) => widgetMinSize(byId.get(id)?.widgetId ?? '');
+  const customWidgets = useDashboardStore((s) => s.profile.customWidgets);
+  // A custom widget's minimum comes from its definition (a composite's panels), others' from their type.
+  const minFor = (id: string) => {
+    const widgetId = byId.get(id)?.widgetId ?? '';
+    return widgetMinSize(widgetId, customWidgets.find((c) => c.id === widgetId));
+  };
   const layout = tab.cockpit!;
   const header = layout.header ? byId.get(layout.header) : undefined;
 
@@ -414,7 +479,8 @@ export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, tit
           )}
         </div>
       )}
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1">
+        {dragging && isEditing && layout.root && !isPane(layout.root) && <EdgeTargets tabId={tab.id} dragging={dragging} onDone={() => setDragging(null)} />}
         {layout.root ? (
           renderNode(layout.root, [])
         ) : (

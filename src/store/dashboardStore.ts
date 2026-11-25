@@ -1,6 +1,6 @@
 import { sanitizeWidgetDefinition } from '../lib/widgetValidation';
 import { create } from 'zustand';
-import { appendPane, buildPreset, movePane, panesInOrder, placedOrUnchanged, removeFromLayout, replacePane, sanitizeCockpit, setSplitSizes, splitPane, type CockpitPresetId, type CockpitVariant, type DropZone } from '../lib/cockpitLayout';
+import { addAtEdge, appendPane, buildPreset, movePane, movePaneToEdge, panesInOrder, placedOrUnchanged, removeFromLayout, replacePane, sanitizeCockpit, setSplitSizes, splitPane, type CockpitPresetId, type CockpitVariant, type DropZone } from '../lib/cockpitLayout';
 import {
   CockpitLayout,
   DashboardProfile,
@@ -306,6 +306,10 @@ interface DashboardState {
   unplaceFromCockpit: (tabId: string, instanceId: string) => void;
   /** Put a widget beside, above or below a pane: a new one of a type, or one of the tab's hidden widgets. */
   splitInCockpit: (tabId: string, targetInstanceId: string, side: Exclude<DropZone, 'center'>, what: PaneSource) => void;
+  /** Put a widget along a whole edge of the layout (a full-width row, a full-height column). */
+  addAtEdgeInCockpit: (tabId: string, side: Exclude<DropZone, 'center'>, what: PaneSource) => void;
+  /** Move a pane to a whole edge of the layout. */
+  moveToEdgeInCockpit: (tabId: string, srcInstanceId: string, side: Exclude<DropZone, 'center'>) => void;
   /** Show another widget in a pane (the one it showed stays on the tab, hidden). */
   replaceInCockpit: (tabId: string, targetInstanceId: string, what: PaneSource) => void;
   /** Move a pane beside, above or below another, or (centre) swap the two. */
@@ -550,6 +554,23 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const placed = placedOrUnchanged(layout!, next, [instanceId]);
       return placed === layout ? t : withLayout(tab, variant, placed);
     });
+  },
+
+  addAtEdgeInCockpit: (tabId, side, what) => {
+    const v = get().editVariant;
+    get().updateTab(tabId, (t) => {
+      const variant = v === 'wide' && t.cockpitWide ? 'wide' : 'standard';
+      const layout = layoutOf(t, variant) ?? { header: null, root: null };
+      // A widget from the tab: its own, and not already shown.
+      if ('instanceId' in what && (!t.widgets.some((w) => w.instanceId === what.instanceId) || panesInOrder(layout).includes(what.instanceId))) return t;
+      const { tab, instanceId } = sourceInstance(t, what);
+      const placed = placedOrUnchanged(layout, sanitizeCockpit(addAtEdge(layout, instanceId, side), tab.widgets.map((w) => w.instanceId)), [instanceId]);
+      return placed === layout ? t : withLayout(tab, variant, placed);
+    });
+  },
+
+  moveToEdgeInCockpit: (tabId, src, side) => {
+    get().updateLayout(tabId, (layout, tab) => movePaneToEdge(layout, src, side, tab.widgets.map((w) => w.instanceId)));
   },
 
   replaceInCockpit: (tabId, target, what) => {

@@ -157,5 +157,32 @@ check('sizes always sum to exactly 100', [[1, 1, 1], [1, 2, 3, 4, 5, 6, 7], [3, 
   check('a swap across branches keeps both splits\' sizes', J((sw.root as any).children.map((c: any) => c.sizes)) === J([[30, 70], [80, 20]]) && J(panesInOrder(sw)) === J(['d', 'b', 'c', 'a']));
 }
 
+// Whole edges: a pane across the whole bottom (or down a whole side).
+{
+  const { addAtEdge, movePaneToEdge } = await import('../src/lib/cockpitLayout.ts');
+  const ids = ['a', 'b', 'c', 's'];
+  const grid = sanitizeCockpit({ header: null, root: { split: 'column', children: [{ split: 'row', children: [{ pane: 'a' }, { pane: 'b' }] }, { pane: 'c' }], sizes: [60, 40] } }, ids)!;
+  const bottom = addAtEdge(grid, 's', 'bottom');
+  check('along the bottom of a column layout: another full-width row', J(bottom.root) === J({ split: 'column', children: [{ split: 'row', children: [{ pane: 'a' }, { pane: 'b' }], sizes: [50, 50] }, { pane: 'c' }, { pane: 's' }], sizes: [45, 30, 25] }), J(bottom.root));
+  const left = addAtEdge(grid, 's', 'left');
+  check('down the left of a column layout: a full-height column beside everything', J(left.root) === J({ split: 'row', children: [{ pane: 's' }, grid.root], sizes: [25, 75] }), J(left.root));
+  const row = sanitizeCockpit({ header: null, root: { split: 'row', children: [{ pane: 'a' }, { split: 'column', children: [{ pane: 'b' }, { pane: 'c' }] }], sizes: [50, 50] } }, ids)!;
+  const moved = movePaneToEdge(row, 'b', 'bottom', ids);
+  check('a pane moved to the whole bottom: out of its place, full width below the rest', J(moved.root) === J({ split: 'column', children: [{ split: 'row', children: [{ pane: 'a' }, { pane: 'c' }], sizes: [50, 50] }, { pane: 'b' }], sizes: [75, 25] }), J(moved.root));
+  const lone = movePaneToEdge(sanitizeCockpit({ header: null, root: { pane: 'a' } }, ids)!, 'a', 'bottom', ids);
+  check('the only pane to an edge: still the only pane', J(lone.root) === J({ pane: 'a' }));
+}
+
+// Custom widgets' minimum size, from their definition.
+{
+  const { customWidgetMinSize } = await import('../src/lib/cockpitLayout.ts');
+  const stat = customWidgetMinSize({ id: 'x', name: 'x', category: 'telemetry', displayType: 'stat-card' } as any);
+  check('a single stat card: small', stat.w === 220 && stat.h < 160, J(stat));
+  const twoUp = customWidgetMinSize({ id: 'y', name: 'y', category: 'telemetry', displayType: 'composite', panels: [{ displayType: 'stat-card', span: 6 }, { displayType: 'stat-card', span: 6 }, { displayType: 'sparkline', span: 12 }] } as any);
+  check('a composite with panels side by side: wide enough not to stack, two rows tall', twoUp.w === 360 && twoUp.h >= 70 + 130 + 40, J(twoUp));
+  const withHud = customWidgetMinSize({ id: 'z', name: 'z', category: 'telemetry', displayType: 'composite', panels: [{ displayType: 'builtin', widgetId: 'built-in-hud' }] } as any);
+  check('a composite holding the HUD: at least the HUD panel\'s own minimum', withHud.h >= 300, J(withHud));
+}
+
 console.log(failures.length ? `\n${failures.length} cockpit-layout check(s) FAILED` : '\nAll cockpit-layout checks PASSED');
 if (failures.length) process.exit(1);

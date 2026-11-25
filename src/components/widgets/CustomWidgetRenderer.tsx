@@ -4,6 +4,7 @@
 // value of every panel on one clock and hands each panel its share. What each display type draws, and the controls'
 // own state, live in the panel components under ./custom.
 
+import { useInPane } from '../dashboard/paneContext';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { CustomWidgetDefinition, WidgetDataBinding } from '../../types/widget';
 import { useTelemetryStore } from '../../store/telemetryStore';
@@ -62,6 +63,8 @@ function useWidth<T extends HTMLElement>(enabled: boolean) {
 export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ definition }) => {
   const system = useUnitsStore((s) => s.system) as UnitSystem;
   const isComposite = definition.displayType === 'composite';
+  // In a Cockpit pane: fill it (see the composite grid below).
+  const inPane = useInPane();
 
   // Each panel's values, then its toggle feedback field, all read on one clock.
   const layout = useMemo<PanelLayout[]>(() => {
@@ -156,7 +159,12 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
 
       {isComposite ? (
         <CardContent className="p-2.5 sm:p-3 flex-1 min-h-0">
-          <div ref={gridRef} className="grid grid-cols-12 gap-2.5 h-full content-start">
+          {/* In a Cockpit pane the rows share its height (each at least its content), so the card fills the pane rather
+              than leaving a gap below or scrolling; elsewhere they keep their natural heights. */}
+          <div
+            ref={gridRef}
+            className={`grid grid-cols-12 gap-2.5 h-full ${inPane ? 'content-stretch [grid-auto-rows:minmax(min-content,1fr)]' : 'content-start'}`}
+          >
             {panels.map((p, i) => {
               const span = stacked ? 12 : panelSpan(definition, i);
               const title = definition.panels?.[i]?.title?.trim();
@@ -165,7 +173,8 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                 <section
                   key={`${i}-${p.def.displayType}`}
                   style={{ gridColumn: `span ${span} / span ${span}` }}
-                  className={`min-w-0 flex flex-col rounded-lg border bg-zinc-900/30 p-2.5 transition-colors ${
+                  // A size container: a panel's values scale with its own width (TelemetryPanels).
+                  className={`@container min-w-0 flex flex-col rounded-lg border bg-zinc-900/30 p-2.5 transition-colors ${
                     p.alert === 'crit' ? 'border-red-500/60' : p.alert === 'warn' ? 'border-amber-500/50' : 'border-zinc-800/80'
                   }`}
                   aria-label={title || undefined}
