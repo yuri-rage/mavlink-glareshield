@@ -1,3 +1,5 @@
+import containerQueries from '@tailwindcss/container-queries';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ['class'],
@@ -49,5 +51,6 @@ export default {
       },
     },
   },
-  plugins: [],
+  // Container queries (@container, @md: ...): widgets lay out by their own pane's width, not the window's.
+  plugins: [containerQueries],
 };

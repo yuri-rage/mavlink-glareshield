@@ -287,7 +287,7 @@ export const WaypointControlWidget: React.FC = () => {
             </div>
 
             {/* Live Waypoint Navigation Metrics Strip */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-zinc-900/70 border border-zinc-800/80 rounded-lg p-2 text-xs sm:text-[13px] font-mono">
+            <div className="grid grid-cols-2 @md:grid-cols-4 gap-1.5 bg-zinc-900/70 border border-zinc-800/80 rounded-lg p-2 text-xs sm:text-[13px] font-mono">
               <div className="flex flex-col">
                 <span className="text-[11px] text-zinc-500 font-sans">Distance</span>
                 <span className="text-sky-400 font-bold">

@@ -367,9 +367,9 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
               value={contentWidth}
               onChange={setContentWidth}
               options={[
-                { value: 'standard', label: 'Standard', hint: 'Up to 1280 px wide, centred: suits laptops and HD screens.' },
-                { value: 'wide', label: 'Wide', hint: 'Up to 1680 px: more room on large monitors.' },
-                { value: 'full', label: 'Full', hint: 'The whole window: for ultrawide and 4K screens.' },
+                { value: 'standard', label: 'Standard', hint: 'Scrolling (Flow) tabs up to 1280 px wide, centred: suits laptops and HD screens. Cockpit tabs always fill the window.' },
+                { value: 'wide', label: 'Wide', hint: 'Scrolling (Flow) tabs up to 1680 px: more room on large monitors. Cockpit tabs always fill the window.' },
+                { value: 'full', label: 'Full', hint: 'Scrolling (Flow) tabs across the whole window: for ultrawide and 4K screens.' },
               ]}
             />
             <Segmented<boolean>

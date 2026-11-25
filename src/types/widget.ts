@@ -194,11 +194,29 @@ export interface PlacedWidget {
   rowSpan?: number;
 }
 
+/**
+ * A Cockpit tab's layout node: a pane showing one of the tab's widgets (by instance ID), or a split laying out its
+ * children side by side ('row') or stacked ('column'), with their sizes as percentages (summing to 100).
+ */
+export type CockpitNode = { pane: string } | { split: 'row' | 'column'; children: CockpitNode[]; sizes: number[] };
+
+/** A Cockpit tab's layout: an optional widget pinned above the panes (the quick-actions bar), and the panes. */
+export interface CockpitLayout {
+  /** Instance ID of the widget pinned above the panes (it keeps its own height), or null. */
+  header: string | null;
+  root: CockpitNode | null;
+}
+
 export interface DashboardTab {
   id: string;
   title: string;
   icon?: string;
+  /** Every widget on the tab. A Cockpit tab's layout refers to them by instance ID. */
   widgets: PlacedWidget[];
+  /** 'flow' (the default): widgets in a scrolling grid. 'cockpit': panes filling the window below the navbar. */
+  mode?: 'flow' | 'cockpit';
+  /** The Cockpit layout (kept when the tab is switched back to Flow, for switching again). */
+  cockpit?: CockpitLayout;
 }
 
 export interface DashboardProfile {

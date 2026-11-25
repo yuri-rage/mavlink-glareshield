@@ -1,6 +1,7 @@
 // A compact STATUSTEXT log: one message per line, newest at the top or the bottom. Sized like the control widgets by
 // default and growing with the row it sits in (the list never sets the card's height, it fills what the card is given).
 
+import { useInPane } from '../dashboard/paneContext';
 import React, { useState } from 'react';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
@@ -24,6 +25,8 @@ const sevTone = (sev: number) =>
 const SEV_SHORT = ['EMRG', 'ALRT', 'CRIT', 'ERR', 'WARN', 'NOTE', 'INFO', 'DBG'];
 
 export const MiniStatusTextWidget: React.FC = () => {
+  // In a Cockpit pane: fill it (no minimum heights; lists scroll inside).
+  const inPane = useInPane();
   const messages = useTelemetryStore((s) => s.statusMessages);
   const clearMessages = useTelemetryStore((s) => s.clearMessages);
   const [filter, setFilter] = useState(0);
@@ -77,7 +80,7 @@ export const MiniStatusTextWidget: React.FC = () => {
 
       <CardContent className="p-2 flex-1 flex flex-col min-h-0">
         {/* Absolutely positioned so the list fills the card instead of sizing it. */}
-        <div className="relative flex-1 min-h-[104px]">
+        <div className={`relative flex-1 ${inPane ? 'min-h-0' : 'min-h-[104px]'}`}>
           <div ref={scrollRef} onScroll={onScroll} className="absolute inset-0 overflow-y-auto rounded-lg bg-black/50 border border-zinc-800 px-1.5 py-1 font-mono text-xs select-text">
             {shown.length === 0 ? (
               <div className="h-full flex items-center justify-center text-zinc-600 italic text-[11px]">

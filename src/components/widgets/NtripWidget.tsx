@@ -274,7 +274,7 @@ export const NtripWidget: React.FC = () => {
             {/* Source Settings Panel */}
             {sourceMode === 'ntrip' ? (
               <div className="space-y-2 bg-zinc-900/40 border border-zinc-800/60 p-2.5 rounded-lg">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 @md:grid-cols-3 gap-2">
                   <div className="sm:col-span-2 space-y-1">
                     <label className="text-[10px] text-zinc-400 uppercase font-bold">Caster Host / IP</label>
                     <input
@@ -300,7 +300,7 @@ export const NtripWidget: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 @md:grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <label className="text-[10px] text-zinc-400 uppercase font-bold">Mountpoint</label>
                     <input
@@ -328,7 +328,7 @@ export const NtripWidget: React.FC = () => {
                 </div>
 
                 {/* Authentication & VRS GGA Feedback */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-zinc-800/60">
+                <div className="grid grid-cols-1 @md:grid-cols-2 gap-2 pt-1 border-t border-zinc-800/60">
                   <div className="space-y-1">
                     <label className="text-[10px] text-zinc-400 uppercase font-bold">Username</label>
                     <input
@@ -434,7 +434,7 @@ export const NtripWidget: React.FC = () => {
             <span className="font-mono text-zinc-500">Msg 233 (GPS_RTCM_DATA)</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 @md:grid-cols-4 gap-2">
             <div className="bg-zinc-950/70 border border-zinc-800/60 rounded p-1.5">
               <span className="text-[10px] text-zinc-500 block">Data Rate</span>
               <span className="text-sm font-mono font-bold text-sky-400">

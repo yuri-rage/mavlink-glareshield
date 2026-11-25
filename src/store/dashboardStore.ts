@@ -1,5 +1,6 @@
 import { sanitizeWidgetDefinition } from '../lib/widgetValidation';
 import { create } from 'zustand';
+import { appendPane, buildPreset, removeFromLayout, sanitizeCockpit, setSplitSizes, type CockpitPresetId } from '../lib/cockpitLayout';
 import {
   DashboardProfile,
   DashboardTab,
@@ -132,6 +133,20 @@ const DEFAULT_PROFILE: DashboardProfile = {
 
 const STORAGE_KEY = 'mavlink_glareshield_profile_v1';
 
+/**
+ * A tab made consistent: its mode one of the two, and its Cockpit layout (if any) referring only to its own widgets,
+ * each once (lib/cockpitLayout.ts). Applied to every tab that's loaded, imported, or loses a widget.
+ */
+export function reconcileTab(tab: DashboardTab): DashboardTab {
+  const widgets = Array.isArray(tab.widgets) ? tab.widgets : [];
+  const mode = tab.mode === 'cockpit' ? 'cockpit' : undefined;
+  const cockpit = tab.cockpit ? sanitizeCockpit(tab.cockpit, widgets.map((w) => w.instanceId)) ?? undefined : undefined;
+  const { mode: _m, cockpit: _c, ...rest } = tab;
+  return { ...rest, widgets, ...(mode ? { mode } : {}), ...(cockpit ? { cockpit } : {}) };
+}
+
+const newInstanceId = () => `w-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+
 function loadInitialProfile(): DashboardProfile {
   try {
     if (typeof localStorage !== 'undefined') {
@@ -145,10 +160,12 @@ function loadInitialProfile(): DashboardProfile {
             'Instruments & Graphs': 'Telemetry',
             'Messages & Params': 'Configuration',
           };
-          parsed.tabs = parsed.tabs.map((t: DashboardTab) => ({
-            ...t,
-            title: OLD_TO_NEW_TITLES[t.title] || t.title,
-          }));
+          parsed.tabs = parsed.tabs.map((t: DashboardTab) =>
+            reconcileTab({
+              ...t,
+              title: OLD_TO_NEW_TITLES[t.title] || t.title,
+            })
+          );
         }
         // Saved widgets get the same structural cleaning as imports (older saved formats, or storage edited by
         // hand), but keep the confirmation settings their owner chose.
@@ -198,6 +215,20 @@ interface DashboardState {
   updateWidgetRowSpan: (instanceId: string, rowSpan: number) => void;
   moveWidget: (instanceId: string, direction: 'up' | 'down') => void;
   reorderWidgetsInActiveTab: (fromIndex: number, toIndex: number) => void;
+
+  // Cockpit tabs
+  /** Switch a tab between Flow and Cockpit (a tab without a Cockpit layout gets one from its widgets). */
+  setTabMode: (tabId: string, mode: 'flow' | 'cockpit') => void;
+  /** Lay a tab out as a preset (switching it to Cockpit); its own widgets are reused, missing ones added. */
+  applyCockpitPreset: (tabId: string, preset: CockpitPresetId) => void;
+  /** New sizes for the split at `path` (after a divider drag). */
+  setCockpitSizes: (tabId: string, path: number[], sizes: number[]) => void;
+  /** Show a tab widget the layout doesn't place, as a new pane. */
+  placeInCockpit: (tabId: string, instanceId: string) => void;
+  /** Take a widget out of the layout (it stays on the tab, unplaced). */
+  unplaceFromCockpit: (tabId: string, instanceId: string) => void;
+  /** Change one tab (made consistent and saved). */
+  updateTab: (tabId: string, fn: (tab: DashboardTab) => DashboardTab) => void;
 
   // Custom Widgets
   saveCustomWidget: (def: CustomWidgetDefinition) => void;
@@ -279,7 +310,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const newTabs = state.profile.tabs.map((tab) => {
         if (tab.id !== activeTabId) return tab;
         const newWidget: PlacedWidget = { instanceId, widgetId, colSpan };
-        return { ...tab, widgets: [...tab.widgets, newWidget] };
+        // A Cockpit tab shows it as a new pane.
+        const cockpit = tab.mode === 'cockpit' ? appendPane(tab.cockpit ?? { header: null, root: null }, instanceId) : tab.cockpit;
+        return reconcileTab({ ...tab, widgets: [...tab.widgets, newWidget], ...(cockpit ? { cockpit } : {}) });
       });
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
       saveProfileToStorage(newProfile);
@@ -292,7 +325,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set((state) => {
       const newTabs = state.profile.tabs.map((tab) => {
         if (tab.id !== activeTabId) return tab;
-        return { ...tab, widgets: tab.widgets.filter((w) => w.instanceId !== instanceId) };
+        // Its pane goes too (its neighbours take the room).
+        return reconcileTab({ ...tab, widgets: tab.widgets.filter((w) => w.instanceId !== instanceId) });
       });
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
       saveProfileToStorage(newProfile);
@@ -380,6 +414,46 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     });
   },
 
+  setTabMode: (tabId, mode) => {
+    get().updateTab(tabId, (tab) => {
+      if (mode === 'flow') return { ...tab, mode: undefined };
+      if (tab.cockpit && tab.cockpit.root) return { ...tab, mode: 'cockpit' };
+      // No layout yet: one from the tab's own widgets.
+      const { widgets, layout } = buildPreset('from-tab', tab.widgets, newInstanceId);
+      return { ...tab, widgets, cockpit: layout, mode: 'cockpit' };
+    });
+  },
+
+  applyCockpitPreset: (tabId, preset) => {
+    get().updateTab(tabId, (tab) => {
+      const { widgets, layout } = buildPreset(preset, tab.widgets, newInstanceId);
+      return { ...tab, widgets, cockpit: layout, mode: 'cockpit' };
+    });
+  },
+
+  setCockpitSizes: (tabId, path, sizes) => {
+    get().updateTab(tabId, (tab) => (tab.cockpit ? { ...tab, cockpit: setSplitSizes(tab.cockpit, path, sizes) } : tab));
+  },
+
+  placeInCockpit: (tabId, instanceId) => {
+    get().updateTab(tabId, (tab) => ({ ...tab, cockpit: appendPane(tab.cockpit ?? { header: null, root: null }, instanceId) }));
+  },
+
+  unplaceFromCockpit: (tabId, instanceId) => {
+    get().updateTab(tabId, (tab) =>
+      tab.cockpit ? { ...tab, cockpit: removeFromLayout(tab.cockpit, instanceId, tab.widgets.map((w) => w.instanceId)) } : tab
+    );
+  },
+
+  updateTab: (tabId, fn) => {
+    set((state) => {
+      const tabs = state.profile.tabs.map((t) => (t.id === tabId ? reconcileTab(fn(t)) : t));
+      const newProfile = { ...state.profile, tabs, updatedAt: new Date().toISOString() };
+      saveProfileToStorage(newProfile);
+      return { profile: newProfile };
+    });
+  },
+
   saveCustomWidget: (def: CustomWidgetDefinition) => {
     set((state) => {
       const existing = state.profile.customWidgets.findIndex((w) => w.id === def.id);
@@ -402,10 +476,13 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   deleteCustomWidget: (widgetId: string) => {
     set((state) => {
       const updatedCustom = state.profile.customWidgets.filter((w) => w.id !== widgetId);
-      const updatedTabs = state.profile.tabs.map((t) => ({
-        ...t,
-        widgets: t.widgets.filter((w) => w.widgetId !== widgetId),
-      }));
+      // Its instances leave every tab, and their panes every Cockpit layout.
+      const updatedTabs = state.profile.tabs.map((t) =>
+        reconcileTab({
+          ...t,
+          widgets: t.widgets.filter((w) => w.widgetId !== widgetId),
+        })
+      );
       const newProfile = {
         ...state.profile,
         tabs: updatedTabs,
@@ -429,6 +506,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         if (Array.isArray(parsed.customWidgets)) {
           parsed.customWidgets = parsed.customWidgets.map((w) => sanitizeWidgetDefinition(w));
         }
+        // Cockpit layouts: only the tab's own widgets, each once, bounded (as when loading).
+        parsed.tabs = parsed.tabs.map((t) => reconcileTab(t));
         saveProfileToStorage(parsed);
         set({
           profile: parsed,

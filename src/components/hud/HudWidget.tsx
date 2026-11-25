@@ -1,4 +1,5 @@
 import { CameraFeed, type CameraStatus } from './CameraFeed';
+import { useInPane } from '../dashboard/paneContext';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { displayAltitudeM } from '../../lib/displayAltitude';
 import React, { useEffect, useRef, useState } from 'react';
@@ -150,6 +151,8 @@ function isFailsafeActive(
 }
 
 export const HudWidget: React.FC = () => {
+  // In a Cockpit pane: fill it (no minimum heights; lists scroll inside).
+  const inPane = useInPane();
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
   // The fast-changing telemetry (attitude, speeds, position, ...) is not React state here: the canvas is drawn from a
   // requestAnimationFrame loop that reads the store, so a packet doesn't re-render this component (and its
@@ -372,10 +375,13 @@ export const HudWidget: React.FC = () => {
     // Geometric layouts for HUD overlay instruments
     const PITCH_SCALE = 4.2; // Pixels per degree
     // Readout text and its boxes grow with the HUD: 1x up to a 520 x 380 HUD, at most 1.3x, so a large HUD is
-    // easier to read and a small one keeps its layout. The pitch ladder's spacing doesn't change.
-    const ts = Math.max(1, Math.min(1.3, Math.min(width / 520, height / 380)));
+    // easier to read and a small one keeps its layout. In a Cockpit pane (which may be smaller than a Flow card ever
+    // is) they also shrink, to 0.8x, so the corner readouts and the compass tape still fit. The pitch ladder's
+    // spacing doesn't change.
+    const ts = Math.max(inPane ? 0.8 : 1, Math.min(1.3, Math.min(width / 520, height / 380)));
     const hudFont = (px: number, weight = 'bold') => `${weight} ${(px * ts).toFixed(1)}px ui-monospace, SFMono-Regular, monospace`;
-    const disarmY = cy - 18 * PITCH_SCALE; // Steady disarm banner positioned ~18 deg above wings level horizon
+    // Steady disarm banner ~18 deg above the horizon, but always below the compass tape (a short HUD, in a small pane).
+    const disarmY = Math.max(cy - 18 * PITCH_SCALE, 40 * ts + 14 * ts);
     const failsafeY = disarmY + 25 * ts; // Directly below DISARMED
     const isFlashVisible = flashTick % 2 === 0;
 
@@ -393,7 +399,8 @@ export const HudWidget: React.FC = () => {
     const altBoxH = 30 * ts;
     const altBoxY = cy - altBoxH / 2;
 
-    const tapeWidth = Math.min(280, width - 110);
+    // Narrower on a small HUD, so it stays clear of the corner readouts (G and home, up to ~140 px each at 1x).
+    const tapeWidth = Math.max(120, Math.min(280, width - 110, width - 2 * (140 * ts + 12)));
 
     ctx.save();
     ctx.globalAlpha = symbologyAlpha;
@@ -1164,7 +1171,7 @@ export const HudWidget: React.FC = () => {
           </button>
         </div>
       </CardHeader>
-      <CardContent className="p-0 sm:p-0 flex-1 relative w-full min-h-[340px] overflow-hidden bg-black">
+      <CardContent className={`p-0 sm:p-0 flex-1 relative w-full ${inPane ? 'min-h-0' : 'min-h-[340px]'} overflow-hidden bg-black`}>
         {/* Live Camera Video / Stream Layer */}
         {videoConfig.enabled && Boolean(videoConfig.url.trim()) && (
           <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none">

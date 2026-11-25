@@ -27,10 +27,16 @@ export const CONTENT_WIDTH_CLASS: Record<ContentWidth, string> = {
 interface LayoutState {
   contentWidth: ContentWidth;
   setContentWidth: (w: ContentWidth) => void;
+  /**
+   * The active tab is a Cockpit tab shown as panes (it fits the window): the page is exactly the window's height and
+   * doesn't scroll (App). Set by the dashboard.
+   */
+  cockpitFill: boolean;
 }
 
 export const useLayoutStore = create<LayoutState>((set) => ({
   contentWidth: load(),
+  cockpitFill: false,
   setContentWidth: (contentWidth) => {
     try {
       localStorage.setItem(KEY, contentWidth);

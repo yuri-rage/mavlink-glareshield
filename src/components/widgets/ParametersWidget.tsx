@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useInPane } from '../dashboard/paneContext';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { paramManager, ParamManagerStatus } from '../../mavlink/paramManager';
@@ -34,6 +35,8 @@ export { formatParamValue };
 type WriteState = { state: 'writing' } | { state: WriteOutcome; echoed?: number };
 
 export const ParametersWidget: React.FC = () => {
+  // In a Cockpit pane: fill it (no minimum heights; lists scroll inside).
+  const inPane = useInPane();
   // Use selector so this component ONLY re-renders when parameters or connection state change,
   // NOT on 50Hz attitude, GPS, or VFR_HUD telemetry updates.
   const parameters = useTelemetryStore((state) => state.parameters);
@@ -343,7 +346,7 @@ export const ParametersWidget: React.FC = () => {
   };
 
   return (
-    <Card className="border-zinc-800 bg-zinc-950/90 shadow-md flex flex-col h-full min-h-[380px] sm:min-h-[540px]">
+    <Card className={`border-zinc-800 bg-zinc-950/90 shadow-md flex flex-col h-full ${inPane ? 'min-h-0' : 'min-h-[380px] sm:min-h-[540px]'}`}>
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -524,7 +527,7 @@ export const ParametersWidget: React.FC = () => {
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 bg-black/60 rounded-xl border border-zinc-800 overflow-y-auto min-h-[240px] max-h-[68vh]"
+          className={`flex-1 bg-black/60 rounded-xl border border-zinc-800 overflow-y-auto ${inPane ? 'min-h-0' : 'min-h-[240px] max-h-[68vh]'}`}
         >
           {filteredKeys.length === 0 ? (
             <div className="text-zinc-500 text-center py-10 px-4 text-xs flex flex-col items-center gap-2">

@@ -137,7 +137,7 @@ export const BatteryWidget: React.FC = () => {
             <span className="text-[11px] text-zinc-500 uppercase font-bold block">
               Cells ({battery.cellVoltages.length}S)
             </span>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+            <div className="grid grid-cols-3 @lg:grid-cols-6 gap-1.5">
               {battery.cellVoltages.map((v, i) => (
                 <div key={i} className="bg-zinc-900/80 border border-zinc-800 rounded p-1 text-center min-w-0">
                   <span className="text-[10px] text-zinc-500 block truncate">C{i + 1}</span>
