@@ -1275,7 +1275,7 @@ class BridgeServer:
 
     async def stream_mock_log(self, log_index: int, ofs: int, count: int):
         """LOG_DATA for one LOG_REQUEST_DATA; the first request drops a few packets so the GCS must fill gaps."""
-        num, size, _t, data = self.mock_logs[log_index]
+        _num, size, _t, data = self.mock_logs[log_index]
         self.log_data_requests += 1
         drop = self.log_data_requests == 1
         end = min(size, ofs + count)

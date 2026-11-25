@@ -13,6 +13,7 @@ Usage:
     python3 tests/gen_vectors.py
 """
 import json
+import math
 import os
 import struct
 import sys
@@ -242,7 +243,6 @@ dcase("ESC_TELEMETRY_9_TO_12 motor numbers", vehicle.esc_telemetry_9_to_12_encod
       {"rpm9": 100, "rpm12": 400, "temp12": 33, "curr12": 1.0})
 dcase("MOUNT_STATUS centidegrees to degrees", vehicle.mount_status_encode(1, 154, -4500, 1250, 18000, 3),
       {"pitch": -45, "roll": 12.5, "yaw": 180, "mount_mode": 3})
-import math
 half = math.radians(30) / 2  # 30 degrees of pitch
 dcase("GIMBAL_DEVICE_ATTITUDE_STATUS quaternion to Euler", vehicle.gimbal_device_attitude_status_encode(
           1, 154, 123456, 4096, [math.cos(half), 0, math.sin(half), 0], 0.1, 0.2, 0.3, 0, 1.5, 0.25, 7),

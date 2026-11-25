@@ -42,6 +42,34 @@ jobs:
       - name: Run unit & regression tests
         run: npm test
 
+  format:
+    name: Formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          pip install ruff==0.17.4
+
+      - name: Check formatting (Prettier, Ruff) and Ruff lint
+        run: npm run format:check
+
   bridge_tests:
     name: Bridge Tests
     runs-on: ubuntu-latest
@@ -102,7 +130,7 @@ jobs:
 
   deploy:
     name: Deploy to Cloudflare
-    needs: [unit_tests, bridge_tests, build]
+    needs: [unit_tests, format, bridge_tests, build]
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 10

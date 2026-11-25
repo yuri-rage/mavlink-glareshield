@@ -1,0 +1,11 @@
+{
+  "plugins": ["@ianvs/prettier-plugin-sort-imports", "prettier-plugin-tailwindcss"],
+  "semi": true,
+  "singleQuote": true,
+  "jsxSingleQuote": false,
+  "trailingComma": "es5",
+  "tabWidth": 2,
+  "printWidth": 120,
+  "endOfLine": "lf",
+  "importOrder": ["^react", "", "<THIRD_PARTY_MODULES>", "", "^\\.\\./", "^\\./", "", "\\.css$"]
+}
