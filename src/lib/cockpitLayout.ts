@@ -366,7 +366,10 @@ export const WIDE_ASPECT = 2.2;
 
 export type CockpitVariant = 'standard' | 'wide';
 
+/** The least window width for the wide layout: a phone in landscape is as wide in proportion, but small. */
+export const WIDE_MIN_WIDTH = 1200;
+
 /** Which of a tab's layouts a window of this shape shows: the wide one only when the tab has it and it's wide. */
 export function variantFor(hasWide: boolean, width: number, height: number): CockpitVariant {
-  return hasWide && height > 0 && width / height > WIDE_ASPECT ? 'wide' : 'standard';
+  return hasWide && height > 0 && width >= WIDE_MIN_WIDTH && width / height > WIDE_ASPECT ? 'wide' : 'standard';
 }

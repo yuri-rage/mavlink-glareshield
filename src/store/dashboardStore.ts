@@ -627,6 +627,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         set({
           profile: parsed,
           activeTabId: parsed.tabs[0]?.id || 'tab-flight',
+          editVariant: 'standard',
         });
         return true;
       }
@@ -642,6 +643,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       profile: DEFAULT_PROFILE,
       activeTabId: 'tab-flight',
       isEditing: false,
+      editVariant: 'standard',
     });
   },
 }));

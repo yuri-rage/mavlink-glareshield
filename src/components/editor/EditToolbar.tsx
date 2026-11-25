@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { Button } from '../ui/button';
 import { Plus, Sliders, Check, Pencil } from 'lucide-react';
@@ -16,6 +16,8 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({
   const { isEditing, toggleEditing, profile, activeTabId, setTabMode, applyCockpitPreset, editVariant, setEditVariant, addWideLayout, removeWideLayout } =
     useDashboardStore();
   const [confirmRemoveWide, setConfirmRemoveWide] = useState(false);
+  // A pending "Remove the wide layout?" doesn't outlive what it was about.
+  useEffect(() => setConfirmRemoveWide(false), [activeTabId, editVariant, isEditing]);
 
   if (!isEditing) return null;
 

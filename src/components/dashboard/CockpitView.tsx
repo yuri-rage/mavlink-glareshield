@@ -147,6 +147,13 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
   const id = placed.instanceId;
   const customWidgets = useDashboardStore((s) => s.profile.customWidgets);
   const customDef = customWidgets.find((w) => w.id === placed.widgetId);
+  // Shown in the tab's other layout too (standard / wide)? Deleting it removes it there as well: the prompt says so.
+  const inOther = useDashboardStore((s) => {
+    const full = s.profile.tabs.find((t) => t.id === tab.id);
+    if (!full?.cockpitWide) return false;
+    const other = s.editVariant === 'wide' ? full.cockpit : full.cockpitWide;
+    return panesInOrder(other).includes(placed.instanceId);
+  });
   const { unplaceFromCockpit, splitInCockpit, replaceInCockpit, moveInCockpit, removeWidgetFromActiveTab } = useDashboardStore.getState();
   const [zone, setZone] = useState<DropZone | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -292,8 +299,13 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
           </button>
           {confirmDelete ? (
             <span className="flex items-center gap-0.5 rounded border border-red-500/40 bg-red-950/90 px-0.5 text-[10px] text-red-200">
-              <button type="button" onClick={() => removeWidgetFromActiveTab(id)} className="rounded bg-red-600 px-1 font-bold text-white" title={`Delete ${title} from the tab`}>
-                Delete
+              <button
+                type="button"
+                onClick={() => removeWidgetFromActiveTab(id)}
+                className="rounded bg-red-600 px-1 font-bold text-white"
+                title={inOther ? `Delete ${title} from the tab: it leaves both layouts` : `Delete ${title} from the tab`}
+              >
+                {inOther ? 'Delete (both layouts)' : 'Delete'}
               </button>
               <button type="button" onClick={() => setConfirmDelete(false)} className="rounded bg-zinc-800 px-1">
                 No

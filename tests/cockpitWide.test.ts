@@ -13,6 +13,7 @@ function check(name: string, ok: boolean, detail = '') {
 const J = JSON.stringify;
 
 check(`wide only past ${WIDE_ASPECT}:1, and only if the tab has one`, variantFor(true, 3440, 1305) === 'wide' && variantFor(true, 1920, 970) === 'standard' && variantFor(true, 2560, 1305) === 'standard' && variantFor(false, 3440, 1305) === 'standard');
+check('a phone in landscape (915x310) stays standard', variantFor(true, 915, 310) === 'standard');
 
 const st = () => useDashboardStore.getState();
 const hud = () => st().profile.tabs.find((t) => t.id === 'tab-flight')!;
@@ -32,6 +33,14 @@ st().moveInCockpit('tab-flight', 'w-hud', 'w-map-flight', 'center');
 st().unplaceFromCockpit('tab-flight', 'w-gps');
 check('sizes, moves and hiding in the wide layout leave the standard one as it was', J(hud().cockpit) === standard && !panesInOrder(hud().cockpitWide).includes('w-gps') && panesInOrder(hud().cockpit).includes('w-gps'));
 
+const std0 = J(hud().cockpit);
+st().splitInCockpit('tab-flight', 'w-map-flight', 'bottom', { widgetId: 'built-in-statustext' });
+const msgs = hud().widgets.find((w) => w.widgetId === 'built-in-statustext')!.instanceId;
+st().replaceInCockpit('tab-flight', 'w-vfr', { widgetId: 'built-in-inspector' });
+st().placeInCockpit('tab-flight', 'w-gps');
+check('split, replace and show while editing the wide layout leave the standard one alone', J(hud().cockpit) === std0 && panesInOrder(hud().cockpitWide).includes(msgs) && panesInOrder(hud().cockpitWide).includes('w-gps') && !panesInOrder(hud().cockpitWide).includes('w-vfr'));
+st().replaceInCockpit('tab-flight', hud().widgets.find((w) => w.widgetId === 'built-in-inspector')!.instanceId, { instanceId: 'w-vfr' });
+
 st().addWidgetToActiveTab('built-in-charts');
 const charts = hud().widgets.find((w) => w.widgetId === 'built-in-charts')!.instanceId;
 check('a widget added while editing the wide layout: placed there, not shown in the standard one', panesInOrder(hud().cockpitWide).includes(charts) && !panesInOrder(hud().cockpit).includes(charts));
@@ -43,6 +52,19 @@ check('editing the standard layout leaves the wide one alone', !panesInOrder(hud
 st().removeWidgetFromActiveTab('w-battery');
 check('a widget removed from the tab leaves both layouts', !panesInOrder(hud().cockpit).includes('w-battery') && !panesInOrder(hud().cockpitWide).includes('w-battery'));
 
+// A custom widget in both layouts, deleted: gone from both.
+{
+  const customId = st().profile.customWidgets[0].id;
+  st().setEditVariant('wide');
+  st().addWidgetToActiveTab(customId);
+  const inst = hud().widgets.find((w) => w.widgetId === customId)!.instanceId;
+  st().setEditVariant('standard');
+  st().placeInCockpit('tab-flight', inst);
+  check('custom widget placed in both layouts', panesInOrder(hud().cockpit).includes(inst) && panesInOrder(hud().cockpitWide).includes(inst));
+  st().deleteCustomWidget(customId);
+  check('deleting the custom widget removes it from both layouts', !panesInOrder(hud().cockpit).includes(inst) && !panesInOrder(hud().cockpitWide).includes(inst));
+}
+
 st().setEditVariant('wide');
 st().removeWideLayout('tab-flight');
 check('removing the wide layout: gone, the standard one kept, editing it again', !hud().cockpitWide && !!hud().cockpit && st().editVariant === 'standard');
@@ -50,6 +72,9 @@ check('removing the wide layout: gone, the standard one kept, editing it again',
 // Import: a wide layout is cleaned like the standard one.
 st().importProfileJson(J({ version: '1', name: 'w', updatedAt: '', customWidgets: [], tabs: [{ id: 't', title: 'T', mode: 'cockpit', widgets: [{ instanceId: 'a', widgetId: 'built-in-hud' }], cockpit: { header: null, root: { pane: 'a' } }, cockpitWide: { header: 'zz', root: { split: 'row', children: [{ pane: 'a' }, { pane: 'ghost' }] } } }] }));
 const t = st().profile.tabs[0];
+st().setEditVariant('wide');
+st().importProfileJson(J({ version: '1', name: 'w2', updatedAt: '', customWidgets: [], tabs: [t] }));
+check('an import edits the standard layout again', st().editVariant === 'standard');
 check('an imported wide layout is cleaned', J(t.cockpitWide) === J({ header: null, root: { pane: 'a' } }), J(t.cockpitWide));
 
 console.log(failures.length ? `\n${failures.length} wide-layout check(s) FAILED` : '\nAll wide-layout checks PASSED');

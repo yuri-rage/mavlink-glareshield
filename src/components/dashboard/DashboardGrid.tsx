@@ -103,11 +103,10 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
   }, []);
   const editVariant = useDashboardStore((st) => st.editVariant);
   const shownVariant: CockpitVariant = variantFor(Boolean(activeTab?.cockpitWide), windowSize.w, windowSize.h);
-  useEffect(() => {
-    if (isEditing) useDashboardStore.getState().setEditVariant(shownVariant);
-    // Only on entering Edit mode (or changing tab), not as the window changes while editing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditing, activeTab?.id]);
+  // The layout to edit is chosen in the same click that enters Edit mode or changes tab while editing (not after
+  // paint: for a frame the other layout would be shown, tearing down and rebuilding the map, HUD and every widget).
+  const variantShownFor = (tabId: string) =>
+    variantFor(Boolean(profile.tabs.find((t) => t.id === tabId)?.cockpitWide), windowSize.w, windowSize.h);
   const variant: CockpitVariant = isEditing ? (editVariant === 'wide' && activeTab?.cockpitWide ? 'wide' : 'standard') : shownVariant;
   const cockpit = isCockpit ? ((variant === 'wide' ? activeTab.cockpitWide : activeTab.cockpit) ?? { header: null, root: null }) : undefined;
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -172,6 +171,11 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
     return () => useLayoutStore.setState({ cockpitFill: false });
   }, [fill]);
   const placedIds = new Set(panesInOrder(cockpit));
+  // The tab's other layout (standard or wide), when it has both: deleting a widget it shows removes it there too.
+  const otherLayout = isCockpit && activeTab.cockpitWide ? (variant === 'wide' ? activeTab.cockpit : activeTab.cockpitWide) : undefined;
+  const otherPlaced = new Set(panesInOrder(otherLayout));
+  const otherName = variant === 'wide' ? 'standard' : 'wide';
+  const [confirmDeleteHidden, setConfirmDeleteHidden] = useState<string | null>(null);
   const emptyCockpit = isCockpit && !cockpit?.root && !cockpit?.header;
   const unplaced = isCockpit ? activeTab.widgets.filter((w) => !placedIds.has(w.instanceId)) : [];
 
@@ -361,7 +365,10 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                   </div>
                 ) : (
                   <button
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => {
+                      if (isEditing) useDashboardStore.getState().setEditVariant(variantShownFor(tab.id));
+                      setActiveTab(tab.id);
+                    }}
                     className={`px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
                       isActive
                         ? 'bg-zinc-800 text-sky-400 shadow-sm border border-zinc-700'
@@ -459,7 +466,10 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
             <Button
               variant="outline"
               size="sm"
-              onClick={toggleEditing}
+              onClick={() => {
+                if (activeTab) useDashboardStore.getState().setEditVariant(shownVariant);
+                toggleEditing();
+              }}
               className="gap-1.5 h-8 px-3 text-xs font-semibold"
               title="Edit dashboard layout & widgets"
             >
@@ -477,6 +487,11 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
           {unplaced.map((w) => (
             <span key={w.instanceId} className="flex items-center gap-1 rounded border border-zinc-700 bg-zinc-950 px-1.5 py-0.5">
               {getWidgetTitle(w.widgetId)}
+              {otherPlaced.has(w.instanceId) && (
+                <span className="rounded bg-sky-950 px-1 text-[9px] font-bold text-sky-300" title={`Shown in the ${otherName} layout`}>
+                  in {otherName}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => placeInCockpit(activeTab.id, w.instanceId)}
@@ -486,15 +501,28 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                 <Eye className="h-3 w-3" />
                 Show
               </button>
-              <button
-                type="button"
-                onClick={() => removeWidgetFromActiveTab(w.instanceId)}
-                className="text-zinc-500 hover:text-red-400"
-                title="Remove it from the tab"
-                aria-label={`Remove ${getWidgetTitle(w.widgetId)} from the tab`}
-              >
-                <Trash2 className="h-3 w-3" />
-              </button>
+              {confirmDeleteHidden === w.instanceId ? (
+                <span className="flex items-center gap-1 text-red-200">
+                  Remove from both layouts?
+                  <button type="button" onClick={() => removeWidgetFromActiveTab(w.instanceId)} className="rounded bg-red-600 px-1 font-bold text-white">
+                    Remove
+                  </button>
+                  <button type="button" onClick={() => setConfirmDeleteHidden(null)} className="rounded bg-zinc-800 px-1">
+                    No
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  // Shown in the other layout: ask first (it would go from there too). Otherwise at once.
+                  onClick={() => (otherPlaced.has(w.instanceId) ? setConfirmDeleteHidden(w.instanceId) : removeWidgetFromActiveTab(w.instanceId))}
+                  className="text-zinc-500 hover:text-red-400"
+                  title={otherPlaced.has(w.instanceId) ? `Remove it from the tab (and the ${otherName} layout)` : 'Remove it from the tab'}
+                  aria-label={`Remove ${getWidgetTitle(w.widgetId)} from the tab`}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              )}
             </span>
           ))}
         </div>
