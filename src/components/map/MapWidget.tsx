@@ -332,7 +332,6 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const vehicleMarkerRef = useRef<L.Marker | null>(null);
   /** The trail, drawn in chunks (see TRAIL_CHUNK): only the last one changes as points arrive. */
   const trailChunksRef = useRef<L.Polyline[]>([]);
-  const trailSyncRef = useRef<() => void>(() => {});
   const missionPolylineRef = useRef<L.Polyline | null>(null);
   const missionMarkersRef = useRef<L.Marker[]>([]);
   const missionRadiiRef = useRef<L.Circle[]>([]);
@@ -690,8 +689,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   }, []);
 
   // The flight trail follows the store without re-rendering the map: each new point extends the last chunk; a trim
-  // or clear (rare) rebuilds the chunks.
+  // or clear (rare) rebuilds the chunks. Runs once the map exists (drawing the trail recorded so far at once, e.g.
+  // on coming back to the map's tab), and clears its chunks when the map goes.
   useEffect(() => {
+    if (!mapReady) return;
     let resets = -1;
     let drawn = 0;
     const sync = () => {
@@ -716,12 +717,16 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         chunk.addLatLng(trace[drawn]);
       }
     };
-    trailSyncRef.current = sync;
     sync();
-    return useTelemetryStore.subscribe((st, prev) => {
+    const unsubscribe = useTelemetryStore.subscribe((st, prev) => {
       if (st.traceVersion !== prev.traceVersion) sync();
     });
-  }, []);
+    return () => {
+      unsubscribe();
+      trailChunksRef.current.forEach((c) => c.remove());
+      trailChunksRef.current = [];
+    };
+  }, [mapReady]);
 
   // Register subscription for position
   useEffect(() => {
@@ -1006,12 +1011,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     }).addTo(map);
     vehicleMarkerRef.current = marker;
 
-    // Trail polyline: dark magenta, so it reads against satellite imagery and stays distinct from the
-    // bright magenta / yellow mission lines.
-    // The trail, drawn by the sync above. SVG, not a canvas: a canvas renderer reallocates and redraws its whole
-    // canvas after every map move, and following a vehicle moves the map nearly every frame; SVG only shifts its
-    // viewBox, and off-screen chunks are skipped.
-    trailSyncRef.current();
+    // The trail is drawn by the trail effect once the map is ready. SVG, not a canvas: a canvas renderer reallocates
+    // and redraws its whole canvas after every map move, and following a vehicle moves the map nearly every frame;
+    // SVG only shifts its viewBox, and off-screen chunks are skipped.
 
     // Mission polyline - Mission Planner bright electric yellow mission path
     const missionPoly = L.polyline([], {
@@ -1909,10 +1911,19 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
   // Update dashed vector line connecting vehicle to target (efficient setLatLngs without recreation)
   useEffect(() => {
+    const removeLine = () => {
+      flyToLineRef.current?.remove();
+      flyToLineRef.current = null;
+    };
+    // No target: no line, and no subscription running on every fix.
+    if (!activeFlyToTarget) {
+      removeLine();
+      return;
+    }
     const draw = (position: { lat: number; lon: number }) => {
     if (!mapInstanceRef.current) return;
 
-    if (!activeFlyToTarget || (position.lat === 0 && position.lon === 0)) {
+    if (position.lat === 0 && position.lon === 0) {
       if (flyToLineRef.current) {
         flyToLineRef.current.remove();
         flyToLineRef.current = null;

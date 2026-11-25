@@ -31,8 +31,24 @@ function storedVoiceEngine(): VoiceEngine {
   return defaultVoiceEngine(typeof navigator !== 'undefined' ? (navigator as Navigator & { deviceMemory?: number }) : undefined);
 }
 
-/** Stop the neural voice and drop its cached audio, giving back its memory. */
+/** Bumped when the neural voice is released: work started before it (a synthesis, the prewarm) is abandoned. */
+let piperGeneration = 0;
+/** The pending start of the prewarm, after the model is ready. */
+let prewarmTimer: ReturnType<typeof setTimeout> | null = null;
+const neuralVoice = () => useAudioAlertsStore.getState().voiceEngine === 'neural';
+
+/**
+ * Stop the neural voice and drop its cached audio, giving back its memory. Anything it had started is abandoned:
+ * the prewarm (which would otherwise start the worker again for its next phrase), a callout being synthesized
+ * (which would otherwise be spoken by the device voice after the switch), and the prewarm is redone if it comes back.
+ */
 function releasePiper() {
+  piperGeneration++;
+  if (prewarmTimer) {
+    clearTimeout(prewarmTimer);
+    prewarmTimer = null;
+  }
+  prewarmStarted = false;
   if (piperWorker) {
     try {
       piperWorker.terminate();
@@ -304,8 +320,9 @@ function synthesizeViaWorker(text: string, timeoutMs = 6000): Promise<ArrayBuffe
 }
 
 async function prewarmCoreCallouts() {
-  if (prewarmStarted) return;
+  if (prewarmStarted || !neuralVoice() || !piperWorker) return;
   prewarmStarted = true;
+  const generation = piperGeneration;
   const phrases = [
     'Motors armed',
     'Motors disarmed',
@@ -316,6 +333,8 @@ async function prewarmCoreCallouts() {
     'Restarting mission',
   ];
   for (const phrase of phrases) {
+    // Turned off meanwhile: stop, rather than start the worker again for the next phrase.
+    if (generation !== piperGeneration || !neuralVoice() || !piperWorker) return;
     if (audioBufferCache.has(phrase)) continue;
     try {
       const wavBuf = await synthesizeViaWorker(phrase, 12000);
@@ -354,7 +373,9 @@ function ensurePiperWorker(): Worker | null {
             ttsStatus: 'ready',
             ttsDownloadProgress: 100,
           });
-          setTimeout(() => {
+          if (prewarmTimer) clearTimeout(prewarmTimer);
+          prewarmTimer = setTimeout(() => {
+            prewarmTimer = null;
             prewarmCoreCallouts().catch(() => {});
           }, 400);
         } else if (msg.status === 'error') {
@@ -448,8 +469,10 @@ export function speakCallout(text: string, priority = false) {
     }
 
     // 3. Synthesize via Piper Neural TTS Web Worker and play through Cockpit EQ
+    const generation = piperGeneration;
     synthesizeViaWorker(clean)
       .then(async (wavBuffer) => {
+        if (generation !== piperGeneration) return; // the neural voice was turned off meanwhile
         const ctx = getSharedAudioContext();
         if (!ctx) {
           fallbackBrowserSpeak(clean, priority);
@@ -460,6 +483,8 @@ export function speakCallout(text: string, priority = false) {
         enqueueCockpitBuffer(decoded, priority);
       })
       .catch(() => {
+        // Turned off on purpose meanwhile: the callout is abandoned, not spoken late by the device voice.
+        if (generation !== piperGeneration) return;
         fallbackBrowserSpeak(clean, priority);
       });
   } catch {

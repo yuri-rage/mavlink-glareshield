@@ -1066,7 +1066,8 @@ export const HudWidget: React.FC = () => {
     let last = 0;
     const tick = (t: number) => {
       raf = requestAnimationFrame(tick);
-      if (!dirtyRef.current || t - last < 32) return;
+      // 28 ms, not 33: at 60 Hz two frames can land a hair under 33 ms apart, which would skip a third (20 fps).
+      if (!dirtyRef.current || t - last < 28) return;
       last = t;
       dirtyRef.current = false;
       drawRef.current();
