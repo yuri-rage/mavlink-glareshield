@@ -46,5 +46,7 @@ check('...counted positive, both sides', countTiles(across, 6, 6) === (rs[0].x1 
 check('west > east (normalised) also wraps', tileRanges({ south: 0, west: 179, north: 1, east: -179 }, 6).length === 2);
 check('wider than the world: every column once', tileRanges({ south: 0, west: -200, north: 1, east: 200 }, 3).length === 1 && tileRanges({ south: 0, west: -200, north: 1, east: 200 }, 3)[0].x1 === 7);
 
+check('an east edge exactly on 180: one range, ending at the last column', (() => { const r = tileRanges({ south: 0, west: 170, north: 1, east: 180 }, 4); return r.length === 1 && r[0].x1 === 15; })(), JSON.stringify(tileRanges({ south: 0, west: 170, north: 1, east: 180 }, 4)));
+
 console.log(failures.length ? `\n${failures.length} offline-tile check(s) FAILED` : '\nAll offline-tile checks PASSED');
 process.exit(failures.length ? 1 : 0);

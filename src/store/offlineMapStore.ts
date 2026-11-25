@@ -62,7 +62,8 @@ interface OfflineMapState {
   startKeeping: (name: string, source: string, layer: string) => void;
   stopKeeping: () => Promise<void>;
   job: OfflineJob | null;
-  jobError: string | null;
+  /** The last job's failure, and which section it belongs under. */
+  jobError: { from: 'download' | 'import'; message: string } | null;
   jobAbort: AbortController | null;
   startDownload: (area: OfflineArea, urls: string[], label: string) => Promise<void>;
   startImport: (file: File) => Promise<OfflineArea | null>;
@@ -128,10 +129,10 @@ export const useOfflineMapStore = create<OfflineMapState>((set, get) => ({
         onProgress: (done, failed, bytes) => set((s) => (s.job ? { job: { ...s.job, done, failed, bytes } } : {})),
       });
       if (result.tiles === 0) {
-        set({ jobError: 'Nothing could be downloaded. Check the source address and the connection; a tile server must allow other sites (CORS: Access-Control-Allow-Origin).' });
+        set({ jobError: { from: 'download', message: 'Nothing could be downloaded. Check the source address and the connection; a tile server must allow other sites (CORS: Access-Control-Allow-Origin).' } });
       }
     } catch (e: unknown) {
-      set({ jobError: e instanceof Error ? e.message : 'The download failed.' });
+      set({ jobError: { from: 'download', message: e instanceof Error ? e.message : 'The download failed.' } });
     } finally {
       set({ job: null, jobAbort: null });
       await get().refresh();
@@ -144,7 +145,7 @@ export const useOfflineMapStore = create<OfflineMapState>((set, get) => ({
       const area = await importMbtiles(file, (done, total) => set((s) => (s.job ? { job: { ...s.job, done, total } } : {})));
       return area;
     } catch (e: unknown) {
-      set({ jobError: e instanceof Error ? e.message : 'The file could not be read.' });
+      set({ jobError: { from: 'import', message: e instanceof Error ? e.message : 'The file could not be read.' } });
       return null;
     } finally {
       set({ job: null });
