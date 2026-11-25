@@ -22,7 +22,7 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({
   const shown = cockpit ? panesInOrder(activeTab.cockpit).length : 0;
 
   return (
-    <div className="bg-amber-950/40 border-b border-amber-500/30 px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+    <div data-edit-chrome className="bg-amber-950/40 border-b border-amber-500/30 px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2.5 text-xs">
       <div className="flex items-center gap-2 text-amber-300 font-medium min-w-0">
         <Pencil className="h-3.5 w-3.5 text-amber-400 shrink-0" />
         <span className="font-bold tracking-tight text-amber-200 uppercase">Dashboard Editor:</span>

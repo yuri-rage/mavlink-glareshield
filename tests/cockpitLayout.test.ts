@@ -123,5 +123,39 @@ check('sizes always sum to exactly 100', [[1, 1, 1], [1, 2, 3, 4, 5, 6, 7], [3, 
   check('move past its own sibling', J(panesInOrder(sib)) === J(['b', 'a']) && J((sib.root as any).sizes) === J([50, 50]), J(sib.root));
 }
 
+// Limits and flattening.
+{
+  const { splitPane, swapPanes, movePane, placedOrUnchanged } = await import('../src/lib/cockpitLayout.ts');
+  const ids = ['a', 'b', 'c', 'd'];
+  const nested = sanitizeCockpit({ header: null, root: { split: 'row', children: [{ pane: 'a' }, { split: 'column', children: [{ pane: 'b' }, { split: 'row', children: [{ pane: 'c' }, { pane: 'd' }], sizes: [50, 50] }], sizes: [50, 50] }], sizes: [40, 60] } }, ids)!;
+  const flat = removeFromLayout(nested, 'b', ids);
+  check('removing a pane merges a same-direction split into its parent (sizes in proportion, summing to 100)', J(flat.root) === J({ split: 'row', children: [{ pane: 'a' }, { pane: 'c' }, { pane: 'd' }], sizes: [40, 30, 30] }), J(flat.root));
+
+  // A pane at the deepest level (6): splitting it across would put two panes deeper than allowed.
+  const deepIds = ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'q', 's'];
+  let node: any = { pane: 'p6' };
+  for (let lvl = 5; lvl >= 0; lvl--) node = { split: lvl % 2 === 0 ? 'row' : 'column', children: [{ pane: `p${lvl}` }, node] };
+  // One more pane at the top, whose removal doesn't make the chain any shorter.
+  node.children.unshift({ pane: 's' });
+  const deep = sanitizeCockpit({ header: null, root: node }, deepIds)!;
+  check('built a pane at depth 6', panesInOrder(deep).includes('p6'), J(panesInOrder(deep)));
+  const across = sanitizeCockpit(splitPane(deep, 'p6', 'right', 'q'), deepIds);
+  check('past the depth limit the split would drop both panes (what the guard is for)', !panesInOrder(across).includes('p6'));
+  check('...so the guarded edit changes nothing', placedOrUnchanged(deep, across, ['q']) === deep);
+  check('moving a pane to a too-deep place: nothing changes, no pane lost', movePane(deep, 's', 'p6', 'right', deepIds) === deep);
+  check('moving one whose leaving makes room: allowed, nothing lost', panesInOrder(movePane(deep, 'p0', 'p6', 'right', deepIds)).length === panesInOrder(deep).length);
+
+  // At the pane limit (24): a 25th can't be added.
+  const many = Array.from({ length: 24 }, (_, i) => `m${i}`);
+  const full = sanitizeCockpit({ header: null, root: { split: 'row', children: many.map((m) => ({ pane: m })) } }, [...many, 'x'])!;
+  const over = sanitizeCockpit(splitPane(full, 'm0', 'right', 'x'), [...many, 'x']);
+  check('past the pane limit, sanitizing drops a pane elsewhere (the last)', !panesInOrder(over).includes('m23'));
+  check('...so the guarded split changes nothing', placedOrUnchanged(full, over, ['x']) === full);
+
+  const two = sanitizeCockpit({ header: null, root: { split: 'column', children: [{ split: 'row', children: [{ pane: 'a' }, { pane: 'b' }], sizes: [30, 70] }, { split: 'row', children: [{ pane: 'c' }, { pane: 'd' }], sizes: [80, 20] }], sizes: [60, 40] } }, ids)!;
+  const sw = swapPanes(two, 'a', 'd');
+  check('a swap across branches keeps both splits\' sizes', J((sw.root as any).children.map((c: any) => c.sizes)) === J([[30, 70], [80, 20]]) && J(panesInOrder(sw)) === J(['d', 'b', 'c', 'a']));
+}
+
 console.log(failures.length ? `\n${failures.length} cockpit-layout check(s) FAILED` : '\nAll cockpit-layout checks PASSED');
 if (failures.length) process.exit(1);
