@@ -87,9 +87,8 @@ export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, la
                 Pan and zoom over the area at the zoom levels you'll need: every {layerName} tile the map loads is kept. The
                 built-in imagery and street tiles can only be kept this way (their providers don't allow bulk downloads).
               </p>
-              {layer.startsWith('import:') ? (
-                <p className="text-[11px] text-zinc-500">The imported map showing is stored already: switch to another layer to keep it.</p>
-              ) : keeping ? (
+              {/* A keep under way first: its Stop stays here whatever layer is showing now. */}
+              {keeping ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-emerald-300">
                     Keeping "{keeping.name}": {keeping.tiles} tiles, {mb(keeping.bytes)}
@@ -99,6 +98,8 @@ export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, la
                     Stop and save
                   </button>
                 </div>
+              ) : layer.startsWith('import:') ? (
+                <p className="text-[11px] text-zinc-500">The imported map showing is stored already: switch to another layer to keep it.</p>
               ) : (
                 <div className="flex gap-2">
                   <input className={FIELD} placeholder="Area name (e.g. North field)" value={keepName} onChange={(e) => setKeepName(e.target.value)} />
