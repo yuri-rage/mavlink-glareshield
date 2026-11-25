@@ -127,6 +127,7 @@ import { FenceChip } from './FenceControl';
 import { GimbalChip, PointCameraButton } from './GimbalControl';
 import { TerrainChip } from './TerrainChip';
 import { MissionProfileStrip, ProfileToggle } from './MissionProfileStrip';
+import { useProfileLink } from './useProfileLink';
 import { useMissionTerrain } from './useMissionTerrain';
 import { useMissionTerrainStore } from '../../store/missionTerrainStore';
 import { terrainChecked } from '../../mavlink/missionProfile';
@@ -1129,6 +1130,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   useGimbalLayer(mapInstanceRef, mapReady);
   // The draft's terrain profile and clearance issues, while planning.
   useMissionTerrain();
+  // The profile's point marked on the map, and the route on the map pointing into the profile.
+  useProfileLink(mapInstanceRef, mapReady);
   const showProfile = useMissionTerrainStore((s) => s.showProfile);
   // The elevation data's attribution, while it is in use.
   const terrainOn = useTerrainStore((s) => s.enabled);
@@ -2774,7 +2777,14 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         )}
         {planning && showProfile && planLayout === 'side' && planLayer === 'mission' && terrainOn && terrainChecked(getVehicleCategory(heartbeat.type)) && (
           // Along the bottom, left of the side panel (264 px wide, 8 px in).
-          <MissionProfileStrip style={{ left: 8, right: 280, bottom: 8 }} />
+          <MissionProfileStrip
+            style={{ left: 8, right: 280, bottom: 8 }}
+            onShowPoint={(lat, lon) => {
+              setFollowVehicle(false);
+              followVehicleRef.current = false;
+              mapInstanceRef.current?.panTo([lat, lon], { animate: true });
+            }}
+          />
         )}
         {planning && (
           <MissionPlanPanel
