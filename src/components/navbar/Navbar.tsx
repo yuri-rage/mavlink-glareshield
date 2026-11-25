@@ -211,7 +211,8 @@ export const Navbar: React.FC = () => {
   const [inputSerialBaud, setInputSerialBaud] = useState(serialBaud);
   const [serialPickerNotice, setSerialPickerNotice] = useState<string | null>(null);
   const serialApi = getSerialApi();
-  const [inputGcsSysId, setInputGcsSysId] = useState(gcsSystemId);
+  // Kept as typed (an empty field stays empty, not 0); checked when the settings are applied.
+  const [inputGcsSysId, setInputGcsSysId] = useState(String(gcsSystemId));
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [isPreArmMenuOpen, setIsPreArmMenuOpen] = useState(false);
   const [daylightMode, setDaylightMode] = useState<boolean>(() => {
@@ -313,7 +314,7 @@ export const Navbar: React.FC = () => {
     setInputLinkKind(linkKind);
     setInputSerialBaud(serialBaud);
     setSerialPickerNotice(null);
-    setInputGcsSysId(gcsSystemId);
+    setInputGcsSysId(String(gcsSystemId));
     mavlinkConnection.pauseReconnect();
     setIsConnectModalOpen(true);
   };
@@ -338,7 +339,9 @@ export const Navbar: React.FC = () => {
     }
     setLinkKind(inputLinkKind);
     setUrl(inputUrl);
-    setGcsSystemId(inputGcsSysId);
+    // A whole number 1-255, else the ID stays as it was.
+    const sysId = Number(inputGcsSysId);
+    if (Number.isInteger(sysId) && sysId >= 1 && sysId <= 255) setGcsSystemId(sysId);
     setIsConnectModalOpen(false);
     mavlinkConnection.resumeReconnect();
     connect();
@@ -1126,9 +1129,15 @@ export const Navbar: React.FC = () => {
               min="1"
               max="255"
               value={inputGcsSysId}
-              onChange={(e) => setInputGcsSysId(Number(e.target.value))}
+              onChange={(e) => setInputGcsSysId(e.target.value)}
               className="font-mono text-xs"
             />
+            {(() => {
+              const n = Number(inputGcsSysId);
+              return !(Number.isInteger(n) && n >= 1 && n <= 255) ? (
+                <p className="text-[11px] text-amber-300">A whole number from 1 to 255; until then the ID stays {gcsSystemId}.</p>
+              ) : null;
+            })()}
             <p className="text-[11px] text-zinc-500">
               Default is <code className="text-sky-400">255</code> (matches ArduPilot <code className="text-zinc-300">SYSID_MYGCS</code>). Use 254 if connecting simultaneously alongside Mission Planner on 255.
             </p>
