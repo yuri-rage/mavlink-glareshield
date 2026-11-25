@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CONTENT_WIDTH_CLASS, useLayoutStore } from '../../store/layoutStore';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CustomWidgetDefinition, PlacedWidget } from '../../types/widget';
 import { renderBuiltinWidget } from '../widgets/builtinRegistry';
@@ -42,6 +43,8 @@ const HEIGHT_OPTIONS = [
 ];
 
 export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget }) => {
+  // How wide the tab may grow (Settings > Display).
+  const contentWidth = useLayoutStore((st) => st.contentWidth);
   const {
     profile,
     activeTabId,
@@ -155,7 +158,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
   };
 
   return (
-    <div className="flex-1 flex flex-col p-3 sm:p-5 max-w-7xl mx-auto w-full space-y-4">
+    <div className={`flex-1 flex flex-col p-3 sm:p-5 ${CONTENT_WIDTH_CLASS[contentWidth]} mx-auto w-full space-y-4`}>
       {/* Tab Navigation Bar */}
       <div className="flex items-center justify-between border-b border-zinc-800 pb-2 gap-2 relative">
         {/* Scrollable Tabs with Mobile Scroll Hint */}

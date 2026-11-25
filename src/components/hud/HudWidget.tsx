@@ -379,13 +379,17 @@ export const HudWidget: React.FC = () => {
     const failsafeY = disarmY + 25 * ts; // Directly below DISARMED
     const isFlashVisible = flashTick % 2 === 0;
 
-    const spdBoxX = 10;
+    // The speed and altitude boxes flank the horizon within a core about as wide as the HUD is tall: at the edges of
+    // a usual HUD, but on a wide, short one (a wide screen) they stay beside the pitch ladder rather than drifting
+    // to the far edges, away from what they're read against.
+    const coreHalf = Math.min(cx - 10, Math.max(260 * ts, height * 0.9));
+    const spdBoxX = cx - coreHalf;
     const spdBoxW = 62 * ts;
     const spdBoxH = 30 * ts;
     const spdBoxY = cy - spdBoxH / 2;
 
     const altBoxW = 62 * ts;
-    const altBoxX = width - altBoxW - 10;
+    const altBoxX = cx + coreHalf - altBoxW;
     const altBoxH = 30 * ts;
     const altBoxY = cy - altBoxH / 2;
 
@@ -889,7 +893,8 @@ export const HudWidget: React.FC = () => {
     const vviW = vviMetrics.width + 8;
     const vviH = 15 * ts;
     const vviY = altBoxY + altBoxH + 4;
-    const vviX = width - vviW - 10;
+    // Right-aligned under the altitude box (wherever the core puts it).
+    const vviX = altBoxX + altBoxW - vviW;
 
     ctx.fillStyle = Math.abs(vfr.climb) > 0.3 ? HUD_HIGHLIGHT : HUD_BRIGHT;
     ctx.font = hudFont(10);

@@ -2406,12 +2406,40 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     };
   }, [baseStationPosition, unitSystem]);
 
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  // The room from the card's top (on the page, not the scrolled view) to the window's bottom, less a margin: kept
+  // current as the window, or what's above the map (banners, the action bar), changes size.
+  const [fitBelow, setFitBelow] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isFullWidth || maximized) return;
+    const measure = () => {
+      const el = cardRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      // Less the dashboard's bottom padding (20 px) and a little air.
+      const room = Math.max(440, Math.floor(window.innerHeight - top - 24));
+      setFitBelow((prev) => (prev === room ? prev : room));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    // What's above the map changing height moves it: watch the page's content (the map's own height doesn't
+    // change where it starts, so this settles).
+    const ro = new ResizeObserver(measure);
+    ro.observe(document.body);
+    return () => {
+      window.removeEventListener('resize', measure);
+      ro.disconnect();
+    };
+  }, [isFullWidth, maximized]);
+
+  // A full-width map keeps its shape, but no taller than the window below where it starts (fitBelow): on a wide
+  // screen its shape would otherwise make it taller than the window.
   const aspectClass = isFullWidth
     ? (aspectRatio === '1:1'
-        ? 'aspect-square min-h-[440px] max-h-[85vh]'
+        ? 'aspect-square min-h-[440px]'
         : aspectRatio === '4:3'
-        ? 'aspect-[16/9] md:aspect-[4/3] min-h-[440px] max-h-[82vh]'
-        : 'aspect-[16/9] min-h-[440px] max-h-[82vh]')
+        ? 'aspect-[16/9] md:aspect-[4/3] min-h-[440px]'
+        : 'aspect-[16/9] min-h-[440px]')
     : 'h-full min-h-[350px] lg:min-h-[480px]';
 
   return (
@@ -2421,7 +2449,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         // the dashboard. Dialogs (z-50) stay on top.
         maximized ? 'fixed inset-x-0 bottom-0 z-[39] rounded-none' : aspectClass
       }`}
-      style={maximized ? { top: navBottom } : undefined}
+      ref={cardRef}
+      style={maximized ? { top: navBottom } : isFullWidth && fitBelow ? { maxHeight: fitBelow } : undefined}
     >
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <div ref={headerRef} className="flex items-center justify-between gap-1.5 min-w-0">

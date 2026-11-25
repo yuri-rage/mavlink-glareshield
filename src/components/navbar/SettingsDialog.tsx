@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ExternalLink, Shield } from 'lucide-react';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useUnitsStore, type AltitudeMode, type UnitSystem } from '../../store/unitsStore';
+import { useLayoutStore, type ContentWidth } from '../../store/layoutStore';
 import { useAudioAlertsStore, type VoiceEngine } from '../../lib/audioAlerts';
 import { isLoopbackWs, getWssHost, SERIAL_BAUD_RATES } from '../../mavlink/connection';
 import { getSerialApi, requestSerialDevice } from '../../mavlink/transport';
@@ -98,6 +99,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
   const { url, linkKind, serialBaud, setLinkKind, setSerialBaud, status, errorMessage, setUrl, gcsSystemId, setGcsSystemId, connect, disconnect, bandwidthProfile, setBandwidthProfile } =
     useConnectionStore();
   const { system: unitSystem, setSystem: setUnitSystem, altitudeMode, setAltitudeMode } = useUnitsStore();
+  const { contentWidth, setContentWidth } = useLayoutStore();
   const { soundEnabled, voiceEnabled, waypointAnnounceEnabled, ttsStatus, voiceEngine, setVoiceEngine, ttsDownloadProgress, toggleSound, toggleVoice, toggleWaypointAnnounce } =
     useAudioAlertsStore();
   const serialApi = getSerialApi();
@@ -358,6 +360,16 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
               options={[
                 { value: 'agl', label: 'AGL', hint: 'Height above home (where the vehicle armed or home was set).' },
                 { value: 'msl', label: 'MSL', hint: 'Altitude above mean sea level.' },
+              ]}
+            />
+            <Segmented<ContentWidth>
+              label="Content width"
+              value={contentWidth}
+              onChange={setContentWidth}
+              options={[
+                { value: 'standard', label: 'Standard', hint: 'Up to 1280 px wide, centred: suits laptops and HD screens.' },
+                { value: 'wide', label: 'Wide', hint: 'Up to 1680 px: more room on large monitors.' },
+                { value: 'full', label: 'Full', hint: 'The whole window: for ultrawide and 4K screens.' },
               ]}
             />
             <Segmented<boolean>
