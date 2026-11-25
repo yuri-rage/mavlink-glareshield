@@ -279,14 +279,20 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, token, fit, o
     let session: WhepSession | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastTime = -1;
+    let lastFrames = -1;
     let lastProgressAt = Date.now();
-    let live = false;
+    /** A stream is attached: from here frames must arrive (or it's stalled), whether or not it ever played. */
+    let attached = false;
     const report = (s: CameraStatus) => !cancelled && statusRef.current(s);
+    const clearDisconnect = () => {
+      if (disconnectTimer) clearTimeout(disconnectTimer);
+      disconnectTimer = null;
+    };
 
     const retry = (reason: string) => {
       if (cancelled || retryTimer) return;
-      live = false;
+      attached = false;
+      clearDisconnect();
       const delay = reconnectDelayMs(attempt++);
       report({ state: 'reconnecting', method: 'whep', detail: `${reason}; retrying in ${Math.round(delay / 1000)} s` });
       retryTimer = setTimeout(() => {
@@ -296,6 +302,10 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, token, fit, o
     };
     const connect = async () => {
       if (cancelled) return;
+      // A fresh start: no stall carried over, no other session's disconnect timer left to strand this one.
+      attached = false;
+      lastFrames = -1;
+      clearDisconnect();
       const old = session;
       session = new WhepSession(url, { fetch: window.fetch.bind(window), createPeerConnection: (c) => new RTCPeerConnection(c) }, { token: token || undefined });
       void old?.stop();
@@ -318,8 +328,10 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, token, fit, o
         });
         if (cancelled || mine !== session) return;
         lastProgressAt = Date.now();
-        // The server ending the track (its source gone) ends the stream: connect again.
-        for (const track of stream.getTracks()) track.addEventListener('ended', () => mine === session && retry('stream ended'));
+        lastFrames = -1;
+        attached = true;
+        // The server ending the video (its source gone) ends the stream: connect again. (The audio is muted anyway.)
+        for (const track of stream.getVideoTracks()) track.addEventListener('ended', () => mine === session && retry('stream ended'));
         video.srcObject = stream;
         void video.play().catch(() => {});
       } catch (e) {
@@ -329,17 +341,18 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, token, fit, o
     };
     const onPlaying = () => {
       attempt = 0;
-      live = true;
       report({ state: 'live', method: 'whep' });
     };
     // Frames stopped arriving (the camera or the server stalled, the network dropped without ICE noticing yet). Counted
     // from the connection's statistics: a <video> playing a MediaStream keeps its clock running with no frames.
+    // Armed once a stream is attached, so a stream that never delivers a frame (UDP blocked, the camera upstream
+    // silent) is caught too; no statistics yet counts as no frames.
     const watchdog = setInterval(async () => {
-      if (!live || !session) return;
-      const frames = await session.framesReceived();
-      if (cancelled || frames === null) return;
-      if (frames !== lastTime) {
-        lastTime = frames;
+      if (!attached || !session) return;
+      const frames = (await session.framesReceived()) ?? 0;
+      if (cancelled || !attached) return;
+      if (frames !== lastFrames) {
+        lastFrames = frames;
         lastProgressAt = Date.now();
       } else if (Date.now() - lastProgressAt > VIDEO_STALL_MS) {
         retry('no frames');
@@ -348,14 +361,23 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, token, fit, o
     video.addEventListener('playing', onPlaying);
     // Leaving the page doesn't unmount this: end the server's session then too, rather than leave it to time out.
     const onPageHide = () => void session?.stop();
+    // Back to the page from the browser's cache (its session was ended as it left): connect again.
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        attempt = 0;
+        void connect();
+      }
+    };
     window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('pageshow', onPageShow);
     void connect();
     return () => {
       window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('pageshow', onPageShow);
       cancelled = true;
       clearInterval(watchdog);
       if (retryTimer) clearTimeout(retryTimer);
-      if (disconnectTimer) clearTimeout(disconnectTimer);
+      clearDisconnect();
       video.removeEventListener('playing', onPlaying);
       void session?.stop();
       video.srcObject = null;
