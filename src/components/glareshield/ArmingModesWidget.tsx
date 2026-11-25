@@ -343,10 +343,12 @@ export const ArmingModesWidget: React.FC = () => {
     <Card className="border-sky-500/20 bg-zinc-950/90 shadow-xl overflow-hidden">
       <CardContent className="p-2 sm:p-2.5 space-y-2.5">
         {/* Top Control Bar: Arming Slider & 5 Quick Mode Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-2 sm:gap-2.5 items-center">
-          {/* Arm / Disarm Interlock (Made less wide: md:col-span-4) */}
+        {/* The arm block takes a third on medium screens and a fixed width on large ones: on a wide screen the room
+            goes to the quick actions, not to a slider over 1000 px long. */}
+        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] xl:grid-cols-[28rem_minmax(0,1fr)] gap-2 sm:gap-2.5 items-center">
+          {/* Arm / Disarm Interlock */}
           <div
-            className={`md:col-span-4 bg-zinc-900/80 border border-zinc-800 rounded-xl p-2 transition-opacity ${
+            className={`bg-zinc-900/80 border border-zinc-800 rounded-xl p-2 transition-opacity ${
               !isVehicleConnected ? 'opacity-65' : ''
             } ${getFeedbackRing('arm')}`}
           >
@@ -406,13 +408,13 @@ export const ArmingModesWidget: React.FC = () => {
             </div>
           </div>
 
-          {/* 5 Quick Action Modes (md:col-span-8) */}
+          {/* 5 Quick Action Modes */}
           <div
             // One row of five at every width: on phones each button stacks its icon over a small label (two to a row
             // took three rows, ~140 px, above the HUD and map). There, a label too long for the button is cut short
             // with an ellipsis, and the command's progress/result icon (after the label) sits in the top-right corner
             // rather than as a third row.
-            className={`md:col-span-8 grid grid-cols-5 gap-1 sm:gap-2 [&>button]:relative [&>button]:min-w-0 [&>button]:h-12 [&>button]:flex-col [&>button]:gap-0.5 [&>button]:px-0.5 [&>button]:text-[10px] [&>button>span]:max-w-full [&>button>span~svg]:absolute [&>button>span~svg]:right-0.5 [&>button>span~svg]:top-0.5 [&>button>span~svg]:h-3 [&>button>span~svg]:w-3 sm:[&>button]:h-10 sm:[&>button]:flex-row sm:[&>button]:gap-1 sm:[&>button]:px-3 sm:[&>button]:text-xs sm:[&>button>span~svg]:static sm:[&>button>span~svg]:h-3.5 sm:[&>button>span~svg]:w-3.5 ${
+            className={`grid grid-cols-5 gap-1 sm:gap-2 [&>button]:relative [&>button]:min-w-0 [&>button]:h-12 [&>button]:flex-col [&>button]:gap-0.5 [&>button]:px-0.5 [&>button]:text-[10px] [&>button>span]:max-w-full [&>button>span~svg]:absolute [&>button>span~svg]:right-0.5 [&>button>span~svg]:top-0.5 [&>button>span~svg]:h-3 [&>button>span~svg]:w-3 sm:[&>button]:h-10 sm:[&>button]:flex-row sm:[&>button]:gap-1 sm:[&>button]:px-3 sm:[&>button]:text-xs sm:[&>button>span~svg]:static sm:[&>button>span~svg]:h-3.5 sm:[&>button>span~svg]:w-3.5 ${
               !isVehicleConnected ? 'opacity-65' : ''
             }`}
           >
