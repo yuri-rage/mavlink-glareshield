@@ -2,6 +2,7 @@ import { sanitizeWidgetDefinition } from '../lib/widgetValidation';
 import { create } from 'zustand';
 import { appendPane, buildPreset, removeFromLayout, sanitizeCockpit, setSplitSizes, type CockpitPresetId } from '../lib/cockpitLayout';
 import {
+  CockpitLayout,
   DashboardProfile,
   DashboardTab,
   PlacedWidget,
@@ -143,6 +144,13 @@ export function reconcileTab(tab: DashboardTab): DashboardTab {
   const cockpit = tab.cockpit ? sanitizeCockpit(tab.cockpit, widgets.map((w) => w.instanceId)) ?? undefined : undefined;
   const { mode: _m, cockpit: _c, ...rest } = tab;
   return { ...rest, widgets, ...(mode ? { mode } : {}), ...(cockpit ? { cockpit } : {}) };
+}
+
+/** A widget placed in a Cockpit layout: the quick-actions bar pinned as the header when none is, else a new pane. */
+function placeWidget(layout: CockpitLayout | undefined, instanceId: string, widgetId: string): CockpitLayout {
+  const current = layout ?? { header: null, root: null };
+  const quickActions = widgetId === 'built-in-glareshield' || widgetId === 'built-in-arm-modes';
+  return quickActions && !current.header ? { ...current, header: instanceId } : appendPane(current, instanceId);
 }
 
 const newInstanceId = () => `w-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
@@ -311,14 +319,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         if (tab.id !== activeTabId) return tab;
         const newWidget: PlacedWidget = { instanceId, widgetId, colSpan };
         // A Cockpit tab shows it as a new pane; the quick-actions bar, if the tab has none pinned, as the header.
-        const current = tab.cockpit ?? { header: null, root: null };
-        const quickActions = widgetId === 'built-in-glareshield' || widgetId === 'built-in-arm-modes';
-        const cockpit =
-          tab.mode !== 'cockpit'
-            ? tab.cockpit
-            : quickActions && !current.header
-              ? { ...current, header: instanceId }
-              : appendPane(current, instanceId);
+        const cockpit = tab.mode !== 'cockpit' ? tab.cockpit : placeWidget(tab.cockpit, instanceId, widgetId);
         return reconcileTab({ ...tab, widgets: [...tab.widgets, newWidget], ...(cockpit ? { cockpit } : {}) });
       });
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
@@ -443,7 +444,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   placeInCockpit: (tabId, instanceId) => {
-    get().updateTab(tabId, (tab) => ({ ...tab, cockpit: appendPane(tab.cockpit ?? { header: null, root: null }, instanceId) }));
+    get().updateTab(tabId, (tab) => ({
+      ...tab,
+      cockpit: placeWidget(tab.cockpit, instanceId, tab.widgets.find((w) => w.instanceId === instanceId)?.widgetId ?? ''),
+    }));
   },
 
   unplaceFromCockpit: (tabId, instanceId) => {

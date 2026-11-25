@@ -10,7 +10,7 @@ import type { CockpitNode, DashboardTab, PlacedWidget } from '../../types/widget
 import { isPane, minLayoutSize, widgetMinSize, type Size } from '../../lib/cockpitLayout';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
-import { PaneContext } from './paneContext';
+import { HeaderSlotContext, PaneContext } from './paneContext';
 
 interface Props {
   tab: DashboardTab;
@@ -155,8 +155,10 @@ export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, tit
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1.5">
       {header && (
-        <div ref={headerRef} className="relative shrink-0">
-          <ErrorBoundary fallbackTitle={titleOf(header.widgetId)}>{renderWidget(header)}</ErrorBoundary>
+        <div ref={headerRef} className="relative z-30 shrink-0">
+          <HeaderSlotContext.Provider value={true}>
+            <ErrorBoundary fallbackTitle={titleOf(header.widgetId)}>{renderWidget(header)}</ErrorBoundary>
+          </HeaderSlotContext.Provider>
           {isEditing && (
             <div className="absolute inset-0 z-20 flex items-start justify-between gap-2 rounded-xl bg-zinc-950/55 p-1.5 ring-1 ring-dashed ring-sky-500/50 select-none">
               <span className="flex items-center gap-1.5 rounded bg-zinc-900/95 px-2 py-0.5 text-[11px] font-bold text-sky-300">

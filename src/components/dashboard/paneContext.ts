@@ -9,3 +9,11 @@ export const PaneContext = createContext(false);
 export function useInPane(): boolean {
   return useContext(PaneContext);
 }
+
+/** Whether a widget is pinned as a Cockpit tab's header (above the panes, at its own height). */
+export const HeaderSlotContext = createContext(false);
+
+/** True when pinned above a Cockpit tab's panes: what it would expand inline should float over the panes instead. */
+export function useInHeaderSlot(): boolean {
+  return useContext(HeaderSlotContext);
+}

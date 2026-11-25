@@ -100,14 +100,17 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
    */
   const headerHeightRef = useRef<number | null>(null);
   const layoutKey = `${activeTab?.id}|${cockpit?.header ?? ''}`;
-  useEffect(() => {
-    headerHeightRef.current = null;
-  }, [layoutKey]);
+  const lastLayoutKeyRef = useRef(layoutKey);
   const [stacked, setStacked] = useState(false);
   useLayoutEffect(() => {
     if (!isCockpit || !cockpit) {
       setStacked(false);
       return;
+    }
+    // Another tab or header: its own resting height (reset here, before measuring, not after).
+    if (lastLayoutKeyRef.current !== layoutKey) {
+      lastLayoutKeyRef.current = layoutKey;
+      headerHeightRef.current = null;
     }
     const byId = new Map(activeTab.widgets.map((w) => [w.instanceId, w.widgetId]));
     const need = minLayoutSize(cockpit.root, (id) => widgetMinSize(byId.get(id) ?? ''));
@@ -139,7 +142,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       window.removeEventListener('resize', measure);
       ro.disconnect();
     };
-  }, [isCockpit, cockpit, activeTab, isEditing]);
+  }, [isCockpit, cockpit, activeTab, isEditing, layoutKey]);
   const fill = isCockpit && !stacked;
   useEffect(() => {
     useLayoutStore.setState({ cockpitFill: fill });
