@@ -136,7 +136,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
                   <Badge
                     variant="outline"
                     className="text-[10px] font-mono px-1 py-0 h-4 leading-none bg-sky-950/70 border-sky-600/40 text-sky-300 font-bold shrink-0 shadow-sm"
-                    title={`${msg.count} consecutive identical messages`}
+                    title={`${msg.count} identical messages`}
                   >
                     ×{msg.count}
                   </Badge>

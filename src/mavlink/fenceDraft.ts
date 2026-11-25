@@ -13,7 +13,6 @@
 
 import type { MissionItemIntData } from './encoder';
 import type { FencePoint } from '../store/telemetryStore';
-import type { History } from './missionDraft';
 
 export const CMD_FENCE_RETURN_POINT = 5000;
 export const CMD_FENCE_POLYGON_INCLUSION = 5001;
@@ -40,7 +39,6 @@ export interface FenceDraft {
   returnPoint: LatLon | null;
 }
 
-export type FenceHistory = History<FenceDraft>;
 
 export const EMPTY_FENCE: FenceDraft = { shapes: [], returnPoint: null };
 

@@ -1,5 +1,6 @@
 import { CameraFeed, type CameraStatus } from './CameraFeed';
 import { mavlinkConnection } from '../../mavlink/connection';
+import { displayAltitudeM } from '../../lib/displayAltitude';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
@@ -869,14 +870,7 @@ export const HudWidget: React.FC = () => {
     ctx.lineWidth = 1.5;
     ctx.strokeRect(altBoxX, altBoxY, altBoxW, altBoxH);
 
-    const rawAltM =
-      altitudeMode === 'msl'
-        ? position.alt !== 0
-          ? position.alt
-          : vfr.alt
-        : position.relativeAlt !== 0
-        ? position.relativeAlt
-        : vfr.alt;
+    const rawAltM = displayAltitudeM(altitudeMode, position, vfr.alt);
     const altFormatted = formatAltitude(rawAltM);
     ctx.fillStyle = HUD_HIGHLIGHT;
     ctx.font = hudFont(14);

@@ -1,5 +1,6 @@
 import 'leaflet/dist/leaflet.css';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { displayAltitudeM } from '../../lib/displayAltitude';
 import { useTelemetryStore, sendTrackedCommand, computeDistanceAndBearing } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { lengthUnit, useLengthUnit } from '../../lib/inputUnits';
@@ -284,7 +285,7 @@ const PositionReadout: React.FC<{ show: boolean }> = ({ show }) => {
       <span>
         Alt:{' '}
         <b className="text-emerald-400">
-          {show ? `${formatAltitude(altitudeMode === 'msl' ? position.alt || position.relativeAlt : position.relativeAlt).full} ${altitudeMode.toUpperCase()}` : '--'}
+          {show ? `${formatAltitude(displayAltitudeM(altitudeMode, position, useTelemetryStore.getState().vfr.alt)).full} ${altitudeMode.toUpperCase()}` : '--'}
         </b>
       </span>
       {show && home.distanceM !== null && (

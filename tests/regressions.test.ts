@@ -248,10 +248,10 @@ for (const [type, landCmd, opts, label] of [
 
   // 3. RADIO_STATUS (109) decoding (wire order: rxerrors u16, fixed u16, rssi u8, remrssi u8, txbuf u8, noise u8, remnoise u8)
   const radioPayload = new Uint8Array([2, 0, 5, 0, 200, 195, 90, 40, 42]);
-  for (const p of parser.parse(veh.packV2(109, radioPayload))) {
-    useTelemetryStore.getState().processPacket(p);
-  }
-  const rs = useTelemetryStore.getState().radioStatus;
+  // Decoded for the message inspector and custom widgets (the store keeps no copy: nothing showed it, and a SiK
+  // radio reports under its own system ID).
+  const radioPkt = parser.parse(veh.packV2(109, radioPayload))[0];
+  const rs = decodePayload(radioPkt.messageId, radioPkt.payload);
   check('RADIO_STATUS (109) decodes rssi, remrssi, txbuf and rxerrors',
     rs.rssi === 200 && rs.remrssi === 195 && rs.txbuf === 90 && rs.rxerrors === 2 && rs.fixed === 5,
     JSON.stringify(rs));

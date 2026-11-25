@@ -1,5 +1,6 @@
 import { TlogIndicator, TlogSettings } from './TlogSettings';
 import { TakeoverBanner, VehiclePicker } from './VehiclePicker';
+import { displayAltitudeM } from '../../lib/displayAltitude';
 import { AdsbSettings } from './AdsbSettings';
 import { TerrainSettings } from './TerrainSettings';
 import React, { useState, useRef, useEffect } from 'react';
@@ -99,7 +100,7 @@ const GpsPill: React.FC<{ active: boolean }> = ({ active }) => {
 
 const AltSpeedPill: React.FC<{ active: boolean; plane: boolean }> = ({ active, plane }) => {
   const { formatAltitude, formatSpeed, altitudeMode } = useUnitsStore();
-  const altM = useTelemetryStore((s) => (altitudeMode === 'msl' ? s.position.alt : s.vfr.alt));
+  const altM = useTelemetryStore((s) => displayAltitudeM(altitudeMode, s.position, s.vfr.alt));
   const speedMs = useTelemetryStore((s) => (plane ? s.vfr.airspeed : s.vfr.groundspeed));
   return (
     <div className="flex items-center gap-1.5 shrink-0" title="Active Altitude & Speed">
