@@ -122,14 +122,15 @@ Every command shows its result (accepted, refused and why, or no answer).
 
 ### Guided actions on the map
 
-- **Fly here**: right-click the map (long-press on a touch screen), or use the map header's fly-to button then click
-  the map. Choose the altitude above home, then **Switch to GUIDED & fly here**. The target is marked on the map
+- **Fly here**: right-click the map (long-press on a touch screen), or use the map header's fly-to button (the arrow)
+  then click the map. Choose the altitude above home, then **Switch to GUIDED & fly here**. The target is marked on the map
   until the vehicle arrives or leaves GUIDED.
 - **Orbit here** (Plane): from the same card, with a radius.
 - **Set home here**: from the same card; it asks again, since it moves home.
-- **Fly to me**: the header button sends the vehicle to where this device is (the browser asks for your location).
-- The map header's guided actions also change altitude (Copter, Plane), change speed (AUTO and GUIDED), pause and
-  resume (Copter), and set home to the vehicle's position.
+- **Fly to me**: after the fly-to button, the **Pick a point to fly to** bar has a button that sends the vehicle to
+  where this device is (the browser asks for your location).
+- The map header's **Altitude · speed · home** button changes altitude (Copter, Plane), changes speed (AUTO and
+  GUIDED), pauses and resumes (Copter), and sets home to the vehicle's position.
 
 Anything that moves home or takes the vehicle out of its mode asks for a second press that names the consequence.
 
@@ -185,9 +186,10 @@ rather than having your draft replaced.
 
 ## Maps and offline use
 
-The map's **View** menu chooses the imagery (**Satellite** or **Street map**), its shape, whether ADS-B traffic is
-shown, **Fit vehicle and mission**, and **Clear flight trace**. The header's buttons follow the vehicle and maximize the
-map to the window.
+The map's **View** menu chooses the imagery (**Satellite** or **Street map**), its shape (on a full-width map in a Flow
+tab; in a Cockpit pane the map fills the pane), whether ADS-B traffic is shown, **Fit vehicle and mission**, and
+**Clear flight trace**. The header's crosshair button centres on the vehicle and follows it. While planning, the
+planner's maximize button fills the window with the map.
 
 **Offline maps…** (View menu) keeps imagery for use without internet:
 
