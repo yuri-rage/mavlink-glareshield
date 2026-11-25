@@ -274,6 +274,8 @@ const PositionReadout: React.FC<{ show: boolean }> = ({ show }) => {
   const position = useTelemetryStore((s) => s.position);
   const home = useTelemetryStore((s) => s.homePosition);
   const { formatAltitude, altitudeMode, formatHomeVector } = useUnitsStore();
+  // Subscribed like the rest (VFR_HUD's altitude stands in for MSL until a position arrives).
+  const altM = useTelemetryStore((s) => displayAltitudeM(altitudeMode, s.position, s.vfr.alt));
   return (
     <>
       <span>
@@ -285,7 +287,7 @@ const PositionReadout: React.FC<{ show: boolean }> = ({ show }) => {
       <span>
         Alt:{' '}
         <b className="text-emerald-400">
-          {show ? `${formatAltitude(displayAltitudeM(altitudeMode, position, useTelemetryStore.getState().vfr.alt)).full} ${altitudeMode.toUpperCase()}` : '--'}
+          {show ? `${formatAltitude(altM).full} ${altitudeMode.toUpperCase()}` : '--'}
         </b>
       </span>
       {show && home.distanceM !== null && (

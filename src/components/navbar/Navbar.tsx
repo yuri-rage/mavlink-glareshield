@@ -1,10 +1,10 @@
 import { TlogIndicator } from './TlogSettings';
 import { TakeoverBanner, VehiclePicker } from './VehiclePicker';
 import { displayAltitudeM } from '../../lib/displayAltitude';
-import React, { Suspense, lazy, useState, useRef, useEffect } from 'react';
-import type { SettingsTab } from './SettingsDialog';
-
-const SettingsDialog = lazy(() => import('./SettingsDialog'));
+import React, { useState, useRef, useEffect } from 'react';
+// Loaded with the app, not on demand: Settings holds the link controls, so it must open offline or after a redeploy
+// (when a lazily fetched chunk can fail to load), and it's small (~7 kB gzipped).
+import { SettingsDialog, type SettingsTab } from './SettingsDialog';
 import { useConnectionStore } from '../../store/connectionStore';
 import {
   useTelemetryStore,
@@ -175,8 +175,6 @@ export const Navbar: React.FC = () => {
 
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('link');
-  // The dialog's code is fetched the first time it opens, then kept (closing doesn't unload it).
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [isPreArmMenuOpen, setIsPreArmMenuOpen] = useState(false);
   const [daylightMode, setDaylightMode] = useState<boolean>(() => {
@@ -275,7 +273,6 @@ export const Navbar: React.FC = () => {
 
   const openConnectModal = (tab: SettingsTab = 'link') => {
     setSettingsTab(tab);
-    setSettingsLoaded(true);
     mavlinkConnection.pauseReconnect();
     setIsConnectModalOpen(true);
   };
@@ -892,18 +889,14 @@ export const Navbar: React.FC = () => {
       </div>
     </header>
 
-      {/* Settings (loaded on first open) */}
-      {settingsLoaded && (
-        <Suspense fallback={null}>
-          <SettingsDialog
-            open={isConnectModalOpen}
-            onClose={handleCloseConnectModal}
-            initialTab={settingsTab}
-            daylightMode={daylightMode}
-            setDaylightMode={setDaylightMode}
-          />
-        </Suspense>
-      )}
+      {/* Settings */}
+      <SettingsDialog
+        open={isConnectModalOpen}
+        onClose={handleCloseConnectModal}
+        initialTab={settingsTab}
+        daylightMode={daylightMode}
+        setDaylightMode={setDaylightMode}
+      />
 
       {/* Pre-Arm & Subsystem Health Modal */}
       <Modal

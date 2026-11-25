@@ -39,18 +39,29 @@ export const HeaderMenu: React.FC<HeaderMenuProps> = ({ icon, label, title, chil
       const below = window.innerHeight - btn.bottom - margin;
       const above = btn.top - margin;
       const up = panel.scrollHeight > below && above > below;
-      const right = Math.max(margin, window.innerWidth - btn.right);
-      setPlace(
-        up
-          ? { up, maxH: Math.max(120, above), right, bottom: window.innerHeight - btn.top + 4 }
-          : { up, maxH: Math.max(120, below), right, top: btn.bottom + 4 }
+      // Right-aligned with the button, but kept on screen at both edges (a button left of centre on a narrow phone
+      // would otherwise push a wide panel off the left edge).
+      const right = Math.max(margin, Math.min(window.innerWidth - btn.right, window.innerWidth - panel.offsetWidth - margin));
+      const next = up
+        ? { up, maxH: Math.max(120, above), right, bottom: window.innerHeight - btn.top + 4 }
+        : { up, maxH: Math.max(120, below), right, top: btn.bottom + 4 };
+      // Unchanged: no re-render.
+      setPlace((prev) =>
+        prev && prev.up === next.up && prev.maxH === next.maxH && prev.right === next.right && prev.top === next.top && prev.bottom === next.bottom
+          ? prev
+          : next
       );
     };
     measure();
-    window.addEventListener('scroll', measure, true);
+    // The page (or a scrolling card) moving the button; scrolling inside the menu itself doesn't move it.
+    const onScroll = (e: Event) => {
+      if (panelRef.current?.contains(e.target as Node)) return;
+      measure();
+    };
+    window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', measure);
     return () => {
-      window.removeEventListener('scroll', measure, true);
+      window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', measure);
     };
   }, [open]);

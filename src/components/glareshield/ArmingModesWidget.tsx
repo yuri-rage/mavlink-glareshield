@@ -409,8 +409,10 @@ export const ArmingModesWidget: React.FC = () => {
           {/* 5 Quick Action Modes (md:col-span-8) */}
           <div
             // One row of five at every width: on phones each button stacks its icon over a small label (two to a row
-            // took three rows, ~140 px, above the HUD and map).
-            className={`md:col-span-8 grid grid-cols-5 gap-1 sm:gap-2 [&>button]:h-12 [&>button]:flex-col [&>button]:gap-0.5 [&>button]:px-0.5 [&>button]:text-[10px] sm:[&>button]:h-10 sm:[&>button]:flex-row sm:[&>button]:gap-1 sm:[&>button]:px-3 sm:[&>button]:text-xs ${
+            // took three rows, ~140 px, above the HUD and map). There, a label too long for the button is cut short
+            // with an ellipsis, and the command's progress/result icon (after the label) sits in the top-right corner
+            // rather than as a third row.
+            className={`md:col-span-8 grid grid-cols-5 gap-1 sm:gap-2 [&>button]:relative [&>button]:min-w-0 [&>button]:h-12 [&>button]:flex-col [&>button]:gap-0.5 [&>button]:px-0.5 [&>button]:text-[10px] [&>button>span]:max-w-full [&>button>span~svg]:absolute [&>button>span~svg]:right-0.5 [&>button>span~svg]:top-0.5 [&>button>span~svg]:h-3 [&>button>span~svg]:w-3 sm:[&>button]:h-10 sm:[&>button]:flex-row sm:[&>button]:gap-1 sm:[&>button]:px-3 sm:[&>button]:text-xs sm:[&>button>span~svg]:static sm:[&>button>span~svg]:h-3.5 sm:[&>button>span~svg]:w-3.5 ${
               !isVehicleConnected ? 'opacity-65' : ''
             }`}
           >
