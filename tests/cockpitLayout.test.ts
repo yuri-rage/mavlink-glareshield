@@ -38,7 +38,9 @@ const J = JSON.stringify;
   const d = sanitizeCockpit({ header: null, root: deep }, ids)!;
   check('too deep: the over-deep part is dropped', !panesInOrder(d).includes('a'), J(panesInOrder(d)));
   check('junk is no layout', sanitizeCockpit('x', ids) === null && sanitizeCockpit(null, ids) === null);
-  check('bad sizes become equal', J(normalizeSizes([1, -2], 2)) === J([50, 50]) && J(normalizeSizes([1, NaN, 1], 3)) === J([33.33, 33.33, 33.33]));
+  check('bad sizes become equal', J(normalizeSizes([1, -2], 2)) === J([50, 50]) && J(normalizeSizes([1, NaN, 1], 3)) === J([33.34, 33.33, 33.33]));
+check('a tiny share stays above zero (a zero would reset the split next time)', J(normalizeSizes([99999, 1], 2)) === J([99.5, 0.5]));
+check('sizes always sum to exactly 100', [[1, 1, 1], [1, 2, 3, 4, 5, 6, 7], [3, 7]].every((v) => Math.round(normalizeSizes(v, v.length).reduce((a, b) => a + b, 0) * 100) === 10000));
 }
 
 // Editing.
@@ -50,7 +52,7 @@ const J = JSON.stringify;
   const a1 = appendPane({ header: null, root: null }, 'a');
   check('first pane is the root', J(a1.root) === J({ pane: 'a' }));
   const a2 = appendPane(appendPane(a1, 'b'), 'c');
-  check('appended panes join the row, sharing room', J(a2.root) === J({ split: 'row', children: [{ pane: 'a' }, { pane: 'b' }, { pane: 'c' }], sizes: [25, 41.67, 33.33] }) || (a2.root as any).children.length === 3, J(a2.root));
+  check('appended panes join the row, the others keeping their proportions', J(a2.root) === J({ split: 'row', children: [{ pane: 'a' }, { pane: 'b' }, { pane: 'c' }], sizes: [50, 16.67, 33.33] }), J(a2.root));
   const s = setSplitSizes(lay, [1], [20, 80]);
   check('sizes set on the split at a path', J((s.root as any).children[1].sizes) === J([20, 80]) && J((s.root as any).sizes) === J([60, 40]));
   check('a path to a pane changes nothing', setSplitSizes(lay, [0], [1, 2]) === lay);
@@ -62,7 +64,7 @@ const J = JSON.stringify;
   const lay = sanitizeCockpit({ header: null, root: { split: 'column', children: [{ split: 'row', children: [{ pane: 'hud' }, { pane: 'map' }] }, { pane: 'bat' }] } }, ids)!;
   const kinds: Record<string, string> = { hud: 'built-in-hud', map: 'built-in-map', bat: 'built-in-battery-card' };
   const need = minLayoutSize(lay.root, (id) => widgetMinSize(kinds[id]));
-  check('rows add widths, columns add heights (with separators)', need.w === 380 + 320 + SEPARATOR_PX && need.h === Math.max(250, 260) + 110 + SEPARATOR_PX, J(need));
+  check('rows add widths, columns add heights (with separators)', need.w === 380 + 320 + SEPARATOR_PX && need.h === Math.max(250, 240) + 110 + SEPARATOR_PX, J(need));
   check('fits a 1920x1000 room', layoutFits(need, { w: 1900, h: 900 }));
   check("doesn't fit a phone", !layoutFits(need, { w: 360, h: 700 }));
   check('slack keeps it from flickering at the edge', layoutFits(need, { w: need.w, h: need.h }) && !layoutFits(need, { w: need.w, h: need.h }, 16));
@@ -85,6 +87,12 @@ const J = JSON.stringify;
   check("HD preset: the tab's other widgets are kept (unplaced)", hd.widgets.some((w) => w.instanceId === 'w-x') && !panesInOrder(hd.layout).includes('w-x'));
   const uw = buildPreset('ultrawide', tab, newId);
   check('Ultrawide preset: three columns', (uw.layout.root as any).split === 'row' && (uw.layout.root as any).children.length === 3);
+  const legacy: PlacedWidget[] = [
+    { instanceId: 'old-qa', widgetId: 'built-in-arm-modes' },
+    { instanceId: 'old-pfd', widgetId: 'built-in-pfd' },
+  ];
+  const lp = buildPreset('hd', legacy, newId);
+  check('presets reuse older names (arm-modes, pfd) instead of adding duplicates', lp.layout.header === 'old-qa' && panesInOrder(lp.layout).includes('old-pfd') && !lp.widgets.some((w) => w.widgetId === 'built-in-glareshield' || w.widgetId === 'built-in-hud'));
   const ft = buildPreset('from-tab', tab, newId);
   check("From the tab: all its widgets, large ones on top", J(panesInOrder(ft.layout)) === J(['w-qa', 'w-hud', 'w-map', 'w-x', 'w-vfr']) && (ft.layout.root as any).split === 'column', J(panesInOrder(ft.layout)));
   check('From the tab: adds nothing', ft.widgets.length === tab.length);

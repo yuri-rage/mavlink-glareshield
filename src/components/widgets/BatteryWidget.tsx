@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useInPane } from '../dashboard/paneContext';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { MAVLINK_MSG_ID } from '../../mavlink/messages';
@@ -6,6 +7,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Battery, BatteryCharging, Gauge, Zap, Activity } from 'lucide-react';
 
 export const BatteryWidget: React.FC = () => {
+  // In a Cockpit pane: the card fills it and its content scrolls under the pinned title.
+  const inPane = useInPane();
   const battery = useTelemetryStore((state) => state.battery);
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
   // Other battery monitors (BATT2_ ...), while linked and reporting within the last 10 s. A 2 s tick drops one that
@@ -72,7 +75,7 @@ export const BatteryWidget: React.FC = () => {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="p-3 space-y-2.5 flex-1 flex flex-col">
+      <CardContent className={`p-3 space-y-2.5 flex-1 flex flex-col min-h-0 ${inPane ? 'overflow-y-auto' : ''}`}>
         {/* Voltage, current, power and consumption, laid out like the neighbouring flight cards */}
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2.5 min-w-0">

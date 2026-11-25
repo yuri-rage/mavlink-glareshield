@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useInPane } from '../dashboard/paneContext';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { messageRateManager } from '../../mavlink/rateManager';
@@ -8,6 +9,8 @@ import { Badge } from '../ui/badge';
 import { Satellite } from 'lucide-react';
 
 export const GpsWidget: React.FC = () => {
+  // In a Cockpit pane: the card fills it and its content scrolls under the pinned title.
+  const inPane = useInPane();
   const gps = useTelemetryStore((state) => state.gps);
   const gps2 = useTelemetryStore((state) => state.gps2);
   const position = useTelemetryStore((state) => state.position);
@@ -95,7 +98,7 @@ export const GpsWidget: React.FC = () => {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="p-3 space-y-2.5 flex-1 flex flex-col justify-between">
+      <CardContent className={`p-3 space-y-2.5 flex-1 flex flex-col justify-between min-h-0 ${inPane ? 'overflow-y-auto' : ''}`}>
         {/* Metric stats grid: 2x2 grid prevents truncation at 1/3 card width */}
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-x-1 min-w-0">

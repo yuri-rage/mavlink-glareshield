@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useInPane } from '../dashboard/paneContext';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { messageRateManager } from '../../mavlink/rateManager';
@@ -7,6 +8,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Wind, Gauge, Compass, ArrowUp } from 'lucide-react';
 
 export const VfrHudWidget: React.FC = () => {
+  // In a Cockpit pane: the card fills it and its content scrolls under the pinned title.
+  const inPane = useInPane();
   const connected = useTelemetryStore(
     (state) => state.heartbeat.lastHeartbeatTime > 0 && state.heartbeat.modeName !== 'DISCONNECTED'
   );
@@ -41,7 +44,7 @@ export const VfrHudWidget: React.FC = () => {
           <span>VFR Telemetry</span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-3 space-y-2.5 flex-1 flex flex-col justify-between">
+      <CardContent className={`p-3 space-y-2.5 flex-1 flex flex-col justify-between min-h-0 ${inPane ? 'overflow-y-auto' : ''}`}>
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-2 min-w-0">
             <span className="text-[11px] text-zinc-400 font-bold uppercase flex items-center gap-1">

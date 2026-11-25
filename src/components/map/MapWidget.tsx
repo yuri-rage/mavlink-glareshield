@@ -2618,7 +2618,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
       <CardContent
         ref={mapAreaRef}
-        className="p-0 flex-1 relative min-h-[300px] h-full overflow-hidden"
+        className={`p-0 flex-1 relative ${inPane ? 'min-h-0' : 'min-h-[300px]'} h-full overflow-hidden`}
         onDragEnter={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -2637,7 +2637,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         }}
         onDrop={handleFileDrop}
       >
-        <div ref={mapContainerRef} className="w-full h-full min-h-[300px] z-0" />
+        <div ref={mapContainerRef} className={`w-full h-full ${inPane ? 'min-h-0' : 'min-h-[300px]'} z-0`} />
 
         {/* Drag and Drop Upload Overlay */}
         {isDraggingOver && (
