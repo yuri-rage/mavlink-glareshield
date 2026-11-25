@@ -29,7 +29,8 @@ import type { MapLayerType } from './MapViewMenu';
 const MAX_TERRAIN_TILES = 2000;
 
 const mb = (b: number) => (b >= 1e9 ? `${(b / 1e9).toFixed(2)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(0, Math.round(b / 1e3))} KB`);
-const BTN = 'inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] font-bold disabled:opacity-40';
+// Never squeezed by a full-width field beside it: one line, its own width.
+const BTN = 'inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2 text-[11px] font-bold disabled:opacity-40';
 const PLAIN = `${BTN} border-zinc-700 text-zinc-200 hover:bg-zinc-800`;
 const PRIMARY = `${BTN} border-sky-600 bg-sky-600 text-white hover:bg-sky-500`;
 const FIELD = 'h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100';
