@@ -1260,6 +1260,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     () =>
       onActiveVehicleChange(() => {
         missionFetchedRef.current = false;
+        // A download of the old vehicle stopped by the switch isn't a finished download of the new one.
+        wasFetchingRef.current = false;
         setPendingUpload(null);
         setPendingFlyTo(null);
         setActiveFlyToTarget(null);

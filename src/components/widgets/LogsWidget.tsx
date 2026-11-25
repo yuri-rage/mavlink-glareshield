@@ -73,10 +73,11 @@ export const LogsWidget: React.FC = () => {
     setListError(null);
     try {
       const l = await logManager.listLogs(sysId, compId);
-      // Still the vehicle it was asked of (not switched meanwhile).
+      // Still the vehicle it was asked of (not switched meanwhile): else the result, or the "Cancelled" a switch
+      // causes, isn't the new vehicle's.
       if (mounted.current && useTelemetryStore.getState().heartbeat.systemId === sysId) setList(l);
     } catch (e) {
-      if (mounted.current) setListError(e instanceof Error ? e.message : String(e));
+      if (mounted.current && useTelemetryStore.getState().heartbeat.systemId === sysId) setListError(e instanceof Error ? e.message : String(e));
     } finally {
       if (mounted.current) setListing(false);
     }
@@ -99,10 +100,12 @@ export const LogsWidget: React.FC = () => {
   const listedFor = useRef<string | null>(null);
   useEffect(() => {
     const key = `${sysId}/${compId}`;
-    if (!linked || armed || listedFor.current === key) return;
+    // Not while a listing (perhaps the old vehicle's, ending after a switch) is still settling: refresh would return
+    // without listing, and the key would stay taken. This runs again when it ends.
+    if (!linked || armed || listing || listedFor.current === key) return;
     listedFor.current = key;
     void refresh();
-  }, [linked, armed, sysId, compId, refresh]);
+  }, [linked, armed, listing, sysId, compId, refresh]);
   useEffect(() => {
     if (!linked) listedFor.current = null;
   }, [linked]);

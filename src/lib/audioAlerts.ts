@@ -818,6 +818,8 @@ export function useAudioAlertListener() {
         missionCompleteRef.current?.dispose();
         missionCompleteRef.current = createMissionCompleteAnnouncer((t) => speakCallout(t));
         switchedAtRef.current = Date.now();
+        // A silent old vehicle's loss isn't carried over: no "restored" for a vehicle not yet heard.
+        prevLinkLostRef.current = false;
       }),
     []
   );
