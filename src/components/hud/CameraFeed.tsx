@@ -302,7 +302,12 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({ url, type, token, fit, o
     };
     const connect = async () => {
       if (cancelled) return;
-      // A fresh start: no stall carried over, no other session's disconnect timer left to strand this one.
+      // A fresh start: no stall carried over, no other session's disconnect timer left to strand this one, and no
+      // retry still pending (connecting from pageshow while one was scheduled).
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
       attached = false;
       lastFrames = -1;
       clearDisconnect();

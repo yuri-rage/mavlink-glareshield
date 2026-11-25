@@ -148,6 +148,16 @@ await s.stop();
 await late;
 check('a session answered after stop() is DELETEd', calls.some((c) => c.method === 'DELETE' && c.url === 'http://cam/late/9'), JSON.stringify(calls.map((c) => `${c.method} ${c.url}`)));
 
+// stop() while waiting for the video track: rejects at once, not after the track timeout.
+calls.length = 0;
+s = new WhepSession('http://cam/whep', deps(ok(), { plan: [] }), { trackTimeoutMs: 5000 });
+const waiting = s.start().catch((e) => (e as Error).message);
+await sleep(60);
+const tStop = Date.now();
+await s.stop();
+const reason = await waiting;
+check('stop while awaiting the track: rejects at once', /stopped/.test(String(reason)) && Date.now() - tStop < 500, `${reason} after ${Date.now() - tStop} ms`);
+
 // Gathering that never completes doesn't hang: the offer goes after the timeout.
 calls.length = 0;
 const t0 = Date.now();
