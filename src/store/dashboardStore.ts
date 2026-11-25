@@ -14,6 +14,8 @@ const DEFAULT_PROFILE: DashboardProfile = {
   name: 'Default ArduPilot Layout',
   updatedAt: new Date().toISOString(),
   tabs: [
+    // The flying tabs are Cockpit tabs: they fill the window with no scrolling (stacked on phones and small windows).
+    // HUD has the HD cockpit layout, and the Ultrawide one for screens wider than 2.2:1 (Mini Messages is only in that).
     {
       id: 'tab-flight',
       title: 'HUD',
@@ -24,7 +26,32 @@ const DEFAULT_PROFILE: DashboardProfile = {
         { instanceId: 'w-vfr', widgetId: 'built-in-vfr-hud', colSpan: 4 },
         { instanceId: 'w-battery', widgetId: 'built-in-battery-card', colSpan: 4 },
         { instanceId: 'w-gps', widgetId: 'built-in-gps-card', colSpan: 4 },
+        { instanceId: 'w-messages-mini', widgetId: 'built-in-statustext-mini', colSpan: 6 },
       ],
+      mode: 'cockpit',
+      cockpit: {
+        header: 'w-glareshield',
+        root: {
+          split: 'column',
+          children: [
+            { split: 'row', children: [{ pane: 'w-hud' }, { pane: 'w-map-flight' }], sizes: [45, 55] },
+            { split: 'row', children: [{ pane: 'w-vfr' }, { pane: 'w-battery' }, { pane: 'w-gps' }], sizes: [33.34, 33.33, 33.33] },
+          ],
+          sizes: [64, 36],
+        },
+      },
+      cockpitWide: {
+        header: 'w-glareshield',
+        root: {
+          split: 'row',
+          children: [
+            { pane: 'w-hud' },
+            { pane: 'w-map-flight' },
+            { split: 'column', children: [{ pane: 'w-vfr' }, { pane: 'w-battery' }, { pane: 'w-gps' }, { pane: 'w-messages-mini' }], sizes: [25, 25, 25, 25] },
+          ],
+          sizes: [30, 46, 24],
+        },
+      },
     },
     {
       id: 'tab-map',
@@ -33,6 +60,8 @@ const DEFAULT_PROFILE: DashboardProfile = {
         { instanceId: 'w-glareshield-map', widgetId: 'built-in-glareshield', colSpan: 12 },
         { instanceId: 'w-map-large', widgetId: 'built-in-map', colSpan: 12 },
       ],
+      mode: 'cockpit',
+      cockpit: { header: 'w-glareshield-map', root: { pane: 'w-map-large' } },
     },
     {
       id: 'tab-telemetry',
@@ -50,6 +79,9 @@ const DEFAULT_PROFILE: DashboardProfile = {
         { instanceId: 'w-console', widgetId: 'built-in-statustext', colSpan: 6 },
         { instanceId: 'w-params', widgetId: 'built-in-parameters', colSpan: 6 },
       ],
+      // Messages and the parameter list side by side, each the full height of the window.
+      mode: 'cockpit',
+      cockpit: { header: null, root: { split: 'row', children: [{ pane: 'w-console' }, { pane: 'w-params' }], sizes: [40, 60] } },
     },
   ],
   customWidgets: [

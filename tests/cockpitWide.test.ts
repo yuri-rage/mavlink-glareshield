@@ -18,6 +18,8 @@ check('a phone in landscape (915x310) stays standard', variantFor(true, 915, 310
 const st = () => useDashboardStore.getState();
 const hud = () => st().profile.tabs.find((t) => t.id === 'tab-flight')!;
 st().setActiveTab('tab-flight');
+// Start from a HUD tab without a wide layout (the default has one), to make it here.
+st().removeWideLayout('tab-flight');
 st().setTabMode('tab-flight', 'cockpit');
 st().setEditVariant('standard');
 st().applyCockpitPreset('tab-flight', 'hd');

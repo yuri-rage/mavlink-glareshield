@@ -16,6 +16,20 @@ const st = () => useDashboardStore.getState();
 const hud = () => st().profile.tabs.find((t) => t.id === 'tab-flight')!;
 st().setActiveTab('tab-flight');
 
+// The defaults: the flying tabs and Configuration are Cockpit tabs (HUD with a wide layout too), Telemetry is Flow,
+// and every default layout is already clean (sanitizing leaves it as written).
+{
+  const { reconcileTab } = await import('../src/store/dashboardStore.ts');
+  const tabs = st().profile.tabs;
+  const mode = (id: string) => tabs.find((t) => t.id === id)?.mode ?? 'flow';
+  check('defaults: HUD, Moving Map and Configuration are Cockpit; Telemetry is Flow', mode('tab-flight') === 'cockpit' && mode('tab-map') === 'cockpit' && mode('tab-console') === 'cockpit' && mode('tab-telemetry') === 'flow');
+  check('defaults: HUD has a wide layout', !!hud().cockpitWide);
+  check('defaults: every layout is valid as written', tabs.every((t) => JSON.stringify(reconcileTab(t)) === JSON.stringify(t)), tabs.map((t) => t.id).join());
+}
+
+// From here, a HUD tab as an older profile has it (Flow, no layouts), to switch it ourselves.
+st().updateTab('tab-flight', (t) => ({ id: t.id, title: t.title, widgets: t.widgets.filter((w) => w.widgetId !== 'built-in-statustext-mini') }));
+
 st().setTabMode('tab-flight', 'cockpit');
 check('to Cockpit: a layout from the tab\'s widgets, quick actions pinned', hud().mode === 'cockpit' && hud().cockpit?.header === 'w-glareshield' && panesInOrder(hud().cockpit).length === hud().widgets.length, JSON.stringify(hud().cockpit));
 
