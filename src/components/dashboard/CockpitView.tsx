@@ -5,8 +5,8 @@
 
 import React, { Fragment, useEffect, useState } from 'react';
 import { Group, Panel, Separator, useGroupRef } from 'react-resizable-panels';
-import { EyeOff, GripVertical, Lock, Trash2 } from 'lucide-react';
-import type { CockpitNode, DashboardTab, PlacedWidget } from '../../types/widget';
+import { EyeOff, GripVertical, Lock, Sliders, Trash2 } from 'lucide-react';
+import type { CockpitNode, CustomWidgetDefinition, DashboardTab, PlacedWidget } from '../../types/widget';
 import { isPane, minLayoutSize, panesInOrder, widgetMinSize, type DropZone, type Size } from '../../lib/cockpitLayout';
 import { BUILTIN_PANELS } from '../../lib/builtinWidgets';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -20,6 +20,8 @@ interface Props {
   titleOf: (widgetId: string) => string;
   /** The header's element, measured by the dashboard (how much room the panes have). */
   headerRef?: React.Ref<HTMLDivElement>;
+  /** Open the custom widget editor (Edit mode, a pane showing a custom widget). */
+  onEditCustomWidget?: (def: CustomWidgetDefinition) => void;
 }
 
 /** A structural key: a split remounts when its shape changes (other children), not when only its sizes do. */
@@ -130,6 +132,8 @@ interface OverlayProps {
   min: Size;
   dragging: string | null;
   setDragging: (id: string | null) => void;
+  /** Open the custom widget editor, for a custom widget. */
+  onEditCustomWidget?: (def: CustomWidgetDefinition) => void;
 }
 
 /**
@@ -139,9 +143,10 @@ interface OverlayProps {
  * one stays on the tab, hidden); Hide takes it out of the layout, Delete off the tab. In a narrow pane the bar keeps
  * to one row (the title folds to its grip).
  */
-export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, titleOf, min, dragging, setDragging }) => {
+export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, titleOf, min, dragging, setDragging, onEditCustomWidget }) => {
   const id = placed.instanceId;
   const customWidgets = useDashboardStore((s) => s.profile.customWidgets);
+  const customDef = customWidgets.find((w) => w.id === placed.widgetId);
   const { unplaceFromCockpit, splitInCockpit, replaceInCockpit, moveInCockpit, removeWidgetFromActiveTab } = useDashboardStore.getState();
   const [zone, setZone] = useState<DropZone | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -265,6 +270,17 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
             )}
             <optgroup label="Show instead:">{sourceOptions('')}</optgroup>
           </select>
+          {customDef && onEditCustomWidget && (
+            <button
+              type="button"
+              onClick={() => onEditCustomWidget(customDef)}
+              className="rounded p-1 text-amber-400 hover:bg-zinc-800 hover:text-amber-300"
+              title="Edit this custom widget (its definition, wherever it's used)"
+              aria-label={`Edit ${title}`}
+            >
+              <Sliders className="h-3 w-3" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => unplaceFromCockpit(tab.id, id)}
@@ -315,7 +331,7 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
   );
 };
 
-export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, titleOf, headerRef }) => {
+export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, titleOf, headerRef, onEditCustomWidget }) => {
   const unplace = useDashboardStore((s) => s.unplaceFromCockpit);
   /** The pane being dragged (Edit mode), by instance ID. */
   const [dragging, setDragging] = useState<string | null>(null);
@@ -346,6 +362,7 @@ export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, tit
             min={minFor(id)}
             dragging={dragging}
             setDragging={setDragging}
+            onEditCustomWidget={onEditCustomWidget}
           />
         )}
       </div>
