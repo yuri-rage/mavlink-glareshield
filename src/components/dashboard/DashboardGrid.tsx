@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CONTENT_WIDTH_CLASS, useLayoutStore } from '../../store/layoutStore';
 import { layoutFits, minLayoutSize, panesInOrder, widgetMinSize } from '../../lib/cockpitLayout';
-import { CockpitView } from './CockpitView';
+import { CockpitView, PaneEditOverlay } from './CockpitView';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CustomWidgetDefinition, PlacedWidget } from '../../types/widget';
 import { renderBuiltinWidget } from '../widgets/builtinRegistry';
@@ -24,6 +24,7 @@ import {
   Lock,
   ChevronRight,
   Eye,
+  EyeOff,
   LayoutPanelTop,
 } from 'lucide-react';
 
@@ -65,6 +66,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
     moveWidget,
     reorderWidgetsInActiveTab,
     placeInCockpit,
+    unplaceFromCockpit,
   } = useDashboardStore();
 
   const [newTabTitle, setNewTabTitle] = useState('');
@@ -102,6 +104,8 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
   const layoutKey = `${activeTab?.id}|${cockpit?.header ?? ''}`;
   const lastLayoutKeyRef = useRef(layoutKey);
   const [stacked, setStacked] = useState(false);
+  /** A stacked widget being dragged (Edit mode). */
+  const [stackDragging, setStackDragging] = useState<string | null>(null);
   useLayoutEffect(() => {
     if (!isCockpit || !cockpit) {
       setStacked(false);
@@ -501,16 +505,45 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
           {isEditing && (
             <p className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 px-2.5 py-1.5 text-[11px] text-zinc-400">
               <LayoutPanelTop className="h-3.5 w-3.5 shrink-0 text-sky-400" />
-              This Cockpit tab is shown stacked: the window is smaller than its panes need. Arrange it on a larger screen.
+              Shown stacked: the panes don&apos;t fit this window (with the edit bar). Hide, change or delete some below to make
+              them fit, or arrange them on a larger screen; dragging and swapping arrange the panes as they&apos;ll be shown.
             </p>
           )}
           {panesInOrder(cockpit).map((id) => {
             const w = activeTab.widgets.find((x) => x.instanceId === id);
             if (!w) return null;
+            const isHeader = id === cockpit?.header;
             return (
-              <div key={id} className="@container relative">
+              // In Edit mode each gets the same bar as a pane (the pinned bar: Hide), so a layout too big for the
+              // window can be made to fit here.
+              <div key={id} className={`@container relative ${isEditing ? 'min-h-[7rem]' : ''}`}>
                 <ErrorBoundary fallbackTitle={getWidgetTitle(w.widgetId)}>{renderWidgetContent(w)}</ErrorBoundary>
-                {isEditing && <div className="absolute inset-0 z-20 rounded-xl ring-1 ring-dashed ring-zinc-700" title="Locked while editing" />}
+                {isEditing &&
+                  (isHeader ? (
+                    <div className="absolute inset-0 z-20 flex items-start justify-between gap-2 rounded-xl bg-zinc-950/55 p-1.5 ring-1 ring-dashed ring-sky-500/50 select-none">
+                      <span className="rounded bg-zinc-900/95 px-2 py-0.5 text-[11px] font-bold text-sky-300">
+                        {getWidgetTitle(w.widgetId)} · pinned above the panes
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => unplaceFromCockpit(activeTab.id, id)}
+                        className="flex items-center gap-1 rounded bg-zinc-900/95 px-1.5 py-0.5 text-[11px] text-zinc-300 hover:text-white"
+                      >
+                        <EyeOff className="h-3 w-3" />
+                        Hide
+                      </button>
+                    </div>
+                  ) : (
+                    <PaneEditOverlay
+                      tab={{ ...activeTab, cockpit }}
+                      placed={w}
+                      title={getWidgetTitle(w.widgetId)}
+                      titleOf={getWidgetTitle}
+                      min={widgetMinSize(w.widgetId)}
+                      dragging={stackDragging}
+                      setDragging={setStackDragging}
+                    />
+                  ))}
               </div>
             );
           })}

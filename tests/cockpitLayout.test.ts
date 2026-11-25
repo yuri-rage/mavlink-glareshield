@@ -98,5 +98,30 @@ check('sizes always sum to exactly 100', [[1, 1, 1], [1, 2, 3, 4, 5, 6, 7], [3, 
   check('From the tab: adds nothing', ft.widgets.length === tab.length);
 }
 
+// Editing.
+{
+  const { splitPane, replacePane, swapPanes, movePane } = await import('../src/lib/cockpitLayout.ts');
+  const ids = ['a', 'b', 'c', 'n'];
+  const base = sanitizeCockpit({ header: null, root: { split: 'row', children: [{ pane: 'a' }, { pane: 'b' }], sizes: [60, 40] } }, ids)!;
+  const r = splitPane(base, 'b', 'right', 'n');
+  check('split beside, same direction: a sibling taking half the room', J(r.root) === J({ split: 'row', children: [{ pane: 'a' }, { pane: 'b' }, { pane: 'n' }], sizes: [60, 20, 20] }), J(r.root));
+  const l = splitPane(base, 'a', 'left', 'n');
+  check('split to the left: before it', J(panesInOrder(l)) === J(['n', 'a', 'b']));
+  const d = splitPane(base, 'b', 'bottom', 'n');
+  check('split below in a row: the pane becomes a column', J(d.root) === J({ split: 'row', children: [{ pane: 'a' }, { split: 'column', children: [{ pane: 'b' }, { pane: 'n' }], sizes: [50, 50] }], sizes: [60, 40] }), J(d.root));
+  const single = splitPane({ header: null, root: { pane: 'a' } }, 'a', 'top', 'n');
+  check('split a lone pane', J(single.root) === J({ split: 'column', children: [{ pane: 'n' }, { pane: 'a' }], sizes: [50, 50] }));
+  check('replace a pane', J(panesInOrder(replacePane(base, 'b', 'c'))) === J(['a', 'c']));
+  const s = swapPanes(base, 'a', 'b');
+  check('swap keeps the places and sizes', J(s.root) === J({ split: 'row', children: [{ pane: 'b' }, { pane: 'a' }], sizes: [60, 40] }));
+  const three = sanitizeCockpit({ header: null, root: { split: 'column', children: [{ split: 'row', children: [{ pane: 'a' }, { pane: 'b' }] }, { pane: 'c' }], sizes: [70, 30] } }, ids)!;
+  const m = movePane(three, 'c', 'a', 'left', ids);
+  check('move to an edge: out of its place, beside the target', J(m.root) === J({ split: 'row', children: [{ pane: 'c' }, { pane: 'a' }, { pane: 'b' }], sizes: [25, 25, 50] }), J(m.root));
+  check('move to the centre: a swap', J(panesInOrder(movePane(three, 'c', 'a', 'center', ids))) === J(['c', 'b', 'a']));
+  check('move onto itself: nothing', movePane(three, 'a', 'a', 'left', ids) === three);
+  const sib = movePane(base, 'a', 'b', 'right', ids);
+  check('move past its own sibling', J(panesInOrder(sib)) === J(['b', 'a']) && J((sib.root as any).sizes) === J([50, 50]), J(sib.root));
+}
+
 console.log(failures.length ? `\n${failures.length} cockpit-layout check(s) FAILED` : '\nAll cockpit-layout checks PASSED');
 if (failures.length) process.exit(1);
