@@ -18,14 +18,16 @@ import { missionManager } from '../../mavlink/missionManager';
 import { paramManager } from '../../mavlink/paramManager';
 import { logManager } from '../../mavlink/logManager';
 import { Button } from '../ui/button';
+import { isAnyDirty, useMissionPlanStore } from '../../store/missionPlanStore';
 
-/** Re-render every second (ages of last contact). */
-function useTick(ms = 1000) {
+/** Re-render every second while `on` (ages of last contact); idle otherwise. */
+function useTick(on: boolean, ms = 1000) {
   const [, set] = useState(0);
   useEffect(() => {
+    if (!on) return;
     const t = setInterval(() => set((n) => n + 1), ms);
     return () => clearInterval(t);
-  }, [ms]);
+  }, [on, ms]);
 }
 
 function age(ms: number): string {
@@ -50,7 +52,8 @@ export const VehiclePicker: React.FC = () => {
   const imperial = useUnitsStore((s) => s.system === 'mph' || s.system === 'kts');
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useTick();
+  // The menu shows ages; the chip itself doesn't.
+  useTick(open);
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
@@ -114,7 +117,7 @@ export const TakeoverBanner: React.FC = () => {
   const offer = useVehicleRosterStore((s) => s.takeoverOffer);
   const active = useVehicleRosterStore((s) => s.activeSystemId);
   const vehicles = useVehicleRosterStore((s) => s.vehicles);
-  useTick();
+  useTick(offer !== null);
   if (offer === null || active === null) return null;
   const old = vehicles[active];
   const other = vehicles[offer];
@@ -148,8 +151,14 @@ function switchConsequences(): string[] {
   if (m.isUploading) out.push('A mission upload is under way: it stops, and the old vehicle may hold part of it.');
   else if (m.isFetching) out.push('A mission download is under way: it stops.');
   if (paramManager.getStatus().isFetching) out.push('The parameter download stops.');
-  if (logManager.busy) out.push('The log download stops.');
+  if (logManager.busy) out.push('The log transfer (list or download) stops.');
   for (const b of useVehicleRosterStore.getState().busy) out.push(`${b}: stops.`);
+  const plan = useMissionPlanStore.getState();
+  if (plan.active) {
+    out.push(
+      `Planning is open${isAnyDirty(plan) ? ' with changes not uploaded' : ''}: the plan stays open, and Upload would send it to the vehicle you switch to.`
+    );
+  }
   return out;
 }
 
@@ -196,7 +205,8 @@ export const VehicleSwitchDialog: React.FC = () => {
             </p>
           )}
           <p className="text-zinc-400">
-            Every control then commands vehicle {pending}; its mission, parameters and home are read afresh.
+            Every control then commands vehicle {pending}. Its parameters and home are read afresh; download its mission to
+            see it.
           </p>
         </div>
         <div className="px-4 py-3 bg-zinc-900 border-t border-zinc-800 flex justify-end gap-2">

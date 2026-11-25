@@ -423,6 +423,8 @@ export class MavFtpClient {
           if (isDone) return;
           if (packet.messageId !== MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL)
             return;
+          // The target's own answers only: another vehicle or a companion on the link may be mid-transfer too.
+          if (packet.systemId !== sysId || (compId > 0 && packet.componentId !== compId)) return;
 
           const ftp = parseFtpPayload(packet.payload);
           if (!ftp) return;
@@ -847,6 +849,8 @@ export class MavFtpClient {
           if (isDone) return;
           if (packet.messageId !== MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL)
             return;
+          // The target's own answers only: another vehicle or a companion on the link may be mid-transfer too.
+          if (packet.systemId !== sysId || (compId > 0 && packet.componentId !== compId)) return;
 
           const ftp = parseFtpPayload(packet.payload);
           if (!ftp) return;

@@ -59,7 +59,6 @@ export class ParamManager {
     mavlinkConnection.onPacket((packet: MavlinkPacket) => {
       this.handlePacket(packet);
     });
-    // A new connection may be a different vehicle: its defaults and single reads start over.
     // A new connection may be a different vehicle: its defaults and single reads start over. The stored values
     // are kept (a brief link drop to the same vehicle shouldn't empty the table) but flagged as old, and the
     // count is reset so they are read again once the vehicle is heard.
@@ -302,7 +301,10 @@ export class ParamManager {
   }
 
   /** Stores an unpacked param.pck as the full list. */
-  private applyFullList(unpacked: Record<string, ParamEntry>, method: 'ftp', message: string) {
+  private applyFullList(unpacked: Record<string, ParamEntry>, method: 'ftp', message: string, sysId: number) {
+    // Read from a vehicle no longer commanded (a switch while it ran): not this vehicle's list.
+    const active = getActiveSystemId();
+    if (active !== null && sysId !== active) return;
     for (const [k, v] of Object.entries(unpacked)) {
       if (v.defaultValue !== undefined) this.defaults.set(k, v.defaultValue);
     }
@@ -327,7 +329,7 @@ export class ParamManager {
       const unpacked = this.unpackParamPck(pckData);
       if (!unpacked || Object.keys(unpacked).length === 0) return false;
       const count = Object.keys(unpacked).length;
-      this.applyFullList(unpacked, 'ftp', `Loaded ${count} params via MAVFTP in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+      this.applyFullList(unpacked, 'ftp', `Loaded ${count} params via MAVFTP in ${((Date.now() - startTime) / 1000).toFixed(1)}s`, sysId);
       return true;
     } catch {
       // MAVFTP unavailable: single reads still work via PARAM_VALUE, without defaults.
@@ -441,7 +443,8 @@ export class ParamManager {
           this.applyFullList(
             unpacked,
             'ftp',
-            `Loaded ${count} params${hasDefaults ? ' (with defaults)' : ''} via MAVFTP in ${(duration / 1000).toFixed(1)}s`
+            `Loaded ${count} params${hasDefaults ? ' (with defaults)' : ''} via MAVFTP in ${(duration / 1000).toFixed(1)}s`,
+            sysId
           );
           return;
         }

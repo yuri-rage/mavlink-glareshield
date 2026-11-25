@@ -4,6 +4,7 @@
 // the vehicle). Updated while a vehicle is connected; another vehicle type starts over.
 
 import { create } from 'zustand';
+import { onActiveVehicleChange } from '../mavlink/vehicleRoster';
 import { useTelemetryStore } from './telemetryStore';
 import { paramManager } from '../mavlink/paramManager';
 import { getVehicleCategory } from '../mavlink/messages';
@@ -131,4 +132,12 @@ useTelemetryStore.subscribe((s, prev) => {
     }
   }
   if (next !== last) save(next);
+});
+
+// Another vehicle is commanded: the remembered planning values were the old one's, even when both are the same
+// type. They start over and fill from the new vehicle's answers (asked for again: its sysid:type key differs).
+onActiveVehicleChange(() => {
+  askedFor = '';
+  const last = useLastVehicleStore.getState();
+  if (Object.keys(last.params).length > 0) save({ type: last.type, params: {} });
 });

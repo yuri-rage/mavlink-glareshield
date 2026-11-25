@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react';
 import { create } from 'zustand';
 import { useTelemetryStore } from '../store/telemetryStore';
 import { mavlinkConnection } from '../mavlink/connection';
+import { onActiveVehicleChange } from '../mavlink/vehicleRoster';
 
 export const STORAGE_KEY_SOUND = 'mavlink_glareshield_sound_enabled';
 export const STORAGE_KEY_VOICE = 'mavlink_glareshield_voice_enabled';
@@ -799,6 +800,27 @@ export function useAudioAlertListener() {
   const lastAnnouncedReachedAtRef = useRef<number>(lastReachedAt);
   const prevWpSeqRef = useRef<number>(currentWaypointSeq);
   const lastSpokenWpRef = useRef<{ seq: number; time: number } | null>(null);
+  /** When another vehicle was last switched to (0: never): its first heartbeat isn't a link loss before it's due. */
+  const switchedAtRef = useRef(0);
+
+  // Another vehicle is commanded: nothing heard of the old one carries over. Its mode and armed state are taken up
+  // silently (like a reconnect, not a change), battery warnings start over for the new vehicle, and so does the
+  // mission progress. Runs after the telemetry store has reset (its listener is registered first, at load).
+  useEffect(
+    () =>
+      onActiveVehicleChange(() => {
+        const st = useTelemetryStore.getState();
+        prevModeRef.current = 'DISCONNECTED';
+        batteryWarnedRef.current = 'none';
+        prevWpSeqRef.current = st.currentWaypointSeq;
+        lastAnnouncedReachedAtRef.current = st.lastReachedAt;
+        lastSpokenWpRef.current = null;
+        missionCompleteRef.current?.dispose();
+        missionCompleteRef.current = createMissionCompleteAnnouncer((t) => speakCallout(t));
+        switchedAtRef.current = Date.now();
+      }),
+    []
+  );
 
   // Initialize Piper Neural TTS Worker in the background when voice callouts are enabled (and it is the voice)
   const voiceEngine = useAudioAlertsStore((s) => s.voiceEngine);
@@ -983,7 +1005,9 @@ export function useAudioAlertListener() {
         return;
       }
       const lastHb = st.heartbeat.lastHeartbeatTime;
-      const isLost = lastHb === 0 || Date.now() - lastHb > 3500;
+      // Just switched to another vehicle: not lost until its heartbeat is overdue (as long as for a known one).
+      const awaitingSwitched = lastHb === 0 && Date.now() - switchedAtRef.current <= 3500;
+      const isLost = !awaitingSwitched && (lastHb === 0 || Date.now() - lastHb > 3500);
 
       if (isLost && !prevLinkLostRef.current) {
         prevLinkLostRef.current = true;

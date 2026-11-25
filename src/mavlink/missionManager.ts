@@ -1,5 +1,5 @@
 import { mavlinkConnection } from './connection';
-import { onActiveVehicleChange } from './vehicleRoster';
+import { getActiveSystemId, onActiveVehicleChange } from './vehicleRoster';
 import { MAVLINK_MSG_ID, cmdHasLocation } from './messages';
 import { decodePayload, MavlinkPacket } from './parser';
 import { mavFtpClient } from './ftp';
@@ -50,6 +50,9 @@ const RALLY_TYPE = 2;
 function markRallyUnsupported() {
   if (useTelemetryStore.getState().rallySupport !== 'unsupported') useTelemetryStore.setState({ rallySupport: 'unsupported' });
 }
+
+/** A transfer's error when a switch to another vehicle stopped it. */
+const STOPPED_BY_SWITCH = 'Stopped: switched to another vehicle';
 
 export class MissionManager {
   private status: MissionManagerStatus = {
@@ -237,6 +240,8 @@ export class MissionManager {
 
       const unsubscribe = mavlinkConnection.onPacket((packet: MavlinkPacket) => {
         if (isDone) return;
+        // The target vehicle's own mission messages only (another on the link may be transferring too).
+        if (packet.systemId !== targetSys || (targetComp > 0 && packet.componentId !== targetComp)) return;
 
         if (
           packet.messageId === MAVLINK_MSG_ID.MISSION_REQUEST_INT ||
@@ -267,7 +272,7 @@ export class MissionManager {
           retryCount = 0;
           if (data.type === 0) {
             console.log(`[MissionManager] Vehicle accepted all ${items.length} items for mission_type=${missionType}!`);
-            if (missionType === RALLY_TYPE) useTelemetryStore.setState({ rallySupport: 'supported' });
+            if (missionType === RALLY_TYPE && this.isActive(targetSys)) useTelemetryStore.setState({ rallySupport: 'supported' });
             finish(true);
           } else {
             console.warn(`[MissionManager] Vehicle rejected mission upload for type=${missionType} with ACK code ${data.type}`);
@@ -282,7 +287,17 @@ export class MissionManager {
     });
   }
 
-  private updateStoreItems(type: 'mission' | 'fence' | 'rally', items: MissionItemIntData[]) {
+  /**
+   * Whether `sysId` is still the vehicle the app commands: a transfer that outlives a switch to another vehicle
+   * mustn't write the old vehicle's items into the store (which now describes the new one).
+   */
+  private isActive(sysId: number): boolean {
+    const active = getActiveSystemId();
+    return active === null || active === sysId;
+  }
+
+  private updateStoreItems(type: 'mission' | 'fence' | 'rally', items: MissionItemIntData[], sysId: number) {
+    if (!this.isActive(sysId)) return;
     if (type === 'mission') {
       const wps: MissionWaypoint[] = items.map((it) => ({
         seq: it.seq,
@@ -398,9 +413,12 @@ export class MissionManager {
       }
     }
 
+    // Stopped by a switch to another vehicle: no fallback to the item-by-item upload.
+    if (this.isCancelled) return { success: false, method: 'ftp', error: STOPPED_BY_SWITCH };
+
     if (ftpSuccess) {
       console.log(`[MissionManager] MAVFTP upload to ${ftpPath} succeeded and verified!`);
-      this.updateStoreItems(type, items);
+      this.updateStoreItems(type, items, sysId);
       return { success: true, method: 'ftp' };
     }
 
@@ -443,9 +461,11 @@ export class MissionManager {
 
     if (legacySuccess) {
       console.log(`[MissionManager] Legacy item-by-item upload for ${typeName} completed successfully!`);
-      this.updateStoreItems(type, items);
+      this.updateStoreItems(type, items, sysId);
       return { success: true, method: 'legacy' };
     }
+
+    if (this.isCancelled) return { success: false, method: 'legacy', error: STOPPED_BY_SWITCH };
 
     // Say why: a refusal names the vehicle's reason; only silence is "did not acknowledge".
     const code = this.lastUploadRejection;
@@ -551,6 +571,8 @@ export class MissionManager {
     try {
       const res = await this.uploadSection(type, missionType, items, undefined, sysId, compId);
       if (!res.success) {
+        // Stopped by a switch: its own message stands.
+        if (res.error === STOPPED_BY_SWITCH) return { success: false, method: res.method, readBack: [], readOk: false, error: res.error };
         this.setStatus({ message: res.error || `${name} upload failed.` });
         this.scheduleMessageClear(8000);
         return { success: false, method: res.method, readBack: [], readOk: false, error: res.error };
@@ -564,10 +586,11 @@ export class MissionManager {
         message: `Reading the ${type === 'mission' ? 'mission' : type === 'fence' ? 'geofence' : 'rally points'} back from the vehicle...`,
       });
       const { items: readBack, ok: readOk } = await read(sysId, compId);
+      if (this.isCancelled || !this.isActive(sysId)) return { success: false, method: res.method, readBack: [], readOk: false, error: STOPPED_BY_SWITCH };
       if (!readOk) {
         // The read failed. The vehicle acknowledged the upload, so keep showing what was uploaded rather than a
         // partial list or nothing.
-        this.updateStoreItems(type, items);
+        this.updateStoreItems(type, items, sysId);
       }
       if (type === 'mission') this.setStatus({ waypointCount: readBack.length });
       else if (type === 'fence') this.setStatus({ fenceCount: readBack.length });
@@ -754,6 +777,8 @@ export class MissionManager {
 
       const unsubscribe = mavlinkConnection.onPacket((packet: MavlinkPacket) => {
         if (isDone) return;
+        // The target vehicle's own mission messages only (another on the link may be transferring too).
+        if (packet.systemId !== targetSys || (targetComp > 0 && packet.componentId !== targetComp)) return;
 
         // A refusal (e.g. MAV_MISSION_UNSUPPORTED for rally points on a vehicle without them) is the vehicle's
         // answer: stop now instead of waiting out every retry. Still not a complete read.
@@ -865,7 +890,7 @@ export class MissionManager {
         const unpacked = this.unpackMissionDat(datData);
         if (unpacked !== null) {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} waypoints via MAVFTP!`);
-          useTelemetryStore.setState({ missionWaypoints: unpacked });
+          if (this.isActive(sysId)) useTelemetryStore.setState({ missionWaypoints: unpacked });
           applyHomeFromMissionItem0(unpacked);
           this.setStatus({ waypointCount: unpacked.length });
           return unpacked;
@@ -899,7 +924,7 @@ export class MissionManager {
     }));
 
     waypoints.sort((a, b) => a.seq - b.seq);
-    useTelemetryStore.setState({ missionWaypoints: waypoints });
+    if (this.isActive(sysId)) useTelemetryStore.setState({ missionWaypoints: waypoints });
     this.setStatus({ waypointCount: waypoints.length });
     return waypoints;
   }
@@ -933,7 +958,7 @@ export class MissionManager {
         const unpacked = this.unpackFenceDat(fenceData);
         if (unpacked !== null) {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} fence items via MAVFTP!`);
-          useTelemetryStore.setState({ fencePoints: unpacked });
+          if (this.isActive(sysId)) useTelemetryStore.setState({ fencePoints: unpacked });
           this.setStatus({ fenceCount: unpacked.length });
           this.lastFenceReadOk = true;
           return unpacked;
@@ -976,13 +1001,13 @@ export class MissionManager {
 
       fencePoints.sort((a, b) => a.seq - b.seq);
       console.log(`[MissionManager] Successfully downloaded ${fencePoints.length} fence points via MAVLink stream!`);
-      useTelemetryStore.setState({ fencePoints });
+      if (this.isActive(sysId)) useTelemetryStore.setState({ fencePoints });
       this.setStatus({ fenceCount: fencePoints.length });
       this.lastFenceReadOk = true;
       return fencePoints;
     }
     // A complete read of no items: the vehicle has no fence.
-    useTelemetryStore.setState({ fencePoints: [] });
+    if (this.isActive(sysId)) useTelemetryStore.setState({ fencePoints: [] });
     this.setStatus({ fenceCount: 0 });
     this.lastFenceReadOk = true;
     return [];
@@ -1021,7 +1046,7 @@ export class MissionManager {
         const unpacked = this.unpackRallyDat(rallyData);
         if (unpacked !== null) {
           console.log(`[MissionManager] Successfully unpacked ${unpacked.length} rally points via MAVFTP!`);
-          useTelemetryStore.setState({ rallyPoints: unpacked, ...(unpacked.length > 0 ? { rallySupport: 'supported' as const } : {}) });
+          if (this.isActive(sysId)) useTelemetryStore.setState({ rallyPoints: unpacked, ...(unpacked.length > 0 ? { rallySupport: 'supported' as const } : {}) });
           this.setStatus({ rallyCount: unpacked.length });
           this.lastRallyReadOk = true;
           return unpacked;
@@ -1055,7 +1080,7 @@ export class MissionManager {
       console.warn('[MissionManager] Rally point stream incomplete; keeping the rally points already known.');
       return useTelemetryStore.getState().rallyPoints;
     }
-    useTelemetryStore.setState({ rallyPoints, ...(rallyPoints.length > 0 ? { rallySupport: 'supported' as const } : {}) });
+    if (this.isActive(sysId)) useTelemetryStore.setState({ rallyPoints, ...(rallyPoints.length > 0 ? { rallySupport: 'supported' as const } : {}) });
     this.setStatus({ rallyCount: rallyPoints.length });
     this.lastRallyReadOk = true;
     return rallyPoints;

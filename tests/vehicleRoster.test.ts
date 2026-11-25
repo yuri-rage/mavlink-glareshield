@@ -43,6 +43,10 @@ check('active silent, other heard: offered', st().takeoverOffer === 2 && st().ac
 dismissTakeoverOffer();
 observePacket(...hb(2), (t += 1000));
 check('dismissed: not offered again', st().takeoverOffer === null);
+// A third vehicle: keeping waiting covers it too (no offer bouncing between the others).
+observePacket(...hb(3), (t += 100));
+observePacket(...hb(2), (t += 100));
+check('keep waiting: no offer of any other vehicle', st().takeoverOffer === null && st().activeSystemId === 1);
 observePacket(...hb(1), (t += 1000));
 check('active back: still active, nothing switched', st().activeSystemId === 1 && switches.length === 0);
 switchToVehicle(2);

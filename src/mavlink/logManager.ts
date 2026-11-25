@@ -127,6 +127,7 @@ class LogManager {
       const done = (err?: Error) => {
         if (timer) clearTimeout(timer);
         off();
+        this.cancelCurrent = null;
         // Listing counts as log transfer activity on ArduPilot; end it so normal logging resumes.
         mavlinkConnection.send(enc.createLogRequestEnd(sysId, compId));
         if (err) reject(err);
@@ -161,6 +162,8 @@ class LogManager {
         if (entries.size >= numLogs) return done();
         quiet();
       });
+      // Cancel (a switch to another vehicle, the widget closing) ends the listing too.
+      this.cancelCurrent = () => done(new LogTransferError('Cancelled'));
       mavlinkConnection.send(enc.createLogRequestList(sysId, compId));
       quiet();
     });

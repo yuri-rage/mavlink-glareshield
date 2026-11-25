@@ -95,11 +95,10 @@ export function recordPacket(packet: MavlinkPacket, now = Date.now()): void {
   if (SKIPPED.has(packet.messageId)) return;
   const name = NAME_BY_ID.get(packet.messageId);
   if (!name) return;
-  if (
-    vehicleSystemId !== undefined &&
-    packet.systemId !== vehicleSystemId &&
-    !ANY_SOURCE.has(packet.messageId)
-  ) {
+  // The vehicle's packets only: its ID from its heartbeat, or (just after a switch, before its first heartbeat) the
+  // commanded vehicle's, so the old vehicle's packets don't slip in meanwhile.
+  const expected = vehicleSystemId ?? getActiveSystemId() ?? undefined;
+  if (expected !== undefined && packet.systemId !== expected && !ANY_SOURCE.has(packet.messageId)) {
     return;
   }
   // Only the autopilot's own heartbeat (not a gimbal's or companion's on the same system) describes the vehicle.

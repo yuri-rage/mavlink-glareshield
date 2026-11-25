@@ -1862,9 +1862,10 @@ onActiveVehicleChange((to, from) => {
   lastVersionPollTime = 0;
   versionPollAttempts = 0;
   settlePendingCommands(now);
-  // The new vehicle hasn't had its stream rates asked for.
-  messageRateManager.resetCache();
+  // Stream rates are asked of the new vehicle now (not after its next heartbeat: the request would go to the old one).
   const compId = useVehicleRosterStore.getState().vehicles[to]?.compId ?? 1;
+  messageRateManager.setTarget(to, compId);
+  lastRecentExplanatoryStatus = null;
   useTelemetryStore.setState((state) => ({
     ...initialVehicleState,
     // The new vehicle's ID at once (not 0 until its next heartbeat): a command sent meanwhile goes to it, never to

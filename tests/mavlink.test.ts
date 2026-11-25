@@ -1804,6 +1804,8 @@ console.log('createMissionCount & createMissionItemInt PASSED!');
 import { mavlinkConnection } from '../src/mavlink/connection.ts';
 
 async function testMissionUploadFallback() {
+  // The simulated vehicle answers as itself (system 1, the autopilot): answers from any other system are ignored.
+  const vehicleEncoder = new MavlinkEncoder(1, 1);
   const originalSend = mavlinkConnection.send.bind(mavlinkConnection);
 
   const emitPacket = (pktBytes: Uint8Array) => {
@@ -1831,7 +1833,7 @@ async function testMissionUploadFallback() {
         dv.setUint8(4, 1); // size
         dv.setUint8(5, FTP_OPCODE.CreateFile); // req_opcode
         nackPayload[15] = 1; // FAIL error code
-        const nackPkt = encoder.packV2(MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL, nackPayload);
+        const nackPkt = vehicleEncoder.packV2(MAVLINK_MSG_ID.FILE_TRANSFER_PROTOCOL, nackPayload);
         setTimeout(() => {
           emitPacket(nackPkt);
         }, 10);
@@ -1843,7 +1845,7 @@ async function testMissionUploadFallback() {
         req0Payload[2] = 255;
         req0Payload[3] = 190;
         req0Payload[4] = 0; // mission_type
-        const req0Pkt = encoder.packV2(MAVLINK_MSG_ID.MISSION_REQUEST_INT, req0Payload);
+        const req0Pkt = vehicleEncoder.packV2(MAVLINK_MSG_ID.MISSION_REQUEST_INT, req0Payload);
         setTimeout(() => {
           emitPacket(req0Pkt);
         }, 10);
@@ -1857,7 +1859,7 @@ async function testMissionUploadFallback() {
           req1Payload[2] = 255;
           req1Payload[3] = 190;
           req1Payload[4] = 0;
-          const req1Pkt = encoder.packV2(MAVLINK_MSG_ID.MISSION_REQUEST_INT, req1Payload);
+          const req1Pkt = vehicleEncoder.packV2(MAVLINK_MSG_ID.MISSION_REQUEST_INT, req1Payload);
           setTimeout(() => {
             emitPacket(req1Pkt);
           }, 10);
@@ -1868,7 +1870,7 @@ async function testMissionUploadFallback() {
           ackPayload[1] = 190;
           ackPayload[2] = 0; // MAV_MISSION_ACCEPTED
           ackPayload[3] = 0; // mission_type = 0
-          const ackPkt = encoder.packV2(MAVLINK_MSG_ID.MISSION_ACK, ackPayload);
+          const ackPkt = vehicleEncoder.packV2(MAVLINK_MSG_ID.MISSION_ACK, ackPayload);
           setTimeout(() => {
             emitPacket(ackPkt);
           }, 10);
