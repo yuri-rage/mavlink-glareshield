@@ -1,7 +1,8 @@
 // A small dropdown for the map header: a trigger button and a panel that closes on an outside click, on Escape,
 // or when an item is chosen.
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -20,11 +21,45 @@ interface HeaderMenuProps {
 export const HeaderMenu: React.FC<HeaderMenuProps> = ({ icon, label, title, children, widthClass = 'w-64', extra }) => {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  // The panel is drawn on top of the page (a portal, fixed to the screen), so no card clips it, at the button:
+  // below it unless it doesn't fit there and there's more room above (a map low on a phone screen), and no taller
+  // than that room (it scrolls instead of running off the screen). Kept at the button as the page scrolls.
+  const [place, setPlace] = useState<{ up: boolean; maxH: number; right: number; top?: number; bottom?: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!open) {
+      setPlace(null);
+      return;
+    }
+    const measure = () => {
+      const btn = rootRef.current?.getBoundingClientRect();
+      const panel = panelRef.current;
+      if (!btn || !panel) return;
+      const margin = 8;
+      const below = window.innerHeight - btn.bottom - margin;
+      const above = btn.top - margin;
+      const up = panel.scrollHeight > below && above > below;
+      const right = Math.max(margin, window.innerWidth - btn.right);
+      setPlace(
+        up
+          ? { up, maxH: Math.max(120, above), right, bottom: window.innerHeight - btn.top + 4 }
+          : { up, maxH: Math.max(120, below), right, top: btn.bottom + 4 }
+      );
+    };
+    measure();
+    window.addEventListener('scroll', measure, true);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('scroll', measure, true);
+      window.removeEventListener('resize', measure);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onPointer = (e: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (rootRef.current && !rootRef.current.contains(t) && !panelRef.current?.contains(t)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
@@ -56,17 +91,22 @@ export const HeaderMenu: React.FC<HeaderMenuProps> = ({ icon, label, title, chil
         <ChevronDown className={cn('h-3 w-3 text-zinc-500 transition-transform', open && 'rotate-180')} />
       </button>
       {extra}
-      {open && (
-        <div
-          role="menu"
-          className={cn(
-            'absolute right-0 top-full mt-1 z-[1100] max-w-[calc(100vw-2rem)] rounded-lg border border-zinc-700 bg-zinc-900/95 backdrop-blur-sm shadow-xl p-1 font-sans normal-case tracking-normal',
-            widthClass
-          )}
-        >
-          {children(() => setOpen(false))}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="menu"
+            // Hidden until measured (the first layout pass), so it never flashes in the wrong place.
+            style={place ? { maxHeight: place.maxH, right: place.right, top: place.top, bottom: place.bottom } : { visibility: 'hidden', top: 0, right: 0 }}
+            className={cn(
+              'fixed z-[1100] max-w-[calc(100vw-1rem)] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900/95 backdrop-blur-sm shadow-xl p-1 font-sans normal-case tracking-normal',
+              widthClass
+            )}
+          >
+            {children(() => setOpen(false))}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
