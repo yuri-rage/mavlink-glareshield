@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CONTENT_WIDTH_CLASS, useLayoutStore } from '../../store/layoutStore';
-import { layoutFits, minLayoutSize, panesInOrder, widgetMinSize } from '../../lib/cockpitLayout';
+import { layoutFits, minLayoutSize, panesInOrder, variantFor, widgetMinSize, type CockpitVariant } from '../../lib/cockpitLayout';
 import { CockpitView, PaneEditOverlay } from './CockpitView';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CustomWidgetDefinition, PlacedWidget } from '../../types/widget';
@@ -93,7 +93,23 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
   // (a margin would keep a window with just enough room stacked after leaving Edit mode).
   // ----------------------------------------------------------------------------------------------
   const isCockpit = activeTab?.mode === 'cockpit';
-  const cockpit = isCockpit ? (activeTab.cockpit ?? { header: null, root: null }) : undefined;
+  // Which of the tab's layouts: the wide one on a wide window (if the tab has one); in Edit mode, the one being
+  // edited (so what's arranged is what's seen). Entering Edit mode edits the one on screen.
+  const [windowSize, setWindowSize] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  useEffect(() => {
+    const onResize = () => setWindowSize({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const editVariant = useDashboardStore((st) => st.editVariant);
+  const shownVariant: CockpitVariant = variantFor(Boolean(activeTab?.cockpitWide), windowSize.w, windowSize.h);
+  useEffect(() => {
+    if (isEditing) useDashboardStore.getState().setEditVariant(shownVariant);
+    // Only on entering Edit mode (or changing tab), not as the window changes while editing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing, activeTab?.id]);
+  const variant: CockpitVariant = isEditing ? (editVariant === 'wide' && activeTab?.cockpitWide ? 'wide' : 'standard') : shownVariant;
+  const cockpit = isCockpit ? ((variant === 'wide' ? activeTab.cockpitWide : activeTab.cockpit) ?? { header: null, root: null }) : undefined;
   const contentRef = useRef<HTMLDivElement | null>(null);
   const headerRef = useRef<HTMLDivElement | null>(null);
   /**
@@ -101,7 +117,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
    * while (the panes give way); that mustn't count, or the tab would stack, unmounting the checklist mid-sequence.
    */
   const headerHeightRef = useRef<number | null>(null);
-  const layoutKey = `${activeTab?.id}|${cockpit?.header ?? ''}`;
+  const layoutKey = `${activeTab?.id}|${variant}|${cockpit?.header ?? ''}`;
   const lastLayoutKeyRef = useRef(layoutKey);
   const [stacked, setStacked] = useState(false);
   /** A stacked widget being dragged (Edit mode). */

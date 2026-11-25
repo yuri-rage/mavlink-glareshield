@@ -1,6 +1,6 @@
 import { sanitizeWidgetDefinition } from '../lib/widgetValidation';
 import { create } from 'zustand';
-import { appendPane, buildPreset, movePane, panesInOrder, placedOrUnchanged, removeFromLayout, replacePane, sanitizeCockpit, setSplitSizes, splitPane, type CockpitPresetId, type DropZone } from '../lib/cockpitLayout';
+import { appendPane, buildPreset, movePane, panesInOrder, placedOrUnchanged, removeFromLayout, replacePane, sanitizeCockpit, setSplitSizes, splitPane, type CockpitPresetId, type CockpitVariant, type DropZone } from '../lib/cockpitLayout';
 import {
   CockpitLayout,
   DashboardProfile,
@@ -141,9 +141,11 @@ const STORAGE_KEY = 'mavlink_glareshield_profile_v1';
 export function reconcileTab(tab: DashboardTab): DashboardTab {
   const widgets = Array.isArray(tab.widgets) ? tab.widgets : [];
   const mode = tab.mode === 'cockpit' ? 'cockpit' : undefined;
-  const cockpit = tab.cockpit ? sanitizeCockpit(tab.cockpit, widgets.map((w) => w.instanceId)) ?? undefined : undefined;
-  const { mode: _m, cockpit: _c, ...rest } = tab;
-  return { ...rest, widgets, ...(mode ? { mode } : {}), ...(cockpit ? { cockpit } : {}) };
+  const ids = widgets.map((w) => w.instanceId);
+  const cockpit = tab.cockpit ? sanitizeCockpit(tab.cockpit, ids) ?? undefined : undefined;
+  const cockpitWide = tab.cockpitWide ? sanitizeCockpit(tab.cockpitWide, ids) ?? undefined : undefined;
+  const { mode: _m, cockpit: _c, cockpitWide: _w, ...rest } = tab;
+  return { ...rest, widgets, ...(mode ? { mode } : {}), ...(cockpit ? { cockpit } : {}), ...(cockpitWide ? { cockpitWide } : {}) };
 }
 
 /** A widget placed in a Cockpit layout: the quick-actions bar pinned as the header when none is, else a new pane. */
@@ -156,14 +158,27 @@ function placeWidget(layout: CockpitLayout | undefined, instanceId: string, widg
 /** What a pane is to show: a new widget of a type, or a widget already on the tab (hidden from the layout). */
 export type PaneSource = { widgetId: string } | { instanceId: string };
 
+/** The field holding a tab's layout of a variant. */
+const LAYOUT_KEY = { standard: 'cockpit', wide: 'cockpitWide' } as const;
+
+/** A tab's layout of a variant (the wide one may be missing). */
+export function layoutOf(tab: DashboardTab, variant: CockpitVariant): CockpitLayout | undefined {
+  return tab[LAYOUT_KEY[variant]];
+}
+
+/** The tab with its layout of a variant replaced. */
+function withLayout(tab: DashboardTab, variant: CockpitVariant, layout: CockpitLayout): DashboardTab {
+  return { ...tab, [LAYOUT_KEY[variant]]: layout };
+}
+
 /**
  * Whether `what` can go beside or in place of the pane `target`: the tab has a layout showing that pane, and a widget
  * from the tab is one of its own and not already shown (shown twice, one copy would be dropped, losing a pane).
  */
-function canPlace(tab: DashboardTab, target: string, what: PaneSource): boolean {
-  if (!tab.cockpit?.root) return false;
-  const shown = panesInOrder(tab.cockpit);
-  if (!panesInOrder({ header: null, root: tab.cockpit.root }).includes(target)) return false;
+function canPlace(layout: CockpitLayout | undefined, tab: DashboardTab, target: string, what: PaneSource): boolean {
+  if (!layout?.root) return false;
+  const shown = panesInOrder(layout);
+  if (!panesInOrder({ header: null, root: layout.root }).includes(target)) return false;
   if ('instanceId' in what) return tab.widgets.some((w) => w.instanceId === what.instanceId) && !shown.includes(what.instanceId);
   return true;
 }
@@ -263,6 +278,15 @@ interface DashboardState {
   replaceInCockpit: (tabId: string, targetInstanceId: string, what: PaneSource) => void;
   /** Move a pane beside, above or below another, or (centre) swap the two. */
   moveInCockpit: (tabId: string, srcInstanceId: string, targetInstanceId: string, zone: DropZone) => void;
+  /** Which of a tab's Cockpit layouts the editor works on (the wide one only if the tab has it). */
+  editVariant: CockpitVariant;
+  setEditVariant: (v: CockpitVariant) => void;
+  /** Give a tab a wide layout (a copy of its standard one) and edit it. */
+  addWideLayout: (tabId: string) => void;
+  /** Drop a tab's wide layout (the standard one is used everywhere again). */
+  removeWideLayout: (tabId: string) => void;
+  /** Change the layout being edited (`create`: make an empty one if the tab has none). */
+  updateLayout: (tabId: string, fn: (layout: CockpitLayout, tab: DashboardTab) => CockpitLayout, create?: boolean) => void;
   /** Change one tab (made consistent and saved). */
   updateTab: (tabId: string, fn: (tab: DashboardTab) => DashboardTab) => void;
 
@@ -347,8 +371,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         if (tab.id !== activeTabId) return tab;
         const newWidget: PlacedWidget = { instanceId, widgetId, colSpan };
         // A Cockpit tab shows it as a new pane; the quick-actions bar, if the tab has none pinned, as the header.
-        const cockpit = tab.mode !== 'cockpit' ? tab.cockpit : placeWidget(tab.cockpit, instanceId, widgetId);
-        return reconcileTab({ ...tab, widgets: [...tab.widgets, newWidget], ...(cockpit ? { cockpit } : {}) });
+        // (In the layout being edited; the other one lists it as not shown.)
+        const v = state.editVariant === 'wide' && tab.cockpitWide ? 'wide' : 'standard';
+        const withWidget = { ...tab, widgets: [...tab.widgets, newWidget] };
+        return reconcileTab(tab.mode !== 'cockpit' ? withWidget : withLayout(withWidget, v, placeWidget(layoutOf(tab, v), instanceId, widgetId)));
       });
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
       saveProfileToStorage(newProfile);
@@ -461,52 +487,77 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   applyCockpitPreset: (tabId, preset) => {
+    const v = get().editVariant;
     get().updateTab(tabId, (tab) => {
       const { widgets, layout } = buildPreset(preset, tab.widgets, newInstanceId);
-      return { ...tab, widgets, cockpit: layout, mode: 'cockpit' };
+      return { ...withLayout({ ...tab, widgets }, v === 'wide' && tab.cockpitWide ? 'wide' : 'standard', layout), mode: 'cockpit' };
     });
   },
 
   setCockpitSizes: (tabId, path, sizes) => {
-    get().updateTab(tabId, (tab) => (tab.cockpit ? { ...tab, cockpit: setSplitSizes(tab.cockpit, path, sizes) } : tab));
+    get().updateLayout(tabId, (layout) => setSplitSizes(layout, path, sizes));
   },
 
   placeInCockpit: (tabId, instanceId) => {
-    get().updateTab(tabId, (tab) => ({
-      ...tab,
-      cockpit: placeWidget(tab.cockpit, instanceId, tab.widgets.find((w) => w.instanceId === instanceId)?.widgetId ?? ''),
-    }));
+    get().updateLayout(tabId, (layout, tab) => placeWidget(layout, instanceId, tab.widgets.find((w) => w.instanceId === instanceId)?.widgetId ?? ''), true);
   },
 
   unplaceFromCockpit: (tabId, instanceId) => {
-    get().updateTab(tabId, (tab) =>
-      tab.cockpit ? { ...tab, cockpit: removeFromLayout(tab.cockpit, instanceId, tab.widgets.map((w) => w.instanceId)) } : tab
-    );
+    get().updateLayout(tabId, (layout, tab) => removeFromLayout(layout, instanceId, tab.widgets.map((w) => w.instanceId)));
   },
 
   splitInCockpit: (tabId, target, side, what) => {
+    const v = get().editVariant;
     get().updateTab(tabId, (t) => {
-      if (!canPlace(t, target, what)) return t;
+      const variant = v === 'wide' && t.cockpitWide ? 'wide' : 'standard';
+      const layout = layoutOf(t, variant);
+      if (!canPlace(layout, t, target, what)) return t;
       const { tab, instanceId } = sourceInstance(t, what);
-      const next = sanitizeCockpit(splitPane(tab.cockpit!, target, side, instanceId), tab.widgets.map((w) => w.instanceId));
+      const next = sanitizeCockpit(splitPane(layout!, target, side, instanceId), tab.widgets.map((w) => w.instanceId));
       // Past the depth or pane limits: nothing changes (no pane lost, no new widget left unplaced).
-      const placed = placedOrUnchanged(t.cockpit!, next, [instanceId]);
-      return placed === t.cockpit ? t : { ...tab, cockpit: placed };
+      const placed = placedOrUnchanged(layout!, next, [instanceId]);
+      return placed === layout ? t : withLayout(tab, variant, placed);
     });
   },
 
   replaceInCockpit: (tabId, target, what) => {
+    const v = get().editVariant;
     get().updateTab(tabId, (t) => {
-      if (!canPlace(t, target, what)) return t;
+      const variant = v === 'wide' && t.cockpitWide ? 'wide' : 'standard';
+      const layout = layoutOf(t, variant);
+      if (!canPlace(layout, t, target, what)) return t;
       const { tab, instanceId } = sourceInstance(t, what);
-      return { ...tab, cockpit: replacePane(tab.cockpit!, target, instanceId) };
+      return withLayout(tab, variant, replacePane(layout!, target, instanceId));
     });
   },
 
   moveInCockpit: (tabId, src, target, zone) => {
-    get().updateTab(tabId, (tab) =>
-      tab.cockpit ? { ...tab, cockpit: movePane(tab.cockpit, src, target, zone, tab.widgets.map((w) => w.instanceId)) } : tab
-    );
+    get().updateLayout(tabId, (layout, tab) => movePane(layout, src, target, zone, tab.widgets.map((w) => w.instanceId)));
+  },
+
+  editVariant: 'standard',
+  setEditVariant: (editVariant) => set({ editVariant }),
+
+  addWideLayout: (tabId) => {
+    get().updateTab(tabId, (tab) => (tab.cockpitWide ? tab : { ...tab, cockpitWide: tab.cockpit ?? { header: null, root: null } }));
+    set({ editVariant: 'wide' });
+  },
+
+  removeWideLayout: (tabId) => {
+    get().updateTab(tabId, (tab) => {
+      const { cockpitWide: _w, ...rest } = tab;
+      return rest;
+    });
+    set({ editVariant: 'standard' });
+  },
+
+  updateLayout: (tabId, fn, create = false) => {
+    const v = get().editVariant;
+    get().updateTab(tabId, (tab) => {
+      const variant = v === 'wide' && tab.cockpitWide ? 'wide' : 'standard';
+      const layout = layoutOf(tab, variant) ?? (create ? { header: null, root: null } : undefined);
+      return layout ? withLayout(tab, variant, fn(layout, tab)) : tab;
+    });
   },
 
   updateTab: (tabId, fn) => {

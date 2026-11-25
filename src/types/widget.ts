@@ -217,6 +217,11 @@ export interface DashboardTab {
   mode?: 'flow' | 'cockpit';
   /** The Cockpit layout (kept when the tab is switched back to Flow, for switching again). */
   cockpit?: CockpitLayout;
+  /**
+   * An optional second Cockpit layout for wide screens (wider than WIDE_ASPECT, e.g. an ultrawide), of the same
+   * widgets; the standard layout is used otherwise. Made in Edit mode, from a copy of the standard one.
+   */
+  cockpitWide?: CockpitLayout;
 }
 
 export interface DashboardProfile {
