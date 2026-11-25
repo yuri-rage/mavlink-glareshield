@@ -35,6 +35,37 @@ const DEFAULT_HUD_VIDEO_CONFIG: HudVideoConfig = {
   darken: 0.2,
   snapshotIntervalMs: 200,
   symbologyBrightness: 1.0,
+  whepToken: '',
+};
+
+/**
+ * A text field that applies its value when you leave it or press Enter, not on every keystroke: a stream address
+ * or token half-typed would otherwise open (and, for WHEP, authenticate to) a connection per character.
+ */
+const CommitInput: React.FC<{ value: string; onCommit: (v: string) => void } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>> = ({
+  value,
+  onCommit,
+  ...rest
+}) => {
+  const [text, setText] = useState(value);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setText(value);
+  }, [value]);
+  const commit = () => text !== value && onCommit(text);
+  return (
+    <input
+      {...rest}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onFocus={() => (focused.current = true)}
+      onBlur={() => {
+        focused.current = false;
+        commit();
+      }}
+      onKeyDown={(e) => e.key === 'Enter' && commit()}
+    />
+  );
 };
 
 function lerpColor(r: number, g: number, b: number, whiteness: number, a?: number): string {
@@ -1283,11 +1314,17 @@ export const HudWidget: React.FC = () => {
                 <span>Stream URL</span>
                 <span className="text-[10px] font-normal text-zinc-500">Stored locally in browser</span>
               </label>
-              <input
+              <CommitInput
                 type="text"
                 value={videoConfig.url}
-                onChange={(e) => handleUpdateConfig({ url: e.target.value })}
-                placeholder="http://<camera-ip>/cgi-bin/mjpg/video.cgi?channel=1&subtype=1"
+                onCommit={(v) => handleUpdateConfig({ url: v })}
+                placeholder={
+                  videoConfig.type === 'whep'
+                    ? 'http://<host>:8889/<stream>/whep'
+                    : videoConfig.type === 'video'
+                      ? 'http://<host>/<stream>.mp4'
+                      : 'http://<camera-ip>/cgi-bin/mjpg/video.cgi?channel=1&subtype=1'
+                }
                 className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-sky-500"
               />
               <p className="text-[10px] text-zinc-500 leading-relaxed">
@@ -1344,12 +1381,15 @@ export const HudWidget: React.FC = () => {
                   its WebRTC port (MediaMTX 8189/UDP).
                 </p>
                 <label className="block space-y-1">
-                  <span className="text-[11px] font-semibold text-zinc-300">Bearer token (optional)</span>
-                  <input
+                  <span className="flex items-center justify-between text-[11px] font-semibold text-zinc-300">
+                    Bearer token (optional)
+                    <span className="text-[10px] font-normal text-zinc-500">kept in this browser, not encrypted</span>
+                  </span>
+                  <CommitInput
                     type="password"
                     autoComplete="off"
                     value={videoConfig.whepToken ?? ''}
-                    onChange={(e) => handleUpdateConfig({ whepToken: e.target.value })}
+                    onCommit={(v) => handleUpdateConfig({ whepToken: v })}
                     className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-xs text-zinc-200 focus:outline-none focus:border-sky-500"
                   />
                 </label>
