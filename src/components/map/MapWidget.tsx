@@ -1201,6 +1201,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     return () => {
       saveView();
+      // A pan or zoom animation still running can fire moveend after remove(), when the map has no panes left to
+      // read its centre from (switching tabs mid-animation): stop listening first.
+      map.off('moveend', saveView);
       map.remove();
       mapInstanceRef.current = null;
       setMapReady(false);
