@@ -1,0 +1,295 @@
+{
+  "version": "1.0.0",
+  "name": "Mission Planner style",
+  "updatedAt": "2026-11-25T00:00:00.000Z",
+  "customWidgets": [
+    {
+      "id": "custom-mp-vitals",
+      "name": "Vitals",
+      "description": "What needs attention at a glance: throttle, vibration and EKF health, battery and GNSS quality (HDOP). Values turn amber or red past their limits.",
+      "category": "telemetry",
+      "displayType": "composite",
+      "colorScheme": "default",
+      "panels": [
+        {
+          "displayType": "gauge-radial",
+          "title": "Throttle",
+          "span": 4,
+          "colorScheme": "amber",
+          "binding": {
+            "messageName": "VFR_HUD",
+            "fieldName": "throttle",
+            "unit": "%",
+            "decimals": 0,
+            "min": 0,
+            "max": 100
+          },
+          "gauge": {
+            "sweep": 240,
+            "style": "arc",
+            "majorTicks": 5,
+            "minorTicks": 4
+          }
+        },
+        {
+          "displayType": "multi-bar",
+          "title": "Vibration",
+          "span": 4,
+          "multiBarConfig": {
+            "group": "vibration-xyz"
+          }
+        },
+        {
+          "displayType": "multi-bar",
+          "title": "EKF variances",
+          "span": 4,
+          "multiBarConfig": {
+            "group": "ekf-variances"
+          }
+        },
+        {
+          "displayType": "stat-card",
+          "title": "Battery",
+          "span": 6,
+          "colorScheme": "green",
+          "binding": {
+            "messageName": "SYS_STATUS",
+            "fieldName": "battery_remaining",
+            "unit": "%",
+            "decimals": 0,
+            "min": 0,
+            "max": 100,
+            "warnThreshold": 30,
+            "critThreshold": 15,
+            "thresholdInvert": true
+          }
+        },
+        {
+          "displayType": "stat-card",
+          "title": "GNSS HDOP",
+          "span": 6,
+          "colorScheme": "blue",
+          "binding": {
+            "messageName": "GPS_RAW_INT",
+            "fieldName": "eph",
+            "decimals": 2,
+            "warnThreshold": 1.4,
+            "critThreshold": 2.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "custom-mp-altitude",
+      "name": "Altitude",
+      "description": "Altitude above home over the last minute or so.",
+      "category": "telemetry",
+      "displayType": "sparkline",
+      "colorScheme": "amber",
+      "binding": {
+        "messageName": "GLOBAL_POSITION_INT",
+        "fieldName": "relative_alt",
+        "unit": "m",
+        "decimals": 1,
+        "unitKind": "altitude"
+      }
+    }
+  ],
+  "tabs": [
+    {
+      "id": "tab-mp-data",
+      "title": "Flight Data",
+      "mode": "cockpit",
+      "widgets": [
+        {
+          "instanceId": "mp-actions",
+          "widgetId": "built-in-glareshield",
+          "colSpan": 12
+        },
+        {
+          "instanceId": "mp-hud",
+          "widgetId": "built-in-hud",
+          "colSpan": 4
+        },
+        {
+          "instanceId": "mp-map",
+          "widgetId": "built-in-map",
+          "colSpan": 8
+        },
+        {
+          "instanceId": "mp-vitals",
+          "widgetId": "custom-mp-vitals",
+          "colSpan": 4
+        },
+        {
+          "instanceId": "mp-waypoints",
+          "widgetId": "built-in-waypoints",
+          "colSpan": 4
+        },
+        {
+          "instanceId": "mp-messages",
+          "widgetId": "built-in-statustext-mini",
+          "colSpan": 4
+        },
+        {
+          "instanceId": "mp-altitude",
+          "widgetId": "custom-mp-altitude",
+          "colSpan": 6
+        },
+        {
+          "instanceId": "mp-battery",
+          "widgetId": "built-in-battery-card",
+          "colSpan": 6
+        }
+      ],
+      "cockpit": {
+        "header": "mp-actions",
+        "root": {
+          "split": "row",
+          "sizes": [34, 66],
+          "children": [
+            {
+              "split": "column",
+              "sizes": [40, 60],
+              "children": [
+                {
+                  "pane": "mp-hud"
+                },
+                {
+                  "pane": "mp-vitals"
+                }
+              ]
+            },
+            {
+              "split": "column",
+              "sizes": [73, 27],
+              "children": [
+                {
+                  "pane": "mp-map"
+                },
+                {
+                  "split": "row",
+                  "sizes": [50, 50],
+                  "children": [
+                    {
+                      "pane": "mp-waypoints"
+                    },
+                    {
+                      "pane": "mp-messages"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "cockpitWide": {
+        "header": "mp-actions",
+        "root": {
+          "split": "row",
+          "sizes": [27, 49, 24],
+          "children": [
+            {
+              "split": "column",
+              "sizes": [55, 45],
+              "children": [
+                {
+                  "pane": "mp-hud"
+                },
+                {
+                  "pane": "mp-vitals"
+                }
+              ]
+            },
+            {
+              "pane": "mp-map"
+            },
+            {
+              "split": "column",
+              "sizes": [28, 22, 28, 22],
+              "children": [
+                {
+                  "pane": "mp-altitude"
+                },
+                {
+                  "pane": "mp-waypoints"
+                },
+                {
+                  "pane": "mp-battery"
+                },
+                {
+                  "pane": "mp-messages"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "tab-mp-plan",
+      "title": "Flight Plan",
+      "mode": "cockpit",
+      "widgets": [
+        {
+          "instanceId": "mp-plan-map",
+          "widgetId": "built-in-map",
+          "colSpan": 12
+        }
+      ],
+      "cockpit": {
+        "header": null,
+        "root": {
+          "pane": "mp-plan-map"
+        }
+      }
+    },
+    {
+      "id": "tab-mp-config",
+      "title": "Config/Tuning",
+      "mode": "cockpit",
+      "widgets": [
+        {
+          "instanceId": "mp-params",
+          "widgetId": "built-in-parameters",
+          "colSpan": 8
+        },
+        {
+          "instanceId": "mp-pid",
+          "widgetId": "built-in-pid-tuning",
+          "colSpan": 4
+        },
+        {
+          "instanceId": "mp-console",
+          "widgetId": "built-in-statustext",
+          "colSpan": 12
+        }
+      ],
+      "cockpit": {
+        "header": null,
+        "root": {
+          "split": "row",
+          "sizes": [60, 40],
+          "children": [
+            {
+              "pane": "mp-params"
+            },
+            {
+              "split": "column",
+              "sizes": [65, 35],
+              "children": [
+                {
+                  "pane": "mp-pid"
+                },
+                {
+                  "pane": "mp-console"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
