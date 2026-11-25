@@ -3,10 +3,15 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import net from 'net';
 import fs from 'fs';
+import { readBuildInfo } from './scripts/buildInfo.mjs';
+
+/** This build's identity (scripts/buildInfo.mjs): shown in the app, in dist/version.json, and in the worker. */
+const BUILD = readBuildInfo();
 
 /**
- * Stamps a build ID into dist/sw.js, so each deploy gets its own app-shell cache and the worker can delete the
- * previous deploy's cached bundles when it activates.
+ * Stamps the build ID into dist/sw.js, so each deploy gets its own app-shell cache and the worker can delete the
+ * previous deploy's cached bundles when it activates; and writes dist/version.json, which a running app fetches to
+ * learn that a newer deploy is live (lib/updateCheck.ts).
  */
 function serviceWorkerVersionPlugin() {
   let outDir = 'dist';
@@ -17,10 +22,10 @@ function serviceWorkerVersionPlugin() {
       outDir = path.resolve(config.root, config.build.outDir);
     },
     closeBundle() {
+      fs.writeFileSync(path.join(outDir, 'version.json'), JSON.stringify(BUILD) + '\n');
       const file = path.join(outDir, 'sw.js');
       if (!fs.existsSync(file)) return;
-      const id = Date.now().toString(36);
-      fs.writeFileSync(file, fs.readFileSync(file, 'utf8').split('__BUILD_ID__').join(id));
+      fs.writeFileSync(file, fs.readFileSync(file, 'utf8').split('__BUILD_ID__').join(BUILD.id));
     },
   };
 }
@@ -220,8 +225,12 @@ function ntripProxyPlugin() {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react(), ntripProxyPlugin(), serviceWorkerVersionPlugin()],
+  // The dev server says "dev" (it isn't a deploy, and never offers an update).
+  define: {
+    __BUILD__: JSON.stringify(command === 'build' ? BUILD : { id: 'dev', sha: null, date: null, dirty: false }),
+  },
   worker: {
     format: 'es',
   },
@@ -238,4 +247,4 @@ export default defineConfig({
     host: '0.0.0.0',
     strictPort: true,
   },
-});
+}));

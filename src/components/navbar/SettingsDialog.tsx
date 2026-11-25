@@ -10,6 +10,7 @@ import { useAudioAlertsStore, type VoiceEngine } from '../../lib/audioAlerts';
 import { isLoopbackWs, getWssHost, SERIAL_BAUD_RATES } from '../../mavlink/connection';
 import { getSerialApi, requestSerialDevice } from '../../mavlink/transport';
 import type { BandwidthProfile } from '../../mavlink/rateManager';
+import { BUILD, buildLabel } from '../../lib/updateCheck';
 import { Modal } from '../ui/modal';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -449,6 +450,9 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
               Connect
             </Button>
           )}
+          <span className="font-mono text-[10px] text-zinc-600" title={BUILD.sha ? `Build ${BUILD.id} (commit ${BUILD.sha})` : `Build ${BUILD.id}`}>
+            Glareshield {buildLabel()}
+          </span>
           <Button type="button" variant="ghost" size="sm" onClick={onClose}>
             Close
           </Button>

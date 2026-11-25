@@ -14,6 +14,10 @@ import './mavlink/gimbalBoot';
 import './mavlink/terrainBoot';
 // Remembers the last vehicle's type and waypoint radii, for planning offline.
 import './store/lastVehicleStore';
+import { useTelemetryStore } from './store/telemetryStore';
+import { BUILD, buildLabel, checkForUpdate, startUpdateChecks, useUpdateStore } from './lib/updateCheck';
+
+console.info(`Glareshield ${buildLabel()}${BUILD.sha ? ` (${BUILD.sha})` : ''}`);
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
@@ -24,7 +28,14 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 // Register service worker in production for offline app shell & map tile caching
 // A tab still running an older deploy can fail to load a lazily loaded chunk that the new deploy no longer has:
 // reload once to pick up the current build (the flag stops a reload loop if the chunk is genuinely unreachable).
+// Never while armed: the page doesn't restart under a flying vehicle by itself. The widget shows its load error and
+// the navbar offers the update, for after landing.
 window.addEventListener('vite:preloadError', (event) => {
+  if (useTelemetryStore.getState().heartbeat.isArmed) {
+    useUpdateStore.setState((s) => (s.available ? s : { available: 'unknown' }));
+    void checkForUpdate();
+    return;
+  }
   try {
     if (sessionStorage.getItem('glareshield_chunk_reload')) return;
     sessionStorage.setItem('glareshield_chunk_reload', '1');
@@ -50,3 +61,6 @@ if (import.meta.env.PROD && typeof navigator !== 'undefined' && 'serviceWorker' 
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
 }
+
+// Notice a newer deploy (production only), so the navbar can offer a reload.
+startUpdateChecks();
