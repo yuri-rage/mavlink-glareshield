@@ -101,7 +101,9 @@ interface MissionPlanPanelProps {
 const MissionSummaryLine: React.FC<{ summary: MissionSummary }> = ({ summary }) => {
   const { formatDistance, formatAltitude, formatSpeed } = useUnitsStore();
   const t = Math.round(summary.timeS);
-  const time = t >= 3600 ? `${Math.floor(t / 3600)} h ${Math.round((t % 3600) / 60)} min` : t >= 60 ? `${Math.round(t / 60)} min` : `${t} s`;
+  // Whole minutes first, so 59.6 min reads "1 h 0 min", never "60 min".
+  const mins = Math.round(t / 60);
+  const time = t < 60 ? `${t} s` : mins >= 60 ? `${Math.floor(mins / 60)} h ${mins % 60} min` : `${mins} min`;
   const sp = summary.speeds;
   const title =
     `Estimated at ${formatSpeed(sp.horizontal).full} (${sp.source}), climbing ${formatSpeed(sp.up).full}, descending ${formatSpeed(sp.down).full}; ` +
@@ -113,7 +115,7 @@ const MissionSummaryLine: React.FC<{ summary: MissionSummary }> = ({ summary }) 
       {summary.openEnded && <span className="text-amber-300">then {summary.openEnded}</span>}
       <span>· {formatDistance(summary.distanceM).full}</span>
       <span>· up to {formatAltitude(summary.maxAltM).full}</span>
-      <span>· {formatDistance(summary.farthestM).full} from home</span>
+      {summary.farthestM !== null && <span>· {formatDistance(summary.farthestM).full} from home</span>}
     </div>
   );
 };
@@ -406,20 +408,36 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
     const len = lengthUnit(unitSystem);
     const fenceOptions = param('FENCE_OPTIONS');
     const fenceEnable = param('FENCE_ENABLE');
+    const summary = draft.items.length > 1 ? missionSummary(draft.items, cat, param, legs) : null;
+    // Fencing off only when it's known to stay off: FENCE_ENABLE 1 is on; report-only (FENCE_ACTION 0) is off; with
+    // FENCE_ENABLE 0, auto-enable (at arming or takeoff) means it will come on, and unknown means unknown.
+    const action = param('FENCE_ACTION');
+    const auto = param('FENCE_AUTOENABLE');
+    const enabled =
+      action !== undefined && Math.round(action) === 0
+        ? false
+        : fenceEnable === undefined
+          ? undefined
+          : Math.round(fenceEnable) === 1
+            ? true
+            : auto === undefined
+              ? undefined
+              : Math.round(auto) !== 0
+                ? undefined
+                : false;
     return {
-      summary: draft.items.length > 1 ? missionSummary(draft.items, cat, param, legs) : null,
-      routeIssues:
-        home && (home.x !== 0 || home.y !== 0)
-          ? routeFenceIssues(legs, draft.items, fenceDraft, {
-              home: { lat: home.x, lon: home.y },
-              types: param('FENCE_TYPE'),
-              inclusionUnion: fenceOptions !== undefined ? (Math.round(fenceOptions) & 2) !== 0 : undefined,
-              altMax: param('FENCE_ALT_MAX'),
-              circleRadius: param('FENCE_RADIUS'),
-              enabled: fenceEnable !== undefined ? Math.round(fenceEnable) === 1 : undefined,
-              fmtLen: (m) => wholeLength(m, len),
-            })
-          : [],
+      summary,
+      routeIssues: summary
+        ? routeFenceIssues(summary.legs, draft.items, fenceDraft, {
+            home: home && (home.x !== 0 || home.y !== 0) ? { lat: home.x, lon: home.y } : undefined,
+            types: param('FENCE_TYPE'),
+            inclusionUnion: fenceOptions !== undefined ? (Math.round(fenceOptions) & 2) !== 0 : undefined,
+            altMax: param('FENCE_ALT_MAX'),
+            circleRadius: param('FENCE_RADIUS'),
+            enabled,
+            fmtLen: (m) => wholeLength(m, len),
+          })
+        : [],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, fenceDraft, lastVehicle, linkKey, unitSystem]);

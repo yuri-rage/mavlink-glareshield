@@ -15,13 +15,26 @@ export const RADIUS_PARAMS = ['WP_RADIUS', 'WP_LOITER_RAD', 'WP_RADIUS_M', 'WPNA
 
 /** Mission speeds (missionSummary.ts), current names and those of 4.6 and before. */
 export const SPEED_PARAMS = [
-  'WP_SPD', 'WP_SPD_UP', 'WP_SPD_DN', 'WPNAV_SPEED', 'WPNAV_SPEED_UP', 'WPNAV_SPEED_DN',
+  'WP_SPD', 'WP_SPD_UP', 'WP_SPD_DN', 'WPNAV_SPEED', 'WPNAV_SPEED_UP', 'WPNAV_SPEED_DN', 'WP_ACC', 'WPNAV_ACCEL', 'RTL_LOIT_TIME',
   'AIRSPEED_CRUISE', 'TRIM_ARSPD_CM', 'TECS_CLMB_MAX', 'TECS_SINK_MAX',
   'WP_SPEED', 'CRUISE_SPEED',
 ] as const;
 
 /** The fence settings the route is checked against (routeFence.ts). */
-export const FENCE_CHECK_PARAMS = ['FENCE_ENABLE', 'FENCE_TYPE', 'FENCE_OPTIONS', 'FENCE_ALT_MAX', 'FENCE_RADIUS'] as const;
+export const FENCE_CHECK_PARAMS = ['FENCE_ENABLE', 'FENCE_TYPE', 'FENCE_OPTIONS', 'FENCE_ALT_MAX', 'FENCE_RADIUS', 'FENCE_ACTION', 'FENCE_AUTOENABLE'] as const;
+
+/**
+ * Names for the same setting on different firmware (master's first): a vehicle has one, so when it sends one the
+ * others are a previous vehicle's, and are dropped (they'd be read first, or shadow the live value).
+ */
+const RENAMED_GROUPS: string[][] = [
+  ['WP_RADIUS_M', 'WPNAV_RADIUS_M', 'WPNAV_RADIUS'],
+  ['WP_SPD', 'WPNAV_SPEED'],
+  ['WP_SPD_UP', 'WPNAV_SPEED_UP'],
+  ['WP_SPD_DN', 'WPNAV_SPEED_DN'],
+  ['WP_ACC', 'WPNAV_ACCEL'],
+  ['AIRSPEED_CRUISE', 'TRIM_ARSPD_CM'],
+];
 
 /** Everything planning reads from the vehicle, remembered for planning offline. */
 export const PLANNING_PARAMS: readonly string[] = [...RADIUS_PARAMS, ...SPEED_PARAMS, ...FENCE_CHECK_PARAMS];
@@ -79,7 +92,7 @@ function radiusParamsFor(type: number): string[] {
     cat === 'plane'
       ? ['AIRSPEED_CRUISE', 'TRIM_ARSPD_CM', 'TECS_CLMB_MAX', 'TECS_SINK_MAX']
       : cat === 'copter'
-        ? ['WP_SPD', 'WP_SPD_UP', 'WP_SPD_DN', 'WPNAV_SPEED', 'WPNAV_SPEED_UP', 'WPNAV_SPEED_DN']
+        ? ['WP_SPD', 'WP_SPD_UP', 'WP_SPD_DN', 'WP_ACC', 'WPNAV_SPEED', 'WPNAV_SPEED_UP', 'WPNAV_SPEED_DN', 'WPNAV_ACCEL', 'RTL_LOIT_TIME']
         : cat === 'rover'
           ? ['WP_SPEED', 'CRUISE_SPEED']
           : [];
@@ -112,10 +125,7 @@ useTelemetryStore.subscribe((s, prev) => {
       const p = s.parameters[n];
       if (p && p !== prev.parameters[n] && p.value !== next.params[n]) {
         const params = { ...next.params, [n]: p.value };
-        // A Copter has one of them (WP_RADIUS_M on master, WPNAV_RADIUS in cm on 4.6 and before; WPNAV_RADIUS_M in
-        // between): the others are a previous vehicle's, and would be read first.
-        const copterRadius = ['WP_RADIUS_M', 'WPNAV_RADIUS_M', 'WPNAV_RADIUS'];
-        if (copterRadius.includes(n)) for (const o of copterRadius) if (o !== n) delete params[o];
+        for (const group of RENAMED_GROUPS) if (group.includes(n)) for (const o of group) if (o !== n) delete params[o];
         next = { ...next, params };
       }
     }
