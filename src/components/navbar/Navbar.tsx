@@ -1,4 +1,5 @@
 import { TlogIndicator } from './TlogSettings';
+import { UpdateButton } from './UpdateButton';
 import { TakeoverBanner, VehiclePicker } from './VehiclePicker';
 import { displayAltitudeM } from '../../lib/displayAltitude';
 import React, { useState, useRef, useEffect } from 'react';
@@ -720,6 +721,9 @@ export const Navbar: React.FC = () => {
                 <Sun className="h-3.5 w-3.5 text-amber-400" />
               )}
             </Button>
+
+            {/* A newer deploy is live: offered, never forced */}
+            <UpdateButton />
 
             {/* Explicit Settings Gear Button (#4) */}
             <Button
