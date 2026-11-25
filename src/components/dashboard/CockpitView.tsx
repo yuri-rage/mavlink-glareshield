@@ -5,9 +5,9 @@
 
 import React, { Fragment, useEffect, useState } from 'react';
 import { Group, Panel, Separator, useGroupRef } from 'react-resizable-panels';
-import { EyeOff, GripVertical, Lock, Sliders, Trash2 } from 'lucide-react';
+import { EyeOff, GripVertical, Lock, Pin, PinOff, Sliders, Trash2 } from 'lucide-react';
 import type { CockpitNode, CustomWidgetDefinition, DashboardTab, PlacedWidget } from '../../types/widget';
-import { isPane, minLayoutSize, panesInOrder, widgetMinSize, type DropZone, type Size } from '../../lib/cockpitLayout';
+import { QUICK_ACTIONS, isPane, minLayoutSize, panesInOrder, widgetMinSize, type DropZone, type Size } from '../../lib/cockpitLayout';
 import { BUILTIN_PANELS } from '../../lib/builtinWidgets';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
@@ -225,7 +225,9 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
     const other = s.editVariant === 'wide' ? full.cockpit : full.cockpitWide;
     return panesInOrder(other).includes(placed.instanceId);
   });
-  const { unplaceFromCockpit, splitInCockpit, addAtEdgeInCockpit, replaceInCockpit, moveInCockpit, removeWidgetFromActiveTab } = useDashboardStore.getState();
+  const { unplaceFromCockpit, splitInCockpit, addAtEdgeInCockpit, replaceInCockpit, moveInCockpit, removeWidgetFromActiveTab, pinInCockpit } = useDashboardStore.getState();
+  // The quick-actions bar as a pane can be pinned above the panes again (when nothing else is).
+  const canPin = QUICK_ACTIONS.has(placed.widgetId) && !tab.cockpit?.header;
   const [zone, setZone] = useState<DropZone | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const shown = new Set(panesInOrder(tab.cockpit));
@@ -367,6 +369,17 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
               <Sliders className="h-3 w-3" />
             </button>
           )}
+          {canPin && (
+            <button
+              type="button"
+              onClick={() => pinInCockpit(tab.id, id)}
+              className="rounded p-1 text-amber-400 hover:bg-zinc-800 hover:text-amber-300"
+              title="Pin above the panes: full width, on top"
+              aria-label={`Pin ${title} above the panes`}
+            >
+              <Pin className="h-3 w-3" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => unplaceFromCockpit(tab.id, id)}
@@ -424,6 +437,7 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
 
 export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, titleOf, headerRef, onEditCustomWidget }) => {
   const unplace = useDashboardStore((s) => s.unplaceFromCockpit);
+  const unpin = useDashboardStore((s) => s.unpinInCockpit);
   /** The pane being dragged (Edit mode), by instance ID. */
   const [dragging, setDragging] = useState<string | null>(null);
   const byId = new Map(tab.widgets.map((w) => [w.instanceId, w]));
@@ -485,15 +499,26 @@ export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, tit
                 <Lock className="h-3 w-3 text-amber-400" />
                 {titleOf(header.widgetId)} · pinned above the panes
               </span>
-              <button
-                type="button"
-                onClick={() => unplace(tab.id, header.instanceId)}
-                className="flex items-center gap-1 rounded bg-zinc-900/95 px-1.5 py-0.5 text-[11px] text-zinc-300 hover:text-white"
-                title="Take this widget out of the layout (it stays on the tab)"
-              >
-                <EyeOff className="h-3 w-3" />
-                Hide
-              </button>
+              <span className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => unpin(tab.id)}
+                  className="flex items-center gap-1 rounded bg-zinc-900/95 px-1.5 py-0.5 text-[11px] text-zinc-300 hover:text-white"
+                  title="Make it a pane (across the bottom), to move and resize like the others"
+                >
+                  <PinOff className="h-3 w-3" />
+                  Unpin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => unplace(tab.id, header.instanceId)}
+                  className="flex items-center gap-1 rounded bg-zinc-900/95 px-1.5 py-0.5 text-[11px] text-zinc-300 hover:text-white"
+                  title="Take this widget out of the layout (it stays on the tab)"
+                >
+                  <EyeOff className="h-3 w-3" />
+                  Hide
+                </button>
+              </span>
             </div>
           )}
         </div>

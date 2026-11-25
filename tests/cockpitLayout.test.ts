@@ -194,5 +194,20 @@ check('sizes always sum to exactly 100', [[1, 1, 1], [1, 2, 3, 4, 5, 6, 7], [3, 
   check('eight RC bars ask for eight bars\' height (from the group, not the bindings)', rc.h - one.h > 120, `${rc.h} vs ${one.h}`);
 }
 
+// The pinned bar: unpinned to a pane across the bottom, pinned back.
+{
+  const { unpinHeader, pinAsHeader } = await import('../src/lib/cockpitLayout.ts');
+  const ids = ['q', 'a', 'b'];
+  const l = sanitizeCockpit({ header: 'q', root: { split: 'row', children: [{ pane: 'a' }, { pane: 'b' }], sizes: [50, 50] } }, ids)!;
+  const un = unpinHeader(l, ids);
+  check('unpinned: no header, the bar a short full-width pane at the bottom', un.header === null && J(un.root) === J({ split: 'column', children: [l.root, { pane: 'q' }], sizes: [88, 12] }), J(un));
+  const back = pinAsHeader(un, 'q', ids);
+  check('pinned back: the header again, the rest as before', back.header === 'q' && J(back.root) === J(l.root), J(back));
+  check('pinning when something is pinned: no change', pinAsHeader(l, 'a', ids) === l);
+  const col = sanitizeCockpit({ header: 'q', root: { split: 'column', children: [{ pane: 'a' }, { pane: 'b' }], sizes: [60, 40] } }, ids)!;
+  const un2 = unpinHeader(col, ids);
+  check('unpinned under a column: another row, an eighth of the height', !!un2.root && J((un2.root as any).sizes) === J([52.8, 35.2, 12]), J(un2.root));
+}
+
 console.log(failures.length ? `\n${failures.length} cockpit-layout check(s) FAILED` : '\nAll cockpit-layout checks PASSED');
 if (failures.length) process.exit(1);

@@ -1,6 +1,6 @@
 import { sanitizeWidgetDefinition } from '../lib/widgetValidation';
 import { create } from 'zustand';
-import { addAtEdge, appendPane, buildPreset, movePane, movePaneToEdge, panesInOrder, placedOrUnchanged, removeFromLayout, replacePane, sanitizeCockpit, setSplitSizes, splitPane, type CockpitPresetId, type CockpitVariant, type DropZone } from '../lib/cockpitLayout';
+import { QUICK_ACTIONS, addAtEdge, appendPane, pinAsHeader, unpinHeader, buildPreset, movePane, movePaneToEdge, panesInOrder, placedOrUnchanged, removeFromLayout, replacePane, sanitizeCockpit, setSplitSizes, splitPane, type CockpitPresetId, type CockpitVariant, type DropZone } from '../lib/cockpitLayout';
 import {
   CockpitLayout,
   DashboardProfile,
@@ -308,6 +308,10 @@ interface DashboardState {
   splitInCockpit: (tabId: string, targetInstanceId: string, side: Exclude<DropZone, 'center'>, what: PaneSource) => void;
   /** Put a widget along a whole edge of the layout (a full-width row, a full-height column). */
   addAtEdgeInCockpit: (tabId: string, side: Exclude<DropZone, 'center'>, what: PaneSource) => void;
+  /** The pinned bar becomes a pane (across the bottom), to move and resize like the others. */
+  unpinInCockpit: (tabId: string) => void;
+  /** The quick-actions bar, as a pane, pinned above the panes again. */
+  pinInCockpit: (tabId: string, instanceId: string) => void;
   /** Move a pane to a whole edge of the layout. */
   moveToEdgeInCockpit: (tabId: string, srcInstanceId: string, side: Exclude<DropZone, 'center'>) => void;
   /** Show another widget in a pane (the one it showed stays on the tab, hidden). */
@@ -566,6 +570,18 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const { tab, instanceId } = sourceInstance(t, what);
       const placed = placedOrUnchanged(layout, sanitizeCockpit(addAtEdge(layout, instanceId, side), tab.widgets.map((w) => w.instanceId)), [instanceId]);
       return placed === layout ? t : withLayout(tab, variant, placed);
+    });
+  },
+
+  unpinInCockpit: (tabId) => {
+    get().updateLayout(tabId, (layout, tab) => unpinHeader(layout, tab.widgets.map((w) => w.instanceId)));
+  },
+
+  pinInCockpit: (tabId, instanceId) => {
+    get().updateLayout(tabId, (layout, tab) => {
+      const w = tab.widgets.find((x) => x.instanceId === instanceId);
+      if (!w || !QUICK_ACTIONS.has(w.widgetId)) return layout;
+      return pinAsHeader(layout, instanceId, tab.widgets.map((x) => x.instanceId));
     });
   },
 
