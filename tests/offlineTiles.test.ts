@@ -1,7 +1,7 @@
 // Offline tiles: tile maths, URLs as Leaflet builds them (so a kept tile is found again), MBTiles rows.
 export {};
 (globalThis as any).localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
-const { tileXY, tileRange, countTiles, tilesIn, tileUrl, mbtilesRowToY, validTemplate, importTileUrl } = await import('../src/lib/offlineTiles.ts');
+const { tileXY, tileRange, tileRanges, countTiles, tilesIn, tileUrl, mbtilesRowToY, validTemplate, importTileUrl } = await import('../src/lib/offlineTiles.ts');
 
 const failures: string[] = [];
 const check = (name: string, ok: boolean, detail = '') => {
@@ -34,6 +34,17 @@ check('{-y}: TMS row', tileUrl('https://h/{z}/{x}/{-y}.png', 3, 1, 2) === 'https
 check('MBTiles row to XYZ y', mbtilesRowToY(3, 5) === 2 && mbtilesRowToY(0, 0) === 0);
 check('valid template: z, x, y over http(s)', validTemplate('https://t/{z}/{x}/{y}.png') && validTemplate('http://t/{z}/{x}/{-y}.jpg') && !validTemplate('https://t/{z}/{x}.png') && !validTemplate('ftp://t/{z}/{x}/{y}'));
 check('import addresses', importTileUrl('abc', 4, 3, 2) === 'https://offline.glareshield.invalid/abc/4/3/2');
+
+// Review: retina, empty subdomains, repeated placeholders, the antimeridian.
+check('{r} is @2x on a high-density screen (as Leaflet adds it)', tileUrl('https://h/{z}/{x}/{y}{r}.png', 1, 0, 0, 'abc', true) === 'https://h/1/0/0@2x.png');
+check('empty subdomains: Leaflet\'s default abc (as the map layer gets)', tileUrl('https://{s}.h/{z}/{x}/{y}', 1, 1, 0, '') === 'https://b.h/1/1/0');
+check('every occurrence replaced', tileUrl('https://h/{z}/{x}/{y}?z={z}', 4, 1, 2) === 'https://h/4/1/2?z=4');
+const across = { south: 0, west: 179, north: 1, east: 181 }; // panned across the antimeridian: east beyond 180
+const rs = tileRanges(across, 6);
+check('across the antimeridian: two ranges, each side', rs.length === 2 && rs[0].x1 === 63 && rs[1].x0 === 0, JSON.stringify(rs));
+check('...counted positive, both sides', countTiles(across, 6, 6) === (rs[0].x1 - rs[0].x0 + 1 + rs[1].x1 - rs[1].x0 + 1) * (rs[0].y1 - rs[0].y0 + 1) && countTiles(across, 6, 6) > 0);
+check('west > east (normalised) also wraps', tileRanges({ south: 0, west: 179, north: 1, east: -179 }, 6).length === 2);
+check('wider than the world: every column once', tileRanges({ south: 0, west: -200, north: 1, east: 200 }, 3).length === 1 && tileRanges({ south: 0, west: -200, north: 1, east: 200 }, 3)[0].x1 === 7);
 
 console.log(failures.length ? `\n${failures.length} offline-tile check(s) FAILED` : '\nAll offline-tile checks PASSED');
 process.exit(failures.length ? 1 : 0);

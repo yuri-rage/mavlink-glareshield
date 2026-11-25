@@ -60,45 +60,62 @@ export function tileXY(lat: number, lon: number, z: number): { x: number; y: num
   return { x: Math.min(n - 1, Math.max(0, x)), y: Math.min(n - 1, Math.max(0, y)) };
 }
 
-/** The tiles covering `b` at zoom z: column and row ranges, inclusive. */
+/** The tiles covering `b` at zoom z: column and row ranges, inclusive (one range, unless it crosses ±180°). */
 export function tileRange(b: LatLngBoundsLike, z: number): { x0: number; x1: number; y0: number; y1: number } {
-  const nw = tileXY(b.north, b.west, z);
-  const se = tileXY(b.south, b.east, z);
-  return { x0: nw.x, x1: se.x, y0: nw.y, y1: se.y };
+  return tileRanges(b, z)[0];
+}
+
+/**
+ * The tiles covering `b` at zoom z, as column/row ranges. A map panned across the antimeridian reports longitudes
+ * beyond ±180 (or west east of east): those wrap, giving two ranges, one each side; a view wider than the world is
+ * every column.
+ */
+export function tileRanges(b: LatLngBoundsLike, z: number): { x0: number; x1: number; y0: number; y1: number }[] {
+  const n = 2 ** z;
+  const y0 = tileXY(b.north, 0, z).y;
+  const y1 = tileXY(b.south, 0, z).y;
+  if (b.east - b.west >= 360) return [{ x0: 0, x1: n - 1, y0, y1 }];
+  const wrap = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
+  const x0 = tileXY(0, wrap(b.west), z).x;
+  const x1 = tileXY(0, wrap(b.east), z).x;
+  return x0 <= x1 ? [{ x0, x1, y0, y1 }] : [{ x0, x1: n - 1, y0, y1 }, { x0: 0, x1, y0, y1 }];
 }
 
 /** How many tiles cover `b` from zoom zMin to zMax. */
 export function countTiles(b: LatLngBoundsLike, zMin: number, zMax: number): number {
   let n = 0;
-  for (let z = zMin; z <= zMax; z++) {
-    const r = tileRange(b, z);
-    n += (r.x1 - r.x0 + 1) * (r.y1 - r.y0 + 1);
-  }
+  for (let z = zMin; z <= zMax; z++) for (const r of tileRanges(b, z)) n += (r.x1 - r.x0 + 1) * (r.y1 - r.y0 + 1);
   return n;
 }
 
 /** Every tile covering `b` from zMin to zMax, lowest zoom first. */
 export function* tilesIn(b: LatLngBoundsLike, zMin: number, zMax: number): Generator<{ z: number; x: number; y: number }> {
   for (let z = zMin; z <= zMax; z++) {
-    const r = tileRange(b, z);
-    for (let x = r.x0; x <= r.x1; x++) for (let y = r.y0; y <= r.y1; y++) yield { z, x, y };
+    for (const r of tileRanges(b, z)) for (let x = r.x0; x <= r.x1; x++) for (let y = r.y0; y <= r.y1; y++) yield { z, x, y };
   }
 }
 
+/** The subdomains a template's {s} uses: the source's, or Leaflet's default when left empty. */
+export const effectiveSubdomains = (s: string | undefined) => (s && s.trim() ? s.trim() : 'abc');
+
 /**
- * A tile's URL from a template, as Leaflet builds it: {z} {x} {y}, {-y} (TMS rows), {s} the subdomain Leaflet picks
- * for that tile (|x + y| mod the count), {r} empty (no retina tiles). The same URL the map requests, so a kept or
- * downloaded tile is found again.
+ * A tile's URL from a template, as Leaflet builds it (TileLayer.getTileUrl): {z} {x} {y}, {-y} (TMS rows), {s} the
+ * subdomain Leaflet picks for that tile (|x + y| mod the count), {r} '@2x' on a high-density screen (Leaflet's
+ * Browser.retina, whatever the layer's options) else ''. The same URL the map requests, so a kept or downloaded tile
+ * is found again; pass `retina` as the map's browser has it.
  */
-export function tileUrl(template: string, z: number, x: number, y: number, subdomains = 'abc'): string {
-  const subs = subdomains.length > 0 ? subdomains : 'a';
-  return template
-    .replace('{s}', subs[Math.abs(x + y) % subs.length])
-    .replace('{z}', String(z))
-    .replace('{x}', String(x))
-    .replace('{-y}', String(2 ** z - 1 - y))
-    .replace('{y}', String(y))
-    .replace('{r}', '');
+export function tileUrl(template: string, z: number, x: number, y: number, subdomains = 'abc', retina = false): string {
+  const subs = effectiveSubdomains(subdomains);
+  // Every occurrence of each placeholder (split/join: replaceAll is ES2021).
+  const values: [string, string][] = [
+    ['{s}', subs[Math.abs(x + y) % subs.length]],
+    ['{z}', String(z)],
+    ['{x}', String(x)],
+    ['{-y}', String(2 ** z - 1 - y)],
+    ['{y}', String(y)],
+    ['{r}', retina ? '@2x' : ''],
+  ];
+  return values.reduce((url, [k, v]) => url.split(k).join(v), template);
 }
 
 /** MBTiles stores rows bottom-up (TMS): the XYZ row of a tile. */
@@ -193,9 +210,13 @@ export async function deleteArea(id: string): Promise<void> {
   const area = areas.find((a) => a.id === id);
   const mine = await areaUrls(id);
   const others = new Set<string>();
-  for (const a of areas) if (a.id !== id) for (const u of await areaUrls(a.id)) others.add(u);
+  // Only areas in the same cache can share its tiles (terrain has its own).
+  const sameCache = (k: OfflineKind) => (k === 'terrain') === (area?.kind === 'terrain');
+  for (const a of areas) if (a.id !== id && sameCache(a.kind)) for (const u of await areaUrls(a.id)) others.add(u);
   const cache = await cacheFor(area?.kind ?? 'kept');
-  for (const u of mine) if (!others.has(u)) await cache.delete(u);
+  const gone = mine.filter((u) => !others.has(u));
+  // In batches: thousands of deletes one after another took many seconds.
+  for (let i = 0; i < gone.length; i += 64) await Promise.all(gone.slice(i, i + 64).map((u) => cache.delete(u)));
   await tx([AREAS, AREA_TILES], 'readwrite', (t) => {
     t.objectStore(AREAS).delete(id);
     t.objectStore(AREA_TILES).delete(id);
@@ -293,7 +314,8 @@ export async function downloadArea(
   };
   await Promise.all(Array.from({ length: opts.concurrency ?? 4 }, worker));
   const result = { ...area, tiles: kept.length, bytes };
-  await saveArea(result, kept);
+  // Nothing arrived: no empty area listed.
+  if (kept.length > 0) await saveArea(result, kept);
   return result;
 }
 
@@ -320,6 +342,17 @@ export async function requestPersistence(): Promise<boolean> {
 // ------------------------------------------------------------------------------------------------
 // MBTiles import
 // ------------------------------------------------------------------------------------------------
+
+/** Load the MBTiles reader (sql.js and its WebAssembly) ahead of need, so it's cached for an import made offline. */
+export async function preloadMbtilesReader(): Promise<void> {
+  try {
+    await import('sql.js');
+    const wasmUrl = (await import('sql.js/dist/sql-wasm.wasm?url')).default;
+    await fetch(wasmUrl);
+  } catch {
+    // Offline or blocked: loaded when an import needs it.
+  }
+}
 
 const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
 
@@ -348,7 +381,8 @@ export async function importMbtiles(file: File, onProgress?: (done: number, tota
     const stmt = db.prepare('SELECT zoom_level, tile_column, tile_row, tile_data FROM tiles');
     try {
       while (stmt.step()) {
-        const [z, col, row, data] = stmt.get() as [number, number, number, Uint8Array];
+        const [z, col, row, data] = stmt.get() as [number, number, number, Uint8Array | null];
+        if (!(data instanceof Uint8Array) || data.byteLength === 0) continue; // a corrupt row: skipped
         const url = importTileUrl(id, z, col, mbtilesRowToY(z, row));
         await cache.put(url, new Response(new Blob([data as Uint8Array<ArrayBuffer>], { type: MIME[format] }), { headers: { 'Content-Type': MIME[format] } }));
         urls.push(url);
@@ -357,9 +391,14 @@ export async function importMbtiles(file: File, onProgress?: (done: number, tota
         maxZoom = Math.max(maxZoom, z);
         if (urls.length % 50 === 0) onProgress?.(urls.length, total);
       }
+    } catch (e) {
+      // Failed part way (out of space, a bad file): take back what was written, then say why.
+      for (let i = 0; i < urls.length; i += 64) await Promise.all(urls.slice(i, i + 64).map((u) => cache.delete(u)));
+      throw e;
     } finally {
       stmt.free();
     }
+    if (urls.length === 0) throw new Error('No readable tiles in the file');
     onProgress?.(urls.length, total);
     const b = (meta.bounds ?? '').split(',').map(Number);
     const area: OfflineArea = {
