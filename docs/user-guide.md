@@ -32,6 +32,9 @@ vehicle by accident. **Finish Edit** returns to flying.
 In Edit Mode the toolbar has **Add Widget**, **Profiles & Backup**, and a switch for the tab's layout: **Flow** or
 **Cockpit**. Tabs can be added, renamed, deleted and dragged into another order.
 
+Out of the box, **HUD**, **Moving Map** and **Configuration** are Cockpit tabs (HUD with a wide layout for ultrawide
+screens too) and **Telemetry** is a Flow tab. **Restore defaults** (Settings → Data) brings these back.
+
 ### Flow tabs
 
 A Flow tab is a scrolling grid: widgets sit in rows and the page scrolls. It suits tabs with many cards, and any
