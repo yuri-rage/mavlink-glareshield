@@ -52,7 +52,11 @@ import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { downloadFile } from '../../lib/download';
 import { OPEN_ACCEPT } from './MissionMenu';
 import { ICON_BTN, INPUT, NumField, frameTag } from './planUi';
-import { RAW_LENGTH, RAW_SPEED, lengthUnit, paramUnitKind, relabel, speedUnit } from '../../lib/inputUnits';
+import { RAW_LENGTH, RAW_SPEED, lengthUnit, paramUnitKind, relabel, speedUnit, wholeLength } from '../../lib/inputUnits';
+import { missionSummary, type MissionSummary } from '../../mavlink/missionSummary';
+import { routeFenceIssues } from '../../mavlink/routeFence';
+import { fliesSplines, missionPathLegs, routeIndices } from '../../mavlink/missionPath';
+import { planningVehicle, useLastVehicleStore } from '../../store/lastVehicleStore';
 
 export { typedValue } from './planUi';
 
@@ -92,6 +96,27 @@ interface MissionPlanPanelProps {
   onFenceKeepDraft: () => void;
   onRequestFenceUpload?: () => void;
 }
+
+/** "≈ 7 min · 4.2 km · up to 120 m · 850 m out": the mission at a glance, with what it assumes in the tooltip. */
+const MissionSummaryLine: React.FC<{ summary: MissionSummary }> = ({ summary }) => {
+  const { formatDistance, formatAltitude, formatSpeed } = useUnitsStore();
+  const t = Math.round(summary.timeS);
+  const time = t >= 3600 ? `${Math.floor(t / 3600)} h ${Math.round((t % 3600) / 60)} min` : t >= 60 ? `${Math.round(t / 60)} min` : `${t} s`;
+  const sp = summary.speeds;
+  const title =
+    `Estimated at ${formatSpeed(sp.horizontal).full} (${sp.source}), climbing ${formatSpeed(sp.up).full}, descending ${formatSpeed(sp.down).full}; ` +
+    `holds, loiters, speed changes${sp.accel ? ', stops and RTL\'s wait' : ''} included${summary.jumps ? ', jumps followed' : ''}; ` +
+    `no wind, turns at full speed (expect a little longer).`;
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-zinc-800 bg-zinc-900/40 px-2 py-1 font-mono text-[10px] text-zinc-300" title={title}>
+      <span className="font-bold text-sky-300">≈ {time}</span>
+      {summary.openEnded && <span className="text-amber-300">then {summary.openEnded}</span>}
+      <span>· {formatDistance(summary.distanceM).full}</span>
+      <span>· up to {formatAltitude(summary.maxAltM).full}</span>
+      <span>· {formatDistance(summary.farthestM).full} from home</span>
+    </div>
+  );
+};
 
 /** One line describing an item, for the list. */
 function itemSummary(it: DraftItem, formatAlt: (m: number) => string, fmtParam: (label: string, v: number) => string): string {
@@ -366,7 +391,42 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
 
   // The draft's own checks, and terrain clearance along the route (aircraft, terrain data on; computed elsewhere).
   const terrainIssues = useMissionTerrainStore((s) => s.issues);
-  const issues = useMemo(() => [...validateDraft(draft, getVehicleCategory(vehicleType)), ...terrainIssues], [draft, vehicleType, terrainIssues]);
+  // The summary (distance, time, height, reach) and the route checked against the fence being planned, for the
+  // connected vehicle or the last one (its speeds and fence settings).
+  const lastVehicle = useLastVehicleStore();
+  const linkKey = useTelemetryStore((s) => `${s.heartbeat.type}:${s.heartbeat.modeName === 'DISCONNECTED'}`);
+  const { summary, routeIssues } = useMemo(() => {
+    const v = planningVehicle();
+    const cat = getVehicleCategory(v.type);
+    const param = (n: string) => v.params[n];
+    const splines = fliesSplines(cat);
+    const pathItems = draft.items.map((it) => ({ command: it.command, lat: it.x, lon: it.y, alt: it.z, frame: it.frame, param1: it.param1 }));
+    const legs = missionPathLegs(pathItems, routeIndices(pathItems, splines), splines);
+    const home = draft.items[0];
+    const len = lengthUnit(unitSystem);
+    const fenceOptions = param('FENCE_OPTIONS');
+    const fenceEnable = param('FENCE_ENABLE');
+    return {
+      summary: draft.items.length > 1 ? missionSummary(draft.items, cat, param, legs) : null,
+      routeIssues:
+        home && (home.x !== 0 || home.y !== 0)
+          ? routeFenceIssues(legs, draft.items, fenceDraft, {
+              home: { lat: home.x, lon: home.y },
+              types: param('FENCE_TYPE'),
+              inclusionUnion: fenceOptions !== undefined ? (Math.round(fenceOptions) & 2) !== 0 : undefined,
+              altMax: param('FENCE_ALT_MAX'),
+              circleRadius: param('FENCE_RADIUS'),
+              enabled: fenceEnable !== undefined ? Math.round(fenceEnable) === 1 : undefined,
+              fmtLen: (m) => wholeLength(m, len),
+            })
+          : [],
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, fenceDraft, lastVehicle, linkKey, unitSystem]);
+  const issues = useMemo(
+    () => [...validateDraft(draft, getVehicleCategory(vehicleType)), ...terrainIssues, ...routeIssues],
+    [draft, vehicleType, terrainIssues, routeIssues]
+  );
   // The header's counts are for the layer being edited.
   const activeIssues: { index: number; severity: string }[] = layer === 'rally' ? rallyIssues : layer === 'fence' ? fenceIssues : issues;
   const errors = activeIssues.filter((i) => i.severity === 'error').length;
@@ -618,6 +678,7 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
             className={`min-h-0 flex-1 overflow-y-auto overscroll-contain ${uploading ? 'pointer-events-none opacity-60' : ''}`}
             aria-busy={uploading}
           >
+            {summary && <MissionSummaryLine summary={summary} />}
             {missionIssues.map((iss, k) => (
               <div key={k} className="flex gap-1 border-b border-zinc-800 px-2 py-1 text-[10px] text-amber-300">
                 <AlertTriangle className="mt-px h-3 w-3 shrink-0" />

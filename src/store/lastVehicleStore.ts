@@ -1,6 +1,7 @@
-// The last vehicle connected, saved in this browser: its type and the parameters planning draws waypoint radii from
-// (waypointRadius.ts). Planning offline then draws the same circles as when connected, instead of none (what a
-// radius means depends on the vehicle). Updated while a vehicle is connected; another vehicle type starts over.
+// The last vehicle connected, saved in this browser: its type and the parameters planning uses (waypoint radii,
+// mission speeds, the fence settings: waypointRadius.ts, missionSummary.ts, routeFence.ts). Planning offline then
+// shows the same circles, estimates and fence checks as when connected, instead of none (what they mean depends on
+// the vehicle). Updated while a vehicle is connected; another vehicle type starts over.
 
 import { create } from 'zustand';
 import { useTelemetryStore } from './telemetryStore';
@@ -11,6 +12,19 @@ const KEY = 'mavlink_glareshield_last_vehicle';
 
 /** The parameters the waypoint radii come from. */
 export const RADIUS_PARAMS = ['WP_RADIUS', 'WP_LOITER_RAD', 'WP_RADIUS_M', 'WPNAV_RADIUS_M', 'WPNAV_RADIUS'] as const;
+
+/** Mission speeds (missionSummary.ts), current names and those of 4.6 and before. */
+export const SPEED_PARAMS = [
+  'WP_SPD', 'WP_SPD_UP', 'WP_SPD_DN', 'WPNAV_SPEED', 'WPNAV_SPEED_UP', 'WPNAV_SPEED_DN',
+  'AIRSPEED_CRUISE', 'TRIM_ARSPD_CM', 'TECS_CLMB_MAX', 'TECS_SINK_MAX',
+  'WP_SPEED', 'CRUISE_SPEED',
+] as const;
+
+/** The fence settings the route is checked against (routeFence.ts). */
+export const FENCE_CHECK_PARAMS = ['FENCE_ENABLE', 'FENCE_TYPE', 'FENCE_OPTIONS', 'FENCE_ALT_MAX', 'FENCE_RADIUS'] as const;
+
+/** Everything planning reads from the vehicle, remembered for planning offline. */
+export const PLANNING_PARAMS: readonly string[] = [...RADIUS_PARAMS, ...SPEED_PARAMS, ...FENCE_CHECK_PARAMS];
 
 export interface LastVehicle {
   /** MAV_TYPE, 0 when none has connected in this browser. */
@@ -23,7 +37,7 @@ function load(): LastVehicle {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
     if (s && typeof s === 'object' && Number.isInteger(s.type)) {
       const params: Record<string, number> = {};
-      for (const n of RADIUS_PARAMS) if (Number.isFinite(s.params?.[n])) params[n] = s.params[n];
+      for (const n of PLANNING_PARAMS) if (Number.isFinite(s.params?.[n])) params[n] = s.params[n];
       return { type: s.type, params };
     }
   } catch {
@@ -59,7 +73,17 @@ export function planningVehicle(): LastVehicle {
 /** The radius parameters a vehicle has (Copter: WP_RADIUS_M on master, WPNAV_RADIUS in cm on 4.6 and before). */
 function radiusParamsFor(type: number): string[] {
   const cat = getVehicleCategory(type);
-  return cat === 'plane' ? ['WP_RADIUS', 'WP_LOITER_RAD'] : cat === 'copter' ? ['WP_RADIUS_M', 'WPNAV_RADIUS'] : cat === 'rover' ? ['WP_RADIUS'] : [];
+  const radius = cat === 'plane' ? ['WP_RADIUS', 'WP_LOITER_RAD'] : cat === 'copter' ? ['WP_RADIUS_M', 'WPNAV_RADIUS'] : cat === 'rover' ? ['WP_RADIUS'] : [];
+  // Speeds (the current name and the 4.6 one; the missing one goes unanswered) and the fence, for the summary.
+  const speeds =
+    cat === 'plane'
+      ? ['AIRSPEED_CRUISE', 'TRIM_ARSPD_CM', 'TECS_CLMB_MAX', 'TECS_SINK_MAX']
+      : cat === 'copter'
+        ? ['WP_SPD', 'WP_SPD_UP', 'WP_SPD_DN', 'WPNAV_SPEED', 'WPNAV_SPEED_UP', 'WPNAV_SPEED_DN']
+        : cat === 'rover'
+          ? ['WP_SPEED', 'CRUISE_SPEED']
+          : [];
+  return [...radius, ...speeds, ...(radius.length ? FENCE_CHECK_PARAMS : [])];
 }
 
 /** The vehicle (sysid:type) asked for its radius parameters this connection. */
@@ -84,7 +108,7 @@ useTelemetryStore.subscribe((s, prev) => {
   const last = useLastVehicleStore.getState();
   let next: LastVehicle = s.heartbeat.type === last.type ? last : { type: s.heartbeat.type, params: {} };
   if (s.parameters !== prev.parameters) {
-    for (const n of RADIUS_PARAMS) {
+    for (const n of PLANNING_PARAMS) {
       const p = s.parameters[n];
       if (p && p !== prev.parameters[n] && p.value !== next.params[n]) {
         const params = { ...next.params, [n]: p.value };
