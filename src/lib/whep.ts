@@ -180,15 +180,20 @@ export class WhepSession {
     await pc.setRemoteDescription({ type: 'answer', sdp: answer });
     // The video track should follow at once; if it doesn't, say so rather than wait for ever.
     let trackTimer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
     try {
       return await Promise.race([
         videoArrived,
         new Promise<never>((_, reject) => {
           trackTimer = setTimeout(() => reject(new WhepError('no video track arrived (unsupported codec, e.g. H.265?)')), this.opts.trackTimeoutMs ?? TRACK_TIMEOUT_MS);
+          // A stop while waiting ends the wait at once.
+          onAbort = () => reject(new WhepError('stopped'));
+          this.abort.signal.addEventListener('abort', onAbort);
         }),
       ]);
     } finally {
       clearTimeout(trackTimer);
+      if (onAbort) this.abort.signal.removeEventListener('abort', onAbort);
     }
   }
   /**
