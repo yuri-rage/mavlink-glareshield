@@ -3,8 +3,8 @@
 // and flies them (AP_Mission::mavlink_int_to_mission_cmd and each vehicle's mode_auto / commands_logic):
 //
 // - NAV_WAYPOINT param2 (accept radius) is kept by Plane only (capped at 255 m; 0 = WP_RADIUS). Copter and Rover
-//   store param1 (the hold time) in its place, so they use their default: WPNAV_RADIUS_M (m; older firmware
-//   WPNAV_RADIUS in cm) and WP_RADIUS.
+//   store param1 (the hold time) in its place, so they use their default: Copter's WP_RADIUS_M (master, whose
+//   waypoint parameters moved to WP_; WPNAV_RADIUS in cm on 4.6 and before) and Rover's WP_RADIUS.
 // - LOITER_UNLIM param3 and LOITER_TO_ALT param2 are the loiter radius (sign = direction) for Plane; 0 =
 //   WP_LOITER_RAD. Copter holds position (no circle), and Rover has no LOITER_TO_ALT.
 // - LOITER_TURNS param3 is the circle radius for all three (stored as a byte; over 255 m in tens of metres). Plane's
@@ -40,10 +40,12 @@ function turnsRadius(r: number): number {
 function vehicleWpRadius(category: VehicleCategory, param: ParamLookup): { r: number; name: string } | null {
   if (category === 'plane') return { r: positive(param('WP_RADIUS')) ?? DEFAULTS.planeWp, name: 'WP_RADIUS' };
   if (category === 'copter') {
-    const m = positive(param('WPNAV_RADIUS_M'));
-    if (m !== undefined) return { r: m, name: 'WPNAV_RADIUS_M' };
+    for (const name of ['WP_RADIUS_M', 'WPNAV_RADIUS_M']) {
+      const m = positive(param(name));
+      if (m !== undefined) return { r: m, name };
+    }
     const cm = positive(param('WPNAV_RADIUS'));
-    return cm !== undefined ? { r: cm / 100, name: 'WPNAV_RADIUS' } : { r: DEFAULTS.copterWp, name: 'WPNAV_RADIUS_M' };
+    return cm !== undefined ? { r: cm / 100, name: 'WPNAV_RADIUS' } : { r: DEFAULTS.copterWp, name: 'WP_RADIUS_M' };
   }
   if (category === 'rover') return { r: positive(param('WP_RADIUS')) ?? DEFAULTS.roverWp, name: 'WP_RADIUS' };
   return null; // sub, or an unknown vehicle (not connected): no default to show

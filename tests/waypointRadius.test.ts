@@ -32,8 +32,8 @@ r = waypointRadius(it(CMD.LOITER_TURNS, 0, 1234), 'plane', none);
 check('loiter turns over 255 m stored in tens: 1230', r?.radiusM === 1230, show(r));
 
 // Copter
-r = waypointRadius(it(CMD.WAYPOINT, 25), 'copter', params({ WPNAV_RADIUS_M: 1.5 }));
-check('copter ignores accept radius: WPNAV_RADIUS_M (white)', r?.radiusM === 1.5 && r.source === 'default', show(r));
+r = waypointRadius(it(CMD.WAYPOINT, 25), 'copter', params({ WP_RADIUS_M: 1.5 }));
+check('copter ignores accept radius: WP_RADIUS_M (white; master\'s name)', r?.radiusM === 1.5 && r.source === 'default' && /WP_RADIUS_M/.test(r.label), show(r));
 r = waypointRadius(it(CMD.WAYPOINT), 'copter', params({ WPNAV_RADIUS: 300 }));
 check('older copter: WPNAV_RADIUS in cm', r?.radiusM === 3 && /WPNAV_RADIUS\)/.test(r.label), show(r));
 r = waypointRadius(it(CMD.SPLINE_WAYPOINT), 'copter', none);
