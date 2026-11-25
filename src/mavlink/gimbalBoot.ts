@@ -3,6 +3,7 @@
 // gimbal store. Imported once at startup.
 
 import { mavlinkConnection } from './connection';
+import { onActiveVehicleChange } from './vehicleRoster';
 import { decodePayload } from './parser';
 import { MAVLINK_MSG_ID } from './messages';
 import { messageRateManager } from './rateManager';
@@ -72,10 +73,12 @@ setInterval(() => {
 }, 3000);
 
 // A new link or vehicle: forget the old gimbal.
+function forgetGimbal() {
+  useGimbalStore.getState().reset();
+  askedFor = 0;
+  infoAsked = 0;
+}
 mavlinkConnection.onStatus((status) => {
-  if (status !== 'connected') {
-    useGimbalStore.getState().reset();
-    askedFor = 0;
-    infoAsked = 0;
-  }
+  if (status !== 'connected') forgetGimbal();
 });
+onActiveVehicleChange(forgetGimbal);

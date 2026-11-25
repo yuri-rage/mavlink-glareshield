@@ -1,4 +1,5 @@
 import { TlogIndicator, TlogSettings } from './TlogSettings';
+import { TakeoverBanner, VehiclePicker } from './VehiclePicker';
 import { AdsbSettings } from './AdsbSettings';
 import { TerrainSettings } from './TerrainSettings';
 import React, { useState, useRef, useEffect } from 'react';
@@ -527,6 +528,9 @@ export const Navbar: React.FC = () => {
               <div className="h-5 w-px bg-zinc-800 hidden md:block" />
             )}
 
+            {/* Which vehicle is commanded, when several are on the link */}
+            {status === 'connected' && <VehiclePicker />}
+
             {/* Arm Status Pill (Left of Mode) with Dropdown Flyout */}
             {status === 'connected' && heartbeat.lastHeartbeatTime > 0 && (
               <div className="relative shrink-0" ref={armMenuRef}>
@@ -835,6 +839,9 @@ export const Navbar: React.FC = () => {
             </Button>
           </div>
         )}
+
+        {/* The commanded vehicle is silent and another is on the link: offered, not taken */}
+        <TakeoverBanner />
 
         {/* Persistent Global Telemetry Status Strip (Health First, Battery, GPS, Alt/Spd, Home, Flight Time) */}
         <div className="relative border-t border-zinc-800/80 bg-zinc-900/70 min-h-[30px] md:min-h-[34px] flex items-center overflow-hidden">

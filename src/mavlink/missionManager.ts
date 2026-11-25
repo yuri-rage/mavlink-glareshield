@@ -1,4 +1,5 @@
 import { mavlinkConnection } from './connection';
+import { onActiveVehicleChange } from './vehicleRoster';
 import { MAVLINK_MSG_ID, cmdHasLocation } from './messages';
 import { decodePayload, MavlinkPacket } from './parser';
 import { mavFtpClient } from './ftp';
@@ -103,10 +104,31 @@ export class MissionManager {
     this.scheduleMessageClear(3500);
   }
 
+  /**
+   * Stop any transfer (download or upload) at once: another vehicle is now active. What was sent of an upload may
+   * have reached the old vehicle; the message says the transfer stopped.
+   */
+  public stopForVehicleSwitch() {
+    if (!this.status.isFetching && !this.status.isUploading) return;
+    this.isCancelled = true;
+    mavFtpClient.abortCurrent();
+    if (this.legacyAbort) {
+      this.legacyAbort();
+      this.legacyAbort = null;
+    }
+    this.setStatus({ isFetching: false, isUploading: false, method: 'idle', uploadProgress: undefined, message: 'Mission transfer stopped: switched to another vehicle' });
+    this.scheduleMessageClear(6000);
+  }
+
   public onStateChange(listener: (isFetching: boolean, count?: number, method?: string, status?: MissionManagerStatus) => void): () => void {
     this.listeners.add(listener);
     listener(this.status.isFetching, this.status.waypointCount, this.status.method, this.status);
     return () => this.listeners.delete(listener);
+  }
+
+  /** The current status (what's under way). */
+  public getStatus() {
+    return this.status;
   }
 
   public onStatusChange(listener: (status: MissionManagerStatus) => void): () => void {
@@ -1167,6 +1189,8 @@ export class MissionManager {
 }
 
 export const missionManager = new MissionManager();
+// Another vehicle: a transfer to or from the old one stops.
+onActiveVehicleChange(() => missionManager.stopForVehicleSwitch());
 
 export interface FencePolygon {
   type: 'inclusion' | 'exclusion';

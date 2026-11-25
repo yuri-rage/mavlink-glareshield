@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react';
+import { VehicleSwitchDialog } from './components/navbar/VehiclePicker';
 import { Navbar } from './components/navbar/Navbar';
 import { EditToolbar } from './components/editor/EditToolbar';
 import { DashboardGrid } from './components/dashboard/DashboardGrid';
@@ -44,6 +45,9 @@ export const App: React.FC = () => {
 
       {/* Top Navbar */}
       <Navbar />
+
+      {/* Confirms a switch to another vehicle when something is at stake */}
+      <VehicleSwitchDialog />
 
       {/* Edit Mode Toolbar (populates just below the top bar when edit mode is active) */}
       <EditToolbar

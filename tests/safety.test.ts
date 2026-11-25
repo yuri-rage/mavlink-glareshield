@@ -15,6 +15,7 @@ export {};
 const { mavlinkConnection } = await import('../src/mavlink/connection.ts');
 const { useTelemetryStore, sendTrackedCommand } = await import('../src/store/telemetryStore.ts');
 const { paramManager } = await import('../src/mavlink/paramManager.ts');
+const { switchToVehicle } = await import('../src/mavlink/vehicleRoster.ts');
 const { mavFtpClient } = await import('../src/mavlink/ftp.ts');
 const { MAVLINK_MSG_ID } = await import('../src/mavlink/messages.ts');
 const { sanitizeWidgetDefinition } = await import('../src/lib/widgetValidation.ts');
@@ -111,9 +112,13 @@ const ack = (command: number, result: number) => {
   heartbeat(2, 10);
   check('a second vehicle heard at the same time keeps the list', Object.keys(useTelemetryStore.getState().parameters).length === 2);
 
-  // A different vehicle replacing it (the first has been quiet): its list is not the stored one.
+  // The first quiet, the second still heard: with two seen together, that alone isn't a replacement (vehicleRoster
+  // offers the switch rather than taking it), so the list stays.
   pm.ownerSeenAt = Date.now() - 6000;
   heartbeat(2, 10);
+  check('the first quiet, the second heard: list kept until a switch', Object.keys(useTelemetryStore.getState().parameters).length === 2);
+  // Switched to the other vehicle: its list is not the stored one.
+  switchToVehicle(2);
   check('another vehicle clears the stored values', Object.keys(useTelemetryStore.getState().parameters).length === 0);
   check('…and the old-values flag', !status.fromPreviousConnection && status.paramCount === 0);
 }

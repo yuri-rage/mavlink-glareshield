@@ -1,4 +1,5 @@
 import { mavlinkConnection } from './connection';
+import { getActiveSystemId, onActiveVehicleChange } from './vehicleRoster';
 import { mavFtpClient } from './ftp';
 import { useTelemetryStore } from '../store/telemetryStore';
 import { MAVLINK_MSG_ID } from './messages';
@@ -62,6 +63,7 @@ export class ParamManager {
     // A new connection may be a different vehicle: its defaults and single reads start over. The stored values
     // are kept (a brief link drop to the same vehicle shouldn't empty the table) but flagged as old, and the
     // count is reset so they are read again once the vehicle is heard.
+    onActiveVehicleChange(() => this.handleVehicleSwitch());
     mavlinkConnection.onStatus((status) => {
       if (status === 'connected') return;
       this.backgroundTried.clear();
@@ -76,6 +78,33 @@ export class ParamManager {
         this.setStatus({ isFetching: false, method: 'idle', paramCount: 0, fromPreviousConnection: hasValues, listComplete: false });
       }
     });
+  }
+
+  /** Another vehicle is now active: stop what's under way and forget this one's list (it's read again from the new one). */
+  private handleVehicleSwitch() {
+    if (this.status.isFetching) this.cancelFetch();
+    if (this.backgroundLoad) mavFtpClient.abortCurrent();
+    if (this.legacyTimer) {
+      clearTimeout(this.legacyTimer);
+      this.legacyTimer = null;
+    }
+    if (this.defaultsTimer) {
+      clearTimeout(this.defaultsTimer);
+      this.defaultsTimer = null;
+    }
+    this.listOwner = null;
+    this.backgroundTried.clear();
+    this.defaults.clear();
+    this.singleReads.clear();
+    this.legacyIndices.clear();
+    this.legacyExpected = 0;
+    useTelemetryStore.setState({ parameters: {} });
+    this.setStatus({ isFetching: false, method: 'idle', paramCount: 0, hasDefaults: false, fromPreviousConnection: false, listComplete: false, message: undefined });
+  }
+
+  /** The current status (what's under way). */
+  public getStatus() {
+    return this.status;
   }
 
   public onStatusChange(callback: (status: ParamManagerStatus) => void): () => void {
@@ -146,6 +175,9 @@ export class ParamManager {
 
   /** The autopilot's own heartbeat: notices a different vehicle, and refreshes values from an earlier connection. */
   private handleHeartbeat(packet: MavlinkPacket) {
+    // Another vehicle on the link isn't this one's replacement: a switch says when it is (onActiveVehicleChange).
+    const active = getActiveSystemId();
+    if (active !== null && packet.systemId !== active) return;
     const type = packet.payload[4];
     const autopilot = packet.payload[5];
     if (packet.componentId !== 1 || autopilot === 8 /* MAV_AUTOPILOT_INVALID */ || type === 6 /* MAV_TYPE_GCS */) return;
@@ -174,6 +206,9 @@ export class ParamManager {
       return;
     }
     if (packet.messageId !== MAVLINK_MSG_ID.PARAM_VALUE) return;
+    // The active vehicle's parameters only (another on the link may announce a change of its own).
+    const active = getActiveSystemId();
+    if (active !== null && packet.systemId !== active) return;
     const data = decodePayload(packet.messageId, packet.payload);
 
     if (!this.status.isFetching || this.status.method !== 'legacy') {

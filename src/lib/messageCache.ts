@@ -6,6 +6,7 @@
 // creator offers as bindable fields.
 
 import { mavlinkConnection } from '../mavlink/connection';
+import { getActiveSystemId, onActiveVehicleChange } from '../mavlink/vehicleRoster';
 import { decodePacket, type MavlinkPacket } from '../mavlink/parser';
 import { MAVLINK_MSG_ID } from '../mavlink/messages';
 import { pidAxisMessageName } from '../mavlink/pidTuning';
@@ -81,7 +82,9 @@ export function recordPacket(packet: MavlinkPacket, now = Date.now()): void {
   if (packet.messageId === MAVLINK_MSG_ID.HEARTBEAT) {
     const autopilot = packet.payload[5];
     const type = packet.payload[4];
-    if (autopilot !== MAV_AUTOPILOT_INVALID && type !== MAV_TYPE_GCS && packet.componentId === 1) {
+    // The active vehicle's heartbeat (vehicleRoster): another vehicle on the link isn't the one shown.
+    const active = getActiveSystemId();
+    if (autopilot !== MAV_AUTOPILOT_INVALID && type !== MAV_TYPE_GCS && packet.componentId === 1 && (active === null || packet.systemId === active)) {
       if (vehicleType !== undefined && vehicleType !== type) {
         pidTuningRecorder.clear();
       }
@@ -177,6 +180,8 @@ export function resetMessageCache(): void {
 }
 
 mavlinkConnection.onPacket((packet) => recordPacket(packet));
+// Another vehicle now active: its values start over (vehicleSystemId follows its next heartbeat).
+onActiveVehicleChange(() => resetMessageCache());
 
 // A new connection starts with an empty cache: the previous connection's values (possibly another vehicle's) would
 // otherwise stay bound until each message arrived again. While a link is down the last values stay, shown as stale
