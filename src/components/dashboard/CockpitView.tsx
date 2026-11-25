@@ -125,6 +125,8 @@ const EDGES: [Side, string][] = [
   ['right', 'Down the whole right:'],
 ];
 const EDGE_TEXT: Record<Side, string> = { top: 'Across the whole top', bottom: 'Across the whole bottom', left: 'Down the whole left side', right: 'Down the whole right side' };
+/** How far (px) the pointer moves from the drag's start before the edge strips appear. */
+const ARM_DISTANCE_PX = 40;
 const EDGE_STRIP: Record<Side, string> = { top: 'inset-x-0 top-0 h-4', bottom: 'inset-x-0 bottom-0 h-4', left: 'inset-y-0 left-0 w-4', right: 'inset-y-0 right-0 w-4' };
 const EDGE_PREVIEW: Record<Side, string> = { top: 'inset-x-0 top-0 h-1/4', bottom: 'inset-x-0 bottom-0 h-1/4', left: 'inset-y-0 left-0 w-1/4', right: 'inset-y-0 right-0 w-1/4' };
 
@@ -135,6 +137,22 @@ const EDGE_PREVIEW: Record<Side, string> = { top: 'inset-x-0 top-0 h-1/4', botto
 const EdgeTargets: React.FC<{ tabId: string; dragging: string; onDone: () => void }> = ({ tabId, dragging, onDone }) => {
   const moveToEdge = useDashboardStore((s) => s.moveToEdgeInCockpit);
   const [over, setOver] = useState<Side | null>(null);
+  // The strips appear only once the pointer has moved away from where the drag began: a top-row pane's grip is at the
+  // top edge, and letting go there (to call the drag off) mustn't pull the pane across the whole top.
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    let origin: { x: number; y: number } | null = null;
+    const onOver = (e: DragEvent) => {
+      if (!origin) origin = { x: e.clientX, y: e.clientY };
+      else if (Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > ARM_DISTANCE_PX) {
+        setArmed(true);
+        document.removeEventListener('dragover', onOver, true);
+      }
+    };
+    document.addEventListener('dragover', onOver, true);
+    return () => document.removeEventListener('dragover', onOver, true);
+  }, []);
+  if (!armed) return null;
   return (
     <>
       {over && (
@@ -153,7 +171,8 @@ const EdgeTargets: React.FC<{ tabId: string; dragging: string; onDone: () => voi
             e.dataTransfer.dropEffect = 'move';
             if (over !== side) setOver(side);
           }}
-          onDragLeave={() => setOver(null)}
+          // Strips overlap at the corners: leaving one clears only its own highlight.
+          onDragLeave={() => setOver((cur) => (cur === side ? null : cur))}
           onDrop={(e) => {
             e.preventDefault();
             const src = e.dataTransfer.getData(PANE_DRAG_TYPE) || dragging;

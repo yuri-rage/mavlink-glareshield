@@ -79,12 +79,19 @@ A preset reuses the tab's own widgets and adds any it lacks. Then, in Edit Mode:
   rearrange your instruments.
 - **Move**: drag a pane (by its title or body) onto another. Dropping on an edge puts it on that side; dropping in the
   middle swaps the two. A highlight shows where it will go.
-- **Add…**: put a widget on any side of a pane, either a new one or one hidden on the tab.
+- **Across the whole layout**: once a drag moves away from where it started, a green strip appears along each outer
+  edge of the layout. Drop on one to put the pane across the whole top or bottom, or down a whole side (a chart the
+  full width of the screen, for example), rather than beside a single pane.
+- **Add…**: put a widget on any side of a pane, or along a whole edge of the layout, either a new one or one hidden
+  on the tab.
 - **Replace…**: swap the pane with another, or show a different widget in it.
 - **Edit** (custom widgets): open the custom widget editor.
 - **Hide**: take the widget out of the layout. It stays on the tab, listed under **Not shown in this layout**, with
   **Show** to bring it back.
 - **Delete**: remove the widget from the tab.
+
+A custom widget fills its pane: a composite's rows share the pane's height and its values grow with the room. One
+too tall for its pane scrolls inside its card.
 
 If an edit would make the layout too big for the window, the tab is shown stacked while you edit it, with the same
 controls, so you can hide or delete what you just added. While editing, the editor's own bars don't count against the

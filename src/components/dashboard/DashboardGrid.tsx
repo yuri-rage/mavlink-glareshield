@@ -295,9 +295,10 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                     onClick={() => {
                       removeTab(tab.id);
                       setConfirmDeleteTabId(null);
-                      // Deleting the open tab moves to another: edit the layout shown for that one.
+                      // Deleting the open tab moves to another: edit the layout shown for that one. (Deleting another
+                      // tab leaves the open one, and the layout being edited, as they are.)
                       const st = useDashboardStore.getState();
-                      if (st.isEditing) st.setEditVariant(variantShownFor(st.activeTabId));
+                      if (isActive && st.isEditing) st.setEditVariant(variantShownFor(st.activeTabId));
                     }}
                     className="px-1.5 py-0.5 bg-red-600 hover:bg-red-500 text-white rounded font-bold text-[10px]"
                   >
