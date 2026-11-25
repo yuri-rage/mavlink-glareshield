@@ -133,10 +133,11 @@ interface OverlayProps {
 }
 
 /**
- * A pane in Edit mode: its widget locked (as in Flow tabs), with a bar to arrange it: drag it onto another pane (an
- * edge puts it there, the centre swaps them), add a widget beside or below it, change what it shows, swap it with
- * another, hide it (it stays on the tab) or delete it from the tab. The menus do everything the drag does, for the
- * keyboard.
+ * A pane in Edit mode: its widget locked (as in Flow tabs), with a bar to arrange it. Drag the pane (by its body or
+ * grip) onto another: an edge puts it there, the centre swaps them; the highlight shows where. From the keyboard, Add…
+ * puts a widget on any side of this one, Replace… swaps it with another pane or shows another widget here (the old
+ * one stays on the tab, hidden); Hide takes it out of the layout, Delete off the tab. In a narrow pane the bar keeps
+ * to one row (the title folds to its grip).
  */
 export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, titleOf, min, dragging, setDragging }) => {
   const id = placed.instanceId;
@@ -152,33 +153,43 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
     ...customWidgets.map((w) => ({ id: w.id, name: w.name })),
   ];
   const nameOf = (instanceId: string) => titleOf(tab.widgets.find((w) => w.instanceId === instanceId)?.widgetId ?? '');
-  // Option values: "w:<widgetId>" a new widget of that type, "i:<instanceId>" a hidden one of this tab's.
-  const sourceOptions = (
+  // Sources: "w:<widgetId>" a new widget of that type, "i:<instanceId>" a hidden one of this tab's.
+  const source = (v: string) => (v.startsWith('i:') ? { instanceId: v.slice(2) } : { widgetId: v.slice(2) });
+  const sourceOptions = (prefix: string) => (
     <>
-      {hidden.length > 0 && (
-        <optgroup label="Hidden on this tab">
-          {hidden.map((w) => (
-            <option key={w.instanceId} value={`i:${w.instanceId}`}>
-              {titleOf(w.widgetId)}
-            </option>
-          ))}
-        </optgroup>
-      )}
-      <optgroup label="New widget">
-        {catalog.map((c) => (
-          <option key={c.id} value={`w:${c.id}`}>
-            {c.name}
-          </option>
-        ))}
-      </optgroup>
+      {hidden.map((w) => (
+        <option key={w.instanceId} value={`${prefix}i:${w.instanceId}`}>
+          {titleOf(w.widgetId)} (hidden)
+        </option>
+      ))}
+      {catalog.map((c) => (
+        <option key={c.id} value={`${prefix}w:${c.id}`}>
+          {c.name}
+        </option>
+      ))}
     </>
   );
-  const source = (v: string) => (v.startsWith('i:') ? { instanceId: v.slice(2) } : { widgetId: v.slice(2) });
-  const selectClass = 'h-6 max-w-[6.5rem] rounded border border-zinc-700 bg-zinc-950 px-1 text-[10px] font-semibold text-zinc-300';
+  const SIDES = [
+    ['left', 'To its left:'],
+    ['right', 'To its right:'],
+    ['top', 'Above it:'],
+    ['bottom', 'Below it:'],
+  ] as const;
+  const selectClass = 'h-6 w-[4.75rem] rounded border border-zinc-700 bg-zinc-950 px-1 text-[10px] font-semibold text-zinc-300';
+  const startDrag = (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData(PANE_DRAG_TYPE, id);
+    setDragging(id);
+  };
+  // No drag under way (it ended, or Escape cancelled it): no highlight left behind.
+  useEffect(() => {
+    if (!dragging) setZone(null);
+  }, [dragging]);
+  const dropping = zone && dragging && dragging !== id;
 
   return (
     <div
-      className="absolute inset-0 z-20 flex flex-col rounded-xl bg-zinc-950/55 ring-1 ring-dashed ring-sky-500/50 select-none"
+      className="@container absolute inset-0 z-20 flex flex-col rounded-xl bg-zinc-950/55 ring-1 ring-dashed ring-sky-500/50 select-none"
       onDragOver={(e) => {
         // A pane being dragged (its own data type: known before any re-render; not some other drag, e.g. a file).
         if (!e.dataTransfer.types.includes(PANE_DRAG_TYPE) || dragging === id) return;
@@ -200,75 +211,60 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
         setDragging(null);
       }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-1 border-b border-zinc-700/70 bg-zinc-900/95 px-1.5 py-1 text-[11px]">
+      <div className="flex items-center justify-between gap-1 border-b border-zinc-700/70 bg-zinc-900/95 px-1 py-0.5 text-[11px]">
         <span
           draggable
-          onDragStart={(e) => {
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData(PANE_DRAG_TYPE, id);
-            setDragging(id);
-          }}
+          onDragStart={startDrag}
           onDragEnd={() => setDragging(null)}
           className="flex min-w-0 cursor-grab items-center gap-1 font-bold text-sky-300 active:cursor-grabbing"
-          title="Drag onto another pane: an edge puts it there, the centre swaps them"
+          title={`${title}: drag onto another pane (an edge puts it there, the centre swaps them)`}
         >
           <GripVertical className="h-3.5 w-3.5 shrink-0 text-sky-400" />
-          <Lock className="h-3 w-3 shrink-0 text-amber-400" />
-          <span className="truncate">{title}</span>
+          <Lock className="hidden h-3 w-3 shrink-0 text-amber-400 @xs:block" />
+          <span className="hidden truncate @xs:inline">{title}</span>
         </span>
-        <span className="flex flex-wrap items-center gap-1">
+        <span className="flex shrink-0 items-center gap-0.5">
           <select
             value=""
             className={selectClass}
-            aria-label={`Add a widget beside or below ${title}`}
-            title="Add a widget beside or below this one"
+            aria-label={`Add a widget beside ${title}`}
+            title="Add a widget on a side of this one"
             onChange={(e) => {
-              const [side, v] = [e.target.value.slice(0, e.target.value.indexOf('|')), e.target.value.slice(e.target.value.indexOf('|') + 1)];
-              if (v) splitInCockpit(tab.id, id, side as 'right' | 'bottom', source(v));
+              const v = e.target.value;
+              const bar = v.indexOf('|');
+              if (bar > 0) splitInCockpit(tab.id, id, v.slice(0, bar) as 'left' | 'right' | 'top' | 'bottom', source(v.slice(bar + 1)));
             }}
           >
             <option value="">Add…</option>
-            {(['right', 'bottom'] as const).map((side) => (
-              <optgroup key={side} label={side === 'right' ? 'To its right:' : 'Below it:'}>
-                {hidden.map((w) => (
-                  <option key={w.instanceId} value={`${side}|i:${w.instanceId}`}>
-                    {titleOf(w.widgetId)} (hidden)
-                  </option>
-                ))}
-                {catalog.map((c) => (
-                  <option key={c.id} value={`${side}|w:${c.id}`}>
-                    {c.name}
-                  </option>
-                ))}
+            {SIDES.map(([side, label]) => (
+              <optgroup key={side} label={label}>
+                {sourceOptions(`${side}|`)}
               </optgroup>
             ))}
           </select>
           <select
             value=""
             className={selectClass}
-            aria-label={`Change what ${title} shows`}
-            title="Show another widget here (this one stays on the tab, hidden)"
-            onChange={(e) => e.target.value && replaceInCockpit(tab.id, id, source(e.target.value))}
+            aria-label={`Replace ${title}`}
+            title="Swap with another pane, or show another widget here (this one stays on the tab, hidden)"
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v.startsWith('swap:')) moveInCockpit(tab.id, id, v.slice(5), 'center');
+              else if (v) replaceInCockpit(tab.id, id, source(v));
+            }}
           >
-            <option value="">Change…</option>
-            {sourceOptions}
+            <option value="">Replace…</option>
+            {others.length > 0 && (
+              <optgroup label="Swap places with:">
+                {others.map((o) => (
+                  <option key={o} value={`swap:${o}`}>
+                    {nameOf(o)}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label="Show instead:">{sourceOptions('')}</optgroup>
           </select>
-          {others.length > 0 && (
-            <select
-              value=""
-              className={selectClass}
-              aria-label={`Swap ${title} with another pane`}
-              title="Swap places with another pane"
-              onChange={(e) => e.target.value && moveInCockpit(tab.id, id, e.target.value, 'center')}
-            >
-              <option value="">Swap…</option>
-              {others.map((o) => (
-                <option key={o} value={o}>
-                  {nameOf(o)}
-                </option>
-              ))}
-            </select>
-          )}
           <button
             type="button"
             onClick={() => unplaceFromCockpit(tab.id, id)}
@@ -279,10 +275,9 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
             <EyeOff className="h-3 w-3" />
           </button>
           {confirmDelete ? (
-            <span className="flex items-center gap-1 rounded border border-red-500/40 bg-red-950/90 px-1 text-[10px] text-red-200">
-              Delete?
-              <button type="button" onClick={() => removeWidgetFromActiveTab(id)} className="rounded bg-red-600 px-1 font-bold text-white">
-                Yes
+            <span className="flex items-center gap-0.5 rounded border border-red-500/40 bg-red-950/90 px-0.5 text-[10px] text-red-200">
+              <button type="button" onClick={() => removeWidgetFromActiveTab(id)} className="rounded bg-red-600 px-1 font-bold text-white" title={`Delete ${title} from the tab`}>
+                Delete
               </button>
               <button type="button" onClick={() => setConfirmDelete(false)} className="rounded bg-zinc-800 px-1">
                 No
@@ -301,14 +296,21 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, ti
           )}
         </span>
       </div>
-      <div className="relative flex flex-1 items-center justify-center text-[10px] text-zinc-400">
-        {dragging && dragging !== id ? 'Drop on an edge to put it there, in the middle to swap' : `Drag the dividers to resize · min ${min.w}×${min.h}`}
-        {zone && dragging !== id && (
-          <div className={`pointer-events-none absolute ${ZONE_CLASS[zone]} flex items-center justify-center rounded-lg border-2 border-sky-400 bg-sky-500/25`}>
-            <span className="rounded bg-sky-950/95 px-2 py-0.5 text-[11px] font-bold text-sky-200">{ZONE_TEXT[zone]}</span>
-          </div>
-        )}
+      {/* The body drags the pane too (the bar's controls stay clickable). */}
+      <div
+        draggable
+        onDragStart={startDrag}
+        onDragEnd={() => setDragging(null)}
+        className="flex flex-1 cursor-grab items-center justify-center px-2 text-center text-[10px] text-zinc-400 active:cursor-grabbing"
+      >
+        {dragging && dragging !== id ? 'Drop on an edge to put it there, in the middle to swap' : `Drag to move · dividers resize · min ${min.w}×${min.h}`}
       </div>
+      {/* Where it would go, over the whole pane (what's highlighted is what the drop hits). */}
+      {dropping && (
+        <div className={`pointer-events-none absolute z-30 ${ZONE_CLASS[zone!]} flex items-center justify-center rounded-lg border-2 border-sky-400 bg-sky-500/25`}>
+          <span className="rounded bg-sky-950/95 px-2 py-0.5 text-[11px] font-bold text-sky-200">{ZONE_TEXT[zone!]}</span>
+        </div>
+      )}
     </div>
   );
 };
@@ -328,7 +330,8 @@ export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, tit
     return (
       // The frame holds the edit lock (it mustn't scroll away with a tall widget, uncovering live controls); the
       // widget scrolls inside it.
-      <div className="relative h-full w-full overflow-hidden rounded-xl">
+      // Keyed by widget: a pane showing another widget (Change) starts afresh (error state, open prompts).
+      <div key={id} className="relative h-full w-full overflow-hidden rounded-xl">
         <div className="@container h-full w-full overflow-auto">
           <PaneContext.Provider value={true}>
             <ErrorBoundary fallbackTitle={titleOf(placed.widgetId)}>{renderWidget(placed)}</ErrorBoundary>

@@ -1,6 +1,6 @@
 import { sanitizeWidgetDefinition } from '../lib/widgetValidation';
 import { create } from 'zustand';
-import { appendPane, buildPreset, movePane, removeFromLayout, replacePane, sanitizeCockpit, setSplitSizes, splitPane, type CockpitPresetId, type DropZone } from '../lib/cockpitLayout';
+import { appendPane, buildPreset, movePane, panesInOrder, placedOrUnchanged, removeFromLayout, replacePane, sanitizeCockpit, setSplitSizes, splitPane, type CockpitPresetId, type DropZone } from '../lib/cockpitLayout';
 import {
   CockpitLayout,
   DashboardProfile,
@@ -155,6 +155,18 @@ function placeWidget(layout: CockpitLayout | undefined, instanceId: string, widg
 
 /** What a pane is to show: a new widget of a type, or a widget already on the tab (hidden from the layout). */
 export type PaneSource = { widgetId: string } | { instanceId: string };
+
+/**
+ * Whether `what` can go beside or in place of the pane `target`: the tab has a layout showing that pane, and a widget
+ * from the tab is one of its own and not already shown (shown twice, one copy would be dropped, losing a pane).
+ */
+function canPlace(tab: DashboardTab, target: string, what: PaneSource): boolean {
+  if (!tab.cockpit?.root) return false;
+  const shown = panesInOrder(tab.cockpit);
+  if (!panesInOrder({ header: null, root: tab.cockpit.root }).includes(target)) return false;
+  if ('instanceId' in what) return tab.widgets.some((w) => w.instanceId === what.instanceId) && !shown.includes(what.instanceId);
+  return true;
+}
 
 /** The tab with the widget for `what` (added when it's a new one), and its instance ID. */
 function sourceInstance(tab: DashboardTab, what: PaneSource): { tab: DashboardTab; instanceId: string } {
@@ -474,15 +486,18 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   splitInCockpit: (tabId, target, side, what) => {
     get().updateTab(tabId, (t) => {
-      if (!t.cockpit) return t;
+      if (!canPlace(t, target, what)) return t;
       const { tab, instanceId } = sourceInstance(t, what);
-      return { ...tab, cockpit: splitPane(tab.cockpit!, target, side, instanceId) };
+      const next = sanitizeCockpit(splitPane(tab.cockpit!, target, side, instanceId), tab.widgets.map((w) => w.instanceId));
+      // Past the depth or pane limits: nothing changes (no pane lost, no new widget left unplaced).
+      const placed = placedOrUnchanged(t.cockpit!, next, [instanceId]);
+      return placed === t.cockpit ? t : { ...tab, cockpit: placed };
     });
   },
 
   replaceInCockpit: (tabId, target, what) => {
     get().updateTab(tabId, (t) => {
-      if (!t.cockpit) return t;
+      if (!canPlace(t, target, what)) return t;
       const { tab, instanceId } = sourceInstance(t, what);
       return { ...tab, cockpit: replacePane(tab.cockpit!, target, instanceId) };
     });

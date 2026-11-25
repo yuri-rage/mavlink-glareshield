@@ -60,8 +60,24 @@ export function sanitizeCockpit(raw: unknown, widgetIds: Iterable<string>): Cock
       });
       if (kept.length === 0) return null;
       if (kept.length === 1) return kept[0].child;
-      const sizes = kept.map((k) => k.size);
-      return { split: node.split, children: kept.map((k) => k.child), sizes: normalizeSizes(sizes.every((s) => s !== undefined) ? sizes : null, kept.length) };
+      const given = kept.map((k) => k.size);
+      const sizes = normalizeSizes(given.every((s) => s !== undefined) ? given : null, kept.length);
+      // A child split of the same direction is merged into this one (its children take its share, in proportion):
+      // no deeper than needed, and no dividers of one direction in two nested groups.
+      const children: CockpitNode[] = [];
+      const flat: number[] = [];
+      kept.forEach(({ child }, i) => {
+        if (!isPane(child) && child.split === node.split) {
+          child.children.forEach((c, j) => {
+            children.push(c);
+            flat.push((sizes[i] * child.sizes[j]) / 100);
+          });
+        } else {
+          children.push(child);
+          flat.push(sizes[i]);
+        }
+      });
+      return { split: node.split, children, sizes: normalizeSizes(flat, children.length) };
     }
     return null;
   };
@@ -285,7 +301,7 @@ export function splitPane(layout: CockpitLayout, targetId: string, side: Exclude
       const children = [...n.children];
       const sizes = [...n.sizes];
       children.splice(before ? i : i + 1, 0, fresh);
-      sizes.splice(i, 1, ...(before ? [half, half] : [half, half]));
+      sizes.splice(i, 1, half, half);
       return { ...n, children, sizes };
     }
     return { ...n, children: n.children.map(walk) };
@@ -327,5 +343,16 @@ export function movePane(layout: CockpitLayout, srcId: string, targetId: string,
   const ids = [...widgetIds];
   const without = removeFromLayout(layout, srcId, ids);
   if (!panesInOrder(without).includes(targetId)) return layout;
-  return sanitizeCockpit(splitPane(without, targetId, zone, srcId), ids) ?? layout;
+  return placedOrUnchanged(layout, sanitizeCockpit(splitPane(without, targetId, zone, srcId), ids));
+}
+
+/**
+ * `next` when it still shows everything `layout` showed, and `added` too; else `layout` unchanged. An edit that would
+ * go past the depth or pane limits (sanitizing drops what doesn't fit, wherever it is) does nothing, rather than
+ * losing panes.
+ */
+export function placedOrUnchanged(layout: CockpitLayout, next: CockpitLayout | null, added: string[] = []): CockpitLayout {
+  if (!next) return layout;
+  const shown = new Set(panesInOrder(next));
+  return [...panesInOrder(layout), ...added].every((id) => shown.has(id)) ? next : layout;
 }

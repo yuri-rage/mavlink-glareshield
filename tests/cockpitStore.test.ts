@@ -72,6 +72,17 @@ check('and Cockpit again restores it', JSON.stringify(hud().cockpit) === kept);
   check('Move to an edge: beside the target', moved.indexOf('w-vfr') === moved.indexOf('w-hud') - 1);
 }
 
+// Guards: bad targets and sources change nothing and leave no stray widget.
+{
+  const before = JSON.stringify(hud());
+  st().splitInCockpit('tab-flight', 'no-such-pane', 'right', { widgetId: 'built-in-charts' });
+  check('split beside a pane that isn\'t shown: nothing changes (no widget added)', JSON.stringify(hud()) === before);
+  st().replaceInCockpit('tab-flight', 'w-hud', { instanceId: 'w-map-flight' });
+  check('replace with a widget already shown: nothing changes (no pane lost)', JSON.stringify(hud()) === before);
+  st().splitInCockpit('tab-flight', 'w-hud', 'right', { instanceId: 'ghost' });
+  check('split with a widget not on the tab: nothing changes', JSON.stringify(hud()) === before);
+}
+
 // A custom widget placed in the layout, then deleted: gone from the tab and the layout.
 const customId = st().profile.customWidgets[0].id;
 st().addWidgetToActiveTab(customId);
@@ -103,6 +114,16 @@ check('import accepted', st().importProfileJson(JSON.stringify(imported)));
 const t1 = st().profile.tabs[0];
 check('imported layout cleaned', t1.cockpit?.header === null && JSON.stringify(panesInOrder(t1.cockpit)) === JSON.stringify(['a', 'b']) && JSON.stringify((t1.cockpit!.root as any).sizes) === JSON.stringify([50, 50]), JSON.stringify(t1.cockpit));
 check('import safety check sees controls in a Cockpit tab', profileVehicleControls(imported as any).some((c) => c.builtin));
+
+// At the pane limit: Add does nothing, and leaves no widget unplaced on the tab.
+{
+  const ids = Array.from({ length: 24 }, (_, i) => `m${i}`);
+  st().importProfileJson(JSON.stringify({ version: '1', name: 'full', updatedAt: '', customWidgets: [], tabs: [{ id: 'tf', title: 'Full', mode: 'cockpit', widgets: ids.map((id) => ({ instanceId: id, widgetId: 'built-in-battery-card' })), cockpit: { header: null, root: { split: 'row', children: ids.map((id) => ({ pane: id })) } } }] }));
+  const tf = () => st().profile.tabs.find((t) => t.id === 'tf')!;
+  const before = JSON.stringify(tf());
+  st().splitInCockpit('tf', 'm0', 'right', { widgetId: 'built-in-charts' });
+  check('a 25th pane: nothing changes (no pane lost, no orphan widget)', JSON.stringify(tf()) === before && tf().widgets.length === 24);
+}
 
 console.log(failures.length ? `\n${failures.length} cockpit-store check(s) FAILED` : '\nAll cockpit-store checks PASSED');
 if (failures.length) process.exit(1);

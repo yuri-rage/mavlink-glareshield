@@ -130,8 +130,11 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       // Before the header is first measured, a generous guess: measuring can only lower it (the least is kept), so
       // the choice can't flip back and forth.
       const header = cockpit.header ? (headerHeightRef.current ?? 110) : 0;
+      // While editing, the editor's own bars (toolbar, not-shown list) don't count: the panes may be squeezed a little
+      // for a while (their widgets are locked), but they stay panes, so they can be arranged on the screen they're for.
+      const chrome = isEditing ? [...document.querySelectorAll('[data-edit-chrome]')].reduce((sum, e) => sum + e.getBoundingClientRect().height + 8, 0) : 0;
       // Less the container's bottom padding (12 px).
-      const room = { w: rect.width, h: window.innerHeight - top - 12 - header };
+      const room = { w: rect.width, h: window.innerHeight - top - 12 - header + chrome };
       setStacked(!layoutFits(need, room));
     };
     measure();
@@ -453,7 +456,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
 
       {/* Edit mode, Cockpit tab: the tab's widgets the layout doesn't show. */}
       {isEditing && isCockpit && unplaced.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed border-zinc-700 bg-zinc-900/60 px-2.5 py-1.5 text-[11px] text-zinc-400">
+        <div data-edit-chrome className="flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed border-zinc-700 bg-zinc-900/60 px-2.5 py-1.5 text-[11px] text-zinc-400">
           <span className="font-semibold text-zinc-300">Not shown in this layout:</span>
           {unplaced.map((w) => (
             <span key={w.instanceId} className="flex items-center gap-1 rounded border border-zinc-700 bg-zinc-950 px-1.5 py-0.5">
