@@ -21,6 +21,7 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Sliders, RefreshCw, Check, Search, Zap, X, Download, Upload, AlertTriangle, Info, Loader2, Lock, ChevronDown } from 'lucide-react';
 import { downloadFile } from '../../lib/download';
+import { markBusy, onActiveVehicleChange } from '../../mavlink/vehicleRoster';
 import { compareParams, filterEntries, writeOutcome, type CompareResult, type WriteOutcome } from '../../lib/paramCompare';
 
 const ROW_HEIGHT = 38;
@@ -251,6 +252,9 @@ export const ParametersWidget: React.FC = () => {
     if (todo.length === 0) return;
     setIsBatchWriting(true);
     abortBatchRef.current = false;
+    // A vehicle switch would stop this: the confirmation names it, and the switch stops it.
+    markBusy('Writing parameters', true);
+    const offSwitch = onActiveVehicleChange(() => (abortBatchRef.current = true));
     const outcomes: Record<string, WriteOutcome> = {};
     for (let i = 0; i < todo.length; i++) {
       if (abortBatchRef.current) break;
@@ -267,6 +271,8 @@ export const ParametersWidget: React.FC = () => {
     const kept = done.filter((o) => o === 'kept').length;
     const none = done.filter((o) => o === 'no-answer').length;
     const reboot = todo.filter((e) => outcomes[e.name] === 'ok' && e.rebootRequired).map((e) => e.name);
+    offSwitch();
+    markBusy('Writing parameters', false);
     setIsBatchWriting(false);
     setBatchWriteStatus(
       `${abortBatchRef.current ? 'Stopped. ' : ''}${ok} written${kept ? `, ${kept} kept another value (refused or limited)` : ''}${none ? `, ${none} not answered` : ''}` +

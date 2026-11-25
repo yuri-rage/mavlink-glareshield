@@ -2,6 +2,7 @@
 // asks for both (they ride in a stream a link may have turned off). Imported once at startup.
 
 import { mavlinkConnection } from './connection';
+import { onActiveVehicleChange } from './vehicleRoster';
 import { decodePayload } from './parser';
 import { MAVLINK_MSG_ID } from './messages';
 import { messageRateManager } from './rateManager';
@@ -42,3 +43,5 @@ messageRateManager.registerRequirement('terrain', MAVLINK_MSG_ID.TERRAIN_REPORT)
 mavlinkConnection.onStatus((status) => {
   if (status !== 'connected') useTerrainStore.setState({ report: null, sent: 0, unavailable: 0 });
 });
+// Another vehicle: its terrain report is its own.
+onActiveVehicleChange(() => useTerrainStore.setState({ report: null, sent: 0, unavailable: 0 }));

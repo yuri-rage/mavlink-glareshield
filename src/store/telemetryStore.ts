@@ -1,4 +1,5 @@
 import { create, type StateCreator } from 'zustand';
+import { observePacket, onActiveVehicleChange, useVehicleRosterStore } from '../mavlink/vehicleRoster';
 import { MAVLINK_MSG_ID, getVehicleModeName, extractFirmwareVersion, isVehicleAutopilotHeartbeat, getMavCmdName, MAV_CMD } from '../mavlink/messages';
 import { decodePacket, MavlinkPacket } from '../mavlink/parser';
 import { mavlinkConnection } from '../mavlink/connection';
@@ -963,6 +964,8 @@ export const useTelemetryStore = create<TelemetryState>()(batchedNotify((set) =>
     }
 
     const data = decodePacket(packet);
+    // The list of vehicles hears every packet; it says which vehicle is active (and may switch to another first).
+    const active = observePacket(packet, data);
 
     packetUpdate = true;
     try {
@@ -976,11 +979,9 @@ export const useTelemetryStore = create<TelemetryState>()(batchedNotify((set) =>
           return state;
         }
 
-        // If locked to a vehicle and it was heard from recently (< 10s), reject other vehicles
-        if (state.heartbeat.lastHeartbeatTime > 0 && state.heartbeat.systemId !== packet.systemId) {
-          if (now - state.heartbeat.lastHeartbeatTime < 10000) {
-            return state;
-          }
+        // Only the active vehicle (vehicleRoster: the first heard, or the one switched to); others are only listed.
+        if (packet.systemId !== active) {
+          return state;
         }
 
         const isArmed = (data.base_mode & 0x80) !== 0;
@@ -1070,8 +1071,8 @@ export const useTelemetryStore = create<TelemetryState>()(batchedNotify((set) =>
         };
       }
 
-      // For all other messages, if we are locked to a vehicle, reject packets from other systems
-      if (state.heartbeat.lastHeartbeatTime > 0 && packet.systemId !== state.heartbeat.systemId) {
+      // For all other messages: once a vehicle is active, only its packets.
+      if (active !== null && packet.systemId !== active) {
         return state;
       }
 
@@ -1822,6 +1823,71 @@ let pendingSendMeta: {
   resolve?: (ack: CommandAckInfo) => void;
 } | null = null;
 
+/** Settle every command still waiting for its ACK as not sent (the link went, or the vehicle was switched). */
+function settlePendingCommands(now: number) {
+  for (const [cmdId, list] of pendingCommands.entries()) {
+    for (const item of list) {
+      clearTimeout(item.timer);
+      if (item.resolve) {
+        item.resolve({
+          command: cmdId,
+          result: -2,
+          resultText: 'NOT_SENT',
+          time: now,
+        });
+      }
+    }
+  }
+  pendingCommands.clear();
+}
+
+/**
+ * What the store knew at start, for the fields that describe a vehicle: a switch to another vehicle puts them back,
+ * so nothing of the old one (position, mission, parameters, home, firmware, trace) shows as the new one's.
+ */
+const VEHICLE_FIELDS = [
+  'heartbeat', 'attitude', 'imu', 'position', 'gps', 'battery', 'batteries', 'vfr', 'sysStatus', 'fenceStatus', 'rc', 'servo',
+  'navController', 'wind', 'vibration', 'ekf', 'rangefinder', 'rpm', 'esc', 'extendedState', 'power', 'pressure',
+  'homePosition', 'homeFromVehicle', 'rallySupport', 'firmwareVersion', 'firmwareRaw', 'parameters', 'currentWaypointSeq',
+  'lastReachedWaypointSeq', 'lastReachedAt', 'missionItemReachedSeen', 'manualWaypointJump', 'lastCommandAck',
+  'armedStartedAt', 'accumulatedArmedMs',
+] as const satisfies readonly (keyof TelemetryState)[];
+const initialVehicleState = (() => {
+  const st = useTelemetryStore.getState();
+  return Object.fromEntries(VEHICLE_FIELDS.map((k) => [k, st[k]])) as Pick<TelemetryState, (typeof VEHICLE_FIELDS)[number]>;
+})();
+
+onActiveVehicleChange((to, from) => {
+  const now = Date.now();
+  lastVersionPollTime = 0;
+  versionPollAttempts = 0;
+  settlePendingCommands(now);
+  // The new vehicle hasn't had its stream rates asked for.
+  messageRateManager.resetCache();
+  const compId = useVehicleRosterStore.getState().vehicles[to]?.compId ?? 1;
+  useTelemetryStore.setState((state) => ({
+    ...initialVehicleState,
+    // The new vehicle's ID at once (not 0 until its next heartbeat): a command sent meanwhile goes to it, never to
+    // the default system 1, which may be the old vehicle.
+    heartbeat: { ...initialVehicleState.heartbeat, systemId: to, componentId: compId },
+    missionWaypoints: [],
+    fencePoints: [],
+    rallyPoints: [],
+    flightTrace: [],
+    traceVersion: state.traceVersion + 1,
+    traceResets: state.traceResets + 1,
+    commandFeedback:
+      state.commandFeedback?.status === 'pending'
+        ? { ...state.commandFeedback, status: 'failed', result: -2, resultText: 'NOT_SENT', reason: 'Switched to another vehicle', time: now }
+        : state.commandFeedback,
+    statusMessages: appendStatusMessage(
+      state.statusMessages,
+      { severity: 5, severityLabel: 'NOTICE', text: `Now commanding vehicle ${to}${from !== null ? ` (was ${from})` : ''}` },
+      now
+    ),
+  }));
+});
+
 // Reset vehicle heartbeat state when disconnected
 mavlinkConnection.onStatus((status) => {
   if (status === 'disconnected') {
@@ -1829,21 +1895,7 @@ mavlinkConnection.onStatus((status) => {
     versionPollAttempts = 0;
     const now = Date.now();
 
-    // Settle all in-flight pending commands immediately with NOT_SENT
-    for (const [cmdId, list] of pendingCommands.entries()) {
-      for (const item of list) {
-        clearTimeout(item.timer);
-        if (item.resolve) {
-          item.resolve({
-            command: cmdId,
-            result: -2,
-            resultText: 'NOT_SENT',
-            time: now,
-          });
-        }
-      }
-    }
-    pendingCommands.clear();
+    settlePendingCommands(now);
 
     const isManual = mavlinkConnection.isManualDisconnect;
 

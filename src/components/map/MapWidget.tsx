@@ -135,6 +135,7 @@ import { TERRAIN_ATTRIBUTION } from '../../mavlink/terrain';
 import { useTerrainStore } from '../../store/terrainStore';
 import { useGimbalLayer } from './useGimbalLayer';
 import { TrafficBanner } from './TrafficBanner';
+import { useOtherVehiclesLayer } from './useOtherVehiclesLayer';
 import { useTrafficLayer } from './useTrafficLayer';
 import {
   checkRallyReadBack,
@@ -1127,6 +1128,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   useDraftLayer(mapInstanceRef, mapReady, (layer, index, x, y) => setPlanMenu({ kind: 'item', layer, index, x, y }));
   useFenceDraftLayer(mapInstanceRef, mapReady, setPlanMenu);
   useTrafficLayer(mapInstanceRef, mapReady);
+  useOtherVehiclesLayer(mapInstanceRef, mapReady);
   useGimbalLayer(mapInstanceRef, mapReady);
   // The draft's terrain profile and clearance issues, while planning.
   useMissionTerrain();

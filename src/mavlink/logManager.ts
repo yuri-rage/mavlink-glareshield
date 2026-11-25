@@ -10,6 +10,7 @@
 // LOG_DATA stream, which always works.
 
 import { mavlinkConnection } from './connection';
+import { onActiveVehicleChange } from './vehicleRoster';
 import { mavFtpClient } from './ftp';
 import { MAVLINK_MSG_ID } from './messages';
 import { decodePayload, type MavlinkPacket } from './parser';
@@ -320,3 +321,5 @@ class LogManager {
 }
 
 export const logManager = new LogManager();
+// Another vehicle: a log download from the old one stops.
+onActiveVehicleChange(() => logManager.cancel());
