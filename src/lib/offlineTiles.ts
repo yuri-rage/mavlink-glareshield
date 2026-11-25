@@ -77,7 +77,9 @@ export function tileRanges(b: LatLngBoundsLike, z: number): { x0: number; x1: nu
   if (b.east - b.west >= 360) return [{ x0: 0, x1: n - 1, y0, y1 }];
   const wrap = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
   const x0 = tileXY(0, wrap(b.west), z).x;
-  const x1 = tileXY(0, wrap(b.east), z).x;
+  // An east edge exactly on 180° is the world's last column, not wrapped round to -180 (column 0).
+  const eastWrapped = wrap(b.east);
+  const x1 = tileXY(0, eastWrapped === -180 && b.east > b.west ? 180 : eastWrapped, z).x;
   return x0 <= x1 ? [{ x0, x1, y0, y1 }] : [{ x0, x1: n - 1, y0, y1 }, { x0: 0, x1, y0, y1 }];
 }
 
@@ -415,7 +417,13 @@ export async function importMbtiles(file: File, onProgress?: (done: number, tota
       format,
       attribution: meta.attribution,
     };
-    await saveArea(area, urls);
+    try {
+      await saveArea(area, urls);
+    } catch (e) {
+      // The index couldn't be written: the tiles would be stored with nothing to list (or delete) them by.
+      for (let i = 0; i < urls.length; i += 64) await Promise.all(urls.slice(i, i + 64).map((u) => cache.delete(u)));
+      throw e;
+    }
     return area;
   } finally {
     db.close();

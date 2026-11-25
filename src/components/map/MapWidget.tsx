@@ -398,7 +398,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     void useOfflineMapStore.getState().refresh();
     // Keeping starts: the tiles already on screen are kept too (only new loads would be otherwise).
     return useOfflineMapStore.subscribe((st, prev) => {
-      if (!st.keeper || st.keeper === prev.keeper || st.keepingLayer !== mapLayerRef.current) return;
+      if (!st.keeper || st.keeper === prev.keeper || st.keepingLayer !== mapLayerRef.current || st.keepingLayer?.startsWith('import:')) return;
       const layer = activeTileLayerRef.current as (L.TileLayer & { _tiles?: Record<string, { coords: L.Coords; loaded?: number }> }) | null;
       for (const t of Object.values(layer?._tiles ?? {})) if (t.loaded) void st.keeper.keepTile(layer!.getTileUrl(t.coords));
     });

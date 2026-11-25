@@ -87,7 +87,9 @@ export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, la
                 Pan and zoom over the area at the zoom levels you'll need: every {layerName} tile the map loads is kept. The
                 built-in imagery and street tiles can only be kept this way (their providers don't allow bulk downloads).
               </p>
-              {keeping ? (
+              {layer.startsWith('import:') ? (
+                <p className="text-[11px] text-zinc-500">The imported map showing is stored already: switch to another layer to keep it.</p>
+              ) : keeping ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-emerald-300">
                     Keeping "{keeping.name}": {keeping.tiles} tiles, {mb(keeping.bytes)}
@@ -278,11 +280,15 @@ const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileS
   const view = getView();
   const startZoom = view ? Math.max(0, Math.floor(view.zoom)) : 10;
   const [name, setName] = useState('');
-  const [zMin, setZMin] = useState(startZoom);
+  // From the map's zoom (no deeper than the source goes) to three levels deeper, within the source's maximum.
+  const [zMin, setZMin] = useState(source ? Math.min(source.maxZoom, startZoom) : startZoom);
   const [zMax, setZMax] = useState(source ? Math.min(source.maxZoom, startZoom + 3) : startZoom);
-  // The source set (or changed) with the panel open: offer up to three levels deeper, within its maximum.
+  // The source set or changed (its maximum lowered, say) with the panel open: the range again, within it.
   useEffect(() => {
-    if (source) setZMax(Math.min(source.maxZoom, Math.max(zMin, startZoom + 3)));
+    if (!source) return;
+    const lo = Math.min(source.maxZoom, zMin);
+    setZMin(lo);
+    setZMax(Math.min(source.maxZoom, Math.max(lo, startZoom + 3)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source?.maxZoom, source?.url]);
 
@@ -385,7 +391,7 @@ const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileS
           </div>
         </>
       )}
-      {jobError && <p className="text-[11px] text-red-300">{jobError}</p>}
+      {jobError?.from === 'download' && <p className="text-[11px] text-red-300">{jobError.message}</p>}
     </section>
   );
 };
@@ -427,7 +433,7 @@ const ImportSection: React.FC<{ onDone: (a: OfflineArea) => void }> = ({ onDone 
           Choose a file…
         </button>
       )}
-      {jobError && !job && <p className="text-[11px] text-red-300">{jobError}</p>}
+      {jobError?.from === 'import' && !job && <p className="text-[11px] text-red-300">{jobError.message}</p>}
     </section>
   );
 };
