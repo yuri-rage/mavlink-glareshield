@@ -17,10 +17,15 @@ class FakeWorker {
   }
   postMessage(msg: { type: string; id?: number; text?: string }) {
     if (this.terminated) return;
-    if (msg.type === 'init') setTimeout(() => !this.terminated && this.onmessage?.({ data: { type: 'status', status: 'ready' } }), 5);
+    if (msg.type === 'init')
+      setTimeout(() => !this.terminated && this.onmessage?.({ data: { type: 'status', status: 'ready' } }), 5);
     if (msg.type === 'synthesize') {
       this.synthRequests.push(msg.text!);
-      setTimeout(() => !this.terminated && this.onmessage?.({ data: { type: 'result', id: msg.id, wavBuffer: new ArrayBuffer(8) } }), 50);
+      setTimeout(
+        () =>
+          !this.terminated && this.onmessage?.({ data: { type: 'result', id: msg.id, wavBuffer: new ArrayBuffer(8) } }),
+        50
+      );
     }
   }
   terminate() {
@@ -45,11 +50,30 @@ const check = (name: string, ok: boolean, detail = '') => {
 };
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-check('2 GB device: device voice', defaultVoiceEngine({ deviceMemory: 2, userAgent: 'Mozilla/5.0 (Linux; Android 13)' }) === 'browser');
-check('8 GB desktop: neural', defaultVoiceEngine({ deviceMemory: 8, userAgent: 'Mozilla/5.0 (X11; Linux x86_64)' }) === 'neural');
-check('iPhone: device voice', defaultVoiceEngine({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' }) === 'browser');
-check('iPad reporting as a Mac (touch): device voice', defaultVoiceEngine({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', platform: 'MacIntel', maxTouchPoints: 5 }) === 'browser');
-check('a Mac without touch, memory unknown (Safari): neural', defaultVoiceEngine({ userAgent: 'Mozilla/5.0 (Macintosh)', platform: 'MacIntel', maxTouchPoints: 0 }) === 'neural');
+check(
+  '2 GB device: device voice',
+  defaultVoiceEngine({ deviceMemory: 2, userAgent: 'Mozilla/5.0 (Linux; Android 13)' }) === 'browser'
+);
+check(
+  '8 GB desktop: neural',
+  defaultVoiceEngine({ deviceMemory: 8, userAgent: 'Mozilla/5.0 (X11; Linux x86_64)' }) === 'neural'
+);
+check(
+  'iPhone: device voice',
+  defaultVoiceEngine({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' }) === 'browser'
+);
+check(
+  'iPad reporting as a Mac (touch): device voice',
+  defaultVoiceEngine({
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+    platform: 'MacIntel',
+    maxTouchPoints: 5,
+  }) === 'browser'
+);
+check(
+  'a Mac without touch, memory unknown (Safari): neural',
+  defaultVoiceEngine({ userAgent: 'Mozilla/5.0 (Macintosh)', platform: 'MacIntel', maxTouchPoints: 0 }) === 'neural'
+);
 check('no navigator (tests, SSR): neural', defaultVoiceEngine(undefined) === 'neural');
 
 const store = useAudioAlertsStore;
@@ -58,12 +82,20 @@ store.setState({ soundEnabled: true, voiceEnabled: true });
 // Neural on: the worker starts, becomes ready, and 400 ms later the prewarm starts synthesizing.
 store.getState().setVoiceEngine('neural');
 await wait(450);
-check('neural: one worker, prewarm under way', workers.length === 1 && workers[0].synthRequests.length >= 1, `${workers.length} workers, ${workers[0]?.synthRequests.length} requests`);
+check(
+  'neural: one worker, prewarm under way',
+  workers.length === 1 && workers[0].synthRequests.length >= 1,
+  `${workers.length} workers, ${workers[0]?.synthRequests.length} requests`
+);
 
 // Switch to the device voice mid-prewarm: the worker stops and no new one is started by the prewarm.
 store.getState().setVoiceEngine('browser');
 await wait(400);
-check('device voice mid-prewarm: worker stopped, none started again', workers.length === 1 && workers[0].terminated, `${workers.length} workers`);
+check(
+  'device voice mid-prewarm: worker stopped, none started again',
+  workers.length === 1 && workers[0].terminated,
+  `${workers.length} workers`
+);
 
 // A callout being synthesized when the neural voice is turned off isn't spoken late by the device voice.
 store.getState().setVoiceEngine('neural');
@@ -80,7 +112,11 @@ const before = workers.length;
 store.getState().setVoiceEngine('neural');
 await wait(500);
 const w = workers[workers.length - 1];
-check('back to neural: a new worker, prewarmed again', workers.length === before + 1 && w.synthRequests.some((t) => t === 'Motors armed'), `${workers.length} workers, ${JSON.stringify(w?.synthRequests)}`);
+check(
+  'back to neural: a new worker, prewarmed again',
+  workers.length === before + 1 && w.synthRequests.some((t) => t === 'Motors armed'),
+  `${workers.length} workers, ${JSON.stringify(w?.synthRequests)}`
+);
 
 console.log(failures.length ? `\n${failures.length} voice-engine check(s) FAILED` : '\nAll voice-engine checks PASSED');
 process.exit(failures.length ? 1 : 0);

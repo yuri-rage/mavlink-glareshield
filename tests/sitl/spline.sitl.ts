@@ -59,7 +59,19 @@ const H = { lat: 35, lon: -106 };
 const N = (m: number) => m / 111320;
 const E = (m: number) => m / (111320 * Math.cos((H.lat * Math.PI) / 180));
 const mk = (seq: number, command: number, lat: number, lon: number, z: number, frame = 3) => ({
-  seq, command, frame, current: seq === 0 ? 1 : 0, autocontinue: 1, param1: 0, param2: 0, param3: 0, param4: 0, x: lat, y: lon, z, mission_type: 0,
+  seq,
+  command,
+  frame,
+  current: seq === 0 ? 1 : 0,
+  autocontinue: 1,
+  param1: 0,
+  param2: 0,
+  param3: 0,
+  param4: 0,
+  x: lat,
+  y: lon,
+  z,
+  mission_type: 0,
 });
 const items = [
   mk(0, 16, H.lat, H.lon, 1600, 0), // home as the vehicle reports it: MSL (SITL's --home altitude)
@@ -74,10 +86,20 @@ const up = await missionManager.uploadMissionAndReadBack(items as any, sys, comp
 check('spline mission uploaded', up.success, up.error ?? up.method);
 
 // The path the map draws for it (vehicle home where the mission was planned: SITL's --home).
-const pathItems = items.map((it) => ({ command: it.command, lat: it.x, lon: it.y, alt: it.z, frame: it.frame, param1: it.param1 }));
+const pathItems = items.map((it) => ({
+  command: it.command,
+  lat: it.x,
+  lon: it.y,
+  alt: it.z,
+  frame: it.frame,
+  param1: it.param1,
+}));
 const legs = path.missionPathLegs(pathItems, path.routeIndices(pathItems, true), true);
 const splineLegs = legs.filter((l) => l.spline);
-check('drawn path has the two spline legs, curved', splineLegs.length === 2 && splineLegs.every((l) => l.latLngs.length > 10));
+check(
+  'drawn path has the two spline legs, curved',
+  splineLegs.length === 2 && splineLegs.every((l) => l.latLngs.length > 10)
+);
 
 // Fly it: take off in GUIDED (the usual SITL pattern; SITL has no RC throttle for an AUTO takeoff), then start the
 // mission at waypoint #2 in AUTO, so the vehicle flies straight into the legs being checked.
@@ -111,18 +133,24 @@ const unsub = useTelemetryStore.subscribe((s) => {
 let lastSeq = -1;
 let lastChange = Date.now();
 const progress = setInterval(() => {
-  log(`item ${st().currentWaypointSeq}, ${st().heartbeat.modeName}, alt ${st().position.relativeAlt.toFixed(1)} m, ${track.length} positions`);
+  log(
+    `item ${st().currentWaypointSeq}, ${st().heartbeat.modeName}, alt ${st().position.relativeAlt.toFixed(1)} m, ${track.length} positions`
+  );
 }, 10000);
 try {
-  await until('the mission to reach the RTL', () => {
-    const seq = st().currentWaypointSeq;
-    if (seq !== lastSeq) {
-      lastSeq = seq;
-      lastChange = Date.now();
-    }
-    if (Date.now() - lastChange > 60000) throw new Error(`stalled on item ${seq} for 60 s`);
-    return seq >= 6;
-  }, 240000);
+  await until(
+    'the mission to reach the RTL',
+    () => {
+      const seq = st().currentWaypointSeq;
+      if (seq !== lastSeq) {
+        lastSeq = seq;
+        lastChange = Date.now();
+      }
+      if (Date.now() - lastChange > 60000) throw new Error(`stalled on item ${seq} for 60 s`);
+      return seq >= 6;
+    },
+    240000
+  );
 } finally {
   clearInterval(progress);
 }
@@ -130,7 +158,10 @@ unsub();
 log(`recorded ${track.length} positions`);
 
 // Distance from each track point to a drawn polyline, in metres (flat earth, fine at this size).
-const toXY = (lat: number, lon: number) => [(lon - H.lon) * 111320 * Math.cos((H.lat * Math.PI) / 180), (lat - H.lat) * 111320];
+const toXY = (lat: number, lon: number) => [
+  (lon - H.lon) * 111320 * Math.cos((H.lat * Math.PI) / 180),
+  (lat - H.lat) * 111320,
+];
 function distToLine(pt: [number, number], line: [number, number][]): number {
   const [px, py] = toXY(pt[0], pt[1]);
   let best = Infinity;
@@ -153,15 +184,27 @@ for (const leg of splineLegs) {
   const chordErr = pts.map((q) => distToLine(q, chord));
   const max = (a: number[]) => (a.length ? Math.max(...a) : NaN);
   const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
-  log(`leg to #${leg.to}: ${pts.length} points; off the drawn curve max ${max(curveErr).toFixed(2)} m (mean ${mean(curveErr).toFixed(2)}), off the straight chord max ${max(chordErr).toFixed(2)} m`);
+  log(
+    `leg to #${leg.to}: ${pts.length} points; off the drawn curve max ${max(curveErr).toFixed(2)} m (mean ${mean(curveErr).toFixed(2)}), off the straight chord max ${max(chordErr).toFixed(2)} m`
+  );
   const worst = curveErr.indexOf(max(curveErr));
   // Where along the leg the worst point is (0 = start, 1 = end), and the error away from the ends.
   const inner = curveErr.slice(Math.floor(pts.length * 0.1), Math.ceil(pts.length * 0.9));
-  log(`   worst point at ${(worst / Math.max(1, pts.length - 1)).toFixed(2)} of the leg; middle 80% max ${max(inner).toFixed(2)} m`);
+  log(
+    `   worst point at ${(worst / Math.max(1, pts.length - 1)).toFixed(2)} of the leg; middle 80% max ${max(inner).toFixed(2)} m`
+  );
   // Judged on the middle 80% of the leg: at its ends the track is assigned to a leg by the current mission item, which
   // switches a moment before the waypoint on a fast waypoint, so a few points belong to the turn into the next leg.
-  check(`leg to #${leg.to}: the vehicle flies the drawn curve (within 2 m, middle 80%)`, pts.length > 5 && max(inner) < 2, `${max(inner).toFixed(2)} m`);
-  check(`leg to #${leg.to}: and clearly not the straight chord (3× further off)`, max(chordErr) > 3 * Math.max(0.5, max(inner)), `${max(chordErr).toFixed(2)} m`);
+  check(
+    `leg to #${leg.to}: the vehicle flies the drawn curve (within 2 m, middle 80%)`,
+    pts.length > 5 && max(inner) < 2,
+    `${max(inner).toFixed(2)} m`
+  );
+  check(
+    `leg to #${leg.to}: and clearly not the straight chord (3× further off)`,
+    max(chordErr) > 3 * Math.max(0.5, max(inner)),
+    `${max(chordErr).toFixed(2)} m`
+  );
 }
 
 quiet(failures.length ? `\n${failures.length} SITL spline check(s) FAILED` : '\nAll SITL spline checks PASSED');

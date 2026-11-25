@@ -21,20 +21,33 @@ const b1 = frame('fd2400000001019300002c010000000000001c0c7062ffffffffffffffffff
 
 const st = () => useTelemetryStore.getState();
 const calls: { batteries: number; prevBatteries: number }[] = [];
-useTelemetryStore.subscribe((s, p) => calls.push({ batteries: Object.keys(s.batteries).length, prevBatteries: Object.keys(p.batteries).length }));
+useTelemetryStore.subscribe((s, p) =>
+  calls.push({ batteries: Object.keys(s.batteries).length, prevBatteries: Object.keys(p.batteries).length })
+);
 
 st().processPacket(b0);
 st().processPacket(b1);
-check('applied at once: getState() has both packets', Object.keys(st().batteries).length === 2 && st().battery.voltage > 12);
+check(
+  'applied at once: getState() has both packets',
+  Object.keys(st().batteries).length === 2 && st().battery.voltage > 12
+);
 check('not notified yet (batched)', calls.length === 0, `${calls.length}`);
 await new Promise((r) => setTimeout(r, 40));
 check('one notification for the batch', calls.length === 1, `${calls.length}`);
-check('as one change, from the state before the batch', calls[0]?.prevBatteries === 0 && calls[0]?.batteries === 2, JSON.stringify(calls[0]));
+check(
+  'as one change, from the state before the batch',
+  calls[0]?.prevBatteries === 0 && calls[0]?.batteries === 2,
+  JSON.stringify(calls[0])
+);
 
 calls.length = 0;
 st().processPacket(b0);
 useTelemetryStore.setState({ hasConnectedInSession: true });
-check('another update notifies at once, carrying the gathered packet changes in order', calls.length === 1, `${calls.length}`);
+check(
+  'another update notifies at once, carrying the gathered packet changes in order',
+  calls.length === 1,
+  `${calls.length}`
+);
 await new Promise((r) => setTimeout(r, 40));
 check('nothing left over to deliver after it', calls.length === 1, `${calls.length}`);
 

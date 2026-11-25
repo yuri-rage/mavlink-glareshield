@@ -1,4 +1,5 @@
 import * as React from 'react';
+
 import { cn } from '../../lib/utils';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -35,7 +36,13 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
-        className={cn(baseStyles, !ownTextSize && (size === 'default' || size === 'icon') && 'text-xs sm:text-sm', variants[variant], sizes[size], className)}
+        className={cn(
+          baseStyles,
+          !ownTextSize && (size === 'default' || size === 'icon') && 'text-xs sm:text-sm',
+          variants[variant],
+          sizes[size],
+          className
+        )}
         {...props}
       />
     );

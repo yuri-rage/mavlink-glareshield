@@ -1,20 +1,29 @@
 import React, { useEffect, useState } from 'react';
+
+import { Check, Pencil, Plus, Sliders } from 'lucide-react';
+
+import { COCKPIT_PRESETS, panesInOrder, WIDE_ASPECT, type CockpitPresetId } from '../../lib/cockpitLayout';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { Button } from '../ui/button';
-import { Plus, Sliders, Check, Pencil } from 'lucide-react';
-import { COCKPIT_PRESETS, WIDE_ASPECT, panesInOrder, type CockpitPresetId } from '../../lib/cockpitLayout';
 
 interface EditToolbarProps {
   onOpenWidgetModal: () => void;
   onOpenProfileModal: () => void;
 }
 
-export const EditToolbar: React.FC<EditToolbarProps> = ({
-  onOpenWidgetModal,
-  onOpenProfileModal,
-}) => {
-  const { isEditing, toggleEditing, profile, activeTabId, setTabMode, applyCockpitPreset, editVariant, setEditVariant, addWideLayout, removeWideLayout } =
-    useDashboardStore();
+export const EditToolbar: React.FC<EditToolbarProps> = ({ onOpenWidgetModal, onOpenProfileModal }) => {
+  const {
+    isEditing,
+    toggleEditing,
+    profile,
+    activeTabId,
+    setTabMode,
+    applyCockpitPreset,
+    editVariant,
+    setEditVariant,
+    addWideLayout,
+    removeWideLayout,
+  } = useDashboardStore();
   const [confirmRemoveWide, setConfirmRemoveWide] = useState(false);
   // A pending "Remove the wide layout?" doesn't outlive what it was about.
   useEffect(() => setConfirmRemoveWide(false), [activeTabId, editVariant, isEditing]);
@@ -28,24 +37,33 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({
   const shown = cockpit ? panesInOrder(editingWide ? activeTab.cockpitWide : activeTab.cockpit).length : 0;
 
   return (
-    <div data-edit-chrome className="bg-amber-950/40 border-b border-amber-500/30 px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2.5 text-xs">
-      <div className="flex items-center gap-2 text-amber-300 font-medium min-w-0">
-        <Pencil className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-        <span className="font-bold tracking-tight text-amber-200 uppercase">Dashboard Editor:</span>
-        <span className="text-zinc-400 truncate hidden md:inline">
+    <div
+      data-edit-chrome
+      className="flex flex-wrap items-center justify-between gap-2.5 border-b border-amber-500/30 bg-amber-950/40 px-3 py-2 text-xs sm:px-6"
+    >
+      <div className="flex min-w-0 items-center gap-2 font-medium text-amber-300">
+        <Pencil className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+        <span className="font-bold uppercase tracking-tight text-amber-200">Dashboard Editor:</span>
+        <span className="hidden truncate text-zinc-400 md:inline">
           Editing <strong className="text-zinc-200">{activeTab?.title}</strong>
-          {cockpit && hasWide && <strong className="text-sky-300">{editingWide ? ' (wide layout)' : ' (standard layout)'}</strong>}{' '}
+          {cockpit && hasWide && (
+            <strong className="text-sky-300">{editingWide ? ' (wide layout)' : ' (standard layout)'}</strong>
+          )}{' '}
           {cockpit
             ? `(${shown} shown${activeTab.widgets.length > shown ? `, ${activeTab.widgets.length - shown} hidden` : ''})`
             : `(${activeTab?.widgets.length || 0} widgets)`}
         </span>
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap ml-auto">
+      <div className="ml-auto flex flex-wrap items-center gap-2">
         {/* The tab's layout: Flow (a scrolling grid) or Cockpit (panes filling the window). */}
         {activeTab && (
           <div className="flex items-center gap-1.5">
-            <div className="grid grid-cols-2 gap-0.5 rounded-md border border-zinc-700 bg-zinc-900 p-0.5" role="radiogroup" aria-label="Tab layout">
+            <div
+              className="grid grid-cols-2 gap-0.5 rounded-md border border-zinc-700 bg-zinc-900 p-0.5"
+              role="radiogroup"
+              aria-label="Tab layout"
+            >
               {(['flow', 'cockpit'] as const).map((m) => (
                 <button
                   key={m}
@@ -53,7 +71,11 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({
                   role="radio"
                   aria-checked={(m === 'cockpit') === cockpit}
                   onClick={() => setTabMode(activeTab.id, m)}
-                  title={m === 'flow' ? 'Widgets in a scrolling grid (any screen)' : 'Panes filling the window, no page scroll (stacked on small screens)'}
+                  title={
+                    m === 'flow'
+                      ? 'Widgets in a scrolling grid (any screen)'
+                      : 'Panes filling the window, no page scroll (stacked on small screens)'
+                  }
                   className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
                     (m === 'cockpit') === cockpit ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400 hover:text-zinc-200'
                   }`}
@@ -79,7 +101,9 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({
                       aria-checked={(editVariant === 'wide') === (v === 'wide')}
                       onClick={() => setEditVariant(v)}
                       className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
-                        (editVariant === 'wide') === (v === 'wide') ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400 hover:text-zinc-200'
+                        (editVariant === 'wide') === (v === 'wide')
+                          ? 'bg-sky-500/20 text-sky-300'
+                          : 'text-zinc-400 hover:text-zinc-200'
                       }`}
                     >
                       {v === 'standard' ? 'Standard' : 'Wide'}
@@ -110,7 +134,11 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({
                   >
                     Remove
                   </button>
-                  <button type="button" onClick={() => setConfirmRemoveWide(false)} className="rounded bg-zinc-800 px-1">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmRemoveWide(false)}
+                    className="rounded bg-zinc-800 px-1"
+                  >
                     No
                   </button>
                 </span>
@@ -147,7 +175,7 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({
           variant="default"
           size="sm"
           onClick={onOpenWidgetModal}
-          className="gap-1.5 h-7 px-3 text-xs font-semibold bg-sky-500 hover:bg-sky-600 text-white shadow-sm"
+          className="h-7 gap-1.5 bg-sky-500 px-3 text-xs font-semibold text-white shadow-sm hover:bg-sky-600"
         >
           <Plus className="h-3.5 w-3.5" />
           <span>Add Widget</span>
@@ -157,7 +185,7 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({
           variant="outline"
           size="sm"
           onClick={onOpenProfileModal}
-          className="gap-1.5 h-7 px-2.5 text-xs font-medium border-zinc-700 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300"
+          className="h-7 gap-1.5 border-zinc-700 bg-zinc-900/80 px-2.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800"
           title="Profiles, Backup & Export"
         >
           <Sliders className="h-3.5 w-3.5" />
@@ -168,7 +196,7 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({
           variant="warning"
           size="sm"
           onClick={toggleEditing}
-          className="gap-1.5 h-7 px-3 text-xs font-bold shadow-sm"
+          className="h-7 gap-1.5 px-3 text-xs font-bold shadow-sm"
         >
           <Check className="h-3.5 w-3.5" />
           <span>Finish Edit</span>

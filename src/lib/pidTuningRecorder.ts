@@ -5,8 +5,8 @@
 // its own axis's buffers, so desired and achieved from one message always share a timestamp. A pause in the
 // stream (link loss, GCS_PID_MASK cleared) leaves a gap rather than a straight line across it.
 
-import { SampleRing } from './valueSampler';
 import { PID_TUNING_FIELDS, type PidTuningField } from '../mavlink/pidTuning';
+import { SampleRing } from './valueSampler';
 
 /** Five minutes (the longest chart window) at up to 25 Hz per axis. */
 export const PID_HISTORY_MS = 5 * 60 * 1000;
@@ -61,7 +61,10 @@ class PidTuningRecorder {
 
   /** Axes that have arrived at least once, ascending. */
   seenAxes(): number[] {
-    return [...this.axes.entries()].filter(([, h]) => h.count > 0).map(([a]) => a).sort((a, b) => a - b);
+    return [...this.axes.entries()]
+      .filter(([, h]) => h.count > 0)
+      .map(([a]) => a)
+      .sort((a, b) => a - b);
   }
 
   /** When this axis last arrived (ms epoch), or 0. */

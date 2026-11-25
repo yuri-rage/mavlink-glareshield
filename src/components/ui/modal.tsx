@@ -1,6 +1,8 @@
 import * as React from 'react';
 import { createPortal } from 'react-dom';
+
 import { X } from 'lucide-react';
+
 import { Button } from './button';
 
 interface ModalProps {
@@ -113,7 +115,7 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
 
   const content = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
+      className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
@@ -126,13 +128,13 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className={`w-full ${size === 'xl' ? 'max-w-5xl' : 'max-w-lg'} rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto focus:outline-none`}
+        className={`w-full ${size === 'xl' ? 'max-w-5xl' : 'max-w-lg'} max-h-[90vh] space-y-4 overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl focus:outline-none`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-lg font-bold text-zinc-100">{title}</h2>
-            {description && <p className="text-xs text-zinc-400 mt-1">{description}</p>}
+            {description && <p className="mt-1 text-xs text-zinc-400">{description}</p>}
           </div>
           <Button
             variant="ghost"

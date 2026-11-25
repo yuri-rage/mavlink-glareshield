@@ -2,9 +2,9 @@
 // Mission Planner can load again: QGC WPL 110 text (.waypoints) for each kind, or one QGC .plan with all three.
 // Kept free of the connection and the store so it can be tested on its own.
 
+import type { FencePoint, MissionWaypoint, RallyPoint } from '../store/telemetryStore';
 import type { MissionItemIntData } from './encoder';
 import { cmdHasLocation } from './messages';
-import type { FencePoint, MissionWaypoint, RallyPoint } from '../store/telemetryStore';
 
 const FENCE_RETURN_POINT = 5000;
 const FENCE_POLYGON_INCLUSION = 5001;
@@ -140,7 +140,7 @@ export function groupFenceForPlan(fencePoints: FencePoint[]) {
   const circles: { circle: { center: [number, number]; radius: number }; inclusion: boolean; version: 1 }[] = [];
   let breachReturn: [number, number, number] | undefined;
 
-  for (let i = 0; i < items.length; ) {
+  for (let i = 0; i < items.length;) {
     const it = items[i];
     const lat = coord(it.x, true);
     const lon = coord(it.y, true);
@@ -156,7 +156,8 @@ export function groupFenceForPlan(fencePoints: FencePoint[]) {
         polygon.push([coord(items[i].x, true), coord(items[i].y, true)]);
         i++;
       }
-      if (polygon.length >= 3) polygons.push({ inclusion: it.command === FENCE_POLYGON_INCLUSION, polygon, version: 1 });
+      if (polygon.length >= 3)
+        polygons.push({ inclusion: it.command === FENCE_POLYGON_INCLUSION, polygon, version: 1 });
       continue;
     }
     if (it.command === FENCE_CIRCLE_INCLUSION || it.command === FENCE_CIRCLE_EXCLUSION) {
@@ -203,7 +204,15 @@ export function toQgcPlan(input: PlanInput): string {
         command: it.command,
         doJumpId: i + 1,
         frame: it.frame,
-        params: [num(it.param1), num(it.param2), num(it.param3), num(it.param4), coord(it.x, loc), coord(it.y, loc), num(it.z)],
+        params: [
+          num(it.param1),
+          num(it.param2),
+          num(it.param3),
+          num(it.param4),
+          coord(it.x, loc),
+          coord(it.y, loc),
+          num(it.z),
+        ],
       };
     });
 

@@ -1,13 +1,27 @@
-import { sanitizeWidgetDefinition } from '../lib/widgetValidation';
 import { create } from 'zustand';
-import { QUICK_ACTIONS, addAtEdge, appendPane, pinAsHeader, unpinHeader, buildPreset, movePane, movePaneToEdge, panesInOrder, placedOrUnchanged, removeFromLayout, replacePane, sanitizeCockpit, setSplitSizes, splitPane, type CockpitPresetId, type CockpitVariant, type DropZone } from '../lib/cockpitLayout';
+
 import {
-  CockpitLayout,
-  DashboardProfile,
-  DashboardTab,
-  PlacedWidget,
-  CustomWidgetDefinition,
-} from '../types/widget';
+  addAtEdge,
+  appendPane,
+  buildPreset,
+  movePane,
+  movePaneToEdge,
+  panesInOrder,
+  pinAsHeader,
+  placedOrUnchanged,
+  QUICK_ACTIONS,
+  removeFromLayout,
+  replacePane,
+  sanitizeCockpit,
+  setSplitSizes,
+  splitPane,
+  unpinHeader,
+  type CockpitPresetId,
+  type CockpitVariant,
+  type DropZone,
+} from '../lib/cockpitLayout';
+import { sanitizeWidgetDefinition } from '../lib/widgetValidation';
+import { CockpitLayout, CustomWidgetDefinition, DashboardProfile, DashboardTab, PlacedWidget } from '../types/widget';
 
 const DEFAULT_PROFILE: DashboardProfile = {
   version: '1.0.0',
@@ -35,7 +49,11 @@ const DEFAULT_PROFILE: DashboardProfile = {
           split: 'column',
           children: [
             { split: 'row', children: [{ pane: 'w-hud' }, { pane: 'w-map-flight' }], sizes: [45, 55] },
-            { split: 'row', children: [{ pane: 'w-vfr' }, { pane: 'w-battery' }, { pane: 'w-gps' }], sizes: [33.34, 33.33, 33.33] },
+            {
+              split: 'row',
+              children: [{ pane: 'w-vfr' }, { pane: 'w-battery' }, { pane: 'w-gps' }],
+              sizes: [33.34, 33.33, 33.33],
+            },
           ],
           sizes: [64, 36],
         },
@@ -47,7 +65,11 @@ const DEFAULT_PROFILE: DashboardProfile = {
           children: [
             { pane: 'w-hud' },
             { pane: 'w-map-flight' },
-            { split: 'column', children: [{ pane: 'w-vfr' }, { pane: 'w-battery' }, { pane: 'w-gps' }, { pane: 'w-messages-mini' }], sizes: [25, 25, 25, 25] },
+            {
+              split: 'column',
+              children: [{ pane: 'w-vfr' }, { pane: 'w-battery' }, { pane: 'w-gps' }, { pane: 'w-messages-mini' }],
+              sizes: [25, 25, 25, 25],
+            },
           ],
           sizes: [30, 46, 24],
         },
@@ -81,7 +103,10 @@ const DEFAULT_PROFILE: DashboardProfile = {
       ],
       // Messages and the parameter list side by side, each the full height of the window.
       mode: 'cockpit',
-      cockpit: { header: null, root: { split: 'row', children: [{ pane: 'w-console' }, { pane: 'w-params' }], sizes: [40, 60] } },
+      cockpit: {
+        header: null,
+        root: { split: 'row', children: [{ pane: 'w-console' }, { pane: 'w-params' }], sizes: [40, 60] },
+      },
     },
   ],
   customWidgets: [
@@ -174,10 +199,16 @@ export function reconcileTab(tab: DashboardTab): DashboardTab {
   const widgets = Array.isArray(tab.widgets) ? tab.widgets : [];
   const mode = tab.mode === 'cockpit' ? 'cockpit' : undefined;
   const ids = widgets.map((w) => w.instanceId);
-  const cockpit = tab.cockpit ? sanitizeCockpit(tab.cockpit, ids) ?? undefined : undefined;
-  const cockpitWide = tab.cockpitWide ? sanitizeCockpit(tab.cockpitWide, ids) ?? undefined : undefined;
+  const cockpit = tab.cockpit ? (sanitizeCockpit(tab.cockpit, ids) ?? undefined) : undefined;
+  const cockpitWide = tab.cockpitWide ? (sanitizeCockpit(tab.cockpitWide, ids) ?? undefined) : undefined;
   const { mode: _m, cockpit: _c, cockpitWide: _w, ...rest } = tab;
-  return { ...rest, widgets, ...(mode ? { mode } : {}), ...(cockpit ? { cockpit } : {}), ...(cockpitWide ? { cockpitWide } : {}) };
+  return {
+    ...rest,
+    widgets,
+    ...(mode ? { mode } : {}),
+    ...(cockpit ? { cockpit } : {}),
+    ...(cockpitWide ? { cockpitWide } : {}),
+  };
 }
 
 /** A widget placed in a Cockpit layout: the quick-actions bar pinned as the header when none is, else a new pane. */
@@ -211,7 +242,8 @@ function canPlace(layout: CockpitLayout | undefined, tab: DashboardTab, target: 
   if (!layout?.root) return false;
   const shown = panesInOrder(layout);
   if (!panesInOrder({ header: null, root: layout.root }).includes(target)) return false;
-  if ('instanceId' in what) return tab.widgets.some((w) => w.instanceId === what.instanceId) && !shown.includes(what.instanceId);
+  if ('instanceId' in what)
+    return tab.widgets.some((w) => w.instanceId === what.instanceId) && !shown.includes(what.instanceId);
   return true;
 }
 
@@ -219,7 +251,10 @@ function canPlace(layout: CockpitLayout | undefined, tab: DashboardTab, target: 
 function sourceInstance(tab: DashboardTab, what: PaneSource): { tab: DashboardTab; instanceId: string } {
   if ('instanceId' in what) return { tab, instanceId: what.instanceId };
   const instanceId = newInstanceId();
-  return { tab: { ...tab, widgets: [...tab.widgets, { instanceId, widgetId: what.widgetId, colSpan: 6 }] }, instanceId };
+  return {
+    tab: { ...tab, widgets: [...tab.widgets, { instanceId, widgetId: what.widgetId, colSpan: 6 }] },
+    instanceId,
+  };
 }
 
 const newInstanceId = () => `w-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
@@ -305,7 +340,12 @@ interface DashboardState {
   /** Take a widget out of the layout (it stays on the tab, unplaced). */
   unplaceFromCockpit: (tabId: string, instanceId: string) => void;
   /** Put a widget beside, above or below a pane: a new one of a type, or one of the tab's hidden widgets. */
-  splitInCockpit: (tabId: string, targetInstanceId: string, side: Exclude<DropZone, 'center'>, what: PaneSource) => void;
+  splitInCockpit: (
+    tabId: string,
+    targetInstanceId: string,
+    side: Exclude<DropZone, 'center'>,
+    what: PaneSource
+  ) => void;
   /** Put a widget along a whole edge of the layout (a full-width row, a full-height column). */
   addAtEdgeInCockpit: (tabId: string, side: Exclude<DropZone, 'center'>, what: PaneSource) => void;
   /** The pinned bar becomes a pane (across the bottom), to move and resize like the others. */
@@ -326,7 +366,11 @@ interface DashboardState {
   /** Drop a tab's wide layout (the standard one is used everywhere again). */
   removeWideLayout: (tabId: string) => void;
   /** Change the layout being edited (`create`: make an empty one if the tab has none). */
-  updateLayout: (tabId: string, fn: (layout: CockpitLayout, tab: DashboardTab) => CockpitLayout, create?: boolean) => void;
+  updateLayout: (
+    tabId: string,
+    fn: (layout: CockpitLayout, tab: DashboardTab) => CockpitLayout,
+    create?: boolean
+  ) => void;
   /** Change one tab (made consistent and saved). */
   updateTab: (tabId: string, fn: (tab: DashboardTab) => DashboardTab) => void;
 
@@ -352,10 +396,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   addTab: (title: string) => {
     const id = `tab-${Date.now()}`;
     set((state) => {
-      const newTabs: DashboardTab[] = [
-        ...state.profile.tabs,
-        { id, title: title.trim() || 'New View', widgets: [] },
-      ];
+      const newTabs: DashboardTab[] = [...state.profile.tabs, { id, title: title.trim() || 'New View', widgets: [] }];
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
       saveProfileToStorage(newProfile);
       return { profile: newProfile, activeTabId: id };
@@ -385,13 +426,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   reorderTabs: (fromIndex: number, toIndex: number) => {
     set((state) => {
       const tabs = [...state.profile.tabs];
-      if (
-        fromIndex < 0 ||
-        fromIndex >= tabs.length ||
-        toIndex < 0 ||
-        toIndex >= tabs.length ||
-        fromIndex === toIndex
-      ) {
+      if (fromIndex < 0 || fromIndex >= tabs.length || toIndex < 0 || toIndex >= tabs.length || fromIndex === toIndex) {
         return {};
       }
       const [moved] = tabs.splice(fromIndex, 1);
@@ -414,7 +449,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         // (In the layout being edited; the other one lists it as not shown.)
         const v = state.editVariant === 'wide' && tab.cockpitWide ? 'wide' : 'standard';
         const withWidget = { ...tab, widgets: [...tab.widgets, newWidget] };
-        return reconcileTab(tab.mode !== 'cockpit' ? withWidget : withLayout(withWidget, v, placeWidget(layoutOf(tab, v), instanceId, widgetId)));
+        return reconcileTab(
+          tab.mode !== 'cockpit'
+            ? withWidget
+            : withLayout(withWidget, v, placeWidget(layoutOf(tab, v), instanceId, widgetId))
+        );
       });
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };
       saveProfileToStorage(newProfile);
@@ -530,7 +569,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const v = get().editVariant;
     get().updateTab(tabId, (tab) => {
       const { widgets, layout } = buildPreset(preset, tab.widgets, newInstanceId);
-      return { ...withLayout({ ...tab, widgets }, v === 'wide' && tab.cockpitWide ? 'wide' : 'standard', layout), mode: 'cockpit' };
+      return {
+        ...withLayout({ ...tab, widgets }, v === 'wide' && tab.cockpitWide ? 'wide' : 'standard', layout),
+        mode: 'cockpit',
+      };
     });
   },
 
@@ -539,11 +581,22 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   placeInCockpit: (tabId, instanceId) => {
-    get().updateLayout(tabId, (layout, tab) => placeWidget(layout, instanceId, tab.widgets.find((w) => w.instanceId === instanceId)?.widgetId ?? ''), true);
+    get().updateLayout(
+      tabId,
+      (layout, tab) =>
+        placeWidget(layout, instanceId, tab.widgets.find((w) => w.instanceId === instanceId)?.widgetId ?? ''),
+      true
+    );
   },
 
   unplaceFromCockpit: (tabId, instanceId) => {
-    get().updateLayout(tabId, (layout, tab) => removeFromLayout(layout, instanceId, tab.widgets.map((w) => w.instanceId)));
+    get().updateLayout(tabId, (layout, tab) =>
+      removeFromLayout(
+        layout,
+        instanceId,
+        tab.widgets.map((w) => w.instanceId)
+      )
+    );
   },
 
   splitInCockpit: (tabId, target, side, what) => {
@@ -553,7 +606,10 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const layout = layoutOf(t, variant);
       if (!canPlace(layout, t, target, what)) return t;
       const { tab, instanceId } = sourceInstance(t, what);
-      const next = sanitizeCockpit(splitPane(layout!, target, side, instanceId), tab.widgets.map((w) => w.instanceId));
+      const next = sanitizeCockpit(
+        splitPane(layout!, target, side, instanceId),
+        tab.widgets.map((w) => w.instanceId)
+      );
       // Past the depth or pane limits: nothing changes (no pane lost, no new widget left unplaced).
       const placed = placedOrUnchanged(layout!, next, [instanceId]);
       return placed === layout ? t : withLayout(tab, variant, placed);
@@ -566,27 +622,54 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const variant = v === 'wide' && t.cockpitWide ? 'wide' : 'standard';
       const layout = layoutOf(t, variant) ?? { header: null, root: null };
       // A widget from the tab: its own, and not already shown.
-      if ('instanceId' in what && (!t.widgets.some((w) => w.instanceId === what.instanceId) || panesInOrder(layout).includes(what.instanceId))) return t;
+      if (
+        'instanceId' in what &&
+        (!t.widgets.some((w) => w.instanceId === what.instanceId) || panesInOrder(layout).includes(what.instanceId))
+      )
+        return t;
       const { tab, instanceId } = sourceInstance(t, what);
-      const placed = placedOrUnchanged(layout, sanitizeCockpit(addAtEdge(layout, instanceId, side), tab.widgets.map((w) => w.instanceId)), [instanceId]);
+      const placed = placedOrUnchanged(
+        layout,
+        sanitizeCockpit(
+          addAtEdge(layout, instanceId, side),
+          tab.widgets.map((w) => w.instanceId)
+        ),
+        [instanceId]
+      );
       return placed === layout ? t : withLayout(tab, variant, placed);
     });
   },
 
   unpinInCockpit: (tabId) => {
-    get().updateLayout(tabId, (layout, tab) => unpinHeader(layout, tab.widgets.map((w) => w.instanceId)));
+    get().updateLayout(tabId, (layout, tab) =>
+      unpinHeader(
+        layout,
+        tab.widgets.map((w) => w.instanceId)
+      )
+    );
   },
 
   pinInCockpit: (tabId, instanceId) => {
     get().updateLayout(tabId, (layout, tab) => {
       const w = tab.widgets.find((x) => x.instanceId === instanceId);
       if (!w || !QUICK_ACTIONS.has(w.widgetId)) return layout;
-      return pinAsHeader(layout, instanceId, tab.widgets.map((x) => x.instanceId));
+      return pinAsHeader(
+        layout,
+        instanceId,
+        tab.widgets.map((x) => x.instanceId)
+      );
     });
   },
 
   moveToEdgeInCockpit: (tabId, src, side) => {
-    get().updateLayout(tabId, (layout, tab) => movePaneToEdge(layout, src, side, tab.widgets.map((w) => w.instanceId)));
+    get().updateLayout(tabId, (layout, tab) =>
+      movePaneToEdge(
+        layout,
+        src,
+        side,
+        tab.widgets.map((w) => w.instanceId)
+      )
+    );
   },
 
   replaceInCockpit: (tabId, target, what) => {
@@ -601,14 +684,24 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   moveInCockpit: (tabId, src, target, zone) => {
-    get().updateLayout(tabId, (layout, tab) => movePane(layout, src, target, zone, tab.widgets.map((w) => w.instanceId)));
+    get().updateLayout(tabId, (layout, tab) =>
+      movePane(
+        layout,
+        src,
+        target,
+        zone,
+        tab.widgets.map((w) => w.instanceId)
+      )
+    );
   },
 
   editVariant: 'standard',
   setEditVariant: (editVariant) => set({ editVariant }),
 
   addWideLayout: (tabId) => {
-    get().updateTab(tabId, (tab) => (tab.cockpitWide ? tab : { ...tab, cockpitWide: tab.cockpit ?? { header: null, root: null } }));
+    get().updateTab(tabId, (tab) =>
+      tab.cockpitWide ? tab : { ...tab, cockpitWide: tab.cockpit ?? { header: null, root: null } }
+    );
     set({ editVariant: 'wide' });
   },
 

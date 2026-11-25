@@ -1,8 +1,9 @@
 // A composite widget panel holding one of the dashboard's built-in widgets (GPS, battery, HUD, map...).
 
 import React, { useEffect, useRef, useState } from 'react';
-import { CardEmbedContext } from '../../ui/card';
+
 import { BUILTIN_PANELS, builtinPanelId } from '../../../lib/builtinWidgets';
+import { CardEmbedContext } from '../../ui/card';
 import { renderBuiltinWidget } from '../builtinRegistry';
 import type { PanelProps } from './panelKit';
 
@@ -23,12 +24,16 @@ export const BuiltinPanel: React.FC<PanelProps> = ({ def }) => {
   }, []);
 
   if (!id) {
-    return <p className="text-xs text-zinc-500 text-center py-4 font-mono">Unknown built-in widget: {String(def.widgetId ?? '')}</p>;
+    return (
+      <p className="py-4 text-center font-mono text-xs text-zinc-500">
+        Unknown built-in widget: {String(def.widgetId ?? '')}
+      </p>
+    );
   }
   const info = BUILTIN_PANELS[id];
   const widget = renderBuiltinWidget(id, width >= MAP_FULL_WIDTH_PX ? 12 : 6);
   return (
-    <div ref={ref} className="flex-1 flex flex-col min-w-0 [&>*]:flex-1" style={{ minHeight: info.minHeightPx }}>
+    <div ref={ref} className="flex min-w-0 flex-1 flex-col [&>*]:flex-1" style={{ minHeight: info.minHeightPx }}>
       <CardEmbedContext.Provider value={true}>{widget}</CardEmbedContext.Provider>
     </div>
   );

@@ -57,12 +57,21 @@ const enc = mavlinkConnection.getEncoder();
 const H = { lat: 35, lon: -106 };
 // 1. Round trip: an inclusion square around home, an exclusion circle off to one side, a return point.
 let fence = fd.addShape(fd.EMPTY_FENCE, fd.squareAt(H, 600, true)).draft;
-fence = fd.addShape(fence, { kind: 'circle', inclusion: false, center: fd.offsetPoint(H, 150, 90), radius: 40.5 }).draft;
+fence = fd.addShape(fence, {
+  kind: 'circle',
+  inclusion: false,
+  center: fd.offsetPoint(H, 150, 90),
+  radius: 40.5,
+}).draft;
 fence = fd.setReturnPoint(fence, fd.offsetPoint(H, 50, 180));
 {
   const res = await missionManager.uploadFenceAndReadBack(fd.fenceDraftToItems(fence), sys, comp);
   const v = fd.checkFenceReadBack(fence, res.readBack, res.readOk);
-  check('fence over MAVFTP: uploaded and verified', res.success && res.method === 'ftp' && v.status === 'verified', `${res.method} ${v.status} ${v.differences.join('; ')} ${res.error ?? ''}`);
+  check(
+    'fence over MAVFTP: uploaded and verified',
+    res.success && res.method === 'ftp' && v.status === 'verified',
+    `${res.method} ${v.status} ${v.differences.join('; ')} ${res.error ?? ''}`
+  );
 }
 {
   const realWrite = mavFtpClient.writeFile.bind(mavFtpClient);
@@ -73,7 +82,11 @@ fence = fd.setReturnPoint(fence, fd.offsetPoint(H, 50, 180));
   (mavFtpClient as any).writeFile = realWrite;
   (mavFtpClient as any).readFile = realRead;
   const v = fd.checkFenceReadBack(fence, res.readBack, res.readOk);
-  check('fence item-by-item: uploaded, streamed back, verified', res.success && res.method === 'legacy' && v.status === 'verified', `${res.method} ${v.status} ${v.differences.join('; ')} ${res.error ?? ''}`);
+  check(
+    'fence item-by-item: uploaded, streamed back, verified',
+    res.success && res.method === 'legacy' && v.status === 'verified',
+    `${res.method} ${v.status} ${v.differences.join('; ')} ${res.error ?? ''}`
+  );
 }
 
 // 2. Fencing on (polygons and circles only, action RTL or land), hover at 20 m over home.
@@ -114,9 +127,17 @@ log(`hovering at ${st().position.relativeAlt.toFixed(1)} m, mode ${st().heartbea
   } catch {
     // reported below
   }
-  check('vehicle takes its fence action at once (leaves GUIDED: RTL or land)', ['RTL', 'LAND', 'SMART_RTL', 'BRAKE'].includes(st().heartbeat.modeName),
-    st().heartbeat.modeName);
-  log(`messages: ${st().statusMessages.slice(-5).map((m: any) => m.text).join(' | ')}`);
+  check(
+    'vehicle takes its fence action at once (leaves GUIDED: RTL or land)',
+    ['RTL', 'LAND', 'SMART_RTL', 'BRAKE'].includes(st().heartbeat.modeName),
+    st().heartbeat.modeName
+  );
+  log(
+    `messages: ${st()
+      .statusMessages.slice(-5)
+      .map((m: any) => m.text)
+      .join(' | ')}`
+  );
 }
 
 quiet(failures.length ? `\n${failures.length} SITL fence check(s) FAILED` : '\nAll SITL fence checks PASSED');

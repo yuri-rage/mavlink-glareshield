@@ -1,6 +1,7 @@
 // ADS-B traffic currently known (mavlink/adsb.ts), keyed by ICAO address. Reports older than TRAFFIC_EXPIRE_MS drop.
 
 import { create } from 'zustand';
+
 import { TRAFFIC_EXPIRE_MS, type TrafficAircraft } from '../mavlink/adsb';
 
 interface TrafficState {

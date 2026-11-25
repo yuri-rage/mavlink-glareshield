@@ -4,9 +4,11 @@
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+
 import { Info, Lock, RotateCcw } from 'lucide-react';
-import type { ParamMeta } from '../../../mavlink/paramMetadata';
+
 import { bitmaskBits, hasBit, setBits, sortedValueOptions, withBit } from '../../../mavlink/paramBits';
+import type { ParamMeta } from '../../../mavlink/paramMetadata';
 import { formatParamValue } from '../../../mavlink/paramMetadata';
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -74,7 +76,7 @@ export const Popover: React.FC<PopoverProps> = ({ anchor, onClose, width = 300, 
       ref={ref}
       role="dialog"
       aria-label={label}
-      className="fixed z-[2000] rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl text-xs font-sans flex flex-col"
+      className="fixed z-[2000] flex flex-col rounded-lg border border-zinc-700 bg-zinc-950 font-sans text-xs shadow-2xl"
       style={{ top: pos.top, left: pos.left, width, maxHeight: pos.maxHeight }}
     >
       {children}
@@ -101,7 +103,15 @@ interface EnumSelectProps {
   onCustom: () => void;
 }
 
-export const EnumSelect: React.FC<EnumSelectProps> = ({ name, values, editValue, onChange, onSave, onCancel, onCustom }) => {
+export const EnumSelect: React.FC<EnumSelectProps> = ({
+  name,
+  values,
+  editValue,
+  onChange,
+  onSave,
+  onCancel,
+  onCustom,
+}) => {
   const options = sortedValueOptions(values);
   const current = editValue.trim() === '' ? NaN : Number(editValue);
   const known = Number.isFinite(current) && options.some(([v]) => v === current);
@@ -123,7 +133,7 @@ export const EnumSelect: React.FC<EnumSelectProps> = ({ name, values, editValue,
           onCancel();
         }
       }}
-      className="h-6 max-w-[220px] rounded border border-sky-500 bg-black/90 text-sky-300 text-xs font-mono px-1 focus:outline-none focus:ring-1 focus:ring-sky-500"
+      className="h-6 max-w-[220px] rounded border border-sky-500 bg-black/90 px-1 font-mono text-xs text-sky-300 focus:outline-none focus:ring-1 focus:ring-sky-500"
     >
       {!known && <option value="">{formatParamValue(current)} (not in list)</option>}
       {options.map(([v, label]) => (
@@ -152,7 +162,16 @@ interface BitmaskEditorProps {
   onCancel: () => void;
 }
 
-export const BitmaskEditor: React.FC<BitmaskEditorProps> = ({ name, bitmask, value, original, anchor, onChange, onSave, onCancel }) => {
+export const BitmaskEditor: React.FC<BitmaskEditorProps> = ({
+  name,
+  bitmask,
+  value,
+  original,
+  anchor,
+  onChange,
+  onSave,
+  onCancel,
+}) => {
   const bits = bitmaskBits(bitmask);
   // Bits set on the vehicle that the definition doesn't name are kept and listed, so saving never drops them.
   const unnamed = setBits(value).filter((b) => bitmask[b] === undefined);
@@ -183,9 +202,9 @@ export const BitmaskEditor: React.FC<BitmaskEditorProps> = ({ name, bitmask, val
 
   return (
     <Popover anchor={anchor} onClose={onCancel} width={300} label={`${name} bits`}>
-      <div className="px-3 pt-2.5 pb-1.5 border-b border-zinc-800 flex items-center justify-between gap-2">
-        <span className="font-bold text-zinc-100 font-mono truncate">{name}</span>
-        <div className="flex items-center gap-1 font-mono text-sky-300 shrink-0" aria-live="polite">
+      <div className="flex items-center justify-between gap-2 border-b border-zinc-800 px-3 pb-1.5 pt-2.5">
+        <span className="truncate font-mono font-bold text-zinc-100">{name}</span>
+        <div className="flex shrink-0 items-center gap-1 font-mono text-sky-300" aria-live="polite">
           <span>=</span>
           <input
             type="number"
@@ -200,17 +219,17 @@ export const BitmaskEditor: React.FC<BitmaskEditorProps> = ({ name, bitmask, val
                 onSave();
               }
             }}
-            className="h-6 w-20 rounded border border-sky-500/70 bg-zinc-900 px-1.5 text-xs font-mono text-sky-300 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            className="h-6 w-20 rounded border border-sky-500/70 bg-zinc-900 px-1.5 font-mono text-xs text-sky-300 focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
           {changed && <span className="text-[10px] text-zinc-500">(was {origRounded})</span>}
         </div>
       </div>
-      <ul className="overflow-y-auto px-1.5 py-1 flex-1 min-h-0">
+      <ul className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1">
         {bits.map((bit) => {
           const on = hasBit(value, bit);
           return (
             <li key={bit}>
-              <label className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-zinc-900 cursor-pointer">
+              <label className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 hover:bg-zinc-900">
                 <input
                   type="checkbox"
                   checked={on}
@@ -218,37 +237,46 @@ export const BitmaskEditor: React.FC<BitmaskEditorProps> = ({ name, bitmask, val
                   className="accent-sky-500"
                 />
                 <span className={on ? 'text-zinc-100' : 'text-zinc-400'}>{bitmask[bit]}</span>
-                <span className="ml-auto text-[10px] font-mono text-zinc-600">bit {bit}</span>
+                <span className="ml-auto font-mono text-[10px] text-zinc-600">bit {bit}</span>
               </label>
             </li>
           );
         })}
         {unnamed.map((bit) => (
-          <li key={`u${bit}`} className="flex items-center gap-2 px-1.5 py-1 text-zinc-500 italic">
-            <input type="checkbox" checked onChange={(e) => onChange(withBit(value, bit, e.target.checked))} className="accent-zinc-500" />
+          <li key={`u${bit}`} className="flex items-center gap-2 px-1.5 py-1 italic text-zinc-500">
+            <input
+              type="checkbox"
+              checked
+              onChange={(e) => onChange(withBit(value, bit, e.target.checked))}
+              className="accent-zinc-500"
+            />
             Unnamed bit
-            <span className="ml-auto text-[10px] font-mono not-italic">bit {bit}</span>
+            <span className="ml-auto font-mono text-[10px] not-italic">bit {bit}</span>
           </li>
         ))}
       </ul>
-      <div className="px-3 py-2 border-t border-zinc-800 flex items-center gap-2">
+      <div className="flex items-center gap-2 border-t border-zinc-800 px-3 py-2">
         <button
           type="button"
           onClick={() => onChange(original)}
           disabled={!changed}
-          className="text-[11px] text-zinc-400 hover:text-zinc-200 disabled:opacity-40 inline-flex items-center gap-1"
+          className="inline-flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-200 disabled:opacity-40"
         >
           <RotateCcw className="h-3 w-3" /> Undo changes
         </button>
         <div className="ml-auto flex items-center gap-1.5">
-          <button type="button" onClick={onCancel} className="h-6 px-2 rounded border border-zinc-700 text-zinc-300 hover:bg-zinc-800">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="h-6 rounded border border-zinc-700 px-2 text-zinc-300 hover:bg-zinc-800"
+          >
             Cancel
           </button>
           <button
             type="button"
             onClick={onSave}
             disabled={!changed}
-            className="h-6 px-2.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold disabled:opacity-40"
+            className="h-6 rounded bg-emerald-600 px-2.5 font-semibold text-white hover:bg-emerald-500 disabled:opacity-40"
           >
             Save
           </button>
@@ -276,30 +304,62 @@ interface DetailsProps {
 export const ParamDetails: React.FC<DetailsProps> = ({ name, meta, anchor, onClose, source, defaultValue }) => {
   const options = meta.values ? sortedValueOptions(meta.values) : [];
   const bits = meta.bitmask ? bitmaskBits(meta.bitmask) : [];
-  const range = meta.min !== undefined || meta.max !== undefined ? `${meta.min ?? '—'} to ${meta.max ?? '—'}${meta.units ? ` ${meta.units}` : ''}` : null;
+  const range =
+    meta.min !== undefined || meta.max !== undefined
+      ? `${meta.min ?? '—'} to ${meta.max ?? '—'}${meta.units ? ` ${meta.units}` : ''}`
+      : null;
   return (
     <Popover anchor={anchor} onClose={onClose} width={360} label={`${name} details`}>
-      <div className="px-3 pt-2.5 pb-2 border-b border-zinc-800">
-        <div className="font-bold text-zinc-100 font-mono">{name}</div>
-        {meta.displayName && <div className="text-zinc-300 mt-0.5">{meta.displayName}</div>}
-        <div className="flex flex-wrap gap-1 mt-1.5">
-          {meta.rebootRequired && <span className="px-1.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px]">Reboot required</span>}
-          {meta.readOnly && <span className="px-1.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 text-[10px] inline-flex items-center gap-1"><Lock className="h-2.5 w-2.5" />Read-only</span>}
-          {meta.user && <span className="px-1.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800 text-[10px]">{meta.user}</span>}
+      <div className="border-b border-zinc-800 px-3 pb-2 pt-2.5">
+        <div className="font-mono font-bold text-zinc-100">{name}</div>
+        {meta.displayName && <div className="mt-0.5 text-zinc-300">{meta.displayName}</div>}
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {meta.rebootRequired && (
+            <span className="rounded border border-amber-500/30 bg-amber-500/15 px-1.5 text-[10px] text-amber-300">
+              Reboot required
+            </span>
+          )}
+          {meta.readOnly && (
+            <span className="inline-flex items-center gap-1 rounded border border-zinc-700 bg-zinc-800 px-1.5 text-[10px] text-zinc-300">
+              <Lock className="h-2.5 w-2.5" />
+              Read-only
+            </span>
+          )}
+          {meta.user && (
+            <span className="rounded border border-zinc-800 bg-zinc-900 px-1.5 text-[10px] text-zinc-400">
+              {meta.user}
+            </span>
+          )}
         </div>
       </div>
-      <div className="overflow-y-auto px-3 py-2 space-y-2 flex-1 min-h-0">
-        {meta.description && <p className="text-zinc-300 leading-relaxed whitespace-pre-line">{meta.description}</p>}
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-2">
+        {meta.description && <p className="whitespace-pre-line leading-relaxed text-zinc-300">{meta.description}</p>}
         {(range || meta.units || meta.increment || defaultValue !== undefined) && (
           <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-0.5 text-[11px]">
-            {range && (<><dt className="text-zinc-500">Range</dt><dd className="text-zinc-200 font-mono">{range}</dd></>)}
-            {meta.units && !range && (<><dt className="text-zinc-500">Units</dt><dd className="text-zinc-200 font-mono">{meta.units}</dd></>)}
-            {meta.increment && (<><dt className="text-zinc-500">Step</dt><dd className="text-zinc-200 font-mono">{meta.increment}</dd></>)}
+            {range && (
+              <>
+                <dt className="text-zinc-500">Range</dt>
+                <dd className="font-mono text-zinc-200">{range}</dd>
+              </>
+            )}
+            {meta.units && !range && (
+              <>
+                <dt className="text-zinc-500">Units</dt>
+                <dd className="font-mono text-zinc-200">{meta.units}</dd>
+              </>
+            )}
+            {meta.increment && (
+              <>
+                <dt className="text-zinc-500">Step</dt>
+                <dd className="font-mono text-zinc-200">{meta.increment}</dd>
+              </>
+            )}
             {defaultValue !== undefined && (
               <>
                 <dt className="text-zinc-500">Default</dt>
-                <dd className="text-zinc-200 font-mono">
-                  {formatParamValue(defaultValue)}{meta.units ? ` ${meta.units}` : ''}
+                <dd className="font-mono text-zinc-200">
+                  {formatParamValue(defaultValue)}
+                  {meta.units ? ` ${meta.units}` : ''}
                 </dd>
               </>
             )}
@@ -307,37 +367,46 @@ export const ParamDetails: React.FC<DetailsProps> = ({ name, meta, anchor, onClo
         )}
         {options.length > 0 && (
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-0.5">Values</div>
-            <ul className="text-[11px] space-y-px">
+            <div className="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Values</div>
+            <ul className="space-y-px text-[11px]">
               {options.map(([v, label]) => (
-                <li key={v} className="flex gap-2"><span className="font-mono text-zinc-500 w-10 text-right shrink-0">{v}</span><span className="text-zinc-300">{label}</span></li>
+                <li key={v} className="flex gap-2">
+                  <span className="w-10 shrink-0 text-right font-mono text-zinc-500">{v}</span>
+                  <span className="text-zinc-300">{label}</span>
+                </li>
               ))}
             </ul>
           </div>
         )}
         {bits.length > 0 && (
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-0.5">Bits</div>
-            <ul className="text-[11px] space-y-px">
+            <div className="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500">Bits</div>
+            <ul className="space-y-px text-[11px]">
               {bits.map((b) => (
-                <li key={b} className="flex gap-2"><span className="font-mono text-zinc-500 w-10 text-right shrink-0">{b}</span><span className="text-zinc-300">{meta.bitmask![b]}</span></li>
+                <li key={b} className="flex gap-2">
+                  <span className="w-10 shrink-0 text-right font-mono text-zinc-500">{b}</span>
+                  <span className="text-zinc-300">{meta.bitmask![b]}</span>
+                </li>
               ))}
             </ul>
           </div>
         )}
-        {source && <p className="text-[10px] text-zinc-500 pt-1 border-t border-zinc-900">{source}</p>}
+        {source && <p className="border-t border-zinc-900 pt-1 text-[10px] text-zinc-500">{source}</p>}
       </div>
     </Popover>
   );
 };
 
 /** The small (i) button that opens the details card. */
-export const DetailsButton = React.forwardRef<HTMLButtonElement, { name: string; onClick: (button: HTMLButtonElement) => void }>(({ name, onClick }, ref) => (
+export const DetailsButton = React.forwardRef<
+  HTMLButtonElement,
+  { name: string; onClick: (button: HTMLButtonElement) => void }
+>(({ name, onClick }, ref) => (
   <button
     ref={ref}
     type="button"
     onClick={(e) => onClick(e.currentTarget)}
-    className="h-4 w-4 inline-flex items-center justify-center rounded text-zinc-500 hover:text-sky-300 shrink-0"
+    className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-zinc-500 hover:text-sky-300"
     title={`About ${name}`}
     aria-label={`About ${name}`}
   >

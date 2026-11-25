@@ -14,7 +14,14 @@
 
 import type { VehicleCategory } from './messages';
 
-export const CMD = { WAYPOINT: 16, LOITER_UNLIM: 17, LOITER_TURNS: 18, LOITER_TIME: 19, LOITER_TO_ALT: 31, SPLINE_WAYPOINT: 82 } as const;
+export const CMD = {
+  WAYPOINT: 16,
+  LOITER_UNLIM: 17,
+  LOITER_TURNS: 18,
+  LOITER_TIME: 19,
+  LOITER_TO_ALT: 31,
+  SPLINE_WAYPOINT: 82,
+} as const;
 
 export interface WaypointRadius {
   radiusM: number;
@@ -29,7 +36,8 @@ type ParamLookup = (name: string) => number | undefined;
 /** ArduPilot's defaults, for when the vehicle's parameter hasn't been read. */
 const DEFAULTS = { planeWp: 90, planeLoiter: 60, copterWp: 2, roverWp: 2 };
 
-const positive = (v: number | undefined): number | undefined => (v !== undefined && Number.isFinite(v) && v > 0 ? v : undefined);
+const positive = (v: number | undefined): number | undefined =>
+  v !== undefined && Number.isFinite(v) && v > 0 ? v : undefined;
 
 /** The stored loiter-turns radius: a byte, or tens of metres above 255 (up to 2550). */
 function turnsRadius(r: number): number {
@@ -64,10 +72,16 @@ export function waypointRadius(
     return v ? { radiusM: v.r, source: 'default', label: `${what} ${fmt(v.r)} (${v.name})` } : null;
   };
   const planeLoiter = (): WaypointRadius => {
-    const r = positive(param('WP_LOITER_RAD') !== undefined ? Math.abs(param('WP_LOITER_RAD')!) : undefined) ?? DEFAULTS.planeLoiter;
+    const r =
+      positive(param('WP_LOITER_RAD') !== undefined ? Math.abs(param('WP_LOITER_RAD')!) : undefined) ??
+      DEFAULTS.planeLoiter;
     return { radiusM: r, source: 'default', label: `Loiter radius ${fmt(r)} (WP_LOITER_RAD)` };
   };
-  const own = (r: number, what: string): WaypointRadius => ({ radiusM: r, source: 'item', label: `${what} ${fmt(r)} (this item)` });
+  const own = (r: number, what: string): WaypointRadius => ({
+    radiusM: r,
+    source: 'item',
+    label: `${what} ${fmt(r)} (this item)`,
+  });
 
   switch (item.command) {
     case CMD.WAYPOINT: {
@@ -87,7 +101,8 @@ export function waypointRadius(
     }
     case CMD.LOITER_TURNS: {
       const r = positive(turnsRadius(item.param3));
-      if (r !== undefined && (category === 'plane' || category === 'copter' || category === 'rover')) return own(r, 'Loiter radius');
+      if (r !== undefined && (category === 'plane' || category === 'copter' || category === 'rover'))
+        return own(r, 'Loiter radius');
       return category === 'plane' ? planeLoiter() : def('Waypoint radius');
     }
     case CMD.LOITER_TIME:

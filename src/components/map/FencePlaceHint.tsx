@@ -2,17 +2,30 @@
 // exclusion), and while a polygon is being drawn, its vertex count with Finish and Cancel.
 
 import React from 'react';
-import { useMissionPlanStore, type FenceDrawKind } from '../../store/missionPlanStore';
-import { DEFAULT_CIRCLE_RADIUS } from '../../mavlink/fenceDraft';
-import { finishFencePolygon } from './fenceCommit';
+
 import { useLengthUnit, wholeLength } from '../../lib/inputUnits';
+import { DEFAULT_CIRCLE_RADIUS } from '../../mavlink/fenceDraft';
+import { useMissionPlanStore, type FenceDrawKind } from '../../store/missionPlanStore';
+import { finishFencePolygon } from './fenceCommit';
 
 const KINDS: { kind: FenceDrawKind; label: string; title: string }[] = [
   { kind: 'polygon-inclusion', label: 'Incl. polygon', title: 'Click each vertex; the vehicle must stay inside' },
   { kind: 'polygon-exclusion', label: 'Excl. polygon', title: 'Click each vertex; the vehicle must stay outside' },
-  { kind: 'circle-inclusion', label: 'Incl. circle', title: 'Click the centre ({r} radius; drag its handle to resize)' },
-  { kind: 'circle-exclusion', label: 'Excl. circle', title: 'Click the centre ({r} radius; drag its handle to resize)' },
-  { kind: 'return-point', label: 'Return point', title: 'Click to place (or move) the fence return point (used by ArduPlane)' },
+  {
+    kind: 'circle-inclusion',
+    label: 'Incl. circle',
+    title: 'Click the centre ({r} radius; drag its handle to resize)',
+  },
+  {
+    kind: 'circle-exclusion',
+    label: 'Excl. circle',
+    title: 'Click the centre ({r} radius; drag its handle to resize)',
+  },
+  {
+    kind: 'return-point',
+    label: 'Return point',
+    title: 'Click to place (or move) the fence return point (used by ArduPlane)',
+  },
 ];
 
 const BTN = 'rounded px-1.5 py-0.5 text-[10px] font-bold';
@@ -61,17 +74,27 @@ export const FencePlaceHint: React.FC = () => {
           >
             Finish
           </button>
-          <button type="button" onClick={() => setFenceDrawing(n > 1 ? drawing!.slice(0, -1) : null)} className={`${BTN} border border-zinc-600 text-zinc-200 hover:bg-zinc-800`}>
+          <button
+            type="button"
+            onClick={() => setFenceDrawing(n > 1 ? drawing!.slice(0, -1) : null)}
+            className={`${BTN} border border-zinc-600 text-zinc-200 hover:bg-zinc-800`}
+          >
             Undo vertex
           </button>
-          <button type="button" onClick={() => setFenceDrawing(null)} className={`${BTN} border border-zinc-600 text-zinc-200 hover:bg-zinc-800`}>
+          <button
+            type="button"
+            onClick={() => setFenceDrawing(null)}
+            className={`${BTN} border border-zinc-600 text-zinc-200 hover:bg-zinc-800`}
+          >
             Cancel
           </button>
         </div>
       )}
       {!polygon && (
         <div>
-          {kind === 'return-point' ? 'Click the map to place the return point' : 'Click the map to place a circle centre'}
+          {kind === 'return-point'
+            ? 'Click the map to place the return point'
+            : 'Click the map to place a circle centre'}
           <span className="text-zinc-500"> · Esc to stop</span>
         </div>
       )}

@@ -1,15 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
+
 import { Navigation, RotateCcw, SkipForward, X } from 'lucide-react';
+
+import { formatEta, useConfirmStep, useWaypointNavigation } from '../../lib/useWaypointNavigation';
+import { getMavCmdName } from '../../mavlink/messages';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
-import { getMavCmdName } from '../../mavlink/messages';
-import { formatEta, useConfirmStep, useWaypointNavigation } from '../../lib/useWaypointNavigation';
 
 /** One readout in a fixed-width slot, so changing numbers never resize the strip. */
-const Stat: React.FC<{ label: string; value: string; width: string; tone: string }> = ({ label, value, width, tone }) => (
-  <span className="flex items-baseline gap-1 shrink-0">
+const Stat: React.FC<{ label: string; value: string; width: string; tone: string }> = ({
+  label,
+  value,
+  width,
+  tone,
+}) => (
+  <span className="flex shrink-0 items-baseline gap-1">
     <span className="text-zinc-500">{label}</span>
-    <b className={`${tone} inline-block text-right tabular-nums whitespace-nowrap`} style={{ minWidth: width }}>
+    <b className={`${tone} inline-block whitespace-nowrap text-right tabular-nums`} style={{ minWidth: width }}>
       {value}
     </b>
   </span>
@@ -43,15 +50,15 @@ export const MapMissionFooter: React.FC = () => {
   const controlsDisabled = !nav.connected || nav.isPending;
 
   return (
-    <div className="border-t border-zinc-800 bg-zinc-900/60 px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 text-[11px] font-mono">
-      <div className="flex items-center gap-x-3 gap-y-1 flex-wrap min-w-0">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-t border-zinc-800 bg-zinc-900/60 px-2.5 py-1.5 font-mono text-[11px]">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
         <Stat label="WP" value={`${nav.currentWaypointSeq}/${nav.maxSeq}`} width="5ch" tone="text-amber-300" />
         <Stat label="Dist" value={dist} width="8ch" tone="text-sky-400" />
         <Stat label="XTrk" value={xtrack} width="9ch" tone={xtrackWarn ? 'text-amber-400' : 'text-zinc-300'} />
         <Stat label="ETA" value={eta} width="7ch" tone="text-emerald-400" />
       </div>
 
-      <div className="flex items-center gap-1 shrink-0 font-sans">
+      <div className="flex shrink-0 items-center gap-1 font-sans">
         {restartConfirm.armed ? (
           <span className="flex items-center gap-0.5">
             <button
@@ -61,7 +68,7 @@ export const MapMissionFooter: React.FC = () => {
                 restartConfirm.cancel();
                 void nav.navigateTo(nav.minSeq);
               }}
-              className="h-7 px-2 rounded-md bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-40 flex items-center gap-1 text-[11px] font-bold animate-pulse"
+              className="flex h-7 animate-pulse items-center gap-1 rounded-md bg-amber-600 px-2 text-[11px] font-bold text-white hover:bg-amber-500 disabled:opacity-40"
               title={`Confirm: restart the mission from WP ${nav.minSeq}`}
               autoFocus
             >
@@ -71,7 +78,7 @@ export const MapMissionFooter: React.FC = () => {
             <button
               type="button"
               onClick={restartConfirm.cancel}
-              className="h-7 w-7 rounded-md border border-zinc-800 text-zinc-400 hover:text-zinc-200 flex items-center justify-center"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-800 text-zinc-400 hover:text-zinc-200"
               aria-label="Cancel restart"
               title="Cancel"
             >
@@ -83,7 +90,7 @@ export const MapMissionFooter: React.FC = () => {
             type="button"
             disabled={controlsDisabled || nav.currentWaypointSeq === nav.minSeq}
             onClick={restartConfirm.arm}
-            className="h-7 px-2 rounded-md border border-zinc-800 text-amber-300 hover:bg-zinc-800 disabled:opacity-40 flex items-center gap-1 text-[11px] font-semibold"
+            className="flex h-7 items-center gap-1 rounded-md border border-zinc-800 px-2 text-[11px] font-semibold text-amber-300 hover:bg-zinc-800 disabled:opacity-40"
             title={`Restart the mission from WP ${nav.minSeq} (asks to confirm)`}
             aria-label="Restart mission"
           >
@@ -97,7 +104,7 @@ export const MapMissionFooter: React.FC = () => {
           value={selected}
           onChange={(e) => setSelected(Number(e.target.value))}
           disabled={controlsDisabled}
-          className="h-7 max-w-[11rem] bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md px-1.5 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
+          className="h-7 max-w-[11rem] rounded-md border border-zinc-800 bg-zinc-900 px-1.5 font-mono text-[11px] text-zinc-200 focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:opacity-50"
           aria-label="Waypoint to fly to"
         >
           {nav.userWps.map((wp) => (
@@ -112,7 +119,7 @@ export const MapMissionFooter: React.FC = () => {
           type="button"
           disabled={controlsDisabled || selected === nav.currentWaypointSeq}
           onClick={() => void nav.navigateTo(selected)}
-          className="h-7 px-2 rounded-md bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-40 flex items-center gap-1 text-[11px] font-bold"
+          className="flex h-7 items-center gap-1 rounded-md bg-sky-600 px-2 text-[11px] font-bold text-white hover:bg-sky-500 disabled:opacity-40"
           title={`Fly to WP ${selected} now`}
         >
           <Navigation className="h-3 w-3" />
@@ -123,7 +130,7 @@ export const MapMissionFooter: React.FC = () => {
           type="button"
           disabled={controlsDisabled || !nav.hasNext}
           onClick={() => void nav.navigateTo(nav.nextSeq)}
-          className="h-7 px-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-40 flex items-center gap-1 text-[11px] font-bold"
+          className="flex h-7 items-center gap-1 rounded-md bg-emerald-600 px-2 text-[11px] font-bold text-white hover:bg-emerald-500 disabled:opacity-40"
           title={nav.hasNext ? `Skip to the next waypoint (WP ${nav.nextSeq})` : 'Already at the last waypoint'}
           aria-label="Next waypoint"
         >

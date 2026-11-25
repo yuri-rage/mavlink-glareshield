@@ -1,9 +1,27 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+
+import { Download, Plus, Save } from 'lucide-react';
+
+import { BUILTIN_PANELS } from '../../lib/builtinWidgets';
+import { downloadFile } from '../../lib/download';
+import { getObservedCatalog } from '../../lib/messageCache';
+import { useConfirmStep } from '../../lib/useWaypointNavigation';
+import { cleanBinding, MAX_COMPOSITE_BINDINGS, MAX_PANELS, sanitizeParamSetEntries } from '../../lib/widgetValidation';
+import {
+  COMMAND_PRESET_GROUPS,
+  COMMAND_PRESETS,
+  findCommandPreset,
+  presetFitsWidget,
+  presetKindFor,
+  presetTitle,
+  type PresetWidgetKind,
+} from '../../mavlink/commandPresets';
+import { getVehicleCategory } from '../../mavlink/messages';
+import { expandParamPatterns } from '../../mavlink/paramMatch';
+import { getParamMetadata } from '../../mavlink/paramMetadata';
 import { useDashboardStore } from '../../store/dashboardStore';
-import { GLOBAL_FRAMES } from '../widgets/custom/panelModel';
-import { Modal } from '../ui/modal';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
+import { useParamMetaStore } from '../../store/paramMetaStore';
+import { useTelemetryStore } from '../../store/telemetryStore';
 import {
   CustomWidgetDefinition,
   MultiBarGroupType,
@@ -14,31 +32,14 @@ import {
   WidgetGaugeConfig,
   WidgetPanelDefinition,
 } from '../../types/widget';
-import { Download, Plus, Save } from 'lucide-react';
-import { CompositePanelList, PANEL_TYPE_OPTIONS, SPAN_OPTIONS, panelValueCount } from './CompositePanelList';
-import { BUILTIN_PANELS } from '../../lib/builtinWidgets';
-import { MAX_COMPOSITE_BINDINGS, MAX_PANELS, sanitizeParamSetEntries } from '../../lib/widgetValidation';
-import { expandParamPatterns } from '../../mavlink/paramMatch';
-import { getVehicleCategory } from '../../mavlink/messages';
-import {
-  COMMAND_PRESETS,
-  COMMAND_PRESET_GROUPS,
-  findCommandPreset,
-  presetFitsWidget,
-  presetKindFor,
-  presetTitle,
-  type PresetWidgetKind,
-} from '../../mavlink/commandPresets';
-import { getParamMetadata } from '../../mavlink/paramMetadata';
-import { useParamMetaStore } from '../../store/paramMetaStore';
-import { useTelemetryStore } from '../../store/telemetryStore';
-import { useConfirmStep } from '../../lib/useWaypointNavigation';
-import { BindingEditor, NumberField, SELECT_CLASS } from './BindingEditor';
-import { cleanBinding } from '../../lib/widgetValidation';
-import { getObservedCatalog } from '../../lib/messageCache';
-import { CustomWidgetRenderer } from '../widgets/CustomWidgetRenderer';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Modal } from '../ui/modal';
+import { GLOBAL_FRAMES } from '../widgets/custom/panelModel';
 import { WINDOW_CHOICES } from '../widgets/custom/TimeSeriesChart';
-import { downloadFile } from '../../lib/download';
+import { CustomWidgetRenderer } from '../widgets/CustomWidgetRenderer';
+import { BindingEditor, NumberField, SELECT_CLASS } from './BindingEditor';
+import { CompositePanelList, PANEL_TYPE_OPTIONS, panelValueCount, SPAN_OPTIONS } from './CompositePanelList';
 
 interface CustomWidgetCreatorModalProps {
   isOpen: boolean;
@@ -163,14 +164,65 @@ const COMMON_FIELDS: Record<string, string[]> = {
   RPM: ['rpm1', 'rpm2'],
   // Landed state (0 unknown, 1 on ground, 2 in air, 3 taking off, 4 landing) and VTOL state (3 hover, 4 forward).
   EXTENDED_SYS_STATE: ['landed_state', 'vtol_state'],
-  ESC_TELEMETRY_5_TO_8: ['rpm5', 'rpm6', 'rpm7', 'rpm8', 'temp5', 'temp6', 'temp7', 'temp8', 'curr5', 'curr6', 'curr7', 'curr8', 'volt5', 'volt6', 'volt7', 'volt8'],
-  ESC_TELEMETRY_9_TO_12: ['rpm9', 'rpm10', 'rpm11', 'rpm12', 'temp9', 'temp10', 'temp11', 'temp12', 'curr9', 'curr10', 'curr11', 'curr12'],
+  ESC_TELEMETRY_5_TO_8: [
+    'rpm5',
+    'rpm6',
+    'rpm7',
+    'rpm8',
+    'temp5',
+    'temp6',
+    'temp7',
+    'temp8',
+    'curr5',
+    'curr6',
+    'curr7',
+    'curr8',
+    'volt5',
+    'volt6',
+    'volt7',
+    'volt8',
+  ],
+  ESC_TELEMETRY_9_TO_12: [
+    'rpm9',
+    'rpm10',
+    'rpm11',
+    'rpm12',
+    'temp9',
+    'temp10',
+    'temp11',
+    'temp12',
+    'curr9',
+    'curr10',
+    'curr11',
+    'curr12',
+  ],
   // Gimbal attitude in degrees (from the quaternion); yaw is vehicle-relative unless flags has the earth-frame bit.
   GIMBAL_DEVICE_ATTITUDE_STATUS: ['roll', 'pitch', 'yaw', 'angular_velocity_z', 'flags', 'failure_flags'],
   MOUNT_STATUS: ['pitch', 'roll', 'yaw', 'mount_mode'],
   CAMERA_FEEDBACK: ['img_idx', 'completed_captures', 'lat', 'lng', 'alt_rel', 'yaw'],
-  EFI_STATUS: ['rpm', 'health', 'engine_load', 'throttle_position', 'fuel_flow', 'fuel_consumed', 'cylinder_head_temperature', 'exhaust_gas_temperature', 'ignition_voltage', 'fuel_pressure'],
-  GENERATOR_STATUS: ['generator_speed', 'bus_voltage', 'battery_current', 'load_current', 'power_generated', 'runtime', 'time_until_maintenance', 'generator_temperature', 'rectifier_temperature'],
+  EFI_STATUS: [
+    'rpm',
+    'health',
+    'engine_load',
+    'throttle_position',
+    'fuel_flow',
+    'fuel_consumed',
+    'cylinder_head_temperature',
+    'exhaust_gas_temperature',
+    'ignition_voltage',
+    'fuel_pressure',
+  ],
+  GENERATOR_STATUS: [
+    'generator_speed',
+    'bus_voltage',
+    'battery_current',
+    'load_current',
+    'power_generated',
+    'runtime',
+    'time_until_maintenance',
+    'generator_temperature',
+    'rectifier_temperature',
+  ],
   ESC_TELEMETRY_1_TO_4: [
     'rpm1',
     'rpm2',
@@ -223,20 +275,23 @@ const DEFAULT_BINDING: WidgetDataBinding = {
 
 /** Message-specific defaults when the user picks a message for a binding. */
 function messageDefaults(msg: string): Partial<WidgetDataBinding> {
-  if (msg === 'RC_CHANNELS (scaled)' || msg === 'SERVO_OUTPUT_RAW (scaled)') return { min: -1, max: 1, unit: '', decimals: 2 };
+  if (msg === 'RC_CHANNELS (scaled)' || msg === 'SERVO_OUTPUT_RAW (scaled)')
+    return { min: -1, max: 1, unit: '', decimals: 2 };
   if (msg === 'RC_CHANNELS' || msg === 'SERVO_OUTPUT_RAW') return { min: 1000, max: 2000, unit: 'µs', decimals: 0 };
   return {};
 }
 
-const Section: React.FC<{ title: string; tone?: 'sky' | 'amber'; right?: React.ReactNode; children: React.ReactNode }> = ({
-  title,
-  tone = 'sky',
-  right,
-  children,
-}) => (
-  <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-3">
+const Section: React.FC<{
+  title: string;
+  tone?: 'sky' | 'amber';
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ title, tone = 'sky', right, children }) => (
+  <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
     <div className="flex items-center justify-between gap-2">
-      <h4 className={`text-xs font-bold uppercase tracking-wider ${tone === 'amber' ? 'text-amber-400' : 'text-sky-400'}`}>
+      <h4
+        className={`text-xs font-bold uppercase tracking-wider ${tone === 'amber' ? 'text-amber-400' : 'text-sky-400'}`}
+      >
         {title}
       </h4>
       {right}
@@ -337,7 +392,12 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   const offeredPresets = COMMAND_PRESETS.filter((c) => presetFitsWidget(c, presetKind));
   const selectedPreset = customCommand
     ? undefined
-    : findCommandPreset(parseInt(commandId, 10) || 0, cmdParams.map((v) => parseFloat(v) || 0), presetKind, specialAction);
+    : findCommandPreset(
+        parseInt(commandId, 10) || 0,
+        cmdParams.map((v) => parseFloat(v) || 0),
+        presetKind,
+        specialAction
+      );
   const applyPreset = (key: string) => {
     const preset = COMMAND_PRESETS.find((c) => c.key === key);
     if (!preset) {
@@ -371,7 +431,15 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     }
     const kind = presetKindFor(next);
     if (kind === 'button' || customCommand) return;
-    if (findCommandPreset(parseInt(commandId, 10) || 0, cmdParams.map((v) => parseFloat(v) || 0), kind, specialAction)) return;
+    if (
+      findCommandPreset(
+        parseInt(commandId, 10) || 0,
+        cmdParams.map((v) => parseFloat(v) || 0),
+        kind,
+        specialAction
+      )
+    )
+      return;
     const first = COMMAND_PRESETS.find((c) => presetFitsWidget(c, kind));
     if (first) applyPreset(first.key);
   };
@@ -402,7 +470,9 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     setGauge({ ...(w?.gauge ?? {}) });
     setChart({ ...(w?.chart ?? {}) });
     setFeedbackEnabled(Boolean(w?.feedback));
-    setFeedback(w?.feedback ? { ...w.feedback } : { messageName: 'SERVO_OUTPUT_RAW', fieldName: 'servo9_raw', decimals: 0 });
+    setFeedback(
+      w?.feedback ? { ...w.feedback } : { messageName: 'SERVO_OUTPUT_RAW', fieldName: 'servo9_raw', decimals: 0 }
+    );
     setStateThreshold(w?.stateThreshold);
     setStaleAfterSec(w?.staleAfterSec);
 
@@ -430,7 +500,9 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     setSpecialAction(a?.special);
     setSendAs(a?.send === 'int' ? 'int' : 'long');
     setCmdFrame(a?.frame ?? 3);
-    setCustomCommand(!findCommandPreset(a?.commandId || 20, a?.params ?? [], presetKindFor(w?.displayType), a?.special));
+    setCustomCommand(
+      !findCommandPreset(a?.commandId || 20, a?.params ?? [], presetKindFor(w?.displayType), a?.special)
+    );
     setShowMoreParams(loaded.slice(3).some((v) => Number(v) !== 0));
     setRequireConfirm(a?.confirmation ?? true);
   };
@@ -454,7 +526,9 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     setColorScheme(w?.colorScheme || 'default');
     toSingleConfirm.cancel();
     if (w?.displayType === 'composite') {
-      const list = (w.panels ?? []).length ? (w.panels ?? []).map((p) => ({ ...p })) : [{ displayType: 'stat-card' as const }];
+      const list = (w.panels ?? []).length
+        ? (w.panels ?? []).map((p) => ({ ...p }))
+        : [{ displayType: 'stat-card' as const }];
       setIsComposite(true);
       setPanels(list);
       setSelected(0);
@@ -474,7 +548,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   const isGauge = displayType === 'gauge-radial' || displayType === 'gauge-linear';
   const multiGauge = isGauge && gauge.layout === 'multiple';
   // One gauge per value: up to 6 dials or 8 bars in one card.
-  const extraLimit = multiGauge ? (displayType === 'gauge-radial' ? 5 : 7) : EXTRA_VALUE_LIMIT[displayType] ?? 0;
+  const extraLimit = multiGauge ? (displayType === 'gauge-radial' ? 5 : 7) : (EXTRA_VALUE_LIMIT[displayType] ?? 0);
   const extrasUsed = extraBindings.slice(0, extraLimit);
   const usesRange = displayType !== 'value-list' && displayType !== 'stat-card' && displayType !== 'text-display';
 
@@ -497,10 +571,17 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
       if (staleAfterSec !== undefined) def.staleAfterSec = staleAfterSec;
     }
     if (displayType === 'slider-control') {
-      def.binding = cleanBinding({ messageName: binding.messageName, fieldName: binding.fieldName, unit: binding.unit, min: binding.min ?? 0, max: binding.max ?? 100 });
+      def.binding = cleanBinding({
+        messageName: binding.messageName,
+        fieldName: binding.fieldName,
+        unit: binding.unit,
+        min: binding.min ?? 0,
+        max: binding.max ?? 100,
+      });
     }
     if (displayType === 'gauge-radial') def.gauge = { ...gauge };
-    if (displayType === 'gauge-linear') def.gauge = { layout: gauge.layout, majorTicks: gauge.majorTicks, showZones: gauge.showZones };
+    if (displayType === 'gauge-linear')
+      def.gauge = { layout: gauge.layout, majorTicks: gauge.majorTicks, showZones: gauge.showZones };
     if (displayType === 'sparkline') def.chart = { ...chart };
     if (displayType === 'indicator-led' && stateThreshold !== undefined) def.stateThreshold = stateThreshold;
     if (displayType === 'toggle-switch' && feedbackEnabled) {
@@ -551,7 +632,11 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
         commandId: parseInt(commandId, 10) || 0,
         params: cmdParams.map((v) => parseFloat(v) || 0) as [number, number, number, number, number, number, number],
         confirmation: requireConfirm,
-        ...(specialAction ? { special: specialAction } : sendAs === 'int' ? { send: 'int' as const, frame: cmdFrame } : {}),
+        ...(specialAction
+          ? { special: specialAction }
+          : sendAs === 'int'
+            ? { send: 'int' as const, frame: cmdFrame }
+            : {}),
       };
     }
 
@@ -567,7 +652,14 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
       if (panelSpan !== 12) panel.span = panelSpan;
       return panel;
     }
-    const { id: _id, name: _name, category: _category, description: _description, colorScheme: _color, ...settings } = buildSingle();
+    const {
+      id: _id,
+      name: _name,
+      category: _category,
+      description: _description,
+      colorScheme: _color,
+      ...settings
+    } = buildSingle();
     const panel: WidgetPanelDefinition = { ...(settings as Omit<WidgetPanelDefinition, 'displayType'>), displayType };
     if (panelTitle.trim()) panel.title = panelTitle.trim();
     if (panelSpan !== 12) panel.span = panelSpan;
@@ -580,7 +672,9 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   const buildDefinition = (): CustomWidgetDefinition => {
     if (!isComposite) return buildSingle();
     const list = panelsWithCurrent();
-    const hasControl = list.some((p) => ['action-button', 'toggle-switch', 'slider-control', 'param-control', 'param-set'].includes(p.displayType));
+    const hasControl = list.some((p) =>
+      ['action-button', 'toggle-switch', 'slider-control', 'param-control', 'param-set'].includes(p.displayType)
+    );
     return {
       id: initialWidget?.id || `custom-${Date.now()}`,
       name: name.trim() || 'Custom Instrument',
@@ -685,14 +779,25 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
 
   const handleDownloadWidgetJson = () => {
     const def = buildDefinition();
-    downloadFile(`${def.name.toLowerCase().replace(/\s+/g, '-')}.widget.json`, JSON.stringify(def, null, 2), 'application/json');
+    downloadFile(
+      `${def.name.toLowerCase().replace(/\s+/g, '-')}.widget.json`,
+      JSON.stringify(def, null, 2),
+      'application/json'
+    );
   };
 
   const addExtra = () => {
     const last = extraBindings[extraBindings.length - 1] ?? binding;
     setExtraBindings((list) => [
       ...list.slice(0, extraLimit),
-      { messageName: last.messageName, fieldName: last.fieldName, unit: last.unit, unitKind: last.unitKind, multiplier: last.multiplier, decimals: last.decimals },
+      {
+        messageName: last.messageName,
+        fieldName: last.fieldName,
+        unit: last.unit,
+        unitKind: last.unitKind,
+        multiplier: last.multiplier,
+        decimals: last.decimals,
+      },
     ]);
   };
 
@@ -706,11 +811,11 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     >
       <form
         onSubmit={handleSaveAndPlace}
-        className={`grid grid-cols-1 gap-4 items-start ${isComposite ? 'lg:grid-cols-[minmax(0,1fr)_440px]' : 'lg:grid-cols-[minmax(0,1fr)_320px]'}`}
+        className={`grid grid-cols-1 items-start gap-4 ${isComposite ? 'lg:grid-cols-[minmax(0,1fr)_440px]' : 'lg:grid-cols-[minmax(0,1fr)_320px]'}`}
       >
-        <div className="space-y-4 min-w-0">
+        <div className="min-w-0 space-y-4">
           {/* Name & Display Type */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-zinc-300">Widget Name</label>
               <Input
@@ -741,11 +846,12 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                 }}
                 className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
               >
-                {!isComposite && PANEL_TYPE_OPTIONS.filter((o) => o.value !== 'builtin').map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
+                {!isComposite &&
+                  PANEL_TYPE_OPTIONS.filter((o) => o.value !== 'builtin').map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
                 {isComposite && (
                   <option value="single" disabled={displayType === 'builtin'}>
                     {displayType === 'builtin'
@@ -757,7 +863,9 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
               </select>
               {toSingleConfirm.armed && (
                 <div className="flex items-center gap-2 text-[11px] text-amber-300">
-                  <span>Keep only panel {selected + 1} and drop the other {panels.length - 1}?</span>
+                  <span>
+                    Keep only panel {selected + 1} and drop the other {panels.length - 1}?
+                  </span>
                   <button type="button" className="font-bold underline" onClick={makeSingle}>
                     Yes
                   </button>
@@ -769,8 +877,8 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2 space-y-1">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="space-y-1 sm:col-span-2">
               <label className="text-xs font-semibold text-zinc-300">Description (Optional)</label>
               <Input
                 type="text"
@@ -797,751 +905,805 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
             </div>
           </div>
 
-        {isComposite && (
-          <>
-            <CompositePanelList
-              panels={panelsWithCurrent()}
-              selected={selected}
-              onSelect={selectPanel}
-              onAdd={addPanel}
-              onMove={movePanel}
-              onRemove={removePanel}
-              onSpan={setSpanOf}
-            />
-            <Section title={`Panel ${selected + 1}`}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-zinc-400">Panel Type</label>
-                  <select
-                    value={displayType}
-                    onChange={(e) => {
-                      const next = e.target.value as PanelDisplayType;
-                      changeDisplayType(next);
-                    }}
-                    className={SELECT_CLASS}
-                    aria-label="Panel type"
-                  >
-                    {PANEL_TYPE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-zinc-400">Panel Title (Optional)</label>
-                  <Input
-                    type="text"
-                    maxLength={40}
-                    placeholder="Heading above the panel"
-                    value={panelTitle}
-                    onChange={(e) => setPanelTitle(e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-zinc-400">Width</label>
-                  <select value={panelSpan} onChange={(e) => setPanelSpan(Number(e.target.value))} className={SELECT_CLASS}>
-                    {SPAN_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {displayType === 'builtin' ? (
+          {isComposite && (
+            <>
+              <CompositePanelList
+                panels={panelsWithCurrent()}
+                selected={selected}
+                onSelect={selectPanel}
+                onAdd={addPanel}
+                onMove={movePanel}
+                onRemove={removePanel}
+                onSpan={setSpanOf}
+              />
+              <Section title={`Panel ${selected + 1}`}>
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-zinc-400">Built-in Widget</label>
-                    <select value={builtinId} onChange={(e) => setBuiltinId(e.target.value)} className={SELECT_CLASS} aria-label="Built-in widget">
-                      {Object.entries(BUILTIN_PANELS).map(([id, info]) => (
-                        <option key={id} value={id}>
-                          {info.name}
-                          {info.large ? ' (large: best full width)' : ''}
+                    <label className="text-[11px] font-medium text-zinc-400">Panel Type</label>
+                    <select
+                      value={displayType}
+                      onChange={(e) => {
+                        const next = e.target.value as PanelDisplayType;
+                        changeDisplayType(next);
+                      }}
+                      className={SELECT_CLASS}
+                      aria-label="Panel type"
+                    >
+                      {PANEL_TYPE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
                         </option>
                       ))}
                     </select>
                   </div>
-                ) : (
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-zinc-400">Accent Color</label>
-                  <select
-                    value={panelColor ?? ''}
-                    onChange={(e) => setPanelColor((e.target.value || undefined) as WidgetPanelDefinition['colorScheme'])}
-                    className={SELECT_CLASS}
-                  >
-                    <option value="">Same as the card</option>
-                    <option value="default">Sky Blue</option>
-                    <option value="blue">Aviation Cyan-Blue</option>
-                    <option value="green">Emerald Green</option>
-                    <option value="amber">Amber Warning</option>
-                    <option value="red">Crimson Red</option>
-                  </select>
-                </div>
-                )}
-                {(displayType === 'stat-card' || displayType === 'text-display' || displayType === 'compass-rose') && (
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-[11px] font-medium text-zinc-400">
-                      {displayType === 'text-display' ? 'Readout Label' : 'Caption (Optional)'}
-                    </label>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-zinc-400">Panel Title (Optional)</label>
                     <Input
                       type="text"
-                      placeholder={displayType === 'text-display' ? 'e.g. HDOP' : 'Shown under the value'}
-                      value={panelDescription}
-                      onChange={(e) => setPanelDescription(e.target.value)}
+                      maxLength={40}
+                      placeholder="Heading above the panel"
+                      value={panelTitle}
+                      onChange={(e) => setPanelTitle(e.target.value)}
                       className="h-8 text-xs"
                     />
                   </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-zinc-400">Width</label>
+                    <select
+                      value={panelSpan}
+                      onChange={(e) => setPanelSpan(Number(e.target.value))}
+                      className={SELECT_CLASS}
+                    >
+                      {SPAN_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {displayType === 'builtin' ? (
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-zinc-400">Built-in Widget</label>
+                      <select
+                        value={builtinId}
+                        onChange={(e) => setBuiltinId(e.target.value)}
+                        className={SELECT_CLASS}
+                        aria-label="Built-in widget"
+                      >
+                        {Object.entries(BUILTIN_PANELS).map(([id, info]) => (
+                          <option key={id} value={id}>
+                            {info.name}
+                            {info.large ? ' (large: best full width)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-zinc-400">Accent Color</label>
+                      <select
+                        value={panelColor ?? ''}
+                        onChange={(e) =>
+                          setPanelColor((e.target.value || undefined) as WidgetPanelDefinition['colorScheme'])
+                        }
+                        className={SELECT_CLASS}
+                      >
+                        <option value="">Same as the card</option>
+                        <option value="default">Sky Blue</option>
+                        <option value="blue">Aviation Cyan-Blue</option>
+                        <option value="green">Emerald Green</option>
+                        <option value="amber">Amber Warning</option>
+                        <option value="red">Crimson Red</option>
+                      </select>
+                    </div>
+                  )}
+                  {(displayType === 'stat-card' ||
+                    displayType === 'text-display' ||
+                    displayType === 'compass-rose') && (
+                    <div className="space-y-1 sm:col-span-2">
+                      <label className="text-[11px] font-medium text-zinc-400">
+                        {displayType === 'text-display' ? 'Readout Label' : 'Caption (Optional)'}
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder={displayType === 'text-display' ? 'e.g. HDOP' : 'Shown under the value'}
+                        value={panelDescription}
+                        onChange={(e) => setPanelDescription(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  )}
+                </div>
+                <p className="text-[10px] text-zinc-500">
+                  {displayType === 'builtin'
+                    ? `The ${BUILTIN_PANELS[builtinId]?.name ?? 'built-in'} widget shows its own title and works as it does on the dashboard.${
+                        BUILTIN_PANELS[builtinId]?.controls
+                          ? ` It can send ${BUILTIN_PANELS[builtinId]?.controls}.`
+                          : ''
+                      }`
+                    : 'The settings below are for this panel.'}
+                </p>
+              </Section>
+            </>
+          )}
+
+          {/* Multi-Bar Channel Group Configuration */}
+          {displayType === 'multi-bar' && (
+            <div className="space-y-2.5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400">Multi-Channel Bar / PWM Group</h4>
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-zinc-400">Telemetry Channel Group</label>
+                <select
+                  value={multiBarGroup}
+                  onChange={(e) => setMultiBarGroup(e.target.value as MultiBarGroupType)}
+                  className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 font-mono text-xs text-zinc-200"
+                >
+                  <option value="rc-8">RC_CHANNELS: Radio Input Channels 1–8 (1000–2000 µs)</option>
+                  <option value="rc-8-scaled">RC_CHANNELS (scaled): Radio Input Channels 1–8 (-1.0 to 1.0)</option>
+                  <option value="servo-8">SERVO_OUTPUT_RAW: Motor / Servo Outputs 1–8 (1000–2000 µs)</option>
+                  <option value="servo-8-scaled">
+                    SERVO_OUTPUT_RAW (scaled): Motor / Servo Outputs 1–8 (-1.0 to 1.0)
+                  </option>
+                  <option value="esc-rpm">ESC_TELEMETRY_1_TO_4: ESC 1–4 Motor Speed (RPM)</option>
+                  <option value="esc-temp">ESC_TELEMETRY_1_TO_4: ESC 1–4 Temperature (°C)</option>
+                  <option value="esc-current">ESC_TELEMETRY_1_TO_4: ESC 1–4 Current Draw (A)</option>
+                  <option value="vibration-xyz">VIBRATION: 3-Axis IMU Vibration X / Y / Z (m/s²)</option>
+                  <option value="ekf-variances">EKF_STATUS_REPORT: EKF Variances (Vel / PosH / PosV / Mag)</option>
+                  <option value="battery-cells">BATTERY_STATUS: Individual LiPo Cell Voltages (V)</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Parameter Set Configuration */}
+          {displayType === 'param-set' && (
+            <div className="space-y-2.5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400">Parameters to list</h4>
+                <label className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={paramSetConfirm}
+                    onChange={(e) => setParamSetConfirm(e.target.checked)}
+                    className="rounded border-zinc-700 bg-zinc-900 accent-amber-500"
+                  />
+                  Confirm every write
+                </label>
+              </div>
+              <textarea
+                value={paramSetText}
+                onChange={(e) => setParamSetText(e.target.value.toUpperCase())}
+                rows={5}
+                spellCheck={false}
+                placeholder={'BATT_CAPACITY\nBATT_*\n-BATT2_*\nFS_*'}
+                aria-label="Parameters to list"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:border-sky-500 focus:outline-none"
+              />
+              <p className="text-[10px] leading-snug text-zinc-500">
+                One per line (or separated by commas or spaces). An exact name keeps its place;{' '}
+                <code className="text-sky-300">*</code> and <code className="text-sky-300">?</code> add every matching
+                parameter alphabetically; a leading <code className="text-sky-300">-</code> leaves matches out. Up to 64
+                entries. Out-of-range values always ask before writing.
+              </p>
+              <div className="font-mono text-[10px] text-zinc-400">
+                {Object.keys(downloadedParamNames).length === 0 ? (
+                  <span className="text-zinc-500">
+                    Download the vehicle's parameters to preview what the patterns match.
+                  </span>
+                ) : (
+                  <>
+                    <span className="text-zinc-300">{paramSetPreview.filter((r) => r.present).length} parameters</span>
+                    {paramSetPreview.some((r) => !r.present) && (
+                      <span className="text-amber-400">
+                        {' '}
+                        · not on this vehicle:{' '}
+                        {paramSetPreview
+                          .filter((r) => !r.present)
+                          .map((r) => r.name)
+                          .join(', ')}
+                      </span>
+                    )}
+                    {paramSetPreview.length > 0 && (
+                      <div className="truncate text-zinc-500" title={paramSetPreview.map((r) => r.name).join(', ')}>
+                        {paramSetPreview
+                          .slice(0, 12)
+                          .map((r) => r.name)
+                          .join(', ')}
+                        {paramSetPreview.length > 12 ? ` +${paramSetPreview.length - 12}` : ''}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
-              <p className="text-[10px] text-zinc-500">
-                {displayType === 'builtin'
-                  ? `The ${BUILTIN_PANELS[builtinId]?.name ?? 'built-in'} widget shows its own title and works as it does on the dashboard.${
-                      BUILTIN_PANELS[builtinId]?.controls ? ` It can send ${BUILTIN_PANELS[builtinId]?.controls}.` : ''
-                    }`
-                  : 'The settings below are for this panel.'}
-              </p>
-            </Section>
-          </>
-        )}
-
-        {/* Multi-Bar Channel Group Configuration */}
-        {displayType === 'multi-bar' && (
-          <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2.5">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400">
-              Multi-Channel Bar / PWM Group
-            </h4>
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-zinc-400">Telemetry Channel Group</label>
-              <select
-                value={multiBarGroup}
-                onChange={(e) => setMultiBarGroup(e.target.value as MultiBarGroupType)}
-                className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs font-mono text-zinc-200"
-              >
-                <option value="rc-8">RC_CHANNELS: Radio Input Channels 1–8 (1000–2000 µs)</option>
-                <option value="rc-8-scaled">RC_CHANNELS (scaled): Radio Input Channels 1–8 (-1.0 to 1.0)</option>
-                <option value="servo-8">SERVO_OUTPUT_RAW: Motor / Servo Outputs 1–8 (1000–2000 µs)</option>
-                <option value="servo-8-scaled">SERVO_OUTPUT_RAW (scaled): Motor / Servo Outputs 1–8 (-1.0 to 1.0)</option>
-                <option value="esc-rpm">ESC_TELEMETRY_1_TO_4: ESC 1–4 Motor Speed (RPM)</option>
-                <option value="esc-temp">ESC_TELEMETRY_1_TO_4: ESC 1–4 Temperature (°C)</option>
-                <option value="esc-current">ESC_TELEMETRY_1_TO_4: ESC 1–4 Current Draw (A)</option>
-                <option value="vibration-xyz">VIBRATION: 3-Axis IMU Vibration X / Y / Z (m/s²)</option>
-                <option value="ekf-variances">EKF_STATUS_REPORT: EKF Variances (Vel / PosH / PosV / Mag)</option>
-                <option value="battery-cells">BATTERY_STATUS: Individual LiPo Cell Voltages (V)</option>
-              </select>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Parameter Set Configuration */}
-        {displayType === 'param-set' && (
-          <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400">Parameters to list</h4>
-              <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={paramSetConfirm}
-                  onChange={(e) => setParamSetConfirm(e.target.checked)}
-                  className="rounded border-zinc-700 bg-zinc-900 accent-amber-500"
+          {/* Parameter Control Configuration */}
+          {displayType === 'param-control' && (
+            <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400">
+                  ArduPilot Parameter Binding (PARAM_SET)
+                </h4>
+                <label className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={paramConfirm}
+                    onChange={(e) => setParamConfirm(e.target.checked)}
+                    className="rounded border-zinc-700 bg-zinc-900 accent-amber-500"
+                  />
+                  Require Confirmation
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Parameter ID (up to 16 chars)</label>
+                  <Input
+                    type="text"
+                    maxLength={16}
+                    placeholder="e.g. WPNAV_SPEED, RTL_ALT"
+                    value={paramId}
+                    onChange={(e) => setParamId(e.target.value.toUpperCase())}
+                    className="h-8 font-mono text-xs uppercase"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Common Parameter Presets</label>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      const [pid, punit, pmin, pmax, pstep] = e.target.value.split('|');
+                      setParamId(pid);
+                      setParamUnit(punit);
+                      setParamMin(pmin);
+                      setParamMax(pmax);
+                      setParamStep(pstep);
+                    }}
+                    className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 font-mono text-xs text-zinc-300"
+                  >
+                    <option value="">— Quick-fill common param —</option>
+                    <option value="WPNAV_SPEED|cm/s|50|2000|50">WPNAV_SPEED (Waypoint Speed cm/s)</option>
+                    <option value="RTL_ALT|cm|0|30000|100">RTL_ALT (Return Altitude cm)</option>
+                    <option value="PILOT_SPEED_UP|cm/s|50|500|10">PILOT_SPEED_UP (Max Climb Rate cm/s)</option>
+                    <option value="BATT_CAPACITY|mAh|500|50000|100">BATT_CAPACITY (Battery Capacity mAh)</option>
+                    <option value="MOT_SPIN_ARM|ratio|0|0.3|0.01">MOT_SPIN_ARM (Motor Spin Armed)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Unit</label>
+                  <Input
+                    type="text"
+                    placeholder={paramMeta?.units || 'auto'}
+                    value={paramUnit}
+                    onChange={(e) => setParamUnit(e.target.value)}
+                    className="h-8 font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Min</label>
+                  <Input
+                    type="number"
+                    step="any"
+                    placeholder={paramMeta?.min !== undefined ? String(paramMeta.min) : 'auto'}
+                    value={paramMin}
+                    onChange={(e) => setParamMin(e.target.value)}
+                    className="h-8 font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Max</label>
+                  <Input
+                    type="number"
+                    step="any"
+                    placeholder={paramMeta?.max !== undefined ? String(paramMeta.max) : 'auto'}
+                    value={paramMax}
+                    onChange={(e) => setParamMax(e.target.value)}
+                    className="h-8 font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Step</label>
+                  <Input
+                    type="number"
+                    step="any"
+                    placeholder={paramMeta?.increment !== undefined ? String(paramMeta.increment) : '1'}
+                    value={paramStep}
+                    onChange={(e) => setParamStep(e.target.value)}
+                    className="h-8 font-mono text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-zinc-400">
+                  Dropdown Options (Optional, format:{' '}
+                  <code className="text-sky-400">Slow:300, Cruise:500, Fast:1000</code>)
+                </label>
+                <Input
+                  type="text"
+                  placeholder="Leave blank for numeric input, or enter Label:Value pairs"
+                  value={paramOptionsText}
+                  onChange={(e) => setParamOptionsText(e.target.value)}
+                  className="h-8 font-mono text-xs"
                 />
-                Confirm every write
-              </label>
+              </div>
             </div>
-            <textarea
-              value={paramSetText}
-              onChange={(e) => setParamSetText(e.target.value.toUpperCase())}
-              rows={5}
-              spellCheck={false}
-              placeholder={'BATT_CAPACITY\nBATT_*\n-BATT2_*\nFS_*'}
-              aria-label="Parameters to list"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
-            />
-            <p className="text-[10px] text-zinc-500 leading-snug">
-              One per line (or separated by commas or spaces). An exact name keeps its place; <code className="text-sky-300">*</code> and{' '}
-              <code className="text-sky-300">?</code> add every matching parameter alphabetically; a leading{' '}
-              <code className="text-sky-300">-</code> leaves matches out. Up to 64 entries. Out-of-range values always ask before writing.
-            </p>
-            <div className="text-[10px] font-mono text-zinc-400">
-              {Object.keys(downloadedParamNames).length === 0 ? (
-                <span className="text-zinc-500">Download the vehicle's parameters to preview what the patterns match.</span>
-              ) : (
+          )}
+
+          {/* Telemetry binding (primary value) */}
+          {isTelemetryWidget && (
+            <Section
+              title={
+                multiGauge
+                  ? 'Gauge 1'
+                  : displayType === 'value-list' || displayType === 'sparkline'
+                    ? 'Value 1'
+                    : 'Telemetry Data Binding'
+              }
+            >
+              <BindingEditor
+                value={binding}
+                onChange={setBinding}
+                catalog={catalog}
+                observed={observed}
+                showRange={usesRange}
+                showThresholds={displayType !== 'compass-rose'}
+                showLabel={displayType === 'value-list' || displayType === 'sparkline' || multiGauge}
+                showColor={displayType === 'sparkline'}
+                onMessagePicked={(msg) => setBinding((b) => ({ ...b, ...messageDefaults(msg) }))}
+              />
+              {displayType === 'sparkline' && (
+                <p className="text-[10px] text-zinc-500">
+                  Min and max are only used when the chart scale is set to Fixed.
+                </p>
+              )}
+            </Section>
+          )}
+
+          {/* Slider range */}
+          {displayType === 'slider-control' && (
+            <Section title="Slider Range & Unit">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Unit Label</label>
+                  <Input
+                    type="text"
+                    placeholder="µs, m/s"
+                    value={binding.unit ?? ''}
+                    onChange={(e) => setBinding({ ...binding, unit: e.target.value })}
+                    className="h-8 font-mono text-xs"
+                  />
+                </div>
+                <NumberField
+                  label="Min Value"
+                  value={binding.min}
+                  onChange={(v) => setBinding({ ...binding, min: v })}
+                />
+                <NumberField
+                  label="Max Value"
+                  value={binding.max}
+                  onChange={(v) => setBinding({ ...binding, max: v })}
+                />
+              </div>
+            </Section>
+          )}
+
+          {/* Radial / linear gauge options */}
+          {(displayType === 'gauge-radial' || displayType === 'gauge-linear') && (
+            <Section title="Scale">
+              <div className="grid grid-cols-2 items-end gap-2 sm:grid-cols-4">
+                <div className="col-span-2 space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Layout</label>
+                  <select
+                    value={gauge.layout ?? 'marker'}
+                    onChange={(e) => setGauge({ ...gauge, layout: e.target.value as WidgetGaugeConfig['layout'] })}
+                    className={SELECT_CLASS}
+                  >
+                    <option value="marker">One gauge (optional target marker)</option>
+                    <option value="multiple">One gauge per value</option>
+                  </select>
+                </div>
+                {displayType === 'gauge-radial' && (
+                  <>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-zinc-400">Sweep</label>
+                      <select
+                        value={gauge.sweep ?? 240}
+                        onChange={(e) => setGauge({ ...gauge, sweep: Number(e.target.value) as 180 | 240 | 270 })}
+                        className={SELECT_CLASS}
+                      >
+                        <option value={180}>180° (half dial)</option>
+                        <option value={240}>240°</option>
+                        <option value={270}>270°</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-zinc-400">Indicator</label>
+                      <select
+                        value={gauge.style ?? 'both'}
+                        onChange={(e) => setGauge({ ...gauge, style: e.target.value as WidgetGaugeConfig['style'] })}
+                        className={SELECT_CLASS}
+                      >
+                        <option value="both">Arc + needle</option>
+                        <option value="needle">Needle</option>
+                        <option value="arc">Arc</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+                <NumberField
+                  label="Major ticks (approx.)"
+                  value={gauge.majorTicks}
+                  placeholder="5"
+                  step="1"
+                  min={2}
+                  max={12}
+                  onChange={(v) => setGauge({ ...gauge, majorTicks: v })}
+                />
+                {displayType === 'gauge-radial' && (
+                  <NumberField
+                    label="Minor per major"
+                    value={gauge.minorTicks}
+                    placeholder="4"
+                    step="1"
+                    min={0}
+                    max={9}
+                    onChange={(v) => setGauge({ ...gauge, minorTicks: v })}
+                  />
+                )}
+                <label className="flex h-8 cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={gauge.showZones ?? true}
+                    onChange={(e) => setGauge({ ...gauge, showZones: e.target.checked })}
+                    className="rounded border-zinc-700 bg-zinc-900 accent-sky-500"
+                  />
+                  Threshold zones
+                </label>
+              </div>
+            </Section>
+          )}
+
+          {/* Additional values */}
+          {isTelemetryWidget && extraLimit > 0 && (
+            <Section
+              title={multiGauge ? 'More Gauges' : extraLimit === 1 ? 'Secondary Marker (Optional)' : 'More Values'}
+              right={
+                extrasUsed.length < extraLimit && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 border-zinc-700 text-[11px]"
+                    onClick={addExtra}
+                  >
+                    <Plus className="h-3 w-3" />
+                    {multiGauge ? 'Add gauge' : extraLimit === 1 ? 'Add marker' : 'Add value'}
+                  </Button>
+                )
+              }
+            >
+              <p className="-mt-1 text-[10px] text-zinc-500">
+                {displayType === 'sparkline'
+                  ? 'Each value is plotted as its own series on the same chart.'
+                  : displayType === 'value-list'
+                    ? 'Each value gets its own labelled row.'
+                    : multiGauge
+                      ? "Each value gets its own gauge with its own range, thresholds, multiplier and offset. A blank min or max uses the first gauge's."
+                      : 'Drawn as a magenta marker on the same scale, e.g. a target against the actual value.'}
+              </p>
+              {extrasUsed.map((b, i) => (
+                <div key={i} className="border-t border-zinc-800/80 pt-2 first:border-t-0 first:pt-0">
+                  <BindingEditor
+                    title={multiGauge ? `Gauge ${i + 2}` : extraLimit === 1 ? 'Marker value' : `Value ${i + 2}`}
+                    value={b}
+                    onChange={(next) => setExtraBindings((list) => list.map((x, j) => (j === i ? next : x)))}
+                    onRemove={() => setExtraBindings((list) => list.filter((_, j) => j !== i))}
+                    catalog={catalog}
+                    observed={observed}
+                    showRange={multiGauge}
+                    showThresholds={displayType === 'value-list' || multiGauge}
+                    showLabel
+                    showColor={displayType === 'sparkline'}
+                  />
+                </div>
+              ))}
+            </Section>
+          )}
+
+          {/* Chart options */}
+          {displayType === 'sparkline' && (
+            <Section title="Chart">
+              <div className="grid grid-cols-2 items-end gap-2 sm:grid-cols-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Default window</label>
+                  <select
+                    value={chart.windowSec ?? 30}
+                    onChange={(e) => setChart({ ...chart, windowSec: Number(e.target.value) })}
+                    className={SELECT_CLASS}
+                  >
+                    {WINDOW_CHOICES.map((s) => (
+                      <option key={s} value={s}>
+                        {s >= 60 ? `${s / 60} min` : `${s} s`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Vertical scale</label>
+                  <select
+                    value={chart.yScale ?? 'auto'}
+                    onChange={(e) => setChart({ ...chart, yScale: e.target.value as WidgetChartConfig['yScale'] })}
+                    className={SELECT_CLASS}
+                  >
+                    <option value="auto">Auto (fit data)</option>
+                    <option value="zero">Auto, include zero</option>
+                    <option value="fixed">Fixed (min / max)</option>
+                  </select>
+                </div>
+                <label className="flex h-8 cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={chart.showGrid ?? true}
+                    onChange={(e) => setChart({ ...chart, showGrid: e.target.checked })}
+                    className="rounded border-zinc-700 bg-zinc-900 accent-sky-500"
+                  />
+                  Grid
+                </label>
+                <label className="flex h-8 cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={chart.fill ?? false}
+                    onChange={(e) => setChart({ ...chart, fill: e.target.checked })}
+                    className="rounded border-zinc-700 bg-zinc-900 accent-sky-500"
+                  />
+                  Shade first series
+                </label>
+              </div>
+            </Section>
+          )}
+
+          {/* LED on-threshold */}
+          {displayType === 'indicator-led' && (
+            <Section title="LED State">
+              <div className="grid grid-cols-2 gap-2">
+                <NumberField
+                  label="On when value is above"
+                  value={stateThreshold}
+                  placeholder="0"
+                  onChange={setStateThreshold}
+                />
+              </div>
+            </Section>
+          )}
+
+          {/* Toggle feedback */}
+          {displayType === 'toggle-switch' && (
+            <Section
+              title="Vehicle State Feedback"
+              right={
+                <label className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={feedbackEnabled}
+                    onChange={(e) => setFeedbackEnabled(e.target.checked)}
+                    className="rounded border-zinc-700 bg-zinc-900 accent-sky-500"
+                  />
+                  Follow a vehicle field
+                </label>
+              }
+            >
+              <p className="-mt-1 text-[10px] text-zinc-500">
+                With feedback the switch shows what the vehicle reports (e.g. the servo output it drives) instead of
+                what was last sent.
+              </p>
+              {commandId.trim() === '181' && (
+                <p className="-mt-1 text-[10px] text-sky-300/90">
+                  Relay toggles follow the vehicle's RELAY_STATUS for relay {param1 || '0'} (RELAY
+                  {(Number(param1) || 0) + 1}) automatically. Set a field here only to follow something else.
+                </p>
+              )}
+              {feedbackEnabled && (
                 <>
-                  <span className="text-zinc-300">{paramSetPreview.filter((r) => r.present).length} parameters</span>
-                  {paramSetPreview.some((r) => !r.present) && (
-                    <span className="text-amber-400"> · not on this vehicle: {paramSetPreview.filter((r) => !r.present).map((r) => r.name).join(', ')}</span>
+                  <BindingEditor
+                    value={feedback}
+                    onChange={setFeedback}
+                    catalog={catalog}
+                    observed={observed}
+                    showRange={false}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <NumberField
+                      label="On when value is above"
+                      value={stateThreshold}
+                      placeholder="0 (e.g. 1500 for PWM)"
+                      onChange={setStateThreshold}
+                    />
+                  </div>
+                </>
+              )}
+            </Section>
+          )}
+
+          {/* Staleness */}
+          {(isTelemetryWidget || (displayType === 'toggle-switch' && feedbackEnabled)) && (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <NumberField
+                label="Stale after (s)"
+                value={staleAfterSec}
+                placeholder="3"
+                min={0.5}
+                onChange={setStaleAfterSec}
+              />
+            </div>
+          )}
+
+          {/* Action Command Binding */}
+          {isActionWidget && (
+            <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">MAVLink Command Trigger</h4>
+                <label className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={requireConfirm}
+                    onChange={(e) => setRequireConfirm(e.target.checked)}
+                    className="rounded border-zinc-700 bg-zinc-900 accent-amber-500"
+                  />
+                  {displayType === 'toggle-switch' ? 'Slide to Switch (confirms)' : 'Require Confirmation'}
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Action Label</label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. Return to Home, Open Gripper"
+                    value={actionLabel}
+                    onChange={(e) => setActionLabel(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Command</label>
+                  <select
+                    value={selectedPreset?.key ?? 'custom'}
+                    onChange={(e) => applyPreset(e.target.value)}
+                    className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs text-zinc-200"
+                  >
+                    {COMMAND_PRESET_GROUPS.filter((group) => offeredPresets.some((c) => c.group === group)).map(
+                      (group) => (
+                        <optgroup key={group} label={group}>
+                          {offeredPresets
+                            .filter((c) => c.group === group)
+                            .map((c) => (
+                              <option key={c.key} value={c.key}>
+                                {presetTitle(c, presetKind)}
+                                {c.special ? '' : ` (${c.commandId})`}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )
+                    )}
+                    <option value="custom">Custom command ID…</option>
+                  </select>
+                </div>
+              </div>
+
+              {(customCommand || !selectedPreset) && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-zinc-400">Command ID (MAV_CMD)</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={65535}
+                      value={commandId}
+                      onChange={(e) => setCommandId(e.target.value)}
+                      className="h-8 font-mono text-xs"
+                    />
+                  </div>
+                </div>
+              )}
+              {selectedPreset?.hint && <p className="-mt-1 text-[10px] text-zinc-500">{selectedPreset.hint}</p>}
+              {presetKind !== 'button' && (
+                <p className="-mt-1 text-[10px] text-amber-300/90">
+                  {presetKind === 'toggle'
+                    ? 'A toggle sends on/off in param 1 (param 2 for relay and servo), replacing what is written there, so only commands that take on/off are listed.'
+                    : 'A slider sends its value in param 2 for speed, relay and servo, and in param 1 for any other command, so only speed and servo are listed.'}
+                </p>
+              )}
+
+              {!specialAction && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-zinc-400">Send as</label>
+                    <select
+                      value={sendAs}
+                      onChange={(e) => setSendAs(e.target.value === 'int' ? 'int' : 'long')}
+                      className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs text-zinc-200"
+                    >
+                      <option value="long">COMMAND_LONG</option>
+                      <option value="int">COMMAND_INT</option>
+                    </select>
+                  </div>
+                  {sendAs === 'int' && (
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-medium text-zinc-400">Frame</label>
+                      <select
+                        value={cmdFrame}
+                        onChange={(e) => setCmdFrame(Number(e.target.value))}
+                        className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs text-zinc-200"
+                      >
+                        <option value={3}>Global, relative to home</option>
+                        <option value={0}>Global, above sea level</option>
+                        <option value={10}>Global, above terrain</option>
+                        <option value={2}>None (params as numbers)</option>
+                        {/* A frame from an imported widget that isn't one of the above (e.g. a _INT variant). */}
+                        {![3, 0, 10, 2].includes(cmdFrame) && <option value={cmdFrame}>MAV_FRAME {cmdFrame}</option>}
+                      </select>
+                    </div>
                   )}
-                  {paramSetPreview.length > 0 && (
-                    <div className="truncate text-zinc-500" title={paramSetPreview.map((r) => r.name).join(', ')}>
-                      {paramSetPreview.slice(0, 12).map((r) => r.name).join(', ')}
-                      {paramSetPreview.length > 12 ? ` +${paramSetPreview.length - 12}` : ''}
+                </div>
+              )}
+              {!specialAction && sendAs === 'int' && (
+                <p className="-mt-1 text-[10px] text-zinc-500">
+                  {GLOBAL_FRAMES.has(cmdFrame)
+                    ? 'Param 5 and 6 are latitude and longitude in degrees (sent ×10⁷); param 7 is altitude (m).'
+                    : 'Params 5 and 6 are sent as whole numbers (x, y); param 7 as is.'}
+                </p>
+              )}
+
+              {!specialAction && (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['Param 1', 'Param 2', 'Param 3'].map((label, i) => (
+                      <div key={label} className="space-y-1">
+                        <label className="text-[11px] font-medium text-zinc-400">{label}</label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={cmdParams[i]}
+                          onChange={(e) => setCmdParam(i, e.target.value)}
+                          className="h-8 font-mono text-xs"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowMoreParams((v) => !v)}
+                    className="text-[11px] text-zinc-400 hover:text-zinc-200"
+                  >
+                    {showMoreParams ? '− Hide params 4–7' : '+ Params 4–7'}
+                  </button>
+                  {showMoreParams && (
+                    <div className="grid grid-cols-4 gap-2">
+                      {[3, 4, 5, 6].map((i) => (
+                        <div key={i} className="space-y-1">
+                          <label className="text-[11px] font-medium text-zinc-400">Param {i + 1}</label>
+                          <Input
+                            type="number"
+                            step="any"
+                            value={cmdParams[i]}
+                            onChange={(e) => setCmdParam(i, e.target.value)}
+                            className="h-8 font-mono text-xs"
+                          />
+                        </div>
+                      ))}
                     </div>
                   )}
                 </>
               )}
             </div>
-          </div>
-        )}
-
-        {/* Parameter Control Configuration */}
-        {displayType === 'param-control' && (
-          <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400">
-                ArduPilot Parameter Binding (PARAM_SET)
-              </h4>
-              <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={paramConfirm}
-                  onChange={(e) => setParamConfirm(e.target.checked)}
-                  className="rounded border-zinc-700 bg-zinc-900 accent-amber-500"
-                />
-                Require Confirmation
-              </label>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Parameter ID (up to 16 chars)</label>
-                <Input
-                  type="text"
-                  maxLength={16}
-                  placeholder="e.g. WPNAV_SPEED, RTL_ALT"
-                  value={paramId}
-                  onChange={(e) => setParamId(e.target.value.toUpperCase())}
-                  className="h-8 text-xs font-mono uppercase"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Common Parameter Presets</label>
-                <select
-                  value=""
-                  onChange={(e) => {
-                    if (!e.target.value) return;
-                    const [pid, punit, pmin, pmax, pstep] = e.target.value.split('|');
-                    setParamId(pid);
-                    setParamUnit(punit);
-                    setParamMin(pmin);
-                    setParamMax(pmax);
-                    setParamStep(pstep);
-                  }}
-                  className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs font-mono text-zinc-300"
-                >
-                  <option value="">— Quick-fill common param —</option>
-                  <option value="WPNAV_SPEED|cm/s|50|2000|50">WPNAV_SPEED (Waypoint Speed cm/s)</option>
-                  <option value="RTL_ALT|cm|0|30000|100">RTL_ALT (Return Altitude cm)</option>
-                  <option value="PILOT_SPEED_UP|cm/s|50|500|10">PILOT_SPEED_UP (Max Climb Rate cm/s)</option>
-                  <option value="BATT_CAPACITY|mAh|500|50000|100">BATT_CAPACITY (Battery Capacity mAh)</option>
-                  <option value="MOT_SPIN_ARM|ratio|0|0.3|0.01">MOT_SPIN_ARM (Motor Spin Armed)</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Unit</label>
-                <Input
-                  type="text"
-                  placeholder={paramMeta?.units || 'auto'}
-                  value={paramUnit}
-                  onChange={(e) => setParamUnit(e.target.value)}
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Min</label>
-                <Input
-                  type="number"
-                  step="any"
-                  placeholder={paramMeta?.min !== undefined ? String(paramMeta.min) : 'auto'}
-                  value={paramMin}
-                  onChange={(e) => setParamMin(e.target.value)}
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Max</label>
-                <Input
-                  type="number"
-                  step="any"
-                  placeholder={paramMeta?.max !== undefined ? String(paramMeta.max) : 'auto'}
-                  value={paramMax}
-                  onChange={(e) => setParamMax(e.target.value)}
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Step</label>
-                <Input
-                  type="number"
-                  step="any"
-                  placeholder={paramMeta?.increment !== undefined ? String(paramMeta.increment) : '1'}
-                  value={paramStep}
-                  onChange={(e) => setParamStep(e.target.value)}
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-zinc-400">
-                Dropdown Options (Optional, format: <code className="text-sky-400">Slow:300, Cruise:500, Fast:1000</code>)
-              </label>
-              <Input
-                type="text"
-                placeholder="Leave blank for numeric input, or enter Label:Value pairs"
-                value={paramOptionsText}
-                onChange={(e) => setParamOptionsText(e.target.value)}
-                className="h-8 text-xs font-mono"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Telemetry binding (primary value) */}
-        {isTelemetryWidget && (
-          <Section title={multiGauge ? 'Gauge 1' : displayType === 'value-list' || displayType === 'sparkline' ? 'Value 1' : 'Telemetry Data Binding'}>
-            <BindingEditor
-              value={binding}
-              onChange={setBinding}
-              catalog={catalog}
-              observed={observed}
-              showRange={usesRange}
-              showThresholds={displayType !== 'compass-rose'}
-              showLabel={displayType === 'value-list' || displayType === 'sparkline' || multiGauge}
-              showColor={displayType === 'sparkline'}
-              onMessagePicked={(msg) => setBinding((b) => ({ ...b, ...messageDefaults(msg) }))}
-            />
-            {displayType === 'sparkline' && (
-              <p className="text-[10px] text-zinc-500">Min and max are only used when the chart scale is set to Fixed.</p>
-            )}
-          </Section>
-        )}
-
-        {/* Slider range */}
-        {displayType === 'slider-control' && (
-          <Section title="Slider Range & Unit">
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Unit Label</label>
-                <Input
-                  type="text"
-                  placeholder="µs, m/s"
-                  value={binding.unit ?? ''}
-                  onChange={(e) => setBinding({ ...binding, unit: e.target.value })}
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-              <NumberField label="Min Value" value={binding.min} onChange={(v) => setBinding({ ...binding, min: v })} />
-              <NumberField label="Max Value" value={binding.max} onChange={(v) => setBinding({ ...binding, max: v })} />
-            </div>
-          </Section>
-        )}
-
-        {/* Radial / linear gauge options */}
-        {(displayType === 'gauge-radial' || displayType === 'gauge-linear') && (
-          <Section title="Scale">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
-              <div className="space-y-1 col-span-2">
-                <label className="text-[11px] font-medium text-zinc-400">Layout</label>
-                <select
-                  value={gauge.layout ?? 'marker'}
-                  onChange={(e) => setGauge({ ...gauge, layout: e.target.value as WidgetGaugeConfig['layout'] })}
-                  className={SELECT_CLASS}
-                >
-                  <option value="marker">One gauge (optional target marker)</option>
-                  <option value="multiple">One gauge per value</option>
-                </select>
-              </div>
-              {displayType === 'gauge-radial' && (
-                <>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-zinc-400">Sweep</label>
-                    <select
-                      value={gauge.sweep ?? 240}
-                      onChange={(e) => setGauge({ ...gauge, sweep: Number(e.target.value) as 180 | 240 | 270 })}
-                      className={SELECT_CLASS}
-                    >
-                      <option value={180}>180° (half dial)</option>
-                      <option value={240}>240°</option>
-                      <option value={270}>270°</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-zinc-400">Indicator</label>
-                    <select
-                      value={gauge.style ?? 'both'}
-                      onChange={(e) => setGauge({ ...gauge, style: e.target.value as WidgetGaugeConfig['style'] })}
-                      className={SELECT_CLASS}
-                    >
-                      <option value="both">Arc + needle</option>
-                      <option value="needle">Needle</option>
-                      <option value="arc">Arc</option>
-                    </select>
-                  </div>
-                </>
-              )}
-              <NumberField
-                label="Major ticks (approx.)"
-                value={gauge.majorTicks}
-                placeholder="5"
-                step="1"
-                min={2}
-                max={12}
-                onChange={(v) => setGauge({ ...gauge, majorTicks: v })}
-              />
-              {displayType === 'gauge-radial' && (
-                <NumberField
-                  label="Minor per major"
-                  value={gauge.minorTicks}
-                  placeholder="4"
-                  step="1"
-                  min={0}
-                  max={9}
-                  onChange={(v) => setGauge({ ...gauge, minorTicks: v })}
-                />
-              )}
-              <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none h-8">
-                <input
-                  type="checkbox"
-                  checked={gauge.showZones ?? true}
-                  onChange={(e) => setGauge({ ...gauge, showZones: e.target.checked })}
-                  className="rounded border-zinc-700 bg-zinc-900 accent-sky-500"
-                />
-                Threshold zones
-              </label>
-            </div>
-          </Section>
-        )}
-
-        {/* Additional values */}
-        {isTelemetryWidget && extraLimit > 0 && (
-          <Section
-            title={multiGauge ? 'More Gauges' : extraLimit === 1 ? 'Secondary Marker (Optional)' : 'More Values'}
-            right={
-              extrasUsed.length < extraLimit && (
-                <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] gap-1 border-zinc-700" onClick={addExtra}>
-                  <Plus className="h-3 w-3" />
-                  {multiGauge ? 'Add gauge' : extraLimit === 1 ? 'Add marker' : 'Add value'}
-                </Button>
-              )
-            }
-          >
-            <p className="text-[10px] text-zinc-500 -mt-1">
-              {displayType === 'sparkline'
-                ? 'Each value is plotted as its own series on the same chart.'
-                : displayType === 'value-list'
-                  ? 'Each value gets its own labelled row.'
-                  : multiGauge
-                    ? 'Each value gets its own gauge with its own range, thresholds, multiplier and offset. A blank min or max uses the first gauge\'s.'
-                    : 'Drawn as a magenta marker on the same scale, e.g. a target against the actual value.'}
-            </p>
-            {extrasUsed.map((b, i) => (
-              <div key={i} className="pt-2 border-t border-zinc-800/80 first:border-t-0 first:pt-0">
-                <BindingEditor
-                  title={multiGauge ? `Gauge ${i + 2}` : extraLimit === 1 ? 'Marker value' : `Value ${i + 2}`}
-                  value={b}
-                  onChange={(next) => setExtraBindings((list) => list.map((x, j) => (j === i ? next : x)))}
-                  onRemove={() => setExtraBindings((list) => list.filter((_, j) => j !== i))}
-                  catalog={catalog}
-                  observed={observed}
-                  showRange={multiGauge}
-                  showThresholds={displayType === 'value-list' || multiGauge}
-                  showLabel
-                  showColor={displayType === 'sparkline'}
-                />
-              </div>
-            ))}
-          </Section>
-        )}
-
-        {/* Chart options */}
-        {displayType === 'sparkline' && (
-          <Section title="Chart">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Default window</label>
-                <select
-                  value={chart.windowSec ?? 30}
-                  onChange={(e) => setChart({ ...chart, windowSec: Number(e.target.value) })}
-                  className={SELECT_CLASS}
-                >
-                  {WINDOW_CHOICES.map((s) => (
-                    <option key={s} value={s}>
-                      {s >= 60 ? `${s / 60} min` : `${s} s`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Vertical scale</label>
-                <select
-                  value={chart.yScale ?? 'auto'}
-                  onChange={(e) => setChart({ ...chart, yScale: e.target.value as WidgetChartConfig['yScale'] })}
-                  className={SELECT_CLASS}
-                >
-                  <option value="auto">Auto (fit data)</option>
-                  <option value="zero">Auto, include zero</option>
-                  <option value="fixed">Fixed (min / max)</option>
-                </select>
-              </div>
-              <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none h-8">
-                <input
-                  type="checkbox"
-                  checked={chart.showGrid ?? true}
-                  onChange={(e) => setChart({ ...chart, showGrid: e.target.checked })}
-                  className="rounded border-zinc-700 bg-zinc-900 accent-sky-500"
-                />
-                Grid
-              </label>
-              <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none h-8">
-                <input
-                  type="checkbox"
-                  checked={chart.fill ?? false}
-                  onChange={(e) => setChart({ ...chart, fill: e.target.checked })}
-                  className="rounded border-zinc-700 bg-zinc-900 accent-sky-500"
-                />
-                Shade first series
-              </label>
-            </div>
-          </Section>
-        )}
-
-        {/* LED on-threshold */}
-        {displayType === 'indicator-led' && (
-          <Section title="LED State">
-            <div className="grid grid-cols-2 gap-2">
-              <NumberField
-                label="On when value is above"
-                value={stateThreshold}
-                placeholder="0"
-                onChange={setStateThreshold}
-              />
-            </div>
-          </Section>
-        )}
-
-        {/* Toggle feedback */}
-        {displayType === 'toggle-switch' && (
-          <Section
-            title="Vehicle State Feedback"
-            right={
-              <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={feedbackEnabled}
-                  onChange={(e) => setFeedbackEnabled(e.target.checked)}
-                  className="rounded border-zinc-700 bg-zinc-900 accent-sky-500"
-                />
-                Follow a vehicle field
-              </label>
-            }
-          >
-            <p className="text-[10px] text-zinc-500 -mt-1">
-              With feedback the switch shows what the vehicle reports (e.g. the servo output it drives) instead of what was
-              last sent.
-            </p>
-            {commandId.trim() === '181' && (
-              <p className="text-[10px] text-sky-300/90 -mt-1">
-                Relay toggles follow the vehicle's RELAY_STATUS for relay {param1 || '0'} (RELAY{(Number(param1) || 0) + 1})
-                automatically. Set a field here only to follow something else.
-              </p>
-            )}
-            {feedbackEnabled && (
-              <>
-                <BindingEditor
-                  value={feedback}
-                  onChange={setFeedback}
-                  catalog={catalog}
-                  observed={observed}
-                  showRange={false}
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <NumberField
-                    label="On when value is above"
-                    value={stateThreshold}
-                    placeholder="0 (e.g. 1500 for PWM)"
-                    onChange={setStateThreshold}
-                  />
-                </div>
-              </>
-            )}
-          </Section>
-        )}
-
-        {/* Staleness */}
-        {(isTelemetryWidget || (displayType === 'toggle-switch' && feedbackEnabled)) && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <NumberField
-              label="Stale after (s)"
-              value={staleAfterSec}
-              placeholder="3"
-              min={0.5}
-              onChange={setStaleAfterSec}
-            />
-          </div>
-        )}
-
-        {/* Action Command Binding */}
-        {isActionWidget && (
-          <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">
-                MAVLink Command Trigger
-              </h4>
-              <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={requireConfirm}
-                  onChange={(e) => setRequireConfirm(e.target.checked)}
-                  className="rounded border-zinc-700 bg-zinc-900 accent-amber-500"
-                />
-                {displayType === 'toggle-switch' ? 'Slide to Switch (confirms)' : 'Require Confirmation'}
-              </label>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Action Label</label>
-                <Input
-                  type="text"
-                  placeholder="e.g. Return to Home, Open Gripper"
-                  value={actionLabel}
-                  onChange={(e) => setActionLabel(e.target.value)}
-                  className="h-8 text-xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Command</label>
-                <select
-                  value={selectedPreset?.key ?? 'custom'}
-                  onChange={(e) => applyPreset(e.target.value)}
-                  className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs text-zinc-200"
-                >
-                  {COMMAND_PRESET_GROUPS.filter((group) => offeredPresets.some((c) => c.group === group)).map((group) => (
-                    <optgroup key={group} label={group}>
-                      {offeredPresets
-                        .filter((c) => c.group === group)
-                        .map((c) => (
-                          <option key={c.key} value={c.key}>
-                            {presetTitle(c, presetKind)}{c.special ? '' : ` (${c.commandId})`}
-                          </option>
-                        ))}
-                    </optgroup>
-                  ))}
-                  <option value="custom">Custom command ID…</option>
-                </select>
-              </div>
-            </div>
-
-            {(customCommand || !selectedPreset) && (
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-zinc-400">Command ID (MAV_CMD)</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={65535}
-                    value={commandId}
-                    onChange={(e) => setCommandId(e.target.value)}
-                    className="h-8 text-xs font-mono"
-                  />
-                </div>
-              </div>
-            )}
-            {selectedPreset?.hint && <p className="text-[10px] text-zinc-500 -mt-1">{selectedPreset.hint}</p>}
-            {presetKind !== 'button' && (
-              <p className="text-[10px] text-amber-300/90 -mt-1">
-                {presetKind === 'toggle'
-                  ? 'A toggle sends on/off in param 1 (param 2 for relay and servo), replacing what is written there, so only commands that take on/off are listed.'
-                  : 'A slider sends its value in param 2 for speed, relay and servo, and in param 1 for any other command, so only speed and servo are listed.'}
-              </p>
-            )}
-
-            {!specialAction && (
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-zinc-400">Send as</label>
-                  <select
-                    value={sendAs}
-                    onChange={(e) => setSendAs(e.target.value === 'int' ? 'int' : 'long')}
-                    className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs text-zinc-200"
-                  >
-                    <option value="long">COMMAND_LONG</option>
-                    <option value="int">COMMAND_INT</option>
-                  </select>
-                </div>
-                {sendAs === 'int' && (
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-zinc-400">Frame</label>
-                    <select
-                      value={cmdFrame}
-                      onChange={(e) => setCmdFrame(Number(e.target.value))}
-                      className="h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs text-zinc-200"
-                    >
-                      <option value={3}>Global, relative to home</option>
-                      <option value={0}>Global, above sea level</option>
-                      <option value={10}>Global, above terrain</option>
-                      <option value={2}>None (params as numbers)</option>
-                      {/* A frame from an imported widget that isn't one of the above (e.g. a _INT variant). */}
-                      {![3, 0, 10, 2].includes(cmdFrame) && <option value={cmdFrame}>MAV_FRAME {cmdFrame}</option>}
-                    </select>
-                  </div>
-                )}
-              </div>
-            )}
-            {!specialAction && sendAs === 'int' && (
-              <p className="text-[10px] text-zinc-500 -mt-1">
-                {GLOBAL_FRAMES.has(cmdFrame)
-                  ? 'Param 5 and 6 are latitude and longitude in degrees (sent ×10⁷); param 7 is altitude (m).'
-                  : 'Params 5 and 6 are sent as whole numbers (x, y); param 7 as is.'}
-              </p>
-            )}
-
-            {!specialAction && (
-            <>
-            <div className="grid grid-cols-3 gap-2">
-              {['Param 1', 'Param 2', 'Param 3'].map((label, i) => (
-                <div key={label} className="space-y-1">
-                  <label className="text-[11px] font-medium text-zinc-400">{label}</label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={cmdParams[i]}
-                    onChange={(e) => setCmdParam(i, e.target.value)}
-                    className="h-8 text-xs font-mono"
-                  />
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowMoreParams((v) => !v)}
-              className="text-[11px] text-zinc-400 hover:text-zinc-200"
-            >
-              {showMoreParams ? '− Hide params 4–7' : '+ Params 4–7'}
-            </button>
-            {showMoreParams && (
-              <div className="grid grid-cols-4 gap-2">
-                {[3, 4, 5, 6].map((i) => (
-                  <div key={i} className="space-y-1">
-                    <label className="text-[11px] font-medium text-zinc-400">Param {i + 1}</label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={cmdParams[i]}
-                      onChange={(e) => setCmdParam(i, e.target.value)}
-                      className="h-8 text-xs font-mono"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-            </>
-            )}
-          </div>
-        )}
+          )}
 
           {/* Action Buttons */}
           <div className="flex items-center justify-between pt-2">
@@ -1550,7 +1712,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
               variant="outline"
               size="sm"
               onClick={handleDownloadWidgetJson}
-              className="gap-1.5 text-xs border-zinc-700"
+              className="gap-1.5 border-zinc-700 text-xs"
             >
               <Download className="h-3.5 w-3.5 text-sky-400" />
               Export Widget JSON
@@ -1566,7 +1728,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                 size="sm"
                 disabled={overValueLimit}
                 title={overValueLimit ? `A composite widget reads at most ${MAX_COMPOSITE_BINDINGS} values` : undefined}
-                className="bg-sky-500 hover:bg-sky-600 text-white font-bold gap-1 text-xs"
+                className="gap-1 bg-sky-500 text-xs font-bold text-white hover:bg-sky-600"
               >
                 <Save className="h-3.5 w-3.5" />
                 {isEditing ? 'Save Changes' : 'Save & Place'}
@@ -1576,12 +1738,12 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
         </div>
 
         {/* Live preview */}
-        <div className="lg:sticky lg:top-0 space-y-1.5 min-w-0">
+        <div className="min-w-0 space-y-1.5 lg:sticky lg:top-0">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Live Preview</div>
           {/* inert: preview controls must never send commands or parameter writes */}
           <div
             ref={(el) => el?.setAttribute('inert', '')}
-            className={`flex flex-col pointer-events-none select-none ${isComposite ? 'min-h-[300px] max-h-[70vh] overflow-hidden' : 'h-[300px]'}`}
+            className={`pointer-events-none flex select-none flex-col ${isComposite ? 'max-h-[70vh] min-h-[300px] overflow-hidden' : 'h-[300px]'}`}
           >
             <CustomWidgetRenderer definition={previewDefinition} />
           </div>

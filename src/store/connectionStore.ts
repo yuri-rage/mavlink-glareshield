@@ -1,12 +1,15 @@
 import { create } from 'zustand';
+
+// The bridge's default address lives with the connection; re-exported for existing imports.
 import {
-  mavlinkConnection,
-  ConnectionStatus,
   ConnectionStats,
+  ConnectionStatus,
   DEFAULT_SERIAL_BAUD,
+  getDefaultWsUrl,
+  mavlinkConnection,
   type LinkConfig,
 } from '../mavlink/connection';
-import { messageRateManager, BandwidthProfile } from '../mavlink/rateManager';
+import { BandwidthProfile, messageRateManager } from '../mavlink/rateManager';
 
 const STORAGE_KEY = 'mavlink_glareshield_ws_url';
 const STORAGE_KEY_PROFILE = 'mavlink_glareshield_bandwidth_profile';
@@ -15,8 +18,7 @@ const STORAGE_KEY_LINK_KIND = 'mavlink_glareshield_link_kind';
 const STORAGE_KEY_SERIAL_BAUD = 'mavlink_glareshield_serial_baud';
 
 export type LinkKind = LinkConfig['kind'];
-// The bridge's default address lives with the connection; re-exported for existing imports.
-import { getDefaultWsUrl } from '../mavlink/connection';
+
 export { getDefaultWsUrl };
 
 function getStoredUrl(): string {

@@ -648,7 +648,17 @@ export function isVtolPlane(type: number, qEnable: number | undefined, vtolState
 }
 
 /** ArduPlane modes the VTOL controls use. */
-export const PLANE_MODE = { MANUAL: 0, FBWA: 5, CRUISE: 7, LOITER: 12, TAKEOFF: 13, GUIDED: 15, QLOITER: 19, QLAND: 20, QRTL: 21 } as const;
+export const PLANE_MODE = {
+  MANUAL: 0,
+  FBWA: 5,
+  CRUISE: 7,
+  LOITER: 12,
+  TAKEOFF: 13,
+  GUIDED: 15,
+  QLOITER: 19,
+  QLAND: 20,
+  QRTL: 21,
+} as const;
 
 export function getGuidedModeNum(type: number): number {
   const category = getVehicleCategory(type);

@@ -3,22 +3,24 @@
 // its report is getting old. Click for details. Markers are updated in place (reports arrive several times a second).
 
 import { useEffect, useRef } from 'react';
+
 import L from 'leaflet';
-import { useTrafficStore } from '../../store/trafficStore';
-import { useTelemetryStore } from '../../store/telemetryStore';
-import { useUnitsStore } from '../../store/unitsStore';
-import { useAdsbSettingsStore } from '../../store/adsbSettingsStore';
+
 import {
-  TRAFFIC_STALE_MS,
   emergencySquawk,
+  escapeHtml,
   icaoHex,
   ownForThreat,
-  escapeHtml,
   rankTraffic,
   relAltText,
+  TRAFFIC_STALE_MS,
   type Threat,
   type TrafficAircraft,
 } from '../../mavlink/adsb';
+import { useAdsbSettingsStore } from '../../store/adsbSettingsStore';
+import { useTelemetryStore } from '../../store/telemetryStore';
+import { useTrafficStore } from '../../store/trafficStore';
+import { useUnitsStore } from '../../store/unitsStore';
 
 const PANE = 'trafficPane';
 const COLOURS = { none: '#38bdf8', caution: '#f59e0b', alert: '#ef4444', emergency: '#e879f9' };
@@ -47,13 +49,23 @@ function popupHtml(a: TrafficAircraft, t: Threat | null, fmtAlt: Fmt, fmtDist: F
   const rows = [
     ['ICAO', icaoHex(a.icao)],
     a.squawk !== null ? ['Squawk', `${a.squawk}${em ? ` (${em})` : ''}`] : null,
-    a.altMslM !== null ? ['Altitude', `${fmtAlt(a.altMslM).full} MSL (${a.altGeometric ? 'GNSS' : 'barometric'})`] : null,
+    a.altMslM !== null
+      ? ['Altitude', `${fmtAlt(a.altMslM).full} MSL (${a.altGeometric ? 'GNSS' : 'barometric'})`]
+      : null,
     a.speedMs !== null ? ['Speed', fmtSpeed(a.speedMs).full] : null,
     a.headingDeg !== null ? ['Track', `${Math.round(a.headingDeg)}°`] : null,
     a.climbMs !== null ? ['Vertical', fmtClimb(a.climbMs).full] : null,
-    t ? ['Distance', `${fmtDist(t.distanceM).full}, bearing ${Math.round(t.bearingDeg)}°${t.closing ? ', closing' : ''}`] : null,
+    t
+      ? [
+          'Distance',
+          `${fmtDist(t.distanceM).full}, bearing ${Math.round(t.bearingDeg)}°${t.closing ? ', closing' : ''}`,
+        ]
+      : null,
     t?.cpaS != null && t.cpaS < 300 ? ['Closest', `${fmtDist(t.cpaM!).full} in ${Math.round(t.cpaS)} s`] : null,
-    ['Last heard', `${Math.max(0, Math.round((Date.now() - a.heardAtMs) / 1000))} s ago${a.simulated ? ' (simulated)' : ''}`],
+    [
+      'Last heard',
+      `${Math.max(0, Math.round((Date.now() - a.heardAtMs) / 1000))} s ago${a.simulated ? ' (simulated)' : ''}`,
+    ],
   ].filter(Boolean) as [string, string][];
   return `<b>${escapeHtml(a.callsign ?? icaoHex(a.icao))}</b><table style="margin-top:3px;font-size:11px">${rows
     .map(([k, v]) => `<tr><td style="color:#71717a;padding-right:8px">${k}</td><td>${escapeHtml(v)}</td></tr>`)
@@ -93,7 +105,12 @@ export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, re
       const ic = icon(a, t, now - a.heardAtMs > TRAFFIC_STALE_MS, label);
       let m = markers.current.get(a.icao);
       if (!m) {
-        m = L.marker([a.lat, a.lon], { icon: ic, pane: PANE, keyboard: false, zIndexOffset: t?.level === 'alert' ? 1000 : 0 }).bindPopup('', { autoPan: false });
+        m = L.marker([a.lat, a.lon], {
+          icon: ic,
+          pane: PANE,
+          keyboard: false,
+          zIndexOffset: t?.level === 'alert' ? 1000 : 0,
+        }).bindPopup('', { autoPan: false });
         m.addTo(map);
         markers.current.set(a.icao, m);
       } else {
@@ -111,7 +128,10 @@ export function useTrafficLayer(mapRef: React.MutableRefObject<L.Map | null>, re
     }
   };
 
-  useEffect(() => draw.current(), [mapRef, ready, aircraft, formatAltitude, formatDistance, formatSpeed, formatClimb, showOnMap, thresholds]);
+  useEffect(
+    () => draw.current(),
+    [mapRef, ready, aircraft, formatAltitude, formatDistance, formatSpeed, formatClimb, showOnMap, thresholds]
+  );
 
   // The vehicle moving changes each aircraft's relative height and threat: redraw, while any are shown.
   useEffect(

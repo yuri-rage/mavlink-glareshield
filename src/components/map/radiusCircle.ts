@@ -2,6 +2,7 @@
 // the item's own radius, white for the vehicle's default (waypointRadius.ts).
 
 import L from 'leaflet';
+
 import { getVehicleCategory } from '../../mavlink/messages';
 import { waypointRadius } from '../../mavlink/waypointRadius';
 import type { LastVehicle } from '../../store/lastVehicleStore';
@@ -13,7 +14,11 @@ export function radiusCircle(
   vehicle: LastVehicle,
   opts: { pane: string; opacity: number }
 ): L.Circle | null {
-  const r = waypointRadius({ command: item.command, param2: item.param2 ?? 0, param3: item.param3 ?? 0 }, getVehicleCategory(vehicle.type), (n) => vehicle.params[n]);
+  const r = waypointRadius(
+    { command: item.command, param2: item.param2 ?? 0, param3: item.param3 ?? 0 },
+    getVehicleCategory(vehicle.type),
+    (n) => vehicle.params[n]
+  );
   if (!r) return null;
   return L.circle([lat, lon], {
     pane: opts.pane,

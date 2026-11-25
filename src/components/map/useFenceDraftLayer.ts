@@ -10,10 +10,12 @@
 // On another layer the fence is drawn dimmed and doesn't take clicks.
 
 import { useEffect, useRef } from 'react';
+
 import L from 'leaflet';
+
 import {
-  DEFAULT_CIRCLE_RADIUS,
   addShape,
+  DEFAULT_CIRCLE_RADIUS,
   distanceM,
   insertVertex,
   moveShape,
@@ -135,7 +137,12 @@ export function useFenceDraftLayer(
 
     draft.shapes.forEach((shape, i) => {
       const isSel = editing && selected === i;
-      const opts = { ...style(shape, isSel, editing), pane: SHAPES_PANE, interactive: pickable, bubblingMouseEvents: false };
+      const opts = {
+        ...style(shape, isSel, editing),
+        pane: SHAPES_PANE,
+        interactive: pickable,
+        bubblingMouseEvents: false,
+      };
       const path =
         shape.kind === 'polygon'
           ? L.polygon(shape.vertices.map(ll), opts)
@@ -157,14 +164,22 @@ export function useFenceDraftLayer(
           const n = vertices[(k + 1) % vertices.length];
           const mid = { lat: (v.lat + n.lat) / 2, lon: (v.lon + n.lon) / 2 };
           add(
-            L.marker(ll(mid), { icon: plusIcon, pane: HANDLES_PANE, keyboard: false, title: 'Insert a vertex' }).on('click', () =>
-              commitFence((d) => ({ draft: insertVertex(d, i, k, mid).draft, index: i }))
+            L.marker(ll(mid), { icon: plusIcon, pane: HANDLES_PANE, keyboard: false, title: 'Insert a vertex' }).on(
+              'click',
+              () => commitFence((d) => ({ draft: insertVertex(d, i, k, mid).draft, index: i }))
             )
           );
         });
         // Vertex handles: drag to move, right-click for the vertex menu.
         vertices.forEach((v, k) => {
-          const m = L.marker(ll(v), { icon: squareIcon(false), pane: HANDLES_PANE, draggable: true, autoPan: true, keyboard: false, title: `Vertex ${k + 1}: drag to move` });
+          const m = L.marker(ll(v), {
+            icon: squareIcon(false),
+            pane: HANDLES_PANE,
+            draggable: true,
+            autoPan: true,
+            keyboard: false,
+            title: `Vertex ${k + 1}: drag to move`,
+          });
           m.on('drag', () => {
             const p = m.getLatLng();
             poly.setLatLngs(vertices.map((x, j) => (j === k ? ([p.lat, p.lng] as L.LatLngTuple) : ll(x))));
@@ -174,14 +189,23 @@ export function useFenceDraftLayer(
             if (p.lat === v.lat && p.lng === v.lon) return;
             commitFence((d) => ({ draft: moveVertex(d, i, k, { lat: p.lat, lon: p.lng }), index: i }));
           });
-          m.on('contextmenu', (e: L.LeafletMouseEvent) => menu(e, (x, y) => ({ kind: 'fence-vertex', shape: i, vertex: k, x, y })));
+          m.on('contextmenu', (e: L.LeafletMouseEvent) =>
+            menu(e, (x, y) => ({ kind: 'fence-vertex', shape: i, vertex: k, x, y }))
+          );
           add(m);
         });
       }
 
       // Centre handle: drag to move the whole shape.
       const centre = shape.kind === 'polygon' ? polygonCenter(shape.vertices) : shape.center;
-      const c = L.marker(ll(centre), { icon: centreIcon, pane: HANDLES_PANE, draggable: true, autoPan: true, keyboard: false, zIndexOffset: 500 });
+      const c = L.marker(ll(centre), {
+        icon: centreIcon,
+        pane: HANDLES_PANE,
+        draggable: true,
+        autoPan: true,
+        keyboard: false,
+        zIndexOffset: 500,
+      });
       c.on('drag', () => {
         const p = c.getLatLng();
         const moved = moveShape(draft, i, { lat: p.lat, lon: p.lng }).shapes[i];
@@ -197,7 +221,13 @@ export function useFenceDraftLayer(
 
       // Radius handle (circles): drag to set the radius.
       if (shape.kind === 'circle') {
-        const r = L.marker(ll(offsetPoint(shape.center, shape.radius, 90)), { icon: radiusIcon, pane: HANDLES_PANE, draggable: true, autoPan: true, keyboard: false });
+        const r = L.marker(ll(offsetPoint(shape.center, shape.radius, 90)), {
+          icon: radiusIcon,
+          pane: HANDLES_PANE,
+          draggable: true,
+          autoPan: true,
+          keyboard: false,
+        });
         const radiusAt = () => {
           const p = r.getLatLng();
           return Math.max(1, distanceM(shape.center, { lat: p.lat, lon: p.lng }));
@@ -238,10 +268,23 @@ export function useFenceDraftLayer(
     drawRef.current = [];
     const map = mapRef.current;
     if (!map || !ready || !active || layer !== 'fence' || !drawing || drawing.length === 0) return;
-    const line = L.polyline(drawing.map(ll), { pane: SHAPES_PANE, color: RED, weight: 2, dashArray: '4 4', interactive: false }).addTo(map);
+    const line = L.polyline(drawing.map(ll), {
+      pane: SHAPES_PANE,
+      color: RED,
+      weight: 2,
+      dashArray: '4 4',
+      interactive: false,
+    }).addTo(map);
     drawRef.current.push(line);
     drawing.forEach((v, k) => {
-      const m = L.marker(ll(v), { icon: drawIcon(k === 0), pane: HANDLES_PANE, keyboard: false, interactive: k === 0, bubblingMouseEvents: false, title: k === 0 ? 'Click to finish the polygon' : '' } as L.MarkerOptions);
+      const m = L.marker(ll(v), {
+        icon: drawIcon(k === 0),
+        pane: HANDLES_PANE,
+        keyboard: false,
+        interactive: k === 0,
+        bubblingMouseEvents: false,
+        title: k === 0 ? 'Click to finish the polygon' : '',
+      } as L.MarkerOptions);
       if (k === 0) m.on('click', () => finishFencePolygon());
       m.addTo(map);
       drawRef.current.push(m);
@@ -267,7 +310,14 @@ export function useFenceDraftLayer(
           break;
         case 'circle-inclusion':
         case 'circle-exclusion':
-          commitFence((d) => addShape(d, { kind: 'circle', inclusion: st.fenceDrawKind === 'circle-inclusion', center: at, radius: DEFAULT_CIRCLE_RADIUS }));
+          commitFence((d) =>
+            addShape(d, {
+              kind: 'circle',
+              inclusion: st.fenceDrawKind === 'circle-inclusion',
+              center: at,
+              radius: DEFAULT_CIRCLE_RADIUS,
+            })
+          );
           break;
         case 'return-point':
           commitFence((d) => ({ draft: setReturnPoint(d, at), index: null }));

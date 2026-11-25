@@ -5,8 +5,8 @@
 // Answers are paced (a block is up to 56 messages, ~3 KB): a 57600 baud radio or a small autopilot UART buffer would
 // drop a burst, and the vehicle would only ask again. A send that fails (link gone) stops the rest.
 
-import { requestedGridbits, subgridPoints, toTerrainInt16 } from './terrain';
 import type { TerrainService } from '../lib/terrainService';
+import { requestedGridbits, subgridPoints, toTerrainInt16 } from './terrain';
 
 export interface TerrainRequest {
   mask: bigint;
@@ -32,7 +32,9 @@ export class TerrainServer {
     let sent = 0;
     let unavailable = 0;
     if (!this.service.enabled || req.grid_spacing <= 0) return { sent, unavailable };
-    const bits = requestedGridbits(req.mask).filter((b) => !this.busy.has(`${req.lat},${req.lon},${req.grid_spacing},${b}`));
+    const bits = requestedGridbits(req.mask).filter(
+      (b) => !this.busy.has(`${req.lat},${req.lon},${req.grid_spacing},${b}`)
+    );
     if (bits.length === 0) return { sent, unavailable };
     bits.forEach((b) => this.busy.add(`${req.lat},${req.lon},${req.grid_spacing},${b}`));
     try {
@@ -46,7 +48,18 @@ export class TerrainServer {
           continue;
         }
         if (sent > 0 && this.gapMs > 0) await new Promise((r) => setTimeout(r, this.gapMs));
-        if (this.send(this.encode(req.lat, req.lon, req.grid_spacing, bits[i], h.map((v) => toTerrainInt16(v!)))) === false) break;
+        if (
+          this.send(
+            this.encode(
+              req.lat,
+              req.lon,
+              req.grid_spacing,
+              bits[i],
+              h.map((v) => toTerrainInt16(v!))
+            )
+          ) === false
+        )
+          break;
         sent++;
       }
     } finally {

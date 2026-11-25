@@ -83,7 +83,8 @@ export function catalogCandidates(vehicle: string, version: FirmwareVersion): Ca
     out.push({ folder, url: `${PARAM_REPO_BASE}/${folder}/apm.pdef.json`, major, minor, match });
   };
   push(version.major, version.minor, version.type === 'dev' ? 'dev-same-minor' : 'exact');
-  for (let minor = version.minor - 1; minor >= 0 && out.length < MAX_CANDIDATES; minor--) push(version.major, minor, 'earlier');
+  for (let minor = version.minor - 1; minor >= 0 && out.length < MAX_CANDIDATES; minor--)
+    push(version.major, minor, 'earlier');
   for (let minor = MAX_MINOR_ACROSS_MAJOR; minor >= 0 && out.length < MAX_CANDIDATES && version.major > 0; minor--) {
     push(version.major - 1, minor, 'earlier');
   }

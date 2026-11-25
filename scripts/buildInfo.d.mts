@@ -4,5 +4,10 @@ export interface BuildInfo {
   date: string | null;
   dirty: boolean;
 }
-export function describeBuild(parts: { sha: string | null | undefined; date: string | null | undefined; dirty?: boolean; now?: Date }): BuildInfo;
+export function describeBuild(parts: {
+  sha: string | null | undefined;
+  date: string | null | undefined;
+  dirty?: boolean;
+  now?: Date;
+}): BuildInfo;
 export function readBuildInfo(env?: Record<string, string | undefined>): BuildInfo;

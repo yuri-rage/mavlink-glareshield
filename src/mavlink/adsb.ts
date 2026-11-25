@@ -45,7 +45,10 @@ export const TRAFFIC_EXPIRE_MS = 60_000;
  * ends up in map labels), trimmed; null when nothing is left.
  */
 export function cleanCallsign(raw: unknown): string | null {
-  const s = String(raw ?? '').replace(/[^\x20-\x7E]/g, '').replace(/[<>&"'`]/g, '').trim();
+  const s = String(raw ?? '')
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/[<>&"'`]/g, '')
+    .trim();
   return s || null;
 }
 
@@ -59,7 +62,14 @@ export function trafficFromMessage(d: any, nowMs: number): TrafficAircraft | nul
   const flags = Number(d?.flags) || 0;
   if ((flags & ADSB_FLAGS.VALID_COORDS) === 0) return null;
   if (d.callsign === 'OA_DB' || d.emitter_type === 255) return null;
-  if (!Number.isFinite(d.lat) || !Number.isFinite(d.lon) || (d.lat === 0 && d.lon === 0) || Math.abs(d.lat) > 90 || Math.abs(d.lon) > 180) return null;
+  if (
+    !Number.isFinite(d.lat) ||
+    !Number.isFinite(d.lon) ||
+    (d.lat === 0 && d.lon === 0) ||
+    Math.abs(d.lat) > 90 ||
+    Math.abs(d.lon) > 180
+  )
+    return null;
   return {
     icao: d.ICAO_address >>> 0,
     lat: d.lat,
@@ -144,7 +154,7 @@ export function assessThreat(
 ): Threat {
   const { e, n } = enOffset(own, t);
   const distanceM = Math.hypot(e, n);
-  const bearingDeg = (Math.atan2(e, n) * 180 / Math.PI + 360) % 360;
+  const bearingDeg = ((Math.atan2(e, n) * 180) / Math.PI + 360) % 360;
   const relAltM = t.altMslM !== null && own.altMslM !== null ? t.altMslM - own.altMslM : null;
   // Relative velocity (traffic minus own).
   let rvE = -own.velE;
@@ -169,14 +179,15 @@ export function assessThreat(
     relAltM === null || cpaS === null || Math.abs(relAltM + ((t.climbMs ?? 0) - (own.velUp ?? 0)) * cpaS) <= limit;
   let level: ThreatLevel = 'none';
   if (distanceM <= th.cautionRangeM && vertNow(th.cautionVerticalM)) level = 'caution';
-  const cpaAlert = cpaS !== null && cpaM !== null && cpaS <= th.cpaHorizonS && cpaM <= th.cpaAlertM && vertAtCpa(th.alertVerticalM);
+  const cpaAlert =
+    cpaS !== null && cpaM !== null && cpaS <= th.cpaHorizonS && cpaM <= th.cpaAlertM && vertAtCpa(th.alertVerticalM);
   if ((distanceM <= th.alertRangeM && vertNow(th.alertVerticalM)) || cpaAlert) level = 'alert';
   return { level, distanceM, bearingDeg, relAltM, closing, cpaS, cpaM };
 }
 
 /** Compass point for a bearing. */
 export function compassPoint(deg: number): string {
-  return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+  return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round((((deg % 360) + 360) % 360) / 45) % 8];
 }
 
 /** While an aircraft stays at alert, repeat its warning this often. */
@@ -187,7 +198,11 @@ export const TRAFFIC_REPEAT_MS = 20_000;
  * TRAFFIC_REPEAT_MS ago. `announced` (ICAO → when last announced) is updated; aircraft no longer at alert are
  * forgotten, so coming back to alert announces again.
  */
-export function trafficToAnnounce(threats: { icao: number; level: ThreatLevel }[], announced: Map<number, number>, nowMs: number): number[] {
+export function trafficToAnnounce(
+  threats: { icao: number; level: ThreatLevel }[],
+  announced: Map<number, number>,
+  nowMs: number
+): number[] {
   const alert = new Set(threats.filter((t) => t.level === 'alert').map((t) => t.icao));
   for (const icao of [...announced.keys()]) if (!alert.has(icao)) announced.delete(icao);
   const out: number[] = [];
@@ -204,7 +219,14 @@ export function trafficToAnnounce(threats: { icao: number; level: ThreatLevel }[
 /** The vehicle as the threat checks need it, from the telemetry store's position (null without a position). */
 export function ownForThreat(p: { lat: number; lon: number; alt: number; vx: number; vy: number; vz: number }) {
   if (!Number.isFinite(p.lat) || (p.lat === 0 && p.lon === 0)) return null;
-  return { lat: p.lat, lon: p.lon, altMslM: Number.isFinite(p.alt) ? p.alt : null, velN: p.vx || 0, velE: p.vy || 0, velUp: -(p.vz || 0) };
+  return {
+    lat: p.lat,
+    lon: p.lon,
+    altMslM: Number.isFinite(p.alt) ? p.alt : null,
+    velN: p.vx || 0,
+    velE: p.vy || 0,
+    velUp: -(p.vz || 0),
+  };
 }
 
 /** Every aircraft with its threat, worst first (alert, caution, none; then nearest). */
@@ -220,7 +242,11 @@ export function rankTraffic(
 }
 
 /** "+120 m ↑" relative height, in the user's units. */
-export function relAltText(relAltM: number | null, climbMs: number | null, formatAltitude: (m: number) => { value: string; unit: string }): string {
+export function relAltText(
+  relAltM: number | null,
+  climbMs: number | null,
+  formatAltitude: (m: number) => { value: string; unit: string }
+): string {
   if (relAltM === null) return 'alt ?';
   const f = formatAltitude(Math.abs(relAltM));
   // Whole units: separation to a tenth of a metre is false precision (altitude sources differ by tens of metres).

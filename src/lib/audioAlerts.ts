@@ -1,8 +1,10 @@
-import { useRef, useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+
 import { create } from 'zustand';
-import { useTelemetryStore } from '../store/telemetryStore';
+
 import { mavlinkConnection } from '../mavlink/connection';
 import { onActiveVehicleChange } from '../mavlink/vehicleRoster';
+import { useTelemetryStore } from '../store/telemetryStore';
 
 export const STORAGE_KEY_SOUND = 'mavlink_glareshield_sound_enabled';
 export const STORAGE_KEY_VOICE = 'mavlink_glareshield_voice_enabled';
@@ -16,7 +18,9 @@ export const STORAGE_KEY_VOICE_ENGINE = 'mavlink_glareshield_voice_engine';
 export type VoiceEngine = 'neural' | 'browser';
 
 /** A device short of memory, or iOS (whose Safari reloads tabs under memory pressure): the device voice by default. */
-export function defaultVoiceEngine(nav: { deviceMemory?: number; userAgent?: string; platform?: string; maxTouchPoints?: number } | undefined): VoiceEngine {
+export function defaultVoiceEngine(
+  nav: { deviceMemory?: number; userAgent?: string; platform?: string; maxTouchPoints?: number } | undefined
+): VoiceEngine {
   if (!nav) return 'neural';
   if (typeof nav.deviceMemory === 'number' && nav.deviceMemory < 4) return 'browser';
   const ua = nav.userAgent ?? '';
@@ -29,7 +33,9 @@ function storedVoiceEngine(): VoiceEngine {
     const v = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY_VOICE_ENGINE) : null;
     if (v === 'neural' || v === 'browser') return v;
   } catch {}
-  return defaultVoiceEngine(typeof navigator !== 'undefined' ? (navigator as Navigator & { deviceMemory?: number }) : undefined);
+  return defaultVoiceEngine(
+    typeof navigator !== 'undefined' ? (navigator as Navigator & { deviceMemory?: number }) : undefined
+  );
 }
 
 /** Bumped when the neural voice is released: work started before it (a synthesis, the prewarm) is abandoned. */
@@ -117,8 +123,7 @@ function getSharedAudioContext(allowResume = false): AudioContext | null {
     sharedAudioCtx = new AudioCtxClass();
   }
   const canResume =
-    hasUserInteracted ||
-    (typeof navigator !== 'undefined' && (navigator as any).userActivation?.hasBeenActive);
+    hasUserInteracted || (typeof navigator !== 'undefined' && (navigator as any).userActivation?.hasBeenActive);
   if (sharedAudioCtx.state === 'suspended' && (allowResume || canResume)) {
     sharedAudioCtx.resume().catch(() => {});
   }
@@ -601,7 +606,8 @@ export const useAudioAlertsStore = create<AudioAlertsState>((set, get) => ({
       set({ voiceEngine: engine });
       if (get().soundEnabled && get().voiceEnabled) ensurePiperWorker();
     }
-    if (get().soundEnabled && get().voiceEnabled) speakCallout(engine === 'browser' ? 'Device voice' : 'Neural voice', true);
+    if (get().soundEnabled && get().voiceEnabled)
+      speakCallout(engine === 'browser' ? 'Device voice' : 'Neural voice', true);
   },
   toggleSound: () => {
     const next = !get().soundEnabled;
@@ -870,9 +876,7 @@ export function useAudioAlertListener() {
       playAlertChime(highestSeverity);
 
       const spokenCandidate = alertMsgs.find(
-        (m) =>
-          m.severity <= 2 ||
-          /^(PreArm:|Arm:|Takeoff:|Failsafe|EKF|Battery|Fence)/i.test(m.text.trim())
+        (m) => m.severity <= 2 || /^(PreArm:|Arm:|Takeoff:|Failsafe|EKF|Battery|Fence)/i.test(m.text.trim())
       );
       if (spokenCandidate && !/^CMD\s+/i.test(spokenCandidate.text)) {
         speakCallout(spokenCandidate.text, spokenCandidate.severity <= 2);
@@ -954,11 +958,7 @@ export function useAudioAlertListener() {
         playAlertChime(1);
         speakCallout(`Critical battery, ${Math.round(battery.remaining)} percent`, true);
       }
-    } else if (
-      battery.remaining <= 25 &&
-      battery.remaining > 15 &&
-      batteryWarnedRef.current === 'none'
-    ) {
+    } else if (battery.remaining <= 25 && battery.remaining > 15 && batteryWarnedRef.current === 'none') {
       batteryWarnedRef.current = 'low';
       if (soundEnabled) {
         playAlertChime(3);
@@ -975,11 +975,7 @@ export function useAudioAlertListener() {
 
     const requestWakeLock = async () => {
       try {
-        if (
-          typeof navigator !== 'undefined' &&
-          'wakeLock' in navigator &&
-          document.visibilityState === 'visible'
-        ) {
+        if (typeof navigator !== 'undefined' && 'wakeLock' in navigator && document.visibilityState === 'visible') {
           wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
         }
       } catch {

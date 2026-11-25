@@ -6,10 +6,12 @@
 // would re-render the whole map at the attitude rate. With no gimbal attitude, nothing is drawn or recomputed.
 
 import { useEffect } from 'react';
+
 import L from 'leaflet';
+
+import { aimPoint, gimbalHeading } from '../../mavlink/gimbal';
 import { useGimbalStore } from '../../store/gimbalStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
-import { aimPoint, gimbalHeading } from '../../mavlink/gimbal';
 
 const PANE = 'gimbalPane';
 const STALE_MS = 3000;
@@ -41,13 +43,34 @@ export function useGimbalLayer(mapRef: React.MutableRefObject<L.Map | null>, rea
         return;
       }
       const heading = gimbalHeading(attitude.yaw, attitude.earthFrame, vehicle.yawDeg);
-      const aim = aimPoint({ lat: position.lat, lon: position.lon, heightM: position.relativeAlt, pitchDeg: attitude.pitch, headingDeg: heading, maxM: 1000 });
-      const pts: L.LatLngExpression[] = [[position.lat, position.lon], [aim.lat, aim.lon]];
-      if (!line) line = L.polyline(pts, { pane: PANE, color: '#38bdf8', weight: 2, opacity: 0.85, interactive: false }).addTo(map);
+      const aim = aimPoint({
+        lat: position.lat,
+        lon: position.lon,
+        heightM: position.relativeAlt,
+        pitchDeg: attitude.pitch,
+        headingDeg: heading,
+        maxM: 1000,
+      });
+      const pts: L.LatLngExpression[] = [
+        [position.lat, position.lon],
+        [aim.lat, aim.lon],
+      ];
+      if (!line)
+        line = L.polyline(pts, { pane: PANE, color: '#38bdf8', weight: 2, opacity: 0.85, interactive: false }).addTo(
+          map
+        );
       else line.setLatLngs(pts);
       line.setStyle({ dashArray: aim.ground ? '6 4' : '2 6' });
       if (aim.ground) {
-        if (!ring) ring = L.circleMarker([aim.lat, aim.lon], { pane: PANE, radius: 6, color: '#38bdf8', weight: 2, fillOpacity: 0.15, interactive: false }).addTo(map);
+        if (!ring)
+          ring = L.circleMarker([aim.lat, aim.lon], {
+            pane: PANE,
+            radius: 6,
+            color: '#38bdf8',
+            weight: 2,
+            fillOpacity: 0.15,
+            interactive: false,
+          }).addTo(map);
         else ring.setLatLng([aim.lat, aim.lon]);
       } else {
         ring?.remove();
@@ -60,7 +83,12 @@ export function useGimbalLayer(mapRef: React.MutableRefObject<L.Map | null>, rea
         roiMarker?.remove();
         roiMarker = null;
       } else if (!roiMarker) {
-        roiMarker = L.marker([roi.lat, roi.lon], { pane: PANE, interactive: false, keyboard: false, icon: ROI_ICON() }).addTo(map);
+        roiMarker = L.marker([roi.lat, roi.lon], {
+          pane: PANE,
+          interactive: false,
+          keyboard: false,
+          icon: ROI_ICON(),
+        }).addTo(map);
       } else {
         roiMarker.setLatLng([roi.lat, roi.lon]);
       }

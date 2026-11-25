@@ -85,9 +85,7 @@ function portInfo(port: WebSerialPortLike): WebSerialPortInfo {
 }
 
 function sameUsbIds(a: WebSerialPortInfo, b: WebSerialPortInfo | undefined): boolean {
-  return (
-    !!b && a.usbVendorId !== undefined && a.usbVendorId === b.usbVendorId && a.usbProductId === b.usbProductId
-  );
+  return !!b && a.usbVendorId !== undefined && a.usbVendorId === b.usbVendorId && a.usbProductId === b.usbProductId;
 }
 
 /**

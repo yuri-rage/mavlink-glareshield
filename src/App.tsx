@@ -1,19 +1,24 @@
-import React, { Suspense, lazy, useState, useEffect } from 'react';
-import { useLayoutStore } from './store/layoutStore';
-import { VehicleSwitchDialog } from './components/navbar/VehiclePicker';
-import { Navbar } from './components/navbar/Navbar';
-import { EditToolbar } from './components/editor/EditToolbar';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
+
 import { DashboardGrid } from './components/dashboard/DashboardGrid';
-import { useConnectionStore } from './store/connectionStore';
-import { CustomWidgetDefinition } from './types/widget';
+import { EditToolbar } from './components/editor/EditToolbar';
+import { Navbar } from './components/navbar/Navbar';
+import { VehicleSwitchDialog } from './components/navbar/VehiclePicker';
 import { useAudioAlertListener } from './lib/audioAlerts';
+import { useConnectionStore } from './store/connectionStore';
+import { useLayoutStore } from './store/layoutStore';
+import { CustomWidgetDefinition } from './types/widget';
 
 // Editor modals load when first opened.
-const AddWidgetModal = lazy(() => import('./components/editor/AddWidgetModal').then((m) => ({ default: m.AddWidgetModal })));
+const AddWidgetModal = lazy(() =>
+  import('./components/editor/AddWidgetModal').then((m) => ({ default: m.AddWidgetModal }))
+);
 const CustomWidgetCreatorModal = lazy(() =>
   import('./components/editor/CustomWidgetCreatorModal').then((m) => ({ default: m.CustomWidgetCreatorModal }))
 );
-const ProfileManagerModal = lazy(() => import('./components/editor/ProfileManagerModal').then((m) => ({ default: m.ProfileManagerModal })));
+const ProfileManagerModal = lazy(() =>
+  import('./components/editor/ProfileManagerModal').then((m) => ({ default: m.ProfileManagerModal }))
+);
 
 /**
  * The audio alerts listener, in a component of its own that renders nothing: it subscribes to telemetry (battery,
@@ -29,7 +34,6 @@ export const App: React.FC = () => {
   const connect = useConnectionStore((s) => s.connect);
   const cockpitFill = useLayoutStore((s) => s.cockpitFill);
 
-
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
   const [isWidgetCreatorOpen, setIsWidgetCreatorOpen] = useState(false);
   const [editingCustomWidget, setEditingCustomWidget] = useState<CustomWidgetDefinition | null>(null);
@@ -44,7 +48,7 @@ export const App: React.FC = () => {
     // A Cockpit tab shown as panes: the page is exactly the window's height and doesn't scroll; the navbar (and its
     // banners, and the edit toolbar) take what they need and the panes take the rest, by flexbox alone.
     <div
-      className={`${cockpitFill ? 'h-dvh overflow-hidden' : 'min-h-screen overflow-x-clip'} bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-sky-500/30`}
+      className={`${cockpitFill ? 'h-dvh overflow-hidden' : 'min-h-screen overflow-x-clip'} flex flex-col bg-zinc-950 font-sans text-zinc-100 selection:bg-sky-500/30`}
     >
       {/* Global audio alerts, active across all tabs */}
       <AudioAlerts />
@@ -62,7 +66,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Responsive Dashboard Area */}
-      <main className="flex-1 min-h-0 flex flex-col">
+      <main className="flex min-h-0 flex-1 flex-col">
         <DashboardGrid
           onEditCustomWidget={(cw) => {
             setEditingCustomWidget(cw);

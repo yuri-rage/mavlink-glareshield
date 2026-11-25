@@ -1,11 +1,17 @@
 // Settings: telemetry logging on or off, the size cap, and what's happening now (file, size, storage use).
 
 import React, { useEffect, useState } from 'react';
+
 import { useTlogStore } from '../../store/tlogStore';
 
 const CAPS_MB = [512, 1024, 2048, 5120, 10240];
 const fmtMb = (mb: number) => (mb >= 1024 ? `${+(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`);
-export const fmtBytes = (b: number) => (b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(2)} GB` : b >= 1024 ** 2 ? `${(b / 1024 ** 2).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`);
+export const fmtBytes = (b: number) =>
+  b >= 1024 ** 3
+    ? `${(b / 1024 ** 3).toFixed(2)} GB`
+    : b >= 1024 ** 2
+      ? `${(b / 1024 ** 2).toFixed(1)} MB`
+      : `${Math.round(b / 1024)} KB`;
 
 export const TlogSettings: React.FC = () => {
   const { enabled, capMb, phase, active, activeBytes, error, overCap, logs, setEnabled, setCapMb } = useTlogStore();
@@ -22,7 +28,11 @@ export const TlogSettings: React.FC = () => {
   return (
     <div className="space-y-2">
       <label className="text-xs font-medium text-zinc-300">Telemetry Logs (.tlog)</label>
-      <div className="grid grid-cols-2 gap-1 p-0.5 rounded-lg bg-zinc-900 border border-zinc-800" role="radiogroup" aria-label="Telemetry logging">
+      <div
+        className="grid grid-cols-2 gap-1 rounded-lg border border-zinc-800 bg-zinc-900 p-0.5"
+        role="radiogroup"
+        aria-label="Telemetry logging"
+      >
         {[true, false].map((on) => (
           <button
             key={String(on)}
@@ -31,8 +41,12 @@ export const TlogSettings: React.FC = () => {
             aria-checked={enabled === on}
             onClick={() => setEnabled(on)}
             className={
-              'text-xs py-1.5 rounded-md transition-colors ' +
-              (enabled === on ? (on ? 'bg-red-500/20 text-red-300 font-medium' : 'bg-zinc-700/60 text-zinc-200 font-medium') : 'text-zinc-400 hover:text-zinc-200')
+              'rounded-md py-1.5 text-xs transition-colors ' +
+              (enabled === on
+                ? on
+                  ? 'bg-red-500/20 font-medium text-red-300'
+                  : 'bg-zinc-700/60 font-medium text-zinc-200'
+                : 'text-zinc-400 hover:text-zinc-200')
             }
           >
             {on ? 'Record' : 'Off'}
@@ -62,13 +76,18 @@ export const TlogSettings: React.FC = () => {
             Recording <span className="font-mono">{active}</span> ({fmtBytes(activeBytes)})
           </span>
         ) : enabled ? (
-          phase === 'waiting' ? 'Waiting for the vehicle to choose the log…' : 'Records every connection to a vehicle.'
+          phase === 'waiting' ? (
+            'Waiting for the vehicle to choose the log…'
+          ) : (
+            'Records every connection to a vehicle.'
+          )
         ) : (
           'Off: nothing is recorded.'
         )}{' '}
         {logs.length} log{logs.length === 1 ? '' : 's'}, {fmtBytes(total)} of {fmtMb(capMb)}
-        {quota ? ` · browser storage ${fmtBytes(quota.usage)} of ${fmtBytes(quota.quota)}` : ''}. Oldest logs are deleted to stay under the
-        cap, except ones marked kept. A reload mid-flight continues the same log; a disconnect starts a new one next time.
+        {quota ? ` · browser storage ${fmtBytes(quota.usage)} of ${fmtBytes(quota.quota)}` : ''}. Oldest logs are
+        deleted to stay under the cap, except ones marked kept. A reload mid-flight continues the same log; a disconnect
+        starts a new one next time.
         {overCap && <span className="text-amber-300"> Kept logs alone exceed the cap.</span>}
       </div>
     </div>
@@ -92,7 +111,7 @@ export const TlogIndicator: React.FC<{ onClick: () => void }> = ({ onClick }) =>
         rec ? 'border-red-500/40 bg-red-950/40 text-red-300' : 'border-amber-500/50 bg-amber-950/40 text-amber-300'
       }`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${rec ? 'bg-red-500 animate-pulse' : 'bg-amber-400'}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${rec ? 'animate-pulse bg-red-500' : 'bg-amber-400'}`} />
       {rec ? 'REC' : 'LOG ⚠'}
     </button>
   );

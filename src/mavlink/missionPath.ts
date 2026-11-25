@@ -58,16 +58,26 @@ function makeFrame(lat0: number, lon0: number) {
   const mPerDegLat = 111320;
   const mPerDegLon = 111320 * Math.cos((lat0 * Math.PI) / 180);
   return {
-    toLocal: (it: { lat: number; lon: number }, up: number): V3 => [(it.lon - lon0) * mPerDegLon, (it.lat - lat0) * mPerDegLat, up],
+    toLocal: (it: { lat: number; lon: number }, up: number): V3 => [
+      (it.lon - lon0) * mPerDegLon,
+      (it.lat - lat0) * mPerDegLat,
+      up,
+    ],
     toLatLng: (p: V3): [number, number] => [lat0 + p[1] / mPerDegLat, lon0 + p[0] / mPerDegLon],
   };
 }
 
 /** b − a, without the vertical part when either height is unknown (never subtract an MSL altitude from a relative one). */
-const vec = (a: V3, b: V3): V3 => (Number.isNaN(a[2]) || Number.isNaN(b[2]) ? [b[0] - a[0], b[1] - a[1], 0] : sub(b, a));
+const vec = (a: V3, b: V3): V3 =>
+  Number.isNaN(a[2]) || Number.isNaN(b[2]) ? [b[0] - a[0], b[1] - a[1], 0] : sub(b, a);
 /** The pair with unknown heights levelled, for the curve itself (only its horizontal shape is drawn). */
 const level = (a: V3, b: V3): [V3, V3] =>
-  Number.isNaN(a[2]) || Number.isNaN(b[2]) ? [[a[0], a[1], 0], [b[0], b[1], 0]] : [a, b];
+  Number.isNaN(a[2]) || Number.isNaN(b[2])
+    ? [
+        [a[0], a[1], 0],
+        [b[0], b[1], 0],
+      ]
+    : [a, b];
 
 /** The Hermite curve ArduPilot flies from o to d, sampled (o included, d included). */
 export function splineLeg(o: V3, d: V3, v0: V3, v1: V3, samples = SPLINE_SAMPLES): V3[] {
@@ -146,7 +156,15 @@ export function missionPathLegs(items: PathItem[], route: number[], splines: boo
     const to = items[toI];
     const curved = splines && to.command === CMD_NAV_SPLINE_WAYPOINT;
     if (!curved) {
-      legs.push({ from: fromI, to: toI, spline: false, latLngs: [[from.lat, from.lon], [to.lat, to.lon]] });
+      legs.push({
+        from: fromI,
+        to: toI,
+        spline: false,
+        latLngs: [
+          [from.lat, from.lon],
+          [to.lat, to.lon],
+        ],
+      });
       prevSplineDestVel = null;
       continue;
     }

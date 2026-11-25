@@ -97,8 +97,14 @@ export function fenceEnableBreaches(v: {
   inclusionUnion?: boolean;
 }): string[] {
   const out: string[] = [];
-  if (v.types & FENCE_TYPE_POLYGON && v.position) out.push(...fenceBreachReasons(v.fence, v.position, { inclusionUnion: v.inclusionUnion }));
-  if (v.types & FENCE_TYPE_CIRCLE && v.homeDistanceM !== null && v.fenceRadius !== undefined && v.homeDistanceM >= v.fenceRadius) {
+  if (v.types & FENCE_TYPE_POLYGON && v.position)
+    out.push(...fenceBreachReasons(v.fence, v.position, { inclusionUnion: v.inclusionUnion }));
+  if (
+    v.types & FENCE_TYPE_CIRCLE &&
+    v.homeDistanceM !== null &&
+    v.fenceRadius !== undefined &&
+    v.homeDistanceM >= v.fenceRadius
+  ) {
     out.push(`outside the home circle (${Math.round(v.homeDistanceM)} m from home, FENCE_RADIUS ${v.fenceRadius} m)`);
   }
   if (v.types & FENCE_TYPE_ALT_MAX && v.relAlt !== null && v.altMax !== undefined && v.relAlt >= v.altMax) {

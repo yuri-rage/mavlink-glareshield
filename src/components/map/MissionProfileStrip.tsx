@@ -5,17 +5,22 @@
 // (and pointing at the route on the map marks it here); click to bring it into view on the map.
 
 import React, { useMemo } from 'react';
+
 import { Mountain, X } from 'lucide-react';
+
+import { useMissionPlanStore } from '../../store/missionPlanStore';
 import { useMissionTerrainStore } from '../../store/missionTerrainStore';
 import { useTerrainStore } from '../../store/terrainStore';
 import { useUnitsStore } from '../../store/unitsStore';
-import { useMissionPlanStore } from '../../store/missionPlanStore';
 import { usePanelWidth } from '../widgets/custom/panelKit';
 
 const H = 120;
 const PAD = { l: 44, r: 8, t: 8, b: 16 };
 
-export const MissionProfileStrip: React.FC<{ style?: React.CSSProperties; onShowPoint?: (lat: number, lon: number) => void }> = ({ style, onShowPoint }) => {
+export const MissionProfileStrip: React.FC<{
+  style?: React.CSSProperties;
+  onShowPoint?: (lat: number, lon: number) => void;
+}> = ({ style, onShowPoint }) => {
   const profile = useMissionTerrainStore((s) => s.profile);
   const loading = useMissionTerrainStore((s) => s.loading);
   const issues = useMissionTerrainStore((s) => s.issues);
@@ -41,7 +46,9 @@ export const MissionProfileStrip: React.FC<{ style?: React.CSSProperties; onShow
     const y = (h: number) => PAD.t + (1 - (h - y0) / (y1 - y0)) * (H - PAD.t - PAD.b);
     const withT = profile.points.filter((p) => p.terrain !== null);
     const terrainPath = withT.length
-      ? `M${x(withT[0].dist)},${H - PAD.b} ` + withT.map((p) => `L${x(p.dist)},${y(p.terrain!)}`).join(' ') + ` L${x(withT[withT.length - 1].dist)},${H - PAD.b} Z`
+      ? `M${x(withT[0].dist)},${H - PAD.b} ` +
+        withT.map((p) => `L${x(p.dist)},${y(p.terrain!)}`).join(' ') +
+        ` L${x(withT[withT.length - 1].dist)},${H - PAD.b} Z`
       : '';
     const clearPath = withT.map((p, i) => `${i ? 'L' : 'M'}${x(p.dist)},${y(p.terrain! + clearance)}`).join(' ');
     // The route, split where it is too close (so those stretches can be red).
@@ -79,12 +86,22 @@ export const MissionProfileStrip: React.FC<{ style?: React.CSSProperties; onShow
         {loading && <span className="animate-pulse text-sky-300">loading terrain…</span>}
         {minAgl !== null && (
           <span className="font-mono text-red-300">
-            {minAgl < 0 ? `${formatAltitude(-minAgl).full} below terrain` : `${formatAltitude(minAgl).full} above terrain`} at lowest
+            {minAgl < 0
+              ? `${formatAltitude(-minAgl).full} below terrain`
+              : `${formatAltitude(minAgl).full} above terrain`}{' '}
+            at lowest
           </span>
         )}
-        {profile?.homeFrom === 'terrain' && <span className="text-amber-300" title="The mission's home has no altitude: the terrain there is used">home altitude from terrain</span>}
+        {profile?.homeFrom === 'terrain' && (
+          <span className="text-amber-300" title="The mission's home has no altitude: the terrain there is used">
+            home altitude from terrain
+          </span>
+        )}
         {profile?.homeFrom === 'unknown' && (
-          <span className="text-amber-300" title="Relative altitudes are above home: connect to a vehicle, or give the mission a home">
+          <span
+            className="text-amber-300"
+            title="Relative altitudes are above home: connect to a vehicle, or give the mission a home"
+          >
             home unknown: relative altitudes not placed
           </span>
         )}
@@ -95,7 +112,12 @@ export const MissionProfileStrip: React.FC<{ style?: React.CSSProperties; onShow
               }`
             : `clearance ${formatAltitude(clearance).full}`}
         </span>
-        <button type="button" className="text-zinc-500 hover:text-zinc-200" aria-label="Hide profile" onClick={() => useMissionTerrainStore.getState().setShowProfile(false)}>
+        <button
+          type="button"
+          className="text-zinc-500 hover:text-zinc-200"
+          aria-label="Hide profile"
+          onClick={() => useMissionTerrainStore.getState().setShowProfile(false)}
+        >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -129,26 +151,67 @@ export const MissionProfileStrip: React.FC<{ style?: React.CSSProperties; onShow
             {chart.ticks.map((t, i) => (
               <g key={i}>
                 <line x1={PAD.l} x2={W - PAD.r} y1={chart.y(t)} y2={chart.y(t)} stroke="#27272a" strokeWidth={1} />
-                <text x={PAD.l - 4} y={chart.y(t) + 3} textAnchor="end" fontSize={9} fill="#71717a" fontFamily="ui-monospace, monospace">
+                <text
+                  x={PAD.l - 4}
+                  y={chart.y(t) + 3}
+                  textAnchor="end"
+                  fontSize={9}
+                  fill="#71717a"
+                  fontFamily="ui-monospace, monospace"
+                >
                   {Math.round(Number(formatAltitude(t).value))}
                 </text>
               </g>
             ))}
             <path d={chart.terrainPath} fill="#78716c" fillOpacity={0.45} stroke="#a8a29e" strokeWidth={1} />
-            {clearance > 0 && <path d={chart.clearPath} fill="none" stroke="#a8a29e" strokeOpacity={0.5} strokeDasharray="3 4" strokeWidth={1} />}
+            {clearance > 0 && (
+              <path
+                d={chart.clearPath}
+                fill="none"
+                stroke="#a8a29e"
+                strokeOpacity={0.5}
+                strokeDasharray="3 4"
+                strokeWidth={1}
+              />
+            )}
             {chart.segs.map((s, i) => (
               <path key={i} d={s.d} fill="none" stroke={s.bad ? '#ef4444' : '#f59e0b'} strokeWidth={s.bad ? 3 : 2} />
             ))}
             {profile!.marks.map((m) => (
               <g key={`${m.item}-${m.dist}`}>
-                <line x1={chart.x(m.dist)} x2={chart.x(m.dist)} y1={PAD.t} y2={H - PAD.b} stroke="#52525b" strokeDasharray="2 3" />
-                {m.alt !== null && <circle cx={chart.x(m.dist)} cy={chart.y(m.alt)} r={3} fill="#f59e0b" stroke="#09090b" />}
-                <text x={chart.x(m.dist)} y={H - 4} textAnchor="middle" fontSize={9} fill="#a1a1aa" fontFamily="ui-monospace, monospace">
+                <line
+                  x1={chart.x(m.dist)}
+                  x2={chart.x(m.dist)}
+                  y1={PAD.t}
+                  y2={H - PAD.b}
+                  stroke="#52525b"
+                  strokeDasharray="2 3"
+                />
+                {m.alt !== null && (
+                  <circle cx={chart.x(m.dist)} cy={chart.y(m.alt)} r={3} fill="#f59e0b" stroke="#09090b" />
+                )}
+                <text
+                  x={chart.x(m.dist)}
+                  y={H - 4}
+                  textAnchor="middle"
+                  fontSize={9}
+                  fill="#a1a1aa"
+                  fontFamily="ui-monospace, monospace"
+                >
                   {m.item === 0 ? 'H' : m.item}
                 </text>
               </g>
             ))}
-            {p && <line x1={chart.x(p.dist)} x2={chart.x(p.dist)} y1={PAD.t} y2={H - PAD.b} stroke="#38bdf8" strokeWidth={1} />}
+            {p && (
+              <line
+                x1={chart.x(p.dist)}
+                x2={chart.x(p.dist)}
+                y1={PAD.t}
+                y2={H - PAD.b}
+                stroke="#38bdf8"
+                strokeWidth={1}
+              />
+            )}
           </svg>
         )}
       </div>
@@ -169,7 +232,9 @@ export const ProfileToggle: React.FC<{ disabledReason?: string }> = ({ disabledR
       title={disabledReason ?? 'Altitude profile over the terrain'}
       onClick={() => useMissionTerrainStore.getState().setShowProfile(!shown)}
       className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[11px] font-bold shadow-md disabled:opacity-40 ${
-        shown ? 'border-amber-500/60 bg-amber-500 text-zinc-950' : 'border-zinc-700 bg-zinc-950/90 text-zinc-300 hover:bg-zinc-800'
+        shown
+          ? 'border-amber-500/60 bg-amber-500 text-zinc-950'
+          : 'border-zinc-700 bg-zinc-950/90 text-zinc-300 hover:bg-zinc-800'
       }`}
     >
       <Mountain className="h-3.5 w-3.5" />

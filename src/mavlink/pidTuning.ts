@@ -74,7 +74,12 @@ const SUB: PidController[] = COPTER.filter((c) => c.axis <= 3);
 const PLANE: PidController[] = [
   { axis: 1, bit: 0, label: 'Roll', description: 'Roll rate controller (RLL_RATE_*; Q_A_RAT_RLL_* in VTOL modes)' },
   { axis: 2, bit: 1, label: 'Pitch', description: 'Pitch rate controller (PTCH_RATE_*; Q_A_RAT_PIT_* in VTOL modes)' },
-  { axis: 3, bit: 2, label: 'Yaw', description: 'Yaw controller (YAW_RATE_* or the yaw damper; Q_A_RAT_YAW_* in VTOL modes)' },
+  {
+    axis: 3,
+    bit: 2,
+    label: 'Yaw',
+    description: 'Yaw controller (YAW_RATE_* or the yaw damper; Q_A_RAT_YAW_* in VTOL modes)',
+  },
   { axis: 5, bit: 3, label: 'Steering', description: 'Ground steering rate controller (STEER2SRV_*)' },
   { axis: 6, bit: 4, label: 'Landing', description: 'Deep-stall landing steering (LAND_DS_*)' },
 ];
@@ -124,7 +129,9 @@ export function pidControllersFor(
   const all = BY_VEHICLE[category] ?? [];
   const useMeta = !!maskBitmask && Object.keys(maskBitmask).length > 0;
   return all
-    .filter((c) => !useMeta || maskBitmask[c.bit] !== undefined || (!!c.presentWithParam && !!hasParam?.(c.presentWithParam)))
+    .filter(
+      (c) => !useMeta || maskBitmask[c.bit] !== undefined || (!!c.presentWithParam && !!hasParam?.(c.presentWithParam))
+    )
     .map((c) => ({ ...c }));
 }
 
@@ -147,7 +154,12 @@ export function pidPickerAxes(controllers: PidController[], seenAxes: Iterable<n
     out.push({
       axis,
       bit: -1,
-      label: name ? name.toLowerCase().replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()) : `Axis ${axis}`,
+      label: name
+        ? name
+            .toLowerCase()
+            .replace(/_/g, ' ')
+            .replace(/^\w/, (c) => c.toUpperCase())
+        : `Axis ${axis}`,
       description: `Reported as PID_TUNING axis ${axis}`,
     });
   }

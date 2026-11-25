@@ -74,20 +74,32 @@ function parseOne(hex: string) {
 for (const [idStr, appExtra] of Object.entries(MAVLINK_MESSAGE_CRC_EXTRA)) {
   const truth = V.crc_extra[idStr];
   const name = V.msg_names[idStr] ?? `msg ${idStr}`;
-  check('crc', `${name} (${idStr})`,
-    truth === undefined ? [`message id ${idStr} not in ${V.dialect} dialect`]
-      : appExtra === truth ? [] : [`app CRC_EXTRA ${appExtra}, pymavlink ${truth}`]);
+  check(
+    'crc',
+    `${name} (${idStr})`,
+    truth === undefined
+      ? [`message id ${idStr} not in ${V.dialect} dialect`]
+      : appExtra === truth
+        ? []
+        : [`app CRC_EXTRA ${appExtra}, pymavlink ${truth}`]
+  );
 }
 
 // --- decode ----------------------------------------------------------------
 for (const c of V.decode) {
   const packets = parseOne(c.hex);
   if (packets.length !== 1 || packets[0].messageId !== c.msgid) {
-    check('decode', c.name, [`parser returned ${packets.length} packet(s) (ids: ${packets.map((p) => p.messageId)}) - CRC or framing rejected`]);
+    check('decode', c.name, [
+      `parser returned ${packets.length} packet(s) (ids: ${packets.map((p) => p.messageId)}) - CRC or framing rejected`,
+    ]);
     continue;
   }
   const decoded = decodePayload(packets[0].messageId, packets[0].payload);
-  check('decode', c.name, Object.entries(c.expect).flatMap(([k, v]) => diff(decoded[k], v, k)));
+  check(
+    'decode',
+    c.name,
+    Object.entries(c.expect).flatMap(([k, v]) => diff(decoded[k], v, k))
+  );
 }
 
 // --- encode ----------------------------------------------------------------
@@ -113,18 +125,23 @@ function comparePacket(pkt: Uint8Array, msgid: number, truthPayloadHex: string, 
   const appPayload = pkt.subarray(10, 10 + len);
   const truth = fromHex(truthPayloadHex);
   const n = Math.max(appPayload.length, truth.length);
-  const a = new Uint8Array(n); a.set(appPayload);
-  const t = new Uint8Array(n); t.set(truth);
+  const a = new Uint8Array(n);
+  a.set(appPayload);
+  const t = new Uint8Array(n);
+  t.set(truth);
   const badBytes: number[] = [];
   for (let i = 0; i < n; i++) if (a[i] !== t[i]) badBytes.push(i);
   if (badBytes.length) {
-    problems.push(`payload differs at byte offset(s) ${badBytes.slice(0, 12).join(', ')}${badBytes.length > 12 ? ', ...' : ''}`);
+    problems.push(
+      `payload differs at byte offset(s) ${badBytes.slice(0, 12).join(', ')}${badBytes.length > 12 ? ', ...' : ''}`
+    );
     problems.push(`app:      ${toHex(appPayload)}`);
     problems.push(`pymavlink ${toHex(truth)}`);
   }
   const appCrc = pkt[10 + len] | (pkt[11 + len] << 8);
   const expectedCrc = calculateCrc(pkt, 1, 9 + len, truthCrcExtra);
-  if (appCrc !== expectedCrc) problems.push(`CRC 0x${appCrc.toString(16)} does not verify with crc_extra ${truthCrcExtra}`);
+  if (appCrc !== expectedCrc)
+    problems.push(`CRC 0x${appCrc.toString(16)} does not verify with crc_extra ${truthCrcExtra}`);
   return problems;
 }
 
@@ -146,7 +163,11 @@ for (const c of V.ftp) {
       continue;
     }
     const actual = { ...f, data: toHex(f.data) };
-    check('ftp', c.name, Object.entries(c.expect).flatMap(([k, v]) => diff((actual as any)[k], v, k)));
+    check(
+      'ftp',
+      c.name,
+      Object.entries(c.expect).flatMap(([k, v]) => diff((actual as any)[k], v, k))
+    );
   }
 }
 

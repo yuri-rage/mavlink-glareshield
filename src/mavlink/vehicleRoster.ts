@@ -14,8 +14,9 @@
 //   aircraft because the one being flown lost its link is the thing to avoid.
 
 import { create } from 'zustand';
+
 import { mavlinkConnection } from './connection';
-import { MAVLINK_MSG_ID, getVehicleModeName, isVehicleAutopilotHeartbeat } from './messages';
+import { getVehicleModeName, isVehicleAutopilotHeartbeat, MAVLINK_MSG_ID } from './messages';
 import type { MavlinkPacket } from './parser';
 
 export interface RosterVehicle {
@@ -122,7 +123,12 @@ export function getActiveSystemId(): number | null {
 export function switchToVehicle(sysId: number): void {
   const st = useVehicleRosterStore.getState();
   const from = st.activeSystemId;
-  useVehicleRosterStore.setState({ activeSystemId: sysId, takeoverOffer: null, keepWaiting: false, pendingSwitch: null });
+  useVehicleRosterStore.setState({
+    activeSystemId: sysId,
+    takeoverOffer: null,
+    keepWaiting: false,
+    pendingSwitch: null,
+  });
   if (from === sysId) return;
   for (const l of [...switchListeners]) {
     try {
@@ -156,7 +162,8 @@ const PUBLISH_MS = 500;
 
 function publish(now: number) {
   lastPublish = now;
-  for (const [id, v] of live) if (now - v.lastHeard > FORGET_MS && id !== useVehicleRosterStore.getState().activeSystemId) live.delete(id);
+  for (const [id, v] of live)
+    if (now - v.lastHeard > FORGET_MS && id !== useVehicleRosterStore.getState().activeSystemId) live.delete(id);
   const vehicles: Record<number, RosterVehicle> = {};
   for (const [id, v] of live) vehicles[id] = { ...v };
   useVehicleRosterStore.setState({ vehicles });
@@ -169,14 +176,19 @@ function publish(now: number) {
 export function observePacket(packet: MavlinkPacket, data: any, now = Date.now()): number | null {
   const id = packet.messageId;
   if (id === MAVLINK_MSG_ID.HEARTBEAT) {
-    if (!data || !isVehicleAutopilotHeartbeat(data.type, data.autopilot, packet.componentId)) return getActiveSystemId();
+    if (!data || !isVehicleAutopilotHeartbeat(data.type, data.autopilot, packet.componentId))
+      return getActiveSystemId();
     const st = useVehicleRosterStore.getState();
     const prev = live.get(packet.systemId);
     const armed = (data.base_mode & 0x80) !== 0;
     const modeName = getVehicleModeName(data.type, data.custom_mode);
     const changed = !prev || prev.armed !== armed || prev.modeName !== modeName || prev.type !== data.type;
     const activeLastHeard = st.activeSystemId !== null ? (live.get(st.activeSystemId)?.lastHeard ?? 0) : 0;
-    const decision = decideHeartbeat({ activeSystemId: st.activeSystemId, activeLastHeard, multiSeen: st.multiSeen }, packet.systemId, now);
+    const decision = decideHeartbeat(
+      { activeSystemId: st.activeSystemId, activeLastHeard, multiSeen: st.multiSeen },
+      packet.systemId,
+      now
+    );
     live.set(packet.systemId, {
       ...(prev ?? {}),
       sysId: packet.systemId,
@@ -223,7 +235,15 @@ export function observePacket(packet: MavlinkPacket, data: any, now = Date.now()
 export function resetRoster(): void {
   live.clear();
   lastPublish = 0;
-  useVehicleRosterStore.setState({ vehicles: {}, activeSystemId: null, multiSeen: false, takeoverOffer: null, keepWaiting: false, pendingSwitch: null, busy: [] });
+  useVehicleRosterStore.setState({
+    vehicles: {},
+    activeSystemId: null,
+    multiSeen: false,
+    takeoverOffer: null,
+    keepWaiting: false,
+    pendingSwitch: null,
+    busy: [],
+  });
 }
 
 mavlinkConnection.onStatus((status) => {

@@ -93,7 +93,14 @@ export const ARDUPILOT_PARAM_META: Record<string, ParamMeta> = {
   // Failsafes
   FS_THR_ENABLE: {
     description: 'Throttle (RC receiver) failsafe enable and action',
-    values: { 0: 'Disabled', 1: 'Always RTL', 2: 'Continue Mission in Auto', 3: 'Always Land', 4: 'SmartRTL or RTL', 5: 'SmartRTL or Land' },
+    values: {
+      0: 'Disabled',
+      1: 'Always RTL',
+      2: 'Continue Mission in Auto',
+      3: 'Always Land',
+      4: 'SmartRTL or RTL',
+      5: 'SmartRTL or Land',
+    },
   },
   FS_THR_VALUE: {
     description: 'PWM threshold below which throttle failsafe triggers',
@@ -103,7 +110,14 @@ export const ARDUPILOT_PARAM_META: Record<string, ParamMeta> = {
   },
   FS_GCS_ENABLE: {
     description: 'Ground Control Station heartbeat failsafe action',
-    values: { 0: 'Disabled', 1: 'Always RTL', 2: 'Continue Mission in Auto', 3: 'SmartRTL or RTL', 4: 'SmartRTL or Land', 5: 'Always Land' },
+    values: {
+      0: 'Disabled',
+      1: 'Always RTL',
+      2: 'Continue Mission in Auto',
+      3: 'SmartRTL or RTL',
+      4: 'SmartRTL or Land',
+      5: 'Always Land',
+    },
   },
   FS_EKF_ACTION: {
     description: 'Action taken on EKF attitude/position variance failsafe',
@@ -408,7 +422,11 @@ export function parseParamFile(content: string): Record<string, number> {
 
     // Check QGC 5-column format: sysId compId NAME VALUE TYPE
     const tabParts = line.split(/\t+/);
-    if (tabParts.length >= 4 && /^\d+$/.test(tabParts[0].trim()) && /^[A-Z][A-Z0-9_]{1,15}$/i.test(tabParts[2].trim())) {
+    if (
+      tabParts.length >= 4 &&
+      /^\d+$/.test(tabParts[0].trim()) &&
+      /^[A-Z][A-Z0-9_]{1,15}$/i.test(tabParts[2].trim())
+    ) {
       const name = tabParts[2].trim().toUpperCase();
       const val = Number(tabParts[3].trim());
       if (Number.isFinite(val)) {

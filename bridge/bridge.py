@@ -209,9 +209,7 @@ class ClientSession:
                 pass
             self.ntrip_writer = None
         try:
-            await self.websocket.send(
-                json.dumps({"type": "ntrip_status", "status": "disconnected"})
-            )
+            await self.websocket.send(json.dumps({"type": "ntrip_status", "status": "disconnected"}))
         except Exception:  # noqa: BLE001, S110
             pass
 
@@ -230,9 +228,7 @@ class BridgeServer:
         self.port = port
         self.mode = mode
         self.target = target
-        self.allowed_origins = (
-            allowed_origins if allowed_origins is not None else DEFAULT_ALLOWED_ORIGINS
-        )
+        self.allowed_origins = allowed_origins if allowed_origins is not None else DEFAULT_ALLOWED_ORIGINS
         self.ssl_context = ssl_context
         self.clients: set[Any] = set()
         self.client_sessions: dict[Any, ClientSession] = {}
@@ -299,9 +295,7 @@ class BridgeServer:
         session = ClientSession(websocket)
         self.client_sessions[websocket] = session
         self.clients.add(websocket)
-        print(
-            f"[WS] Client connected from {websocket.remote_address}. Active: {len(self.clients)}"
-        )
+        print(f"[WS] Client connected from {websocket.remote_address}. Active: {len(self.clients)}")
         if self.mode == "mock":
             # Send initial boot status messages
             boot_messages = [
@@ -315,11 +309,7 @@ class BridgeServer:
             for sev, txt in boot_messages:
                 txt_bytes = txt.encode("ascii")[:50].ljust(50, b"\x00")
                 try:
-                    await websocket.send(
-                        self.encoder.pack(
-                            MSG_STATUSTEXT, struct.pack("<B", sev) + txt_bytes
-                        )
-                    )
+                    await websocket.send(self.encoder.pack(MSG_STATUSTEXT, struct.pack("<B", sev) + txt_bytes))
                 except Exception:  # noqa: BLE001, S110
                     pass
         try:
@@ -362,14 +352,17 @@ class BridgeServer:
         username = str(cmd.get("username", "")).strip()
         password = str(cmd.get("password", "")).strip()
 
-        if port not in (2101, 2102, 2103, 2104, 2105) or not re.fullmatch(r"[A-Za-z0-9.-]+", host) \
-                or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", mountpoint):
-            await websocket.send(json.dumps({"type": "ntrip_error", "message": "Invalid NTRIP host, port or mountpoint"}))
+        if (
+            port not in (2101, 2102, 2103, 2104, 2105)
+            or not re.fullmatch(r"[A-Za-z0-9.-]+", host)
+            or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", mountpoint)
+        ):
+            await websocket.send(
+                json.dumps({"type": "ntrip_error", "message": "Invalid NTRIP host, port or mountpoint"})
+            )
             return
         if not host or not mountpoint:
-            await websocket.send(
-                json.dumps({"type": "ntrip_error", "message": "Missing host or mountpoint"})
-            )
+            await websocket.send(json.dumps({"type": "ntrip_error", "message": "Missing host or mountpoint"}))
             return
 
         auth_header = ""
@@ -377,11 +370,7 @@ class BridgeServer:
             token = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
             auth_header = f"Authorization: Basic {token}\r\n"
 
-        req = (
-            f"GET /{mountpoint} HTTP/1.0\r\n"
-            f"User-Agent: NTRIP MavlinkGlareshield/1.0\r\n"
-            f"{auth_header}\r\n"
-        )
+        req = f"GET /{mountpoint} HTTP/1.0\r\nUser-Agent: NTRIP MavlinkGlareshield/1.0\r\n{auth_header}\r\n"
 
         try:
             reader, writer = await asyncio.open_connection(host, port)
@@ -416,23 +405,25 @@ class BridgeServer:
                         await writer.wait_closed()
                         session.ntrip_writer = None
                         await websocket.send(
-                            json.dumps({
-                                "type": "ntrip_error",
-                                "message": f"Caster rejected: {header_str.strip()}",
-                            })
+                            json.dumps(
+                                {
+                                    "type": "ntrip_error",
+                                    "message": f"Caster rejected: {header_str.strip()}",
+                                }
+                            )
                         )
                         return
 
-                    await websocket.send(
-                        json.dumps({"type": "ntrip_status", "status": "streaming"})
-                    )
+                    await websocket.send(json.dumps({"type": "ntrip_status", "status": "streaming"}))
                     body_start = bytes(resp_buf[split_at:])
                     if body_start:
                         await websocket.send(
-                            json.dumps({
-                                "type": "ntrip_data",
-                                "data": base64.b64encode(body_start).decode("ascii"),
-                            })
+                            json.dumps(
+                                {
+                                    "type": "ntrip_data",
+                                    "data": base64.b64encode(body_start).decode("ascii"),
+                                }
+                            )
                         )
 
             async def ntrip_read_loop() -> None:
@@ -442,10 +433,12 @@ class BridgeServer:
                         if not data:
                             break
                         await websocket.send(
-                            json.dumps({
-                                "type": "ntrip_data",
-                                "data": base64.b64encode(data).decode("ascii"),
-                            })
+                            json.dumps(
+                                {
+                                    "type": "ntrip_data",
+                                    "data": base64.b64encode(data).decode("ascii"),
+                                }
+                            )
                         )
                 except Exception:  # noqa: BLE001, S110
                     pass
@@ -501,9 +494,7 @@ class BridgeServer:
 
     def relay_status_packet(self) -> bytes:
         """RELAY_STATUS: time_boot_ms, on and present bitmasks (bit n = relay instance n)."""
-        payload = struct.pack(
-            "<IHH", int(time.time() * 1000) & 0xFFFFFFFF, self.relay_on, self.relay_present
-        )
+        payload = struct.pack("<IHH", int(time.time() * 1000) & 0xFFFFFFFF, self.relay_on, self.relay_present)
         return self.encoder.pack(MSG_RELAY_STATUS, payload)
 
     async def handle_mock_command(self, data: bytes):
@@ -518,37 +509,25 @@ class BridgeServer:
                     payload = payload.ljust(33, b"\x00")
                 # COMMAND_LONG unpack
                 p1, p2, _p3, _p4, _p5, _p6, _p7 = struct.unpack("<7f", payload[:28])
-                cmd, _target_sys, _target_comp, _conf = struct.unpack(
-                    "<HBBB", payload[28:33]
-                )
+                cmd, _target_sys, _target_comp, _conf = struct.unpack("<HBBB", payload[28:33])
 
                 if cmd == 400:  # MAV_CMD_COMPONENT_ARM_DISARM
                     self.armed = p1 == 1.0
                     print(f"[MOCK] Vehicle {'ARMED' if self.armed else 'DISARMED'}")
                     # Send ACK
-                    ack_payload = struct.pack(
-                        "<HBBIBB", 400, 0, 0, 0, 1, 1
-                    )  # 0 = MAV_RESULT_ACCEPTED
-                    await self.broadcast(
-                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
-                    )
+                    ack_payload = struct.pack("<HBBIBB", 400, 0, 0, 0, 1, 1)  # 0 = MAV_RESULT_ACCEPTED
+                    await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
                     # Send STATUSTEXT
                     status_str = f"Throttle {'armed' if self.armed else 'disarmed'}"
                     txt_bytes = status_str.encode("ascii")[:50].ljust(50, b"\x00")
-                    await self.broadcast(
-                        self.encoder.pack(
-                            MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes
-                        )
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes))
 
                 elif cmd == 176:  # MAV_CMD_DO_SET_MODE
                     mode_num = int(p2)
                     self.flight_mode = mode_num
                     print(f"[MOCK] Flight mode changed to {mode_num}")
                     ack_payload = struct.pack("<HBBIBB", 176, 0, 0, 0, 1, 1)
-                    await self.broadcast(
-                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
                     mode_name = (
                         "STABILIZE"
                         if mode_num == 0
@@ -564,95 +543,49 @@ class BridgeServer:
                         if mode_num == 6
                         else f"MODE_{mode_num}"
                     )
-                    txt_bytes = f"Flight mode set to {mode_name}".encode("ascii")[
-                        :50
-                    ].ljust(50, b"\x00")
-                    await self.broadcast(
-                        self.encoder.pack(
-                            MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes
-                        )
-                    )
+                    txt_bytes = f"Flight mode set to {mode_name}".encode("ascii")[:50].ljust(50, b"\x00")
+                    await self.broadcast(self.encoder.pack(MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes))
 
                 elif cmd == 22:  # MAV_CMD_NAV_TAKEOFF
                     if not self.armed or self.flight_mode != 4:
                         reason = (
-                            "Takeoff: must be in GUIDED mode"
-                            if self.flight_mode != 4
-                            else "Takeoff: must be armed"
+                            "Takeoff: must be in GUIDED mode" if self.flight_mode != 4 else "Takeoff: must be armed"
                         )
                         txt_bytes = reason.encode("ascii")[:50].ljust(50, b"\x00")
-                        await self.broadcast(
-                            self.encoder.pack(
-                                MSG_STATUSTEXT, struct.pack("<B", 4) + txt_bytes
-                            )
-                        )
-                        ack_payload = struct.pack(
-                            "<HBBIBB", 22, 4, 0, 0, 1, 1
-                        )  # 4 = MAV_RESULT_FAILED
-                        await self.broadcast(
-                            self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
-                        )
+                        await self.broadcast(self.encoder.pack(MSG_STATUSTEXT, struct.pack("<B", 4) + txt_bytes))
+                        ack_payload = struct.pack("<HBBIBB", 22, 4, 0, 0, 1, 1)  # 4 = MAV_RESULT_FAILED
+                        await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
                     else:
                         target_alt = float(_p7) if _p7 > 0 else 10.0
                         self.sim_alt = target_alt
-                        ack_payload = struct.pack(
-                            "<HBBIBB", 22, 0, 0, 0, 1, 1
-                        )  # 0 = MAV_RESULT_ACCEPTED
-                        await self.broadcast(
-                            self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
-                        )
-                        txt_bytes = f"Taking off to {target_alt:.0f}m".encode("ascii")[
-                            :50
-                        ].ljust(50, b"\x00")
-                        await self.broadcast(
-                            self.encoder.pack(
-                                MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes
-                            )
-                        )
+                        ack_payload = struct.pack("<HBBIBB", 22, 0, 0, 0, 1, 1)  # 0 = MAV_RESULT_ACCEPTED
+                        await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
+                        txt_bytes = f"Taking off to {target_alt:.0f}m".encode("ascii")[:50].ljust(50, b"\x00")
+                        await self.broadcast(self.encoder.pack(MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes))
 
                 elif cmd == 20:  # MAV_CMD_NAV_RETURN_TO_LAUNCH
                     self.flight_mode = 6  # RTL
                     ack_payload = struct.pack("<HBBIBB", 20, 0, 0, 0, 1, 1)
-                    await self.broadcast(
-                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
                     txt_bytes = b"Flight mode set to RTL".ljust(50, b"\x00")
-                    await self.broadcast(
-                        self.encoder.pack(
-                            MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes
-                        )
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes))
 
                 elif cmd == 21:  # MAV_CMD_NAV_LAND
                     self.flight_mode = 9  # LAND
                     ack_payload = struct.pack("<HBBIBB", 21, 0, 0, 0, 1, 1)
-                    await self.broadcast(
-                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
                     txt_bytes = b"Flight mode set to LAND".ljust(50, b"\x00")
-                    await self.broadcast(
-                        self.encoder.pack(
-                            MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes
-                        )
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes))
 
                 elif cmd == 401:  # MAV_CMD_RUN_PREARM_CHECKS
                     ack_payload = struct.pack("<HBBIBB", 401, 0, 0, 0, 1, 1)
-                    await self.broadcast(
-                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
                     txt_bytes = b"PreArm: All checks passing".ljust(50, b"\x00")
-                    await self.broadcast(
-                        self.encoder.pack(
-                            MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes
-                        )
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes))
 
                 elif cmd in (410, 512) and (cmd == 410 or int(p1) == MSG_HOME_POSITION):
                     ack_payload = struct.pack("<HBBIBB", cmd, 0, 0, 0, 1, 1)
-                    await self.broadcast(
-                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
                     home_payload = struct.pack(
                         "<iii3f4f3fQ",
                         int(37.7749 * 1e7),
@@ -670,9 +603,7 @@ class BridgeServer:
                         0.0,
                         int(time.time() * 1e6),
                     )
-                    await self.broadcast(
-                        self.encoder.pack(MSG_HOME_POSITION, home_payload)
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_HOME_POSITION, home_payload))
 
                 elif cmd == 181:  # MAV_CMD_DO_SET_RELAY: param1 relay instance, param2 0 off / 1 on
                     instance = int(p1)
@@ -686,41 +617,25 @@ class BridgeServer:
                     ack_payload = struct.pack(
                         "<HBBIBB", 181, 0 if known else 2, 0, 0, 1, 1
                     )  # 0 = ACCEPTED, 2 = DENIED (relay not configured)
-                    await self.broadcast(
-                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
                     await self.broadcast(self.relay_status_packet())
 
                 elif cmd == 42428:  # MAV_CMD_DO_SEND_BANNER
-                    ack_payload = struct.pack(
-                        "<HBBIBB", 42428, 0, 0, 0, 1, 1
-                    )  # 0 = MAV_RESULT_ACCEPTED
-                    await self.broadcast(
-                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
-                    )
+                    ack_payload = struct.pack("<HBBIBB", 42428, 0, 0, 0, 1, 1)  # 0 = MAV_RESULT_ACCEPTED
+                    await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
                     banner_str = "ArduCopter V4.5.2 (78057ebe)"
                     txt_bytes = banner_str.encode("ascii")[:50].ljust(50, b"\x00")
-                    await self.broadcast(
-                        self.encoder.pack(
-                            MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes
-                        )
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes))
 
                 else:
                     # Acknowledge other commands (housekeeping, message intervals, capabilities, etc.)
-                    ack_payload = struct.pack(
-                        "<HBBIBB", cmd, 0, 0, 0, 1, 1
-                    )  # 0 = MAV_RESULT_ACCEPTED
-                    await self.broadcast(
-                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
-                    )
+                    ack_payload = struct.pack("<HBBIBB", cmd, 0, 0, 0, 1, 1)  # 0 = MAV_RESULT_ACCEPTED
+                    await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
 
             elif msgid == MSG_COMMAND_INT:
                 if len(payload) < 35:
                     payload = payload.ljust(35, b"\x00")
-                _p1, _p2, _p3, _p4, x_i, y_i, z_f, cmd_i = struct.unpack(
-                    "<4fiifH", payload[:30]
-                )
+                _p1, _p2, _p3, _p4, x_i, y_i, z_f, cmd_i = struct.unpack("<4fiifH", payload[:30])
                 if cmd_i == 192:  # MAV_CMD_DO_REPOSITION
                     self.sim_lat = x_i / 1e7
                     self.sim_lon = y_i / 1e7
@@ -728,22 +643,12 @@ class BridgeServer:
                         self.sim_alt = float(z_f)
                     self.flight_mode = 4  # GUIDED
                     ack_payload = struct.pack("<HBBIBB", 192, 0, 0, 0, 1, 1)
-                    await self.broadcast(
-                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
-                    )
-                    txt_bytes = b"Flying to target position (GUIDED)".ljust(
-                        50, b"\x00"
-                    )
-                    await self.broadcast(
-                        self.encoder.pack(
-                            MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes
-                        )
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
+                    txt_bytes = b"Flying to target position (GUIDED)".ljust(50, b"\x00")
+                    await self.broadcast(self.encoder.pack(MSG_STATUSTEXT, struct.pack("<B", 6) + txt_bytes))
                 else:
                     ack_payload = struct.pack("<HBBIBB", cmd_i, 0, 0, 0, 1, 1)
-                    await self.broadcast(
-                        self.encoder.pack(MSG_COMMAND_ACK, ack_payload)
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_COMMAND_ACK, ack_payload))
 
             elif msgid == MSG_PARAM_SET:
                 if len(payload) < 23:
@@ -755,11 +660,7 @@ class BridgeServer:
                 if param_id == "GCS_PID_MASK":
                     self.gcs_pid_mask = max(0, int(param_val))
                 id_bytes = param_id.encode("ascii")[:16].ljust(16, b"\x00")
-                val_bytes = (
-                    struct.pack("<fHH", param_val, 9, 0)
-                    + id_bytes
-                    + struct.pack("<B", param_type or 9)
-                )
+                val_bytes = struct.pack("<fHH", param_val, 9, 0) + id_bytes + struct.pack("<B", param_type or 9)
                 await self.broadcast(self.encoder.pack(MSG_PARAM_VALUE, val_bytes))
 
             elif msgid in (MSG_LOG_REQUEST_LIST, MSG_LOG_REQUEST_DATA, MSG_LOG_ERASE, MSG_LOG_REQUEST_END):
@@ -811,17 +712,11 @@ class BridgeServer:
                 if param_id in mock_params:
                     val, p_type = mock_params[param_id]
                     id_bytes = param_id.encode("ascii").ljust(16, b"\x00")
-                    val_bytes = (
-                        struct.pack("<fHH", val, len(mock_params), 0)
-                        + id_bytes
-                        + struct.pack("<B", p_type)
-                    )
+                    val_bytes = struct.pack("<fHH", val, len(mock_params), 0) + id_bytes + struct.pack("<B", p_type)
                     await self.broadcast(self.encoder.pack(MSG_PARAM_VALUE, val_bytes))
 
             elif msgid == MSG_PARAM_REQUEST_LIST:
-                print(
-                    "[MOCK] Received PARAM_REQUEST_LIST. Streaming sample parameters..."
-                )
+                print("[MOCK] Received PARAM_REQUEST_LIST. Streaming sample parameters...")
                 sample_params = [
                     ("BATT_CAPACITY", 5000.0, 9),
                     ("WPNAV_SPEED", 500.0, 9),
@@ -835,9 +730,7 @@ class BridgeServer:
                 for idx, (p_id, p_val, p_type) in enumerate(sample_params):
                     id_bytes = p_id.encode("ascii")[:16].ljust(16, b"\x00")
                     val_bytes = (
-                        struct.pack("<fHH", p_val, len(sample_params), idx)
-                        + id_bytes
-                        + struct.pack("<B", p_type)
+                        struct.pack("<fHH", p_val, len(sample_params), idx) + id_bytes + struct.pack("<B", p_type)
                     )
                     await self.broadcast(self.encoder.pack(MSG_PARAM_VALUE, val_bytes))
                     await asyncio.sleep(0.02)
@@ -845,14 +738,10 @@ class BridgeServer:
             elif msgid == MSG_MISSION_REQUEST_LIST and len(payload) >= 3 and payload[2] in (1, 2):
                 # Fence (1) or rally (2): the mock has none. Answer with a count of 0 for that mission_type, so the
                 # GCS doesn't wait out its retries for a reply that never matches.
-                await self.broadcast(
-                    self.encoder.pack(MSG_MISSION_COUNT, struct.pack("<HBBB", 0, 255, 0, payload[2]))
-                )
+                await self.broadcast(self.encoder.pack(MSG_MISSION_COUNT, struct.pack("<HBBB", 0, 255, 0, payload[2])))
 
             elif msgid == MSG_MISSION_REQUEST_LIST:
-                print(
-                    "[MOCK] Received MISSION_REQUEST_LIST. Sending MISSION_COUNT = 4..."
-                )
+                print("[MOCK] Received MISSION_REQUEST_LIST. Sending MISSION_COUNT = 4...")
                 # Prepare mock mission waypoints around current vehicle location
                 self.mock_waypoints = [
                     (self.sim_lat, self.sim_lon, 0.0, 0),
@@ -868,15 +757,10 @@ class BridgeServer:
                     )
                 )
 
-            elif (
-                msgid in (MSG_MISSION_REQUEST_INT, MSG_MISSION_REQUEST)
-                and len(payload) >= 2
-            ):
+            elif msgid in (MSG_MISSION_REQUEST_INT, MSG_MISSION_REQUEST) and len(payload) >= 2:
                 req_seq = struct.unpack("<H", payload[:2])[0]
                 print(f"[MOCK] Received request for WP #{req_seq}...")
-                if hasattr(self, "mock_waypoints") and req_seq < len(
-                    self.mock_waypoints
-                ):
+                if hasattr(self, "mock_waypoints") and req_seq < len(self.mock_waypoints):
                     lat, lon, alt, seq = self.mock_waypoints[req_seq]
                     item_payload = struct.pack(
                         "<4fiifHBBBBB",
@@ -895,9 +779,7 @@ class BridgeServer:
                         (1 if seq == 0 else 0),
                         1,
                     )
-                    await self.broadcast(
-                        self.encoder.pack(MSG_MISSION_ITEM_INT, item_payload)
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_MISSION_ITEM_INT, item_payload))
 
             elif msgid == MSG_MISSION_COUNT and len(payload) >= 5:
                 count, _target_sys, _target_comp, m_type = struct.unpack("<HBBB", payload[:5])
@@ -929,9 +811,7 @@ class BridgeServer:
 
             elif msgid == MSG_MISSION_ACK:
                 ack_type = payload[2] if len(payload) > 2 else 0
-                print(
-                    f"[MOCK] Received MISSION_ACK (type={ack_type}). Waypoint sync complete!"
-                )
+                print(f"[MOCK] Received MISSION_ACK (type={ack_type}). Waypoint sync complete!")
 
             elif msgid == MSG_GPS_RTCM_DATA:
                 pass  # Successfully accepted RTCM frame in mock
@@ -966,9 +846,7 @@ class BridgeServer:
                             + struct.pack("<HBBBBBBI", reply_seq, sess_id, 128, 4, 4, 0, 0, 0)
                             + struct.pack("<I", len(buf))
                         )
-                        await self.broadcast(
-                            self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
-                        )
+                        await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload))
                     elif "@PARAM" in filename or "param.pck" in filename:
                         with_defaults = "withdefaults=1" in filename
                         params = [
@@ -1015,9 +893,7 @@ class BridgeServer:
                             + struct.pack("<HBBBBBBI", reply_seq, 1, 128, 4, 4, 0, 0, 0)
                             + struct.pack("<I", len(buf))
                         )
-                        await self.broadcast(
-                            self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
-                        )
+                        await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload))
                     elif "mission.dat" in filename:
                         pts = [
                             (self.sim_lat, self.sim_lon, 0.0, 0),
@@ -1053,9 +929,7 @@ class BridgeServer:
                             + struct.pack("<HBBBBBBI", reply_seq, 2, 128, 4, 4, 0, 0, 0)
                             + struct.pack("<I", len(buf))
                         )
-                        await self.broadcast(
-                            self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
-                        )
+                        await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload))
                     elif "fence.dat" in filename:
                         # 4 vertices forming an inclusion polygon
                         fpts = [
@@ -1093,9 +967,7 @@ class BridgeServer:
                             + struct.pack("<HBBBBBBI", reply_seq, 3, 128, 4, 4, 0, 0, 0)
                             + struct.pack("<I", len(buf))
                         )
-                        await self.broadcast(
-                            self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
-                        )
+                        await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload))
                     elif "rally.dat" in filename:
                         # 1 rally point
                         rpts = [
@@ -1130,18 +1002,12 @@ class BridgeServer:
                             + struct.pack("<HBBBBBBI", reply_seq, 4, 128, 4, 4, 0, 0, 0)
                             + struct.pack("<I", len(buf))
                         )
-                        await self.broadcast(
-                            self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
-                        )
+                        await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload))
                     else:
                         nack_payload = (
-                            bytes([0, 1, 1])
-                            + struct.pack("<HBBBBBBI", reply_seq, 0, 129, 1, 4, 0, 0, 0)
-                            + bytes([2])
+                            bytes([0, 1, 1]) + struct.pack("<HBBBBBBI", reply_seq, 0, 129, 1, 4, 0, 0, 0) + bytes([2])
                         )
-                        await self.broadcast(
-                            self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, nack_payload)
-                        )
+                        await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, nack_payload))
 
                 elif f_opcode == 15:  # BurstReadFile
                     session_buf = getattr(self, "ftp_files", {}).get(f_session, b"")
@@ -1165,21 +1031,15 @@ class BridgeServer:
                             )
                             + chunk
                         )
-                        await self.broadcast(
-                            self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
-                        )
+                        await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload))
                         curr_offset += len(chunk)
                     # Send EOF
                     eof_payload = (
                         bytes([0, 1, 1])
-                        + struct.pack(
-                            "<HBBBBBBI", reply_seq, f_session, 129, 1, 15, 1, 0, curr_offset
-                        )
+                        + struct.pack("<HBBBBBBI", reply_seq, f_session, 129, 1, 15, 1, 0, curr_offset)
                         + bytes([6])
                     )
-                    await self.broadcast(
-                        self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, eof_payload)
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, eof_payload))
 
                 elif f_opcode == 5:  # ReadFile
                     session_buf = getattr(self, "ftp_files", {}).get(f_session, b"")
@@ -1199,9 +1059,7 @@ class BridgeServer:
                         )
                         + chunk
                     )
-                    await self.broadcast(
-                        self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload))
 
                 elif f_opcode == 6:  # CreateFile
                     filename = f_body.decode("utf-8", errors="ignore").strip("\x00")
@@ -1210,13 +1068,8 @@ class BridgeServer:
                     self.mock_files[filename] = bytearray()
                     self.ftp_files = getattr(self, "ftp_files", {})
                     self.ftp_files[sess_id] = self.mock_files[filename]
-                    ack_payload = (
-                        bytes([0, 1, 1])
-                        + struct.pack("<HBBBBBBI", reply_seq, sess_id, 128, 0, 6, 0, 0, 0)
-                    )
-                    await self.broadcast(
-                        self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
-                    )
+                    ack_payload = bytes([0, 1, 1]) + struct.pack("<HBBBBBBI", reply_seq, sess_id, 128, 0, 6, 0, 0, 0)
+                    await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload))
 
                 elif f_opcode == 7:  # WriteFile
                     buf = getattr(self, "ftp_files", {}).get(f_session)
@@ -1224,43 +1077,29 @@ class BridgeServer:
                         if f_offset > len(buf):
                             buf.extend(b"\x00" * (f_offset - len(buf)))
                         buf[f_offset : f_offset + f_size] = f_body
-                        ack_payload = (
-                            bytes([0, 1, 1])
-                            + struct.pack("<HBBBBBBI", reply_seq, f_session, 128, 0, 7, 0, 0, f_offset)
+                        ack_payload = bytes([0, 1, 1]) + struct.pack(
+                            "<HBBBBBBI", reply_seq, f_session, 128, 0, 7, 0, 0, f_offset
                         )
-                        await self.broadcast(
-                            self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
-                        )
+                        await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload))
                     else:
                         nack_payload = (
                             bytes([0, 1, 1])
                             + struct.pack("<HBBBBBBI", reply_seq, f_session, 129, 1, 7, 0, 0, f_offset)
                             + bytes([4])
                         )
-                        await self.broadcast(
-                            self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, nack_payload)
-                        )
+                        await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, nack_payload))
 
                 elif f_opcode == 2:  # ResetSessions
                     if hasattr(self, "ftp_files"):
                         self.ftp_files.clear()
-                    ack_payload = (
-                        bytes([0, 1, 1])
-                        + struct.pack("<HBBBBBBI", reply_seq, 0, 128, 0, 2, 0, 0, 0)
-                    )
-                    await self.broadcast(
-                        self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
-                    )
+                    ack_payload = bytes([0, 1, 1]) + struct.pack("<HBBBBBBI", reply_seq, 0, 128, 0, 2, 0, 0, 0)
+                    await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload))
 
                 elif f_opcode == 1:  # TerminateSession
                     if hasattr(self, "ftp_files") and f_session in self.ftp_files:
                         self.ftp_files.pop(f_session, None)
-                    ack_payload = bytes([0, 1, 1]) + struct.pack(
-                        "<HBBBBBBI", reply_seq, f_session, 128, 0, 1, 0, 0, 0
-                    )
-                    await self.broadcast(
-                        self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload)
-                    )
+                    ack_payload = bytes([0, 1, 1]) + struct.pack("<HBBBBBBI", reply_seq, f_session, 128, 0, 1, 0, 0, 0)
+                    await self.broadcast(self.encoder.pack(MSG_FILE_TRANSFER_PROTOCOL, ack_payload))
 
     def refresh_mock_log_files(self):
         """The SD card as MAVFTP sees it: /APM/LOGS/LASTLOG.TXT and one .BIN per log."""
@@ -1327,16 +1166,12 @@ class BridgeServer:
                 # HEARTBEAT
                 # base_mode: 0x80 (armed flag) if armed
                 base_mode = 0x80 | 0x01 if self.armed else 0x01
-                hb = struct.pack(
-                    "<IBBBBB", self.flight_mode, 2, 3, base_mode, 4, 3
-                )  # Quad, ArduPilot, Active
+                hb = struct.pack("<IBBBBB", self.flight_mode, 2, 3, base_mode, 4, 3)  # Quad, ArduPilot, Active
                 await self.broadcast(self.encoder.pack(MSG_HEARTBEAT, hb))
 
                 # EXTENDED_SYS_STATE: not a VTOL; in the air while armed, on the ground otherwise
                 await self.broadcast(
-                    self.encoder.pack(
-                        MSG_EXTENDED_SYS_STATE, struct.pack("<BB", 0, 2 if self.armed else 1)
-                    )
+                    self.encoder.pack(MSG_EXTENDED_SYS_STATE, struct.pack("<BB", 0, 2 if self.armed else 1))
                 )
 
                 # SYS_STATUS
@@ -1410,9 +1245,7 @@ class BridgeServer:
                 roll = math.sin(elapsed * 0.8) * 0.15
                 pitch = math.cos(elapsed * 0.6) * 0.12
                 yaw = (elapsed * 0.05) % (2 * math.pi)
-                att = struct.pack(
-                    "<I6f", int(elapsed * 1000), roll, pitch, yaw, 0.01, 0.01, 0.05
-                )
+                att = struct.pack("<I6f", int(elapsed * 1000), roll, pitch, yaw, 0.01, 0.01, 0.05)
                 await self.broadcast(self.encoder.pack(MSG_ATTITUDE, att))
 
             # 10Hz: PID_TUNING for each axis GCS_PID_MASK selects (bit n -> axis n+1, as on Copter)
@@ -1420,9 +1253,7 @@ class BridgeServer:
                 for axis in (1, 2, 3, 4):
                     if not self.gcs_pid_mask & (1 << (axis - 1)):
                         continue
-                    await self.broadcast(
-                        self.encoder.pack(MSG_PID_TUNING, self.mock_pid_tuning(axis, elapsed))
-                    )
+                    await self.broadcast(self.encoder.pack(MSG_PID_TUNING, self.mock_pid_tuning(axis, elapsed)))
 
             # 5Hz: VFR_HUD (airspeed, groundspeed, alt, climb, heading, throttle)
             if step % 4 == 0:
@@ -1430,9 +1261,7 @@ class BridgeServer:
                 climb = math.sin(elapsed * 0.5) * 0.8
                 throttle = 45 if self.armed else 0
                 heading = int(math.degrees((elapsed * 0.05) % (2 * math.pi)))
-                hud = struct.pack(
-                    "<ffffhH", gs, gs, self.sim_alt, climb, heading, throttle
-                )
+                hud = struct.pack("<ffffhH", gs, gs, self.sim_alt, climb, heading, throttle)
                 await self.broadcast(self.encoder.pack(MSG_VFR_HUD, hud))
 
             # 2Hz: Global Position & GPS
@@ -1514,12 +1343,8 @@ class BridgeServer:
                 await self.broadcast(self.encoder.pack(MSG_RC_CHANNELS, rc_pkt))
 
                 s_base = 1520 if self.armed else 1100
-                servos = [
-                    int(s_base + 40 * math.sin(elapsed + i)) for i in range(4)
-                ] + [1500] * 12
-                srv_pkt = struct.pack(
-                    "<I8HB8H", int(now * 1e6) & 0xFFFFFFFF, *servos[:8], 0, *servos[8:]
-                )
+                servos = [int(s_base + 40 * math.sin(elapsed + i)) for i in range(4)] + [1500] * 12
+                srv_pkt = struct.pack("<I8HB8H", int(now * 1e6) & 0xFFFFFFFF, *servos[:8], 0, *servos[8:])
                 await self.broadcast(self.encoder.pack(MSG_SERVO_OUTPUT_RAW, srv_pkt))
 
                 nav_pkt = struct.pack(
@@ -1533,9 +1358,7 @@ class BridgeServer:
                     int(((elapsed * 3) + 12) % 360),
                     145,
                 )
-                await self.broadcast(
-                    self.encoder.pack(MSG_NAV_CONTROLLER_OUTPUT, nav_pkt)
-                )
+                await self.broadcast(self.encoder.pack(MSG_NAV_CONTROLLER_OUTPUT, nav_pkt))
 
                 wind_pkt = struct.pack(
                     "<fff",
@@ -1558,9 +1381,7 @@ class BridgeServer:
                 await self.broadcast(self.encoder.pack(MSG_VIBRATION, vibe_pkt))
                 await self.broadcast(self.relay_status_packet())
 
-                ekf_pkt = struct.pack(
-                    "<fffffHf", 0.08, 0.12, 0.09, 0.05, 0.04, 0x01FF, 0.02
-                )
+                ekf_pkt = struct.pack("<fffffHf", 0.08, 0.12, 0.09, 0.05, 0.04, 0x01FF, 0.02)
                 await self.broadcast(self.encoder.pack(MSG_EKF_STATUS_REPORT, ekf_pkt))
 
                 rf_pkt = struct.pack("<ff", max(0.5, self.sim_alt * 0.8), 2.4)
@@ -1576,19 +1397,13 @@ class BridgeServer:
                 esc_r = [int(rpm_val + i * 25) if self.armed else 0 for i in range(4)]
                 esc_cnt = [int(step)] * 4
                 esc_t = [38, 40, 39, 41]
-                esc_pkt = struct.pack(
-                    "<4H4H4H4H4H4B", *esc_v, *esc_c, *esc_tc, *esc_r, *esc_cnt, *esc_t
-                )
-                await self.broadcast(
-                    self.encoder.pack(MSG_ESC_TELEMETRY_1_TO_4, esc_pkt)
-                )
+                esc_pkt = struct.pack("<4H4H4H4H4H4B", *esc_v, *esc_c, *esc_tc, *esc_r, *esc_cnt, *esc_t)
+                await self.broadcast(self.encoder.pack(MSG_ESC_TELEMETRY_1_TO_4, esc_pkt))
 
                 pwr_pkt = struct.pack("<HHH", 5020, 5150, 1)
                 await self.broadcast(self.encoder.pack(MSG_POWER_STATUS, pwr_pkt))
 
-                press_pkt = struct.pack(
-                    "<Iffhh", int(elapsed * 1000), 1013.25, 0.12, 2850, 2800
-                )
+                press_pkt = struct.pack("<Iffhh", int(elapsed * 1000), 1013.25, 0.12, 2850, 2800)
                 await self.broadcast(self.encoder.pack(MSG_SCALED_PRESSURE, press_pkt))
 
     @staticmethod
@@ -1629,9 +1444,7 @@ class BridgeServer:
         return frames
 
     @staticmethod
-    def is_vehicle_heartbeat(
-        compid: int, msgid: int, mav_type: int | None, autopilot: int | None
-    ) -> bool:
+    def is_vehicle_heartbeat(compid: int, msgid: int, mav_type: int | None, autopilot: int | None) -> bool:
         """An autopilot heartbeat: a real autopilot, a vehicle type, and component AUTOPILOT1.
 
         Excludes GCSes (Glareshield, Mission Planner) and non-vehicle devices that also send
@@ -1700,20 +1513,14 @@ class BridgeServer:
             def error_received(self, exc):
                 print(f"[UDP] Error: {exc}")
 
-        self.udp_target = (
-            None
-            if target_ip in ("0.0.0.0", "localhost", "127.0.0.1")
-            else (target_ip, target_port)
-        )
+        self.udp_target = None if target_ip in ("0.0.0.0", "localhost", "127.0.0.1") else (target_ip, target_port)
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
         try:
             sock.bind(("0.0.0.0", target_port))
-            transport, _ = await loop.create_datagram_endpoint(
-                lambda: UdpProtocol(self), sock=sock
-            )
+            transport, _ = await loop.create_datagram_endpoint(lambda: UdpProtocol(self), sock=sock)
             self.transport = transport
             print(
                 f"[UDP] Listening on 0.0.0.0:{target_port} (awaiting vehicle packets, target: {target_ip}:{target_port})"
@@ -1729,9 +1536,7 @@ class BridgeServer:
                     print(f"[UDP] Connected to remote target {target_ip}:{target_port}")
                     return
                 except OSError as ex:
-                    print(
-                        f"[UDP ERROR] Could not connect to {target_ip}:{target_port}: {ex}"
-                    )
+                    print(f"[UDP ERROR] Could not connect to {target_ip}:{target_port}: {ex}")
                     return
 
             print("============================================================")
@@ -1816,20 +1621,14 @@ class BridgeServer:
                 if pattern == origin:
                     return None
         print(f"[SECURITY] Refused WebSocket connection from Origin: {origin}")
-        print(
-            f'           To permit this, restart bridge with: --allow-origin "{origin}" or --allow-all-origins'
-        )
+        print(f'           To permit this, restart bridge with: --allow-origin "{origin}" or --allow-all-origins')
         return connection.respond(
             http.HTTPStatus.FORBIDDEN,
             f"Origin {origin} not allowed by MAVLink bridge security policy.\n",
         )
 
     async def run(self):
-        origins_arg = (
-            None
-            if (self.allowed_origins and "*" in self.allowed_origins)
-            else self.allowed_origins
-        )
+        origins_arg = None if (self.allowed_origins and "*" in self.allowed_origins) else self.allowed_origins
         proto = "wss" if self.ssl_context else "ws"
         await websockets.serve(
             self.ws_handler,
@@ -1841,9 +1640,7 @@ class BridgeServer:
         )
         print("============================================================")
         print(f" MAVLink Glareshield Bridge running on {proto}://{self.host}:{self.port}")
-        print(
-            f" Mode: {self.mode.upper()} {f'-> {self.target}' if self.target else ''}"
-        )
+        print(f" Mode: {self.mode.upper()} {f'-> {self.target}' if self.target else ''}")
         print("============================================================")
 
         if self.mode == "mock":
@@ -1859,12 +1656,8 @@ class BridgeServer:
 
 def main():
     parser = argparse.ArgumentParser(description="MAVLink WebSocket Bridge & Simulator")
-    parser.add_argument(
-        "--host", default="127.0.0.1", help="WebSocket bind host (default: 127.0.0.1)"
-    )
-    parser.add_argument(
-        "--port", type=int, default=56781, help="WebSocket bind port (default: 56781)"
-    )
+    parser.add_argument("--host", default="127.0.0.1", help="WebSocket bind host (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=56781, help="WebSocket bind port (default: 56781)")
     parser.add_argument(
         "--allow-origin",
         action="append",
@@ -1892,18 +1685,10 @@ def main():
         help="Path to SSL private key (.key) to serve over wss://",
     )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument(
-        "--mock", action="store_true", help="Run simulated ArduPilot mock telemetry"
-    )
-    group.add_argument(
-        "--udp", type=str, help="Connect to UDP MAVLink target (e.g. 127.0.0.1:14550)"
-    )
-    group.add_argument(
-        "--tcp", type=str, help="Connect to TCP MAVLink target (e.g. 127.0.0.1:5760)"
-    )
-    group.add_argument(
-        "--serial", type=str, help="Connect to Serial port (e.g. /dev/ttyUSB0:57600)"
-    )
+    group.add_argument("--mock", action="store_true", help="Run simulated ArduPilot mock telemetry")
+    group.add_argument("--udp", type=str, help="Connect to UDP MAVLink target (e.g. 127.0.0.1:14550)")
+    group.add_argument("--tcp", type=str, help="Connect to TCP MAVLink target (e.g. 127.0.0.1:5760)")
+    group.add_argument("--serial", type=str, help="Connect to Serial port (e.g. /dev/ttyUSB0:57600)")
 
     args = parser.parse_args()
 
@@ -1935,9 +1720,7 @@ def main():
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ssl_context.load_cert_chain(args.ssl_cert, keyfile=args.ssl_key)
     elif args.ssl_cert or args.ssl_key:
-        parser.error(
-            "Both --ssl-cert and --ssl-key must be provided together to enable TLS/SSL."
-        )
+        parser.error("Both --ssl-cert and --ssl-key must be provided together to enable TLS/SSL.")
 
     server = BridgeServer(
         args.host,

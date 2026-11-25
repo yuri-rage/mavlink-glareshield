@@ -68,12 +68,19 @@ function mission(n: number) {
 // 1. Mission over MAVFTP: upload, read back, verify (alt in cm, frames, home rewritten by the vehicle).
 {
   let m = mission(5);
-  m = d.insertItems(m, 3, [{ command: 178, frame: 2, param1: 1, param2: 2.5, param3: -1, param4: 0, x: 0, y: 0, z: 0, autocontinue: 1 }]);
-  m = d.insertItems(m, m.items.length, [{ command: 177, frame: 2, param1: 2, param2: 1, param3: 0, param4: 0, x: 0, y: 0, z: 0, autocontinue: 1 }]);
+  m = d.insertItems(m, 3, [
+    { command: 178, frame: 2, param1: 1, param2: 2.5, param3: -1, param4: 0, x: 0, y: 0, z: 0, autocontinue: 1 },
+  ]);
+  m = d.insertItems(m, m.items.length, [
+    { command: 177, frame: 2, param1: 2, param2: 1, param3: 0, param4: 0, x: 0, y: 0, z: 0, autocontinue: 1 },
+  ]);
   const res = await missionManager.uploadMissionAndReadBack(d.draftToItems(m), sys, comp);
   const v = d.checkReadBack(m, res.readBack);
-  check('mission over MAVFTP: uploaded and verified', res.success && res.method === 'ftp' && v.status === 'verified',
-    `${res.method} ${v.status} ${[...v.comparison.structural, ...v.comparison.params].slice(0, 3).join('; ')}`);
+  check(
+    'mission over MAVFTP: uploaded and verified',
+    res.success && res.method === 'ftp' && v.status === 'verified',
+    `${res.method} ${v.status} ${[...v.comparison.structural, ...v.comparison.params].slice(0, 3).join('; ')}`
+  );
 }
 
 // 2. Item-by-item (MAVFTP made unavailable): upload a shorter mission, stream it back, verify.
@@ -87,8 +94,11 @@ function mission(n: number) {
   const v = d.checkReadBack(m, res.readBack);
   (mavFtpClient as any).writeFile = realWrite;
   (mavFtpClient as any).readFile = realRead;
-  check('mission item-by-item: uploaded, streamed back, verified (shorter mission truncated)',
-    res.success && res.method === 'legacy' && v.status === 'verified', `${res.method} ${v.status} ${v.comparison.structural.slice(0, 3).join('; ')}`);
+  check(
+    'mission item-by-item: uploaded, streamed back, verified (shorter mission truncated)',
+    res.success && res.method === 'legacy' && v.status === 'verified',
+    `${res.method} ${v.status} ${v.comparison.structural.slice(0, 3).join('; ')}`
+  );
 }
 
 // 3. Rally points: whole metres, an MSL point, read back and verified; then cleared.
@@ -98,14 +108,24 @@ function mission(n: number) {
   rally = r.updateRallyPoint(rally, 1, { alt: 1630.48, frame: 0 }); // e.g. typed in feet: kept to whole metres
   const res = await missionManager.uploadRallyAndReadBack(r.rallyDraftToItems(rally), sys, comp);
   const v = r.checkRallyReadBack(rally, res.readBack, res.readOk);
-  check('rally points: uploaded and verified (whole metres, MSL frame kept)', res.success && v.status === 'verified',
-    `${res.method} ${v.status} ${v.differences.join('; ')} frames ${res.readBack.map((p) => p.frame).join(',')}`);
+  check(
+    'rally points: uploaded and verified (whole metres, MSL frame kept)',
+    res.success && v.status === 'verified',
+    `${res.method} ${v.status} ${v.differences.join('; ')} frames ${res.readBack.map((p) => p.frame).join(',')}`
+  );
 
   const cleared = await missionManager.uploadRallyAndReadBack([], sys, comp);
   const vc = r.checkRallyReadBack({ points: [] }, cleared.readBack, cleared.readOk);
-  check('rally points cleared: verified', cleared.success && vc.status === 'verified', `${cleared.method} ${vc.status} readOk=${cleared.readOk}`);
-  check('the vehicle reports rally support (capability bit or accepted upload)', useTelemetryStore.getState().rallySupport === 'supported',
-    useTelemetryStore.getState().rallySupport);
+  check(
+    'rally points cleared: verified',
+    cleared.success && vc.status === 'verified',
+    `${cleared.method} ${vc.status} readOk=${cleared.readOk}`
+  );
+  check(
+    'the vehicle reports rally support (capability bit or accepted upload)',
+    useTelemetryStore.getState().rallySupport === 'supported',
+    useTelemetryStore.getState().rallySupport
+  );
 }
 
 // 4. Armed in AUTO, running the mission: why a mission upload must not go over MAVFTP.
@@ -113,7 +133,10 @@ function mission(n: number) {
   const enc = mavlinkConnection.getEncoder();
   const long = mission(6);
   const up = await missionManager.uploadMissionAndReadBack(d.draftToItems(long), sys, comp);
-  check('setup: 6-waypoint mission on the vehicle', up.success && d.checkReadBack(long, up.readBack).status === 'verified');
+  check(
+    'setup: 6-waypoint mission on the vehicle',
+    up.success && d.checkReadBack(long, up.readBack).status === 'verified'
+  );
 
   // The mission must be running, not merely AUTO: arm in HOLD, then enter AUTO, which starts it from the top.
   mavlinkConnection.send(enc.createSetMode(sys, comp, 4)); // Rover HOLD
@@ -136,16 +159,29 @@ function mission(n: number) {
     const afterFtp = await missionManager.fetchWaypoints(sys, comp);
     useTelemetryStore.setState({ heartbeat: { ...hb(), isArmed: true } });
     // uploadSection is the low-level step (the app's paths reset the transfer state after it): reset it here.
-    (missionManager as any).setStatus({ isUploading: false, isFetching: false, method: 'idle', uploadProgress: undefined });
-    log(`forced MAVFTP while armed in AUTO: method ${forced.method}, vehicle now holds ${afterFtp.length - 1} items (sent ${short.items.length - 1})`);
-    check('armed in AUTO over MAVFTP: the old mission\'s tail survives (the ArduPilot behaviour the fix avoids)',
-      forced.method === 'ftp' && afterFtp.length > short.items.length, `${afterFtp.length - 1} items`);
+    (missionManager as any).setStatus({
+      isUploading: false,
+      isFetching: false,
+      method: 'idle',
+      uploadProgress: undefined,
+    });
+    log(
+      `forced MAVFTP while armed in AUTO: method ${forced.method}, vehicle now holds ${afterFtp.length - 1} items (sent ${short.items.length - 1})`
+    );
+    check(
+      "armed in AUTO over MAVFTP: the old mission's tail survives (the ArduPilot behaviour the fix avoids)",
+      forced.method === 'ftp' && afterFtp.length > short.items.length,
+      `${afterFtp.length - 1} items`
+    );
 
     // The fix: the app's normal path while armed.
     const fixed = await missionManager.uploadMissionAndReadBack(d.draftToItems(short), sys, comp);
     const v = d.checkReadBack(short, fixed.readBack);
-    check('armed in AUTO, the app\'s path: item-by-item, verified, no stale tail', fixed.success && fixed.method === 'legacy' && v.status === 'verified',
-      `${fixed.method} ${v.status} ${fixed.readBack.length - 1} items ${fixed.error ?? ''}`);
+    check(
+      "armed in AUTO, the app's path: item-by-item, verified, no stale tail",
+      fixed.success && fixed.method === 'legacy' && v.status === 'verified',
+      `${fixed.method} ${v.status} ${fixed.readBack.length - 1} items ${fixed.error ?? ''}`
+    );
   } else {
     failures.push('could not arm in AUTO');
   }

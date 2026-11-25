@@ -14,13 +14,30 @@ export const MAV_CMD_DO_SET_ROI_LOCATION = 195;
 export const MAV_CMD_DO_SET_ROI_NONE = 197;
 
 export const GIMBAL_FLAGS = { RETRACT: 1, NEUTRAL: 2, YAW_LOCK: 16, YAW_IN_EARTH_FRAME: 64 } as const;
-export const GIMBAL_CAP = { HAS_RETRACT: 1, HAS_NEUTRAL: 2, HAS_PITCH_AXIS: 32, HAS_YAW_AXIS: 256, HAS_YAW_LOCK: 1024, CAN_POINT_GLOBAL: 131072 } as const;
+export const GIMBAL_CAP = {
+  HAS_RETRACT: 1,
+  HAS_NEUTRAL: 2,
+  HAS_PITCH_AXIS: 32,
+  HAS_YAW_AXIS: 256,
+  HAS_YAW_LOCK: 1024,
+  CAN_POINT_GLOBAL: 131072,
+} as const;
 
 export type CommandParams = [number, number, number, number, number, number, number];
 
 /** COMMAND_LONG params for DO_GIMBAL_MANAGER_PITCHYAW. NaN leaves a value unset. */
-export function pitchYawParams(o: { deviceId: number; pitchDeg?: number; yawDeg?: number; yawLock?: boolean; retract?: boolean; neutral?: boolean }): CommandParams {
-  const flags = (o.yawLock ? GIMBAL_FLAGS.YAW_LOCK : 0) | (o.retract ? GIMBAL_FLAGS.RETRACT : 0) | (o.neutral ? GIMBAL_FLAGS.NEUTRAL : 0);
+export function pitchYawParams(o: {
+  deviceId: number;
+  pitchDeg?: number;
+  yawDeg?: number;
+  yawLock?: boolean;
+  retract?: boolean;
+  neutral?: boolean;
+}): CommandParams {
+  const flags =
+    (o.yawLock ? GIMBAL_FLAGS.YAW_LOCK : 0) |
+    (o.retract ? GIMBAL_FLAGS.RETRACT : 0) |
+    (o.neutral ? GIMBAL_FLAGS.NEUTRAL : 0);
   const angles = o.pitchDeg !== undefined && o.yawDeg !== undefined;
   return [angles ? o.pitchDeg! : NaN, angles ? o.yawDeg! : NaN, NaN, NaN, flags, 0, o.deviceId];
 }
@@ -36,7 +53,14 @@ export function roiTurnsVehicle(category: string, capFlags: number | null): bool
  * looking `pitchDeg` (negative down) along `headingDeg` (true). When the ray is level or points up, or the ground is
  * further than `maxM`, the point `maxM` along the heading is returned with `ground` false.
  */
-export function aimPoint(o: { lat: number; lon: number; heightM: number; pitchDeg: number; headingDeg: number; maxM?: number }): {
+export function aimPoint(o: {
+  lat: number;
+  lon: number;
+  heightM: number;
+  pitchDeg: number;
+  headingDeg: number;
+  maxM?: number;
+}): {
   lat: number;
   lon: number;
   distanceM: number;
@@ -70,7 +94,10 @@ export function gimbalHeading(yawDeg: number, earthFrame: boolean, vehicleHeadin
  * unknown or unbounded axis). With yaw lock the yaw is a true heading, so it spans the whole circle whatever the
  * mechanical yaw limits.
  */
-export function gimbalLimits(info: { pitchMin: number; pitchMax: number; yawMin: number; yawMax: number } | null, yawLock: boolean) {
+export function gimbalLimits(
+  info: { pitchMin: number; pitchMax: number; yawMin: number; yawMax: number } | null,
+  yawLock: boolean
+) {
   const fin = (v: number | undefined, d: number) => (v !== undefined && Number.isFinite(v) ? v : d);
   return {
     pitchMin: fin(info?.pitchMin, -90),

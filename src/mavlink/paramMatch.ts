@@ -33,7 +33,9 @@ function globToRegExp(glob: string): RegExp {
 }
 
 function toTerm(raw: string): Term {
-  return isParamPattern(raw) ? { kind: 'glob', re: globToRegExp(raw), source: raw } : { kind: 'word', text: raw.toLowerCase() };
+  return isParamPattern(raw)
+    ? { kind: 'glob', re: globToRegExp(raw), source: raw }
+    : { kind: 'word', text: raw.toLowerCase() };
 }
 
 /** Splits on spaces and commas, keeping "quoted words" together. */
@@ -69,7 +71,9 @@ function termMatches(term: Term, name: string, meta: ParamMeta | null | undefine
   if (term.kind === 'glob') return term.re.test(name);
   if (name.toLowerCase().includes(term.text)) return true;
   if (!meta) return false;
-  return Boolean(meta.displayName?.toLowerCase().includes(term.text) || meta.description?.toLowerCase().includes(term.text));
+  return Boolean(
+    meta.displayName?.toLowerCase().includes(term.text) || meta.description?.toLowerCase().includes(term.text)
+  );
 }
 
 /** Whether parameter `name` (with its metadata, if any) matches the query. */

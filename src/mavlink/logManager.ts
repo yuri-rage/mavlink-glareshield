@@ -10,10 +10,10 @@
 // LOG_DATA stream, which always works.
 
 import { mavlinkConnection } from './connection';
-import { onActiveVehicleChange } from './vehicleRoster';
 import { mavFtpClient } from './ftp';
 import { MAVLINK_MSG_ID } from './messages';
 import { decodePayload, type MavlinkPacket } from './parser';
+import { onActiveVehicleChange } from './vehicleRoster';
 
 export interface LogEntry {
   /** List entry, 1 = oldest. */
@@ -50,7 +50,12 @@ const MAX_STALLS = 12;
 export class LogTransferError extends Error {}
 
 /** The log number in a file name for list entry `id`, assuming consecutive numbering (see top). */
-export function logFileNumber(id: number, numLogs: number, lastLogNum: number, maxLogFiles = DEFAULT_MAX_LOG_FILES): number {
+export function logFileNumber(
+  id: number,
+  numLogs: number,
+  lastLogNum: number,
+  maxLogFiles = DEFAULT_MAX_LOG_FILES
+): number {
   let n = lastLogNum - (numLogs - id);
   while (n < 1) n += maxLogFiles;
   return n;
@@ -149,7 +154,8 @@ class LogManager {
           const missing: number[] = [];
           for (let id = 1; id <= numLogs; id++) if (!entries.has(id)) missing.push(id);
           if (missing.length === 0 || rounds++ >= 3) return done();
-          for (const id of missing.slice(0, 20)) mavlinkConnection.send(enc.createLogRequestList(sysId, compId, id, id));
+          for (const id of missing.slice(0, 20))
+            mavlinkConnection.send(enc.createLogRequestList(sysId, compId, id, id));
           quiet();
         }, LIST_QUIET_MS);
       };
@@ -271,7 +277,8 @@ class LogManager {
         else resolve(asm.data);
       };
       setCancel(() => finish(new LogTransferError('Cancelled')));
-      const request = (ofs: number, count: number) => mavlinkConnection.send(enc.createLogRequestData(sysId, compId, entry.id, ofs, count));
+      const request = (ofs: number, count: number) =>
+        mavlinkConnection.send(enc.createLogRequestData(sysId, compId, entry.id, ofs, count));
       const requestNextGap = () => {
         const gap = asm.firstGap();
         if (!gap) return;

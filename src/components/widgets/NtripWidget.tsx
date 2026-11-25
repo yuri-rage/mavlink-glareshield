@@ -1,19 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import { rtcmInjector, RtcmInjectorState, NtripConfig } from '../../mavlink/rtcmInjector';
+import React, { useEffect, useState } from 'react';
+
+import { AlertCircle, ChevronDown, ChevronUp, Play, Radio, Square, Usb, Wifi } from 'lucide-react';
+
+import { NtripConfig, rtcmInjector, RtcmInjectorState } from '../../mavlink/rtcmInjector';
 import { useTelemetryStore } from '../../store/telemetryStore';
-import {
-  Radio,
-  Usb,
-  Wifi,
-  Play,
-  Square,
-  AlertCircle,
-  ChevronDown,
-  ChevronUp,
-} from 'lucide-react';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
 const STORAGE_KEY = 'mavlink_ntrip_config';
 
@@ -157,20 +150,20 @@ export const NtripWidget: React.FC = () => {
   const isFormExpanded = manualFormExpanded !== null ? manualFormExpanded : !isConnected;
 
   return (
-    <Card className="h-full flex flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
-      <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
-        <div className="flex items-center justify-between gap-1.5 flex-wrap">
-          <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5 shrink-0">
+    <Card className="flex h-full flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
+      <CardHeader className="border-b border-zinc-800 bg-zinc-900/60 px-3 py-1.5 sm:px-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-1.5">
+          <CardTitle className="flex shrink-0 items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-zinc-300">
             <Radio className="h-3.5 w-3.5 text-sky-400" />
             RTCM3 Injection
           </CardTitle>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex flex-wrap items-center gap-1.5">
             {/* Mountpoint or USB serial badge when connected */}
             {isConnected && sourceMode === 'ntrip' && ntripConfig.mountpoint && (
               <Badge
                 variant="outline"
-                className="bg-zinc-900 border-zinc-700 text-sky-300 font-mono text-[10px] px-2 py-0.5 truncate max-w-[130px]"
+                className="max-w-[130px] truncate border-zinc-700 bg-zinc-900 px-2 py-0.5 font-mono text-[10px] text-sky-300"
                 title={`Mountpoint: ${ntripConfig.mountpoint}`}
               >
                 {ntripConfig.mountpoint}
@@ -179,7 +172,7 @@ export const NtripWidget: React.FC = () => {
             {isConnected && sourceMode === 'serial' && (
               <Badge
                 variant="outline"
-                className="bg-zinc-900 border-zinc-700 text-sky-300 font-mono text-[10px] px-2 py-0.5"
+                className="border-zinc-700 bg-zinc-900 px-2 py-0.5 font-mono text-[10px] text-sky-300"
               >
                 USB {serialBaud}
               </Badge>
@@ -187,23 +180,38 @@ export const NtripWidget: React.FC = () => {
 
             {/* Connection Status Badge */}
             {injectorState.status === 'streaming' ? (
-              <Badge variant="outline" className="bg-emerald-950/80 border-emerald-500 text-emerald-300 font-mono text-[10px] px-2 py-0.5">
+              <Badge
+                variant="outline"
+                className="border-emerald-500 bg-emerald-950/80 px-2 py-0.5 font-mono text-[10px] text-emerald-300"
+              >
                 STREAMING
               </Badge>
             ) : injectorState.status === 'connected' ? (
-              <Badge variant="outline" className="bg-emerald-950/50 border-emerald-600 text-emerald-400 font-mono text-[10px] px-2 py-0.5">
+              <Badge
+                variant="outline"
+                className="border-emerald-600 bg-emerald-950/50 px-2 py-0.5 font-mono text-[10px] text-emerald-400"
+              >
                 CONNECTED
               </Badge>
             ) : injectorState.status === 'connecting' ? (
-              <Badge variant="outline" className="bg-amber-950/50 border-amber-600 text-amber-400 font-mono text-[10px] px-2 py-0.5">
+              <Badge
+                variant="outline"
+                className="border-amber-600 bg-amber-950/50 px-2 py-0.5 font-mono text-[10px] text-amber-400"
+              >
                 CONNECTING
               </Badge>
             ) : injectorState.status === 'error' ? (
-              <Badge variant="outline" className="bg-red-950/60 border-red-500 text-red-400 font-mono text-[10px] px-2 py-0.5">
+              <Badge
+                variant="outline"
+                className="border-red-500 bg-red-950/60 px-2 py-0.5 font-mono text-[10px] text-red-400"
+              >
                 ERROR
               </Badge>
             ) : (
-              <Badge variant="outline" className="bg-zinc-900 border-zinc-800 text-zinc-400 font-mono text-[10px] px-2 py-0.5">
+              <Badge
+                variant="outline"
+                className="border-zinc-800 bg-zinc-900 px-2 py-0.5 font-mono text-[10px] text-zinc-400"
+              >
                 OFFLINE
               </Badge>
             )}
@@ -211,11 +219,11 @@ export const NtripWidget: React.FC = () => {
         </div>
       </CardHeader>
 
-      <CardContent className="p-3 space-y-3 flex-1 overflow-y-auto font-sans text-xs">
+      <CardContent className="flex-1 space-y-3 overflow-y-auto p-3 font-sans text-xs">
         {/* Compact endpoint info & form collapse toggle when connected */}
         {isConnected && (
-          <div className="flex items-center justify-between px-2 py-1 bg-zinc-900/60 border border-zinc-800/80 rounded-md text-[11px]">
-            <span className="font-mono text-zinc-300 truncate max-w-[200px] sm:max-w-[260px]">
+          <div className="flex items-center justify-between rounded-md border border-zinc-800/80 bg-zinc-900/60 px-2 py-1 text-[11px]">
+            <span className="max-w-[200px] truncate font-mono text-zinc-300 sm:max-w-[260px]">
               {sourceMode === 'ntrip'
                 ? `${ntripConfig.host}:${ntripConfig.port}/${ntripConfig.mountpoint}`
                 : `USB Serial @ ${serialBaud} baud`}
@@ -223,7 +231,7 @@ export const NtripWidget: React.FC = () => {
             <button
               type="button"
               onClick={() => setManualFormExpanded(!isFormExpanded)}
-              className="text-[10px] text-zinc-400 hover:text-sky-300 flex items-center gap-1 font-mono transition-colors ml-2 shrink-0"
+              className="ml-2 flex shrink-0 items-center gap-1 font-mono text-[10px] text-zinc-400 transition-colors hover:text-sky-300"
             >
               {isFormExpanded ? (
                 <>
@@ -242,14 +250,14 @@ export const NtripWidget: React.FC = () => {
         {isFormExpanded && (
           <div className="space-y-2.5">
             {/* Source Selector: NTRIP Caster vs USB Serial Device */}
-            <div className="grid grid-cols-2 gap-1.5 bg-zinc-900/80 border border-zinc-800/80 p-1 rounded-lg">
+            <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-zinc-800/80 bg-zinc-900/80 p-1">
               <button
                 type="button"
                 disabled={isConnected || isConnecting}
                 onClick={() => setSourceMode('ntrip')}
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md font-semibold text-xs transition-colors ${
+                className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                   sourceMode === 'ntrip'
-                    ? 'bg-zinc-800 text-sky-400 shadow-sm border border-zinc-700/60'
+                    ? 'border border-zinc-700/60 bg-zinc-800 text-sky-400 shadow-sm'
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
@@ -260,9 +268,9 @@ export const NtripWidget: React.FC = () => {
                 type="button"
                 disabled={isConnected || isConnecting}
                 onClick={() => setSourceMode('serial')}
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md font-semibold text-xs transition-colors ${
+                className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                   sourceMode === 'serial'
-                    ? 'bg-zinc-800 text-sky-400 shadow-sm border border-zinc-700/60'
+                    ? 'border border-zinc-700/60 bg-zinc-800 text-sky-400 shadow-sm'
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
@@ -273,53 +281,53 @@ export const NtripWidget: React.FC = () => {
 
             {/* Source Settings Panel */}
             {sourceMode === 'ntrip' ? (
-              <div className="space-y-2 bg-zinc-900/40 border border-zinc-800/60 p-2.5 rounded-lg">
-                <div className="grid grid-cols-1 @md:grid-cols-3 gap-2">
-                  <div className="@md:col-span-2 space-y-1">
-                    <label className="text-[10px] text-zinc-400 uppercase font-bold">Caster Host / IP</label>
+              <div className="space-y-2 rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-2.5">
+                <div className="grid grid-cols-1 gap-2 @md:grid-cols-3">
+                  <div className="space-y-1 @md:col-span-2">
+                    <label className="text-[10px] font-bold uppercase text-zinc-400">Caster Host / IP</label>
                     <input
                       type="text"
                       disabled={isConnected || isConnecting}
                       value={ntripConfig.host}
                       onChange={(e) => handleHostChange(e.target.value)}
                       placeholder="e.g. rtk2go.com or caster.example.com:2101/MOUNT"
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
+                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1 font-mono text-xs text-zinc-100 focus:border-sky-500 focus:outline-none"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-400 uppercase font-bold">Port</label>
+                    <label className="text-[10px] font-bold uppercase text-zinc-400">Port</label>
                     <input
                       type="number"
                       disabled={isConnected || isConnecting}
                       value={ntripConfig.port}
                       onChange={(e) => saveConfig({ ...ntripConfig, port: parseInt(e.target.value, 10) || 2101 })}
                       placeholder="2101"
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
+                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1 font-mono text-xs text-zinc-100 focus:border-sky-500 focus:outline-none"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 @md:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 @md:grid-cols-2">
                   <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-400 uppercase font-bold">Mountpoint</label>
+                    <label className="text-[10px] font-bold uppercase text-zinc-400">Mountpoint</label>
                     <input
                       type="text"
                       disabled={isConnected || isConnecting}
                       value={ntripConfig.mountpoint}
                       onChange={(e) => saveConfig({ ...ntripConfig, mountpoint: e.target.value })}
                       placeholder="e.g. BASE_RTK"
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
+                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1 font-mono text-xs text-zinc-100 focus:border-sky-500 focus:outline-none"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-400 uppercase font-bold">Protocol</label>
+                    <label className="text-[10px] font-bold uppercase text-zinc-400">Protocol</label>
                     <select
                       disabled={isConnected || isConnecting}
                       value={ntripConfig.protocol || 'http'}
                       onChange={(e) => saveConfig({ ...ntripConfig, protocol: e.target.value as any })}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
+                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono text-xs text-zinc-100 focus:border-sky-500 focus:outline-none"
                     >
                       <option value="http">HTTP Streaming (Default)</option>
                       <option value="websocket">WebSocket / Direct Proxy</option>
@@ -328,35 +336,33 @@ export const NtripWidget: React.FC = () => {
                 </div>
 
                 {/* Authentication & VRS GGA Feedback */}
-                <div className="grid grid-cols-1 @md:grid-cols-2 gap-2 pt-1 border-t border-zinc-800/60">
+                <div className="grid grid-cols-1 gap-2 border-t border-zinc-800/60 pt-1 @md:grid-cols-2">
                   <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-400 uppercase font-bold">Username</label>
+                    <label className="text-[10px] font-bold uppercase text-zinc-400">Username</label>
                     <input
                       type="text"
                       disabled={isConnected || isConnecting}
                       value={ntripConfig.username || ''}
                       onChange={(e) => saveConfig({ ...ntripConfig, username: e.target.value })}
                       placeholder="Optional"
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
+                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1 font-mono text-xs text-zinc-100 focus:border-sky-500 focus:outline-none"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-400 uppercase font-bold">Password</label>
+                    <label className="text-[10px] font-bold uppercase text-zinc-400">Password</label>
                     <input
                       type="password"
                       disabled={isConnected || isConnecting}
                       value={ntripConfig.password || ''}
                       onChange={(e) => saveConfig({ ...ntripConfig, password: e.target.value })}
                       placeholder="Optional"
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
+                      className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1 font-mono text-xs text-zinc-100 focus:border-sky-500 focus:outline-none"
                     />
                   </div>
 
-                  <div className="@md:col-span-2 flex items-center justify-between pt-0.5">
-                    <span className="text-[11px] text-zinc-300">
-                      Send NMEA GGA VRS Feedback (Every 10s)
-                    </span>
+                  <div className="flex items-center justify-between pt-0.5 @md:col-span-2">
+                    <span className="text-[11px] text-zinc-300">Send NMEA GGA VRS Feedback (Every 10s)</span>
                     <input
                       type="checkbox"
                       disabled={isConnected || isConnecting}
@@ -368,14 +374,14 @@ export const NtripWidget: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="space-y-2.5 bg-zinc-900/40 border border-zinc-800/60 p-2.5 rounded-lg">
+              <div className="space-y-2.5 rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-2.5">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-400 uppercase font-bold">Serial Baud Rate</label>
+                  <label className="text-[10px] font-bold uppercase text-zinc-400">Serial Baud Rate</label>
                   <select
                     disabled={isConnected || isConnecting}
                     value={serialBaud}
                     onChange={(e) => setSerialBaud(parseInt(e.target.value, 10))}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs font-mono text-zinc-100 focus:outline-none focus:border-sky-500"
+                    className="w-full rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:border-sky-500 focus:outline-none"
                   >
                     <option value={115200}>115,200 baud (u-blox ZED-F9P Default)</option>
                     <option value={230400}>230,400 baud</option>
@@ -387,7 +393,8 @@ export const NtripWidget: React.FC = () => {
                   </select>
                 </div>
                 <div className="text-[11px] text-zinc-400">
-                  Connects directly to an RTK base station connected via USB (e.g. SparkFun RTK Surveyor, Holybro H-RTK, ArduSimple).
+                  Connects directly to an RTK base station connected via USB (e.g. SparkFun RTK Surveyor, Holybro H-RTK,
+                  ArduSimple).
                 </div>
               </div>
             )}
@@ -401,7 +408,7 @@ export const NtripWidget: React.FC = () => {
               variant="outline"
               size="sm"
               onClick={handleDisconnect}
-              className="w-full gap-2 font-medium text-xs h-9 border-zinc-700 bg-zinc-900/90 text-zinc-300 hover:bg-zinc-800 hover:text-red-400 hover:border-red-900/60 transition-colors"
+              className="h-9 w-full gap-2 border-zinc-700 bg-zinc-900/90 text-xs font-medium text-zinc-300 transition-colors hover:border-red-900/60 hover:bg-zinc-800 hover:text-red-400"
             >
               <Square className="h-3.5 w-3.5 fill-current text-zinc-400" />
               Disconnect RTCM Stream
@@ -411,7 +418,7 @@ export const NtripWidget: React.FC = () => {
               variant="default"
               size="sm"
               onClick={sourceMode === 'ntrip' ? handleConnectNtrip : handleConnectSerial}
-              className="w-full gap-2 font-bold text-xs h-9 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-950"
+              className="h-9 w-full gap-2 bg-emerald-600 text-xs font-bold text-white shadow-md shadow-emerald-950 hover:bg-emerald-700"
             >
               <Play className="h-3.5 w-3.5 fill-current" />
               {sourceMode === 'ntrip' ? 'Connect to NTRIP Caster' : 'Select & Connect USB Base Station'}
@@ -421,54 +428,56 @@ export const NtripWidget: React.FC = () => {
 
         {/* Error message */}
         {injectorState.error && (
-          <div className="p-2 rounded bg-red-950/40 border border-red-800/60 text-red-400 text-xs flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded border border-red-800/60 bg-red-950/40 p-2 text-xs text-red-400">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{injectorState.error}</span>
           </div>
         )}
 
         {/* Live Stream Telemetry & Performance HUD */}
-        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-lg p-2.5 space-y-2">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 flex items-center justify-between">
+        <div className="space-y-2 rounded-lg border border-zinc-800/80 bg-zinc-900/60 p-2.5">
+          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-zinc-400">
             <span>Injection Statistics</span>
             <span className="font-mono text-zinc-500">Msg 233 (GPS_RTCM_DATA)</span>
           </div>
 
-          <div className="grid grid-cols-2 @md:grid-cols-4 gap-2">
-            <div className="bg-zinc-950/70 border border-zinc-800/60 rounded p-1.5">
-              <span className="text-[10px] text-zinc-500 block">Data Rate</span>
-              <span className="text-sm font-mono font-bold text-sky-400">
-                {(injectorState.dataRateBps / 1024).toFixed(1)} <span className="text-[10px] font-normal text-zinc-500">KB/s</span>
+          <div className="grid grid-cols-2 gap-2 @md:grid-cols-4">
+            <div className="rounded border border-zinc-800/60 bg-zinc-950/70 p-1.5">
+              <span className="block text-[10px] text-zinc-500">Data Rate</span>
+              <span className="font-mono text-sm font-bold text-sky-400">
+                {(injectorState.dataRateBps / 1024).toFixed(1)}{' '}
+                <span className="text-[10px] font-normal text-zinc-500">KB/s</span>
               </span>
             </div>
 
-            <div className="bg-zinc-950/70 border border-zinc-800/60 rounded p-1.5">
-              <span className="text-[10px] text-zinc-500 block">Inject Rate</span>
-              <span className="text-sm font-mono font-bold text-emerald-400">
+            <div className="rounded border border-zinc-800/60 bg-zinc-950/70 p-1.5">
+              <span className="block text-[10px] text-zinc-500">Inject Rate</span>
+              <span className="font-mono text-sm font-bold text-emerald-400">
                 {injectorState.packetRateHz} <span className="text-[10px] font-normal text-zinc-500">Hz</span>
               </span>
             </div>
 
-            <div className="bg-zinc-950/70 border border-zinc-800/60 rounded p-1.5">
-              <span className="text-[10px] text-zinc-500 block">Total Injected</span>
-              <span className="text-sm font-mono font-bold text-zinc-200">
-                {(injectorState.bytesInjected / 1024).toFixed(1)} <span className="text-[10px] font-normal text-zinc-500">KB</span>
+            <div className="rounded border border-zinc-800/60 bg-zinc-950/70 p-1.5">
+              <span className="block text-[10px] text-zinc-500">Total Injected</span>
+              <span className="font-mono text-sm font-bold text-zinc-200">
+                {(injectorState.bytesInjected / 1024).toFixed(1)}{' '}
+                <span className="text-[10px] font-normal text-zinc-500">KB</span>
               </span>
             </div>
 
-            <div className="bg-zinc-950/70 border border-zinc-800/60 rounded p-1.5">
-              <span className="text-[10px] text-zinc-500 block">MAVLink Packets</span>
-              <span className="text-sm font-mono font-bold text-zinc-200">
-                {injectorState.packetsSent}
-              </span>
+            <div className="rounded border border-zinc-800/60 bg-zinc-950/70 p-1.5">
+              <span className="block text-[10px] text-zinc-500">MAVLink Packets</span>
+              <span className="font-mono text-sm font-bold text-zinc-200">{injectorState.packetsSent}</span>
             </div>
           </div>
 
           {/* Base Station ARP Location if received from stream */}
           {baseStationPosition && (
-            <div className="pt-1.5 border-t border-zinc-800/60 flex items-center justify-between text-[11px] font-mono text-zinc-400">
-              <span className="flex items-center gap-1.5 text-blue-400 font-semibold">
-                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white font-bold text-[10px]">B</span>
+            <div className="flex items-center justify-between border-t border-zinc-800/60 pt-1.5 font-mono text-[11px] text-zinc-400">
+              <span className="flex items-center gap-1.5 font-semibold text-blue-400">
+                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
+                  B
+                </span>
                 Base Station ARP
               </span>
               <span className="text-zinc-200">
@@ -480,31 +489,29 @@ export const NtripWidget: React.FC = () => {
         </div>
 
         {/* Detected RTCM3 Message Types */}
-        <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-lg p-2.5 space-y-1.5">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-            RTCM3 Messages Detected
-          </div>
+        <div className="space-y-1.5 rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-2.5">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">RTCM3 Messages Detected</div>
 
           {Object.keys(injectorState.detectedTypes).length === 0 ? (
-            <div className="text-[11px] text-zinc-500 italic py-1">
+            <div className="py-1 text-[11px] italic text-zinc-500">
               No RTCM3 messages received yet. Connect to a stream to inspect frames.
             </div>
           ) : (
             <div className="overflow-hidden rounded border border-zinc-800/70 bg-zinc-950/70">
-              <table className="w-full text-left text-[11px] font-mono">
+              <table className="w-full text-left font-mono text-[11px]">
                 <thead>
-                  <tr className="border-b border-zinc-800/80 bg-zinc-900/50 text-[10px] text-zinc-400 uppercase tracking-wider">
-                    <th className="py-1 px-2.5 w-16">Type</th>
-                    <th className="py-1 px-2.5 font-sans font-medium text-zinc-400">Description</th>
-                    <th className="py-1 px-2.5 text-right w-20">Count</th>
+                  <tr className="border-b border-zinc-800/80 bg-zinc-900/50 text-[10px] uppercase tracking-wider text-zinc-400">
+                    <th className="w-16 px-2.5 py-1">Type</th>
+                    <th className="px-2.5 py-1 font-sans font-medium text-zinc-400">Description</th>
+                    <th className="w-20 px-2.5 py-1 text-right">Count</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/40">
                   {Object.values(injectorState.detectedTypes).map((t) => (
-                    <tr key={t.type} className="hover:bg-zinc-900/40 transition-colors">
-                      <td className="py-1 px-2.5 font-bold text-sky-400">{t.type}</td>
-                      <td className="py-1 px-2.5 font-sans text-zinc-300 truncate max-w-[160px]">{t.name}</td>
-                      <td className="py-1 px-2.5 text-right text-zinc-400 font-mono">{t.count.toLocaleString()}</td>
+                    <tr key={t.type} className="transition-colors hover:bg-zinc-900/40">
+                      <td className="px-2.5 py-1 font-bold text-sky-400">{t.type}</td>
+                      <td className="max-w-[160px] truncate px-2.5 py-1 font-sans text-zinc-300">{t.name}</td>
+                      <td className="px-2.5 py-1 text-right font-mono text-zinc-400">{t.count.toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

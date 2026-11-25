@@ -13,8 +13,8 @@
 //   here: the leg from home is taken as level with its destination (as missionPath draws it).
 // - Into a LAND with a position: the vehicle goes there at its altitude, then descends. The descent isn't checked.
 
-import { type PathItem, type PathLeg } from './missionPath';
 import type { VehicleCategory } from './messages';
+import { type PathItem, type PathLeg } from './missionPath';
 
 const CMD_NAV_TAKEOFF = 22;
 const CMD_NAV_LAND = 21;
@@ -149,12 +149,21 @@ export function missionProfile(
     const fromTerrain = terrainAt(from.lat, from.lon);
     // The origin's height above terrain: its altitude less the terrain there (for the leg from home, the takeoff
     // altitude above home's ground, or level with the destination when there is no takeoff).
-    const originAgl = fromHome && takeoff === null ? to.alt : a0 !== null && fromTerrain !== null ? a0 - fromTerrain : null;
+    const originAgl =
+      fromHome && takeoff === null ? to.alt : a0 !== null && fromTerrain !== null ? a0 - fromTerrain : null;
     if (marks.length === 0) {
       marks.push({ item: leg.from, dist: 0, alt: fromHome ? homeMsl : a0 });
       // The climb at home: from the ground to the takeoff altitude, unchecked.
       if (fromHome && takeoff !== null && homeMsl !== null && takeoff !== homeMsl) {
-        points.push({ dist: 0, lat: from.lat, lon: from.lon, alt: homeMsl, terrain: terrainAt(from.lat, from.lon), leg: li, checked: false });
+        points.push({
+          dist: 0,
+          lat: from.lat,
+          lon: from.lon,
+          alt: homeMsl,
+          terrain: terrainAt(from.lat, from.lon),
+          leg: li,
+          checked: false,
+        });
       }
     }
     // Sample along the drawn shape.
@@ -174,10 +183,19 @@ export function missionProfile(
       const frac = legLen > 0 ? target / legLen : 1;
       const terrain = terrainAt(lat, lon);
       let alt: number | null;
-      if (terrainLeg) alt = terrain === null || originAgl === null ? null : terrain + originAgl + (to.alt - originAgl) * frac;
+      if (terrainLeg)
+        alt = terrain === null || originAgl === null ? null : terrain + originAgl + (to.alt - originAgl) * frac;
       else alt = a0 === null || a1 === null ? null : a0 + (a1 - a0) * frac;
       // Unchecked: the leg's first point when it leaves home on the ground (no takeoff to climb), nothing else here.
-      points.push({ dist: dist + target, lat, lon, alt, terrain, leg: li, checked: !toTakeoff && !(fromHome && s === 0) });
+      points.push({
+        dist: dist + target,
+        lat,
+        lon,
+        alt,
+        terrain,
+        leg: li,
+        checked: !toTakeoff && !(fromHome && s === 0),
+      });
     }
     dist += legLen;
     // Into a land: the descent at the land point, unchecked.
@@ -200,7 +218,12 @@ const wholeMetres = (m: number) => `${m > 0 ? Math.max(1, Math.round(m)) : Math.
  * Where the route comes within `clearanceM` of the terrain (or below it), one issue per leg, at the leg's end item.
  * `fmt` writes a height (m) for the message, in the user's units.
  */
-export function terrainIssues(profile: MissionProfile, legs: PathLeg[], clearanceM: number, fmt: (m: number) => string = wholeMetres): TerrainIssue[] {
+export function terrainIssues(
+  profile: MissionProfile,
+  legs: PathLeg[],
+  clearanceM: number,
+  fmt: (m: number) => string = wholeMetres
+): TerrainIssue[] {
   const worst = new Map<number, { agl: number; at: number }>();
   for (const p of profile.points) {
     if (!p.checked || p.alt === null || p.terrain === null) continue;

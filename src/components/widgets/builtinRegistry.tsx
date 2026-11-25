@@ -1,21 +1,24 @@
 // Built-in widget components by ID, for the dashboard grid and for composite widget panels.
 
-import React, { Suspense, lazy } from 'react';
-import { ArmingModesWidget } from '../glareshield/ArmingModesWidget';
+import React, { lazy, Suspense } from 'react';
+
 import { AllFlightModesWidget } from '../glareshield/AllFlightModesWidget';
+import { ArmingModesWidget } from '../glareshield/ArmingModesWidget';
 import { SetSpeedWidget } from '../glareshield/SetSpeedWidget';
 import { HudWidget } from '../hud/HudWidget';
 import { BatteryWidget } from './BatteryWidget';
 import { GpsWidget } from './GpsWidget';
-import { VfrHudWidget } from './VfrHudWidget';
-import { StatusTextConsoleWidget } from './StatusTextConsoleWidget';
 import { MiniStatusTextWidget } from './MiniStatusTextWidget';
+import { StatusTextConsoleWidget } from './StatusTextConsoleWidget';
+import { VfrHudWidget } from './VfrHudWidget';
 import { WaypointControlWidget } from './WaypointControlWidget';
 
 // Loaded on first use: each pulls in code the rest of the app doesn't need at startup (Leaflet and mission
 // parsing, the charts, PID tuning, onboard logs, parameter metadata, RTCM handling).
 const MapWidget = lazy(() => import('../map/MapWidget').then((m) => ({ default: m.MapWidget })));
-const TelemetryChartsWidget = lazy(() => import('./TelemetryChartsWidget').then((m) => ({ default: m.TelemetryChartsWidget })));
+const TelemetryChartsWidget = lazy(() =>
+  import('./TelemetryChartsWidget').then((m) => ({ default: m.TelemetryChartsWidget }))
+);
 const ParametersWidget = lazy(() => import('./ParametersWidget').then((m) => ({ default: m.ParametersWidget })));
 const LogsWidget = lazy(() => import('./LogsWidget').then((m) => ({ default: m.LogsWidget })));
 const InspectorWidget = lazy(() => import('./InspectorWidget').then((m) => ({ default: m.InspectorWidget })));
@@ -24,7 +27,7 @@ const NtripWidget = lazy(() => import('./NtripWidget').then((m) => ({ default: m
 
 /** Placeholder while a lazily loaded widget arrives. */
 const WidgetLoading: React.FC = () => (
-  <div className="h-full min-h-[120px] rounded-xl border border-zinc-800 bg-zinc-950/80 flex items-center justify-center text-[11px] font-mono text-zinc-500">
+  <div className="flex h-full min-h-[120px] items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950/80 font-mono text-[11px] text-zinc-500">
     Loading…
   </div>
 );

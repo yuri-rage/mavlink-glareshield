@@ -2,7 +2,18 @@
 // area being kept while browsing, if any.
 
 import { create } from 'zustand';
-import { AreaKeeper, deleteArea, downloadArea, importMbtiles, listAreas, newAreaId, offlineAvailable, validTemplate, type OfflineArea } from '../lib/offlineTiles';
+
+import {
+  AreaKeeper,
+  deleteArea,
+  downloadArea,
+  importMbtiles,
+  listAreas,
+  newAreaId,
+  offlineAvailable,
+  validTemplate,
+  type OfflineArea,
+} from '../lib/offlineTiles';
 
 /** A download or import in progress: runs on with the panel closed (stopped only by its Stop button). */
 export interface OfflineJob {
@@ -112,7 +123,15 @@ export const useOfflineMapStore = create<OfflineMapState>((set, get) => ({
   keepingLayer: null,
   startKeeping: (name, source, layer) => {
     if (get().keeper || !offlineAvailable()) return;
-    const area: OfflineArea = { id: newAreaId(), name: name.trim() || 'Kept area', kind: 'kept', source, tiles: 0, bytes: 0, created: Date.now() };
+    const area: OfflineArea = {
+      id: newAreaId(),
+      name: name.trim() || 'Kept area',
+      kind: 'kept',
+      source,
+      tiles: 0,
+      bytes: 0,
+      created: Date.now(),
+    };
     const keeper = new AreaKeeper(area, (a) => set({ keeping: a }));
     set({ keeper, keeping: area, keepingLayer: layer });
   },
@@ -122,14 +141,31 @@ export const useOfflineMapStore = create<OfflineMapState>((set, get) => ({
   startDownload: async (area, urls, label) => {
     if (get().job) return;
     const ac = new AbortController();
-    set({ job: { kind: area.kind === 'terrain' ? 'terrain' : 'downloaded', label, done: 0, total: urls.length, failed: 0, bytes: 0 }, jobAbort: ac, jobError: null });
+    set({
+      job: {
+        kind: area.kind === 'terrain' ? 'terrain' : 'downloaded',
+        label,
+        done: 0,
+        total: urls.length,
+        failed: 0,
+        bytes: 0,
+      },
+      jobAbort: ac,
+      jobError: null,
+    });
     try {
       const result = await downloadArea(area, urls, {
         signal: ac.signal,
         onProgress: (done, failed, bytes) => set((s) => (s.job ? { job: { ...s.job, done, failed, bytes } } : {})),
       });
       if (result.tiles === 0) {
-        set({ jobError: { from: 'download', message: 'Nothing could be downloaded. Check the source address and the connection; a tile server must allow other sites (CORS: Access-Control-Allow-Origin).' } });
+        set({
+          jobError: {
+            from: 'download',
+            message:
+              'Nothing could be downloaded. Check the source address and the connection; a tile server must allow other sites (CORS: Access-Control-Allow-Origin).',
+          },
+        });
       }
     } catch (e: unknown) {
       set({ jobError: { from: 'download', message: e instanceof Error ? e.message : 'The download failed.' } });
@@ -142,7 +178,9 @@ export const useOfflineMapStore = create<OfflineMapState>((set, get) => ({
     if (get().job) return null;
     set({ job: { kind: 'import', label: file.name, done: 0, total: 0, failed: 0, bytes: 0 }, jobError: null });
     try {
-      const area = await importMbtiles(file, (done, total) => set((s) => (s.job ? { job: { ...s.job, done, total } } : {})));
+      const area = await importMbtiles(file, (done, total) =>
+        set((s) => (s.job ? { job: { ...s.job, done, total } } : {}))
+      );
       return area;
     } catch (e: unknown) {
       set({ jobError: { from: 'import', message: e instanceof Error ? e.message : 'The file could not be read.' } });

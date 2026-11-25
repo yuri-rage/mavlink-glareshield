@@ -10,9 +10,8 @@ export {};
 (globalThis as any).localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 
 const { parseDroppedMissionFile, packDatFile } = await import('../src/mavlink/missionFileParser.ts');
-const { toQgcWpl, toQgcPlan, waypointsToItems, fenceToItems, rallyToItems, groupFenceForPlan, missionFileStem } = await import(
-  '../src/mavlink/missionFileWriter.ts'
-);
+const { toQgcWpl, toQgcPlan, waypointsToItems, fenceToItems, rallyToItems, groupFenceForPlan, missionFileStem } =
+  await import('../src/mavlink/missionFileWriter.ts');
 const { missionManager } = await import('../src/mavlink/missionManager.ts');
 
 const failures: string[] = [];
@@ -26,12 +25,84 @@ const enc = (s: string) => new TextEncoder().encode(s);
 // What the store holds after a fetch (lat/lon in degrees, float32 parameters).
 const f32 = (v: number) => Math.fround(v);
 const waypoints = [
-  { seq: 0, command: 16, lat: 37.7749, lon: -122.4194, alt: 12.5, current: false, frame: 0, param1: 0, param2: 0, param3: 0, param4: 0 },
-  { seq: 1, command: 22, lat: 0, lon: 0, alt: 30, current: true, frame: 3, param1: f32(15), param2: 0, param3: 0, param4: 0 },
-  { seq: 2, command: 16, lat: 37.7755123, lon: -122.4182456, alt: 40, current: false, frame: 3, param1: f32(2.5), param2: f32(0.1), param3: 0, param4: 0 },
-  { seq: 3, command: 178, lat: 0, lon: 0, alt: 0, current: false, frame: 2, param1: 1, param2: f32(7.3), param3: -1, param4: 0 },
-  { seq: 4, command: 177, lat: 0, lon: 0, alt: 0, current: false, frame: 2, param1: 2, param2: 3, param3: 0, param4: 0 },
-  { seq: 5, command: 21, lat: 37.7749, lon: -122.4194, alt: 0, current: false, frame: 3, param1: 0, param2: 0, param3: 0, param4: 0 },
+  {
+    seq: 0,
+    command: 16,
+    lat: 37.7749,
+    lon: -122.4194,
+    alt: 12.5,
+    current: false,
+    frame: 0,
+    param1: 0,
+    param2: 0,
+    param3: 0,
+    param4: 0,
+  },
+  {
+    seq: 1,
+    command: 22,
+    lat: 0,
+    lon: 0,
+    alt: 30,
+    current: true,
+    frame: 3,
+    param1: f32(15),
+    param2: 0,
+    param3: 0,
+    param4: 0,
+  },
+  {
+    seq: 2,
+    command: 16,
+    lat: 37.7755123,
+    lon: -122.4182456,
+    alt: 40,
+    current: false,
+    frame: 3,
+    param1: f32(2.5),
+    param2: f32(0.1),
+    param3: 0,
+    param4: 0,
+  },
+  {
+    seq: 3,
+    command: 178,
+    lat: 0,
+    lon: 0,
+    alt: 0,
+    current: false,
+    frame: 2,
+    param1: 1,
+    param2: f32(7.3),
+    param3: -1,
+    param4: 0,
+  },
+  {
+    seq: 4,
+    command: 177,
+    lat: 0,
+    lon: 0,
+    alt: 0,
+    current: false,
+    frame: 2,
+    param1: 2,
+    param2: 3,
+    param3: 0,
+    param4: 0,
+  },
+  {
+    seq: 5,
+    command: 21,
+    lat: 37.7749,
+    lon: -122.4194,
+    alt: 0,
+    current: false,
+    frame: 3,
+    param1: 0,
+    param2: 0,
+    param3: 0,
+    param4: 0,
+  },
 ];
 const fencePoints = [
   { seq: 0, command: 5001, lat: 37.77, lon: -122.42, param1: 4, vertexCount: 4, inclusion: true },
@@ -75,7 +146,10 @@ function sameItems(name: string, got: any[], want: any[]) {
   check('mission WPL starts with the QGC WPL 110 header', text.startsWith('QGC WPL 110\n'));
   check('mission WPL has one line per item', text.trim().split('\n').length === waypoints.length + 1);
   check('float32 noise is not written', !text.includes('0.100000001') && !text.includes('7.30000019'));
-  check('only home is marked current', text.split('\n')[1].split('\t')[1] === '1' && text.split('\n')[3].split('\t')[1] === '0');
+  check(
+    'only home is marked current',
+    text.split('\n')[1].split('\t')[1] === '1' && text.split('\n')[3].split('\t')[1] === '0'
+  );
   const parsed = parseDroppedMissionFile('mission.waypoints', enc(text));
   check('mission WPL loads as a mission', parsed?.type === 'mission' && parsed.missionType === 0);
   sameItems('mission WPL round-trips every item', parsed?.items ?? [], want);
@@ -104,15 +178,39 @@ function sameItems(name: string, got: any[], want: any[]) {
 {
   const text = toQgcPlan({ waypoints, fencePoints, rallyPoints, vehicleType: 2 });
   const obj = JSON.parse(text);
-  check('plan has the keys QGroundControl requires', obj.fileType === 'Plan' && obj.mission.firmwareType === 3 && obj.mission.vehicleType === 2 &&
-    typeof obj.mission.cruiseSpeed === 'number' && typeof obj.mission.hoverSpeed === 'number' && Array.isArray(obj.mission.items));
-  check('plan keeps home out of the items', obj.mission.items.length === waypoints.length - 1 && near(obj.mission.plannedHomePosition[0], 37.7749));
+  check(
+    'plan has the keys QGroundControl requires',
+    obj.fileType === 'Plan' &&
+      obj.mission.firmwareType === 3 &&
+      obj.mission.vehicleType === 2 &&
+      typeof obj.mission.cruiseSpeed === 'number' &&
+      typeof obj.mission.hoverSpeed === 'number' &&
+      Array.isArray(obj.mission.items)
+  );
+  check(
+    'plan keeps home out of the items',
+    obj.mission.items.length === waypoints.length - 1 && near(obj.mission.plannedHomePosition[0], 37.7749)
+  );
   check('plan doJumpIds count from 1', obj.mission.items.map((i: any) => i.doJumpId).join(',') === '1,2,3,4,5');
-  check('plan has two polygons and two circles', obj.geoFence.polygons.length === 2 && obj.geoFence.circles.length === 2);
-  check('plan polygons keep their vertex counts', obj.geoFence.polygons[0].polygon.length === 4 && obj.geoFence.polygons[1].polygon.length === 3);
-  check('plan keeps inclusion and exclusion', obj.geoFence.polygons[0].inclusion === true && obj.geoFence.polygons[1].inclusion === false &&
-    obj.geoFence.circles[0].inclusion === true && obj.geoFence.circles[1].inclusion === false);
-  check('plan keeps the breach return point', Array.isArray(obj.geoFence.breachReturn) && near(obj.geoFence.breachReturn[0], 37.7745));
+  check(
+    'plan has two polygons and two circles',
+    obj.geoFence.polygons.length === 2 && obj.geoFence.circles.length === 2
+  );
+  check(
+    'plan polygons keep their vertex counts',
+    obj.geoFence.polygons[0].polygon.length === 4 && obj.geoFence.polygons[1].polygon.length === 3
+  );
+  check(
+    'plan keeps inclusion and exclusion',
+    obj.geoFence.polygons[0].inclusion === true &&
+      obj.geoFence.polygons[1].inclusion === false &&
+      obj.geoFence.circles[0].inclusion === true &&
+      obj.geoFence.circles[1].inclusion === false
+  );
+  check(
+    'plan keeps the breach return point',
+    Array.isArray(obj.geoFence.breachReturn) && near(obj.geoFence.breachReturn[0], 37.7745)
+  );
 
   const parsed = parseDroppedMissionFile('all.plan', enc(text));
   check('plan loads as a plan with three sections', parsed?.type === 'plan' && parsed.sections?.length === 3);
@@ -125,8 +223,13 @@ function sameItems(name: string, got: any[], want: any[]) {
 }
 {
   // No mission home item: the vehicle's home stands in.
-  const obj = JSON.parse(toQgcPlan({ waypoints: [], fencePoints, rallyPoints: [], home: { lat: 1.5, lon: 2.5, alt: 100 } }));
-  check('plan without a mission uses the vehicle home', obj.mission.plannedHomePosition.join(',') === '1.5,2.5,100' && obj.mission.items.length === 0);
+  const obj = JSON.parse(
+    toQgcPlan({ waypoints: [], fencePoints, rallyPoints: [], home: { lat: 1.5, lon: 2.5, alt: 100 } })
+  );
+  check(
+    'plan without a mission uses the vehicle home',
+    obj.mission.plannedHomePosition.join(',') === '1.5,2.5,100' && obj.mission.items.length === 0
+  );
   const parsed = parseDroppedMissionFile('fence.plan', enc(JSON.stringify(obj)));
   check('a fence-only plan loads as a fence', parsed?.type === 'fence');
 }
@@ -144,11 +247,17 @@ function sameItems(name: string, got: any[], want: any[]) {
   const items = waypointsToItems(waypoints);
   items[4] = { ...items[4], x: 12, y: 34 }; // a non-location command using param5/param6
   const unpacked = missionManager.unpackMissionDat(packDatFile(items, 0)) ?? [];
-  check('mission.dat keeps param5/6 of commands without a location', unpacked[4]?.lat === 12 && unpacked[4]?.lon === 34);
+  check(
+    'mission.dat keeps param5/6 of commands without a location',
+    unpacked[4]?.lat === 12 && unpacked[4]?.lon === 34
+  );
   check('mission.dat still scales located commands', near(unpacked[2]?.lat, 37.7755123, 1e-7));
 }
 
-check('file stem names the system and time', missionFileStem(3, new Date(2026, 10, 7, 9, 5)) === 'glareshield-sys3-20261107-0905');
+check(
+  'file stem names the system and time',
+  missionFileStem(3, new Date(2026, 10, 7, 9, 5)) === 'glareshield-sys3-20261107-0905'
+);
 
 // A .plan with no planned home: home is a placeholder at seq 0, so the first real item keeps seq 1.
 {
@@ -167,7 +276,12 @@ check('file stem names the system and time', missionFileStem(3, new Date(2026, 1
   const items = parsed?.sections?.find((s: any) => s.type === 'mission')?.items ?? parsed?.items ?? [];
   check(
     'plan without planned home: placeholder home at seq 0, takeoff stays item 1',
-    items.length === 3 && items[0].seq === 0 && items[0].x === 0 && items[1].command === 22 && items[1].seq === 1 && items[2].seq === 2,
+    items.length === 3 &&
+      items[0].seq === 0 &&
+      items[0].x === 0 &&
+      items[1].command === 22 &&
+      items[1].seq === 1 &&
+      items[2].seq === 2,
     JSON.stringify(items.map((it: any) => [it.seq, it.command]))
   );
 }

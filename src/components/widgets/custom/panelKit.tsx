@@ -1,12 +1,13 @@
 // Hooks and small pieces shared by the custom widget panels.
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { useTelemetryStore, sendTrackedCommand } from '../../../store/telemetryStore';
+
 import { readBinding, type AlertState, type BindingReading, type UnitSystem } from '../../../lib/widgetValues';
-import type { CustomWidgetDefinition, WidgetDataBinding } from '../../../types/widget';
-import { describeAck, type AckView } from './panelModel';
 import { mavlinkConnection } from '../../../mavlink/connection';
+import { sendTrackedCommand, useTelemetryStore } from '../../../store/telemetryStore';
+import type { CustomWidgetDefinition, WidgetDataBinding } from '../../../types/widget';
 import type { ColorScheme } from './palette';
+import { describeAck, type AckView } from './panelModel';
 
 /** Re-read bound values at this rate (and on unit / definition changes). */
 const READ_INTERVAL_MS = 125;
@@ -75,7 +76,11 @@ export function useCommandSender() {
   /** A message the vehicle doesn't acknowledge (e.g. SYSTEM_TIME): send it and say so. */
   const sendUnacknowledged = (packet: Uint8Array, note: string) => {
     const sent = mavlinkConnection.send(packet);
-    setAck(sent ? { status: 'accepted', text: `Sent (${note})`, time: Date.now() } : { status: 'rejected', text: 'Not sent (link down)', time: Date.now() });
+    setAck(
+      sent
+        ? { status: 'accepted', text: `Sent (${note})`, time: Date.now() }
+        : { status: 'rejected', text: 'Not sent (link down)', time: Date.now() }
+    );
   };
   return { ack, send, sendUnacknowledged };
 }
@@ -89,7 +94,9 @@ export const AckChip: React.FC<{ ack: AckView | null }> = ({ ack }) => {
         ? 'text-red-400 bg-red-950/40 border-red-800/40'
         : 'text-amber-400 bg-amber-950/40 border-amber-800/40';
   return (
-    <p className={`text-[10px] font-mono text-center px-1.5 py-0.5 rounded border ${tone} ${ack.status === 'pending' ? 'animate-pulse' : ''}`}>
+    <p
+      className={`rounded border px-1.5 py-0.5 text-center font-mono text-[10px] ${tone} ${ack.status === 'pending' ? 'animate-pulse' : ''}`}
+    >
       {ack.text} · {new Date(ack.time).toLocaleTimeString()}
     </p>
   );

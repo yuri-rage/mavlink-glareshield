@@ -2,8 +2,8 @@
 // caches it in the browser so it also works offline in the field, and tells the editor which metadata is in use.
 
 import { create } from 'zustand';
+
 import type { VehicleCategory } from '../mavlink/messages';
-import { setActiveParamCatalog, type ParamMeta } from '../mavlink/paramMetadata';
 import {
   catalogCandidates,
   describeCatalogMatch,
@@ -12,6 +12,7 @@ import {
   repoVehicleName,
   type CatalogCandidate,
 } from '../mavlink/paramCatalog';
+import { setActiveParamCatalog, type ParamMeta } from '../mavlink/paramMetadata';
 
 /** Cache Storage name; the service worker keeps it across deploys. */
 export const PARAM_META_CACHE = 'glareshield-param-meta-v1';
@@ -97,7 +98,11 @@ export const useParamMetaStore = create<ParamMetaState>((set, get) => ({
     }
     const key = `${vehicle}@${version.major}.${version.minor}.${version.patch}-${version.type}`;
     if (get().requestKey === key) return;
-    set({ status: 'loading', requestKey: key, summary: `Loading ${vehicle} ${version.major}.${version.minor} parameter metadata…` });
+    set({
+      status: 'loading',
+      requestKey: key,
+      summary: `Loading ${vehicle} ${version.major}.${version.minor} parameter metadata…`,
+    });
 
     void (async () => {
       const cache = await openCache();

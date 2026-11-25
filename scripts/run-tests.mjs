@@ -51,7 +51,13 @@ if (files.length === 0) {
 
 const detectedCpus = typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length;
 const requestedJobs = Number(process.env.TEST_JOBS);
-const jobs = Math.max(1, Math.min(files.length, Number.isFinite(requestedJobs) && requestedJobs > 0 ? Math.floor(requestedJobs) : detectedCpus || 4));
+const jobs = Math.max(
+  1,
+  Math.min(
+    files.length,
+    Number.isFinite(requestedJobs) && requestedJobs > 0 ? Math.floor(requestedJobs) : detectedCpus || 4
+  )
+);
 
 function runOne(name) {
   return new Promise((resolve) => {

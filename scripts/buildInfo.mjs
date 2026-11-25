@@ -25,7 +25,11 @@ export function describeBuild({ sha, date, dirty = false, now = new Date() }) {
 /** git with an argument list (no shell: nothing from the environment is interpreted). */
 function git(...args) {
   try {
-    return execFileSync('git', args, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || null;
+    return (
+      execFileSync('git', args, { stdio: ['ignore', 'pipe', 'ignore'] })
+        .toString()
+        .trim() || null
+    );
   } catch {
     return null;
   }

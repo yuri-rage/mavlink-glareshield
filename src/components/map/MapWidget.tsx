@@ -1,28 +1,109 @@
 import 'leaflet/dist/leaflet.css';
-import { useInPane } from '../dashboard/paneContext';
+
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { displayAltitudeM } from '../../lib/displayAltitude';
-import { useTelemetryStore, sendTrackedCommand, computeDistanceAndBearing } from '../../store/telemetryStore';
-import { useUnitsStore } from '../../store/unitsStore';
-import { lengthUnit, useLengthUnit } from '../../lib/inputUnits';
-import { offlineAwareTileLayer } from './offlineTileLayer';
-import { useOfflineMapStore } from '../../store/offlineMapStore';
-import { IMPORT_HOST, effectiveSubdomains } from '../../lib/offlineTiles';
-import { escapeHtml } from '../../mavlink/adsb';
-import { OfflineMapsPanel } from './OfflineMapsPanel';
-import { AltitudeAction, PointGuidedActions } from './GuidedActions';
-import { messageRateManager } from '../../mavlink/rateManager';
-import { missionManager, MissionManagerStatus, groupFencePolygons } from '../../mavlink/missionManager';
-import { mavlinkConnection } from '../../mavlink/connection';
-import { MAVLINK_MSG_ID, getVehicleCategory, getGuidedModeNum, cmdHasLocation } from '../../mavlink/messages';
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import { Modal } from '../ui/modal';
-import { parseDroppedMissionFile, ParsedMissionFile } from '../../mavlink/missionFileParser';
-import { MissionItemIntData } from '../../mavlink/encoder';
-import { RefreshCw, Crosshair, Shield, Flag, Upload, AlertTriangle, Navigation, Home, LocateFixed, Map as MapIcon, MousePointer2, MapPinPlus } from 'lucide-react';
+
 import L from 'leaflet';
+import {
+  AlertTriangle,
+  Crosshair,
+  Flag,
+  Home,
+  LocateFixed,
+  Map as MapIcon,
+  MapPinPlus,
+  MousePointer2,
+  Navigation,
+  RefreshCw,
+  Shield,
+  Upload,
+} from 'lucide-react';
+
+import { displayAltitudeM } from '../../lib/displayAltitude';
+import { lengthUnit, useLengthUnit } from '../../lib/inputUnits';
+import { effectiveSubdomains, IMPORT_HOST } from '../../lib/offlineTiles';
+import { escapeHtml } from '../../mavlink/adsb';
+import { mavlinkConnection } from '../../mavlink/connection';
+import { MissionItemIntData } from '../../mavlink/encoder';
+import {
+  checkFenceReadBack,
+  fenceDraftFromItems,
+  fenceDraftFromPoints,
+  fenceDraftsEqual,
+  fenceDraftToItems,
+  polygonCenter,
+  type FenceDraft,
+  type FenceShape,
+} from '../../mavlink/fenceDraft';
+import { cmdHasLocation, getGuidedModeNum, getVehicleCategory, MAVLINK_MSG_ID } from '../../mavlink/messages';
+import {
+  checkReadBack,
+  draftFromItems,
+  draftFromWaypoints,
+  draftsEqual,
+  draftToItems,
+  type MissionDraft,
+} from '../../mavlink/missionDraft';
+import { ParsedMissionFile, parseDroppedMissionFile } from '../../mavlink/missionFileParser';
+import { groupFencePolygons, missionManager, MissionManagerStatus } from '../../mavlink/missionManager';
+import { fliesSplines, joinLegs, missionPathLegs, routeIndices, type PathItem } from '../../mavlink/missionPath';
+import { terrainChecked } from '../../mavlink/missionProfile';
+import {
+  checkRallyReadBack,
+  rallyDraftFromItems,
+  rallyDraftFromPoints,
+  rallyDraftsEqual,
+  rallyDraftToItems,
+  type RallyDraft,
+} from '../../mavlink/rallyDraft';
+import { messageRateManager } from '../../mavlink/rateManager';
+import { TERRAIN_ATTRIBUTION } from '../../mavlink/terrain';
+import { onActiveVehicleChange } from '../../mavlink/vehicleRoster';
+import { planningVehicle, RADIUS_PARAMS, useLastVehicleStore } from '../../store/lastVehicleStore';
+import {
+  isAnyDirty,
+  isDraftDirty,
+  isFenceDirty,
+  isRallyDirty,
+  useMissionPlanStore,
+  vehicleMissionUpdate,
+} from '../../store/missionPlanStore';
+import { useMissionTerrainStore } from '../../store/missionTerrainStore';
+import { useOfflineMapStore } from '../../store/offlineMapStore';
+import { computeDistanceAndBearing, sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
+import { useTerrainStore } from '../../store/terrainStore';
+import { useUnitsStore } from '../../store/unitsStore';
+import { useInPane } from '../dashboard/paneContext';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Modal } from '../ui/modal';
+import { DraftUploadModal, FenceUploadModal, RallyUploadModal } from './DraftUploadModal';
+import { finishFencePolygon } from './fenceCommit';
+import { FenceChip } from './FenceControl';
+import { FencePlaceHint } from './FencePlaceHint';
+import { FlyToPopover } from './FlyToPopover';
+import { GimbalChip, PointCameraButton } from './GimbalControl';
+import { AltitudeAction, PointGuidedActions } from './GuidedActions';
+import { computeMapBadgeVisibility } from './mapBadgeVisibility';
+import { MapMissionFooter } from './MapMissionFooter';
+import { MapViewMenu, type MapLayerType } from './MapViewMenu';
+import { MissionMenu } from './MissionMenu';
+import { MissionPlanPanel } from './MissionPlanPanel';
+import { MissionProfileStrip, ProfileToggle } from './MissionProfileStrip';
+import { OfflineMapsPanel } from './OfflineMapsPanel';
+import { offlineAwareTileLayer } from './offlineTileLayer';
+import { PlanContextMenu, type PlanMenuTarget } from './PlanContextMenu';
+import { PLAN_LAYER_SWITCH_WIDTH, PlanLayerSwitch } from './PlanLayerSwitch';
+import { radiusCircle } from './radiusCircle';
+import { TerrainChip } from './TerrainChip';
+import { TrafficBanner } from './TrafficBanner';
+import { drawablePosition, useDraftLayer } from './useDraftLayer';
+import { useFenceDraftLayer } from './useFenceDraftLayer';
+import { useGimbalLayer } from './useGimbalLayer';
+import { useMissionTerrain } from './useMissionTerrain';
+import { useOtherVehiclesLayer } from './useOtherVehiclesLayer';
+import { useProfileLink } from './useProfileLink';
+import { useTrafficLayer } from './useTrafficLayer';
 
 function renderVehicleSvg(type: number): string {
   const cat = getVehicleCategory(type);
@@ -70,7 +151,6 @@ function renderVehicleSvg(type: number): string {
   }
 }
 
-
 /** Within this horizontal distance of a fly-to target, the vehicle has arrived and the target is cleared. */
 const FLY_TO_ARRIVAL_M = 3;
 
@@ -97,58 +177,6 @@ interface GpsFix {
   lon: number;
   yaw: number;
 }
-
-import { computeMapBadgeVisibility } from './mapBadgeVisibility';
-import { MapMissionFooter } from './MapMissionFooter';
-import { MissionMenu } from './MissionMenu';
-import { MapViewMenu, type MapLayerType } from './MapViewMenu';
-import { FlyToPopover } from './FlyToPopover';
-import { fliesSplines, joinLegs, missionPathLegs, routeIndices, type PathItem } from '../../mavlink/missionPath';
-import { RADIUS_PARAMS, planningVehicle, useLastVehicleStore } from '../../store/lastVehicleStore';
-import { radiusCircle } from './radiusCircle';
-import { MissionPlanPanel } from './MissionPlanPanel';
-import { PLAN_LAYER_SWITCH_WIDTH, PlanLayerSwitch } from './PlanLayerSwitch';
-import { DraftUploadModal, FenceUploadModal, RallyUploadModal } from './DraftUploadModal';
-import { PlanContextMenu, type PlanMenuTarget } from './PlanContextMenu';
-import { useDraftLayer, drawablePosition } from './useDraftLayer';
-import { isAnyDirty, isDraftDirty, isFenceDirty, isRallyDirty, useMissionPlanStore, vehicleMissionUpdate } from '../../store/missionPlanStore';
-import {
-  checkFenceReadBack,
-  fenceDraftFromItems,
-  fenceDraftFromPoints,
-  fenceDraftToItems,
-  fenceDraftsEqual,
-  polygonCenter,
-  type FenceDraft,
-  type FenceShape,
-} from '../../mavlink/fenceDraft';
-import { useFenceDraftLayer } from './useFenceDraftLayer';
-import { finishFencePolygon } from './fenceCommit';
-import { FencePlaceHint } from './FencePlaceHint';
-import { FenceChip } from './FenceControl';
-import { GimbalChip, PointCameraButton } from './GimbalControl';
-import { TerrainChip } from './TerrainChip';
-import { MissionProfileStrip, ProfileToggle } from './MissionProfileStrip';
-import { useProfileLink } from './useProfileLink';
-import { useMissionTerrain } from './useMissionTerrain';
-import { useMissionTerrainStore } from '../../store/missionTerrainStore';
-import { terrainChecked } from '../../mavlink/missionProfile';
-import { TERRAIN_ATTRIBUTION } from '../../mavlink/terrain';
-import { useTerrainStore } from '../../store/terrainStore';
-import { useGimbalLayer } from './useGimbalLayer';
-import { TrafficBanner } from './TrafficBanner';
-import { onActiveVehicleChange } from '../../mavlink/vehicleRoster';
-import { useOtherVehiclesLayer } from './useOtherVehiclesLayer';
-import { useTrafficLayer } from './useTrafficLayer';
-import {
-  checkRallyReadBack,
-  rallyDraftFromItems,
-  rallyDraftFromPoints,
-  rallyDraftToItems,
-  rallyDraftsEqual,
-  type RallyDraft,
-} from '../../mavlink/rallyDraft';
-import { checkReadBack, draftFromItems, draftFromWaypoints, draftToItems, draftsEqual, type MissionDraft } from '../../mavlink/missionDraft';
 
 interface MapWidgetProps {
   colSpan?: number;
@@ -194,13 +222,20 @@ const PLAN_MAXIMIZED_NOW_KEY = 'mavlink_glareshield_plan_maximized_now';
 const PLAN_MAXIMIZE_FORCED_KEY = 'mavlink_glareshield_plan_maximize_forced';
 /** A position worth putting on the map or fitting the view to: finite, in range, not 0,0. */
 function validMapPosition(lat: number, lon: number): boolean {
-  return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && (lat !== 0 || lon !== 0);
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lon) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lon) <= 180 &&
+    (lat !== 0 || lon !== 0)
+  );
 }
 
 /** Too small to edit in place: narrow, or a bottom sheet with no room for the list. */
 /** The corners that frame a fence shape on the map: a polygon's vertices, a circle's bounding box. */
 function fenceShapeExtent(sh: FenceShape): [number, number][] {
-  if (sh.kind === 'polygon') return sh.vertices.filter((p) => validMapPosition(p.lat, p.lon)).map((p) => [p.lat, p.lon]);
+  if (sh.kind === 'polygon')
+    return sh.vertices.filter((p) => validMapPosition(p.lat, p.lon)).map((p) => [p.lat, p.lon]);
   if (!validMapPosition(sh.center.lat, sh.center.lon)) return [];
   const b = L.latLng(sh.center.lat, sh.center.lon).toBounds(sh.radius * 2);
   return [
@@ -287,13 +322,11 @@ const PositionReadout: React.FC<{ show: boolean }> = ({ show }) => {
       </span>
       <span>
         Alt:{' '}
-        <b className="text-emerald-400">
-          {show ? `${formatAltitude(altM).full} ${altitudeMode.toUpperCase()}` : '--'}
-        </b>
+        <b className="text-emerald-400">{show ? `${formatAltitude(altM).full} ${altitudeMode.toUpperCase()}` : '--'}</b>
       </span>
       {show && home.distanceM !== null && (
-        <span className="text-emerald-300 flex items-center gap-1 border-l border-zinc-800 pl-2">
-          <Home className="h-3 w-3 text-emerald-400 inline" />
+        <span className="flex items-center gap-1 border-l border-zinc-800 pl-2 text-emerald-300">
+          <Home className="inline h-3 w-3 text-emerald-400" />
           <b>{formatHomeVector(home.bearingDeg, home.distanceM)}</b>
         </span>
       )}
@@ -407,9 +440,17 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     void useOfflineMapStore.getState().refresh();
     // Keeping starts: the tiles already on screen are kept too (only new loads would be otherwise).
     return useOfflineMapStore.subscribe((st, prev) => {
-      if (!st.keeper || st.keeper === prev.keeper || st.keepingLayer !== mapLayerRef.current || st.keepingLayer?.startsWith('import:')) return;
-      const layer = activeTileLayerRef.current as (L.TileLayer & { _tiles?: Record<string, { coords: L.Coords; loaded?: number }> }) | null;
-      for (const t of Object.values(layer?._tiles ?? {})) if (t.loaded) void st.keeper.keepTile(layer!.getTileUrl(t.coords));
+      if (
+        !st.keeper ||
+        st.keeper === prev.keeper ||
+        st.keepingLayer !== mapLayerRef.current ||
+        st.keepingLayer?.startsWith('import:')
+      )
+        return;
+      const layer = activeTileLayerRef.current as
+        (L.TileLayer & { _tiles?: Record<string, { coords: L.Coords; loaded?: number }> }) | null;
+      for (const t of Object.values(layer?._tiles ?? {}))
+        if (t.loaded) void st.keeper.keepTile(layer!.getTileUrl(t.coords));
     });
   }, []);
   // The layer shown is gone (its imported set deleted, your tile source removed): back to Satellite. Only once the
@@ -417,7 +458,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const areasLoaded = useOfflineMapStore((s) => s.areasLoaded);
   const hasCustomSource = useOfflineMapStore((s) => s.customSource !== null);
   useEffect(() => {
-    if ((mapLayer === 'custom' && !hasCustomSource) || (areasLoaded && offlineLayerKey === 'missing')) setMapLayer('satellite');
+    if ((mapLayer === 'custom' && !hasCustomSource) || (areasLoaded && offlineLayerKey === 'missing'))
+      setMapLayer('satellite');
   }, [mapLayer, hasCustomSource, areasLoaded, offlineLayerKey]);
   const mapLayerRef = useRef(mapLayer);
   mapLayerRef.current = mapLayer;
@@ -454,7 +496,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   /** The connected vehicle flies spline waypoints as curves (Copter); others skip them. */
   const vehicleSplines = fliesSplines(getVehicleCategory(heartbeat.type));
   // What the waypoint radii are drawn from: the vehicle's type and radius parameters (or the last vehicle's).
-  const radiusKey = useTelemetryStore((s) => `${s.heartbeat.type}:${s.heartbeat.modeName === 'DISCONNECTED'}:${RADIUS_PARAMS.map((n) => s.parameters[n]?.value ?? '').join(',')}`);
+  const radiusKey = useTelemetryStore(
+    (s) =>
+      `${s.heartbeat.type}:${s.heartbeat.modeName === 'DISCONNECTED'}:${RADIUS_PARAMS.map((n) => s.parameters[n]?.value ?? '').join(',')}`
+  );
   const lastVehicle = useLastVehicleStore();
   const planTool = useMissionPlanStore((s) => s.tool);
   const planSelected = useMissionPlanStore((s) => s.selected);
@@ -464,7 +509,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const [mapReady, setMapReady] = useState(false);
   /** The map card fills the window (planning on a small map). */
   // Planning resumed after a reload comes back maximized or not, as it was left.
-  const [maximized, setMaximized] = useState(() => useMissionPlanStore.getState().active && readFlag(PLAN_MAXIMIZED_NOW_KEY, false));
+  const [maximized, setMaximized] = useState(
+    () => useMissionPlanStore.getState().active && readFlag(PLAN_MAXIMIZED_NOW_KEY, false)
+  );
   // The maximized map starts below the navbar, which stays in view with its telemetry. The navbar is sticky at the
   // top, so its height is the offset: unlike its on-screen position, that doesn't move with scrolling, pinch-zoom or
   // a mobile address bar. Measured before paint (no frame drawn under the navbar), and again when the navbar
@@ -898,26 +945,32 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           maxNativeZoom: area.maxZoom,
           maxZoom: MAP_MAX_ZOOM,
           // A set covers its own area: no requests (that would fail) outside it.
-          bounds: area.bounds ? L.latLngBounds([area.bounds.south, area.bounds.west], [area.bounds.north, area.bounds.east]) : undefined,
+          bounds: area.bounds
+            ? L.latLngBounds([area.bounds.south, area.bounds.west], [area.bounds.north, area.bounds.east])
+            : undefined,
         });
       }
     }
     switch (layerType) {
       case 'street':
         return offlineAwareTileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
           maxNativeZoom: 19,
           maxZoom: MAP_MAX_ZOOM,
           crossOrigin: true,
         });
       case 'satellite':
       default:
-        return offlineAwareTileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA',
-          maxNativeZoom: 19,
-          maxZoom: MAP_MAX_ZOOM,
-          crossOrigin: true,
-        });
+        return offlineAwareTileLayer(
+          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA',
+            maxNativeZoom: 19,
+            maxZoom: MAP_MAX_ZOOM,
+            crossOrigin: true,
+          }
+        );
     }
   };
 
@@ -946,7 +999,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   };
 
   // Geolocation needs a secure page (https or localhost) and a browser that has it.
-  const canLocate = typeof navigator !== 'undefined' && 'geolocation' in navigator && (typeof window === 'undefined' || window.isSecureContext);
+  const canLocate =
+    typeof navigator !== 'undefined' &&
+    'geolocation' in navigator &&
+    (typeof window === 'undefined' || window.isSecureContext);
 
   /** "Fly to me": the browser's location, offered in the same card as a picked point. */
   const handleFlyToMe = () => {
@@ -965,7 +1021,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           const v = useTelemetryStore.getState().position;
           const pts: [number, number][] = [[lat, lon]];
           if (v.lat !== 0 || v.lon !== 0) pts.push([v.lat, v.lon]);
-          map.fitBounds(L.latLngBounds(pts), { padding: [60, 60], maxZoom: Math.max(map.getZoom(), 17), animate: false });
+          map.fitBounds(L.latLngBounds(pts), {
+            padding: [60, 60],
+            maxZoom: Math.max(map.getZoom(), 17),
+            animate: false,
+          });
         }
         openFlyToPrompt(lat, lon, accuracy);
       },
@@ -994,7 +1054,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     // before a fix), home: one the vehicle gave this session, else where it was last session, else the cached
     // mission's item 0; and only failing all of those, the middle of the US.
     const st = useTelemetryStore.getState();
-    const knownHome = st.homePosition.source !== 'none' && (st.homePosition.lat !== 0 || st.homePosition.lon !== 0) ? st.homePosition : null;
+    const knownHome =
+      st.homePosition.source !== 'none' && (st.homePosition.lat !== 0 || st.homePosition.lon !== 0)
+        ? st.homePosition
+        : null;
     const home = (st.homeFromVehicle ? knownHome : null) ?? st.lastKnownHome ?? knownHome;
     const [initialLat, initialLon]: [number, number] =
       savedMapView && !(savedMapView.follow && hasFix)
@@ -1018,7 +1081,12 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     const saveView = () => {
       const c = map.getCenter();
-      savedMapView = { zoom: map.getZoom(), center: [c.lat, c.lng], follow: followVehicleRef.current, layer: mapLayerRef.current };
+      savedMapView = {
+        zoom: map.getZoom(),
+        center: [c.lat, c.lng],
+        follow: followVehicleRef.current,
+        layer: mapLayerRef.current,
+      };
     };
     map.on('moveend', saveView);
     map.on('zoomend', () => {
@@ -1182,14 +1250,23 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   /** The vehicle's mission as a draft, with the known home when the mission has none. */
   const vehicleDraft = useCallback((): MissionDraft => {
     const s = useTelemetryStore.getState();
-    const home = s.homePosition.source !== 'none' ? { lat: s.homePosition.lat, lon: s.homePosition.lon, alt: s.homePosition.alt } : undefined;
+    const home =
+      s.homePosition.source !== 'none'
+        ? { lat: s.homePosition.lat, lon: s.homePosition.lon, alt: s.homePosition.alt }
+        : undefined;
     return draftFromWaypoints(s.missionWaypoints, home);
   }, []);
 
   /** The vehicle's rally points as a draft. */
-  const vehicleRallyDraft = useCallback((): RallyDraft => rallyDraftFromPoints(useTelemetryStore.getState().rallyPoints), []);
+  const vehicleRallyDraft = useCallback(
+    (): RallyDraft => rallyDraftFromPoints(useTelemetryStore.getState().rallyPoints),
+    []
+  );
   /** The vehicle's fence as a draft. */
-  const vehicleFenceDraft = useCallback((): FenceDraft => fenceDraftFromPoints(useTelemetryStore.getState().fencePoints), []);
+  const vehicleFenceDraft = useCallback(
+    (): FenceDraft => fenceDraftFromPoints(useTelemetryStore.getState().fencePoints),
+    []
+  );
 
   const startPlanning = () => {
     setFlyToMode(false);
@@ -1228,7 +1305,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   // dashboard lays out, a brief narrow width would maximize for nothing. Only ever maximizes.
   // Only when no state was saved (storage blocked, or a session from before it was kept): a restore the user made
   // before reloading is respected.
-  const resumeCheckRef = useRef(useMissionPlanStore.getState().active && !maximized && !hasFlag(PLAN_MAXIMIZED_NOW_KEY));
+  const resumeCheckRef = useRef(
+    useMissionPlanStore.getState().active && !maximized && !hasFlag(PLAN_MAXIMIZED_NOW_KEY)
+  );
   useEffect(() => {
     if (!resumeCheckRef.current) return;
     if (!planning) {
@@ -1359,14 +1438,18 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     try {
       const res = await missionManager.uploadRallyAndReadBack(rallyDraftToItems(draft));
       if (!res.success) {
-        setPlanNotice(`Rally upload failed: ${res.error || 'the vehicle did not accept the rally points'}. The draft is unchanged.`);
+        setPlanNotice(
+          `Rally upload failed: ${res.error || 'the vehicle did not accept the rally points'}. The draft is unchanged.`
+        );
         return;
       }
       const check = checkRallyReadBack(draft, res.readBack, res.readOk);
       if (check.status === 'unreadable') {
         // Acknowledged but not read back: most likely the vehicle holds the draft. Compare with what was uploaded.
         useMissionPlanStore.getState().rallyRebase(draft);
-        setPlanNotice('Rally points uploaded (the vehicle accepted them) but could not be read back to check. Download from the vehicle to verify.');
+        setPlanNotice(
+          'Rally points uploaded (the vehicle accepted them) but could not be read back to check. Download from the vehicle to verify.'
+        );
         missionManager.report('Rally points uploaded but NOT verified', 10000);
         return;
       }
@@ -1401,13 +1484,17 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     try {
       const res = await missionManager.uploadFenceAndReadBack(fenceDraftToItems(draft));
       if (!res.success) {
-        setPlanNotice(`Fence upload failed: ${res.error || 'the vehicle did not accept the fence'}. The draft is unchanged.`);
+        setPlanNotice(
+          `Fence upload failed: ${res.error || 'the vehicle did not accept the fence'}. The draft is unchanged.`
+        );
         return;
       }
       const check = checkFenceReadBack(draft, res.readBack, res.readOk);
       if (check.status === 'unreadable') {
         useMissionPlanStore.getState().fenceRebase(draft);
-        setPlanNotice('Fence uploaded (the vehicle accepted it) but could not be read back to check. Download from the vehicle to verify.');
+        setPlanNotice(
+          'Fence uploaded (the vehicle accepted it) but could not be read back to check. Download from the vehicle to verify.'
+        );
         missionManager.report('Fence uploaded but NOT verified', 10000);
         return;
       }
@@ -1420,7 +1507,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         return;
       }
       useMissionPlanStore.getState().fenceUploaded(check.vehicle);
-      missionManager.report(draft.shapes.length === 0 && !draft.returnPoint ? 'Fence cleared and verified' : `Fence uploaded and verified (${draft.shapes.length} shapes)`);
+      missionManager.report(
+        draft.shapes.length === 0 && !draft.returnPoint
+          ? 'Fence cleared and verified'
+          : `Fence uploaded and verified (${draft.shapes.length} shapes)`
+      );
     } catch (err: any) {
       setPlanNotice(`Fence upload failed: ${err?.message || err}. The draft is unchanged.`);
     } finally {
@@ -1443,7 +1534,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     try {
       const res = await missionManager.uploadMissionAndReadBack(draftToItems(draft));
       if (!res.success) {
-        setPlanNotice(`Upload failed: ${res.error || 'the vehicle did not accept the mission'}. The draft is unchanged.`);
+        setPlanNotice(
+          `Upload failed: ${res.error || 'the vehicle did not accept the mission'}. The draft is unchanged.`
+        );
         return;
       }
       const check = checkReadBack(draft, res.readBack);
@@ -1452,7 +1545,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         // The vehicle acknowledged every item, so it most likely holds the draft; it just couldn't be checked.
         // Compare from now on with what was uploaded, not with an empty mission.
         useMissionPlanStore.getState().rebase(draft);
-        setPlanNotice('Uploaded (the vehicle accepted every item) but the mission could not be read back to check it. Download from the vehicle to verify.');
+        setPlanNotice(
+          'Uploaded (the vehicle accepted every item) but the mission could not be read back to check it. Download from the vehicle to verify.'
+        );
         missionManager.report('Mission uploaded but NOT verified', 10000);
         return;
       }
@@ -1498,7 +1593,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     if (!planning) return;
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable))
+        return;
       const st = useMissionPlanStore.getState();
       const drawing = st.layer === 'fence' ? st.fenceDrawing : null;
       if (drawing && drawing.length > 0) {
@@ -1567,7 +1663,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     const map = mapInstanceRef.current;
     const p = useMissionPlanStore.getState().rally.history.present.points[index];
     if (!map || !p || (p.lat === 0 && p.lon === 0)) return;
-    if (!map.getBounds().pad(-0.15).contains([p.lat, p.lon])) map.panTo([p.lat, p.lon], { animate: true, duration: 0.3 });
+    if (!map.getBounds().pad(-0.15).contains([p.lat, p.lon]))
+      map.panTo([p.lat, p.lon], { animate: true, duration: 0.3 });
   }, []);
 
   /** Pan to a draft fence shape (or, with -2, the return point) when it is out of view. */
@@ -1575,9 +1672,11 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     const map = mapInstanceRef.current;
     const d = useMissionPlanStore.getState().fence.history.present;
     const sh = index >= 0 ? d.shapes[index] : undefined;
-    const p = index === -2 ? d.returnPoint : sh ? (sh.kind === 'circle' ? sh.center : polygonCenter(sh.vertices)) : null;
+    const p =
+      index === -2 ? d.returnPoint : sh ? (sh.kind === 'circle' ? sh.center : polygonCenter(sh.vertices)) : null;
     if (!map || !p || !validMapPosition(p.lat, p.lon)) return;
-    if (!map.getBounds().pad(-0.15).contains([p.lat, p.lon])) map.panTo([p.lat, p.lon], { animate: true, duration: 0.3 });
+    if (!map.getBounds().pad(-0.15).contains([p.lat, p.lon]))
+      map.panTo([p.lat, p.lon], { animate: true, duration: 0.3 });
   }, []);
 
   /**
@@ -1636,7 +1735,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           if (st.fenceReplace(fence)) {
             loaded.push('fence');
             fence.shapes.forEach((sh) => pts.push(...fenceShapeExtent(sh)));
-            if (fence.returnPoint && validMapPosition(fence.returnPoint.lat, fence.returnPoint.lon)) pts.push([fence.returnPoint.lat, fence.returnPoint.lon]);
+            if (fence.returnPoint && validMapPosition(fence.returnPoint.lat, fence.returnPoint.lon))
+              pts.push([fence.returnPoint.lat, fence.returnPoint.lon]);
           } else {
             refused.push('fence');
           }
@@ -1687,48 +1787,46 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   // Buffer incoming GPS fixes for linear interpolation (from the store directly: no render per fix)
   useEffect(() => {
     const ingest = (position: { lat: number; lon: number; timeBootMs: number }) => {
-    if (position.lat === 0 && position.lon === 0) return;
+      if (position.lat === 0 && position.lon === 0) return;
 
-    const now = performance.now();
-    const fix: GpsFix = {
-      t: now,
-      timeBootMs: position.timeBootMs,
-      lat: position.lat,
-      lon: position.lon,
-      yaw: yawRef.current,
-    };
-
-    const fixes = fixesRef.current;
-    if (fixes.length > 0) {
-      const prev = fixes[fixes.length - 1];
-      // If gap exceeds 1.0s (telemetry dropout or link loss), reset history and snap immediately
-      const gapMs = (fix.timeBootMs > 0 && prev.timeBootMs > 0)
-        ? (fix.timeBootMs - prev.timeBootMs)
-        : (now - prev.t);
-      if (gapMs > 1000) {
-        fixesRef.current = [fix];
-        displayPosRef.current = { lat: fix.lat, lon: fix.lon, yaw: fix.yaw };
-        if (vehicleMarkerRef.current) {
-          vehicleMarkerRef.current.setLatLng([fix.lat, fix.lon]);
-        }
-        return;
-      }
-    }
-
-    fixes.push(fix);
-    if (fixes.length > 4) fixes.shift();
-
-    // Instant initialization on first received point
-    if (!displayPosRef.current) {
-      displayPosRef.current = {
+      const now = performance.now();
+      const fix: GpsFix = {
+        t: now,
+        timeBootMs: position.timeBootMs,
         lat: position.lat,
         lon: position.lon,
         yaw: yawRef.current,
       };
-      if (vehicleMarkerRef.current) {
-        vehicleMarkerRef.current.setLatLng([position.lat, position.lon]);
+
+      const fixes = fixesRef.current;
+      if (fixes.length > 0) {
+        const prev = fixes[fixes.length - 1];
+        // If gap exceeds 1.0s (telemetry dropout or link loss), reset history and snap immediately
+        const gapMs = fix.timeBootMs > 0 && prev.timeBootMs > 0 ? fix.timeBootMs - prev.timeBootMs : now - prev.t;
+        if (gapMs > 1000) {
+          fixesRef.current = [fix];
+          displayPosRef.current = { lat: fix.lat, lon: fix.lon, yaw: fix.yaw };
+          if (vehicleMarkerRef.current) {
+            vehicleMarkerRef.current.setLatLng([fix.lat, fix.lon]);
+          }
+          return;
+        }
       }
-    }
+
+      fixes.push(fix);
+      if (fixes.length > 4) fixes.shift();
+
+      // Instant initialization on first received point
+      if (!displayPosRef.current) {
+        displayPosRef.current = {
+          lat: position.lat,
+          lon: position.lon,
+          yaw: yawRef.current,
+        };
+        if (vehicleMarkerRef.current) {
+          vehicleMarkerRef.current.setLatLng([position.lat, position.lon]);
+        }
+      }
     };
     ingest(useTelemetryStore.getState().position);
     return useTelemetryStore.subscribe((st, prev) => {
@@ -1760,8 +1858,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         const p0 = fixes[fixes.length - 2];
         const p1 = fixes[fixes.length - 1];
         // Use true autopilot time_boot_ms delta if available to eliminate WebSocket arrival jitter
-        const bootDt = (p1.timeBootMs > 0 && p0.timeBootMs > 0) ? (p1.timeBootMs - p0.timeBootMs) : 0;
-        const fixDt = (bootDt > 10 && bootDt <= 1000) ? bootDt : (p1.t - p0.t);
+        const bootDt = p1.timeBootMs > 0 && p0.timeBootMs > 0 ? p1.timeBootMs - p0.timeBootMs : 0;
+        const fixDt = bootDt > 10 && bootDt <= 1000 ? bootDt : p1.t - p0.t;
         if (fixDt > 10 && fixDt <= 1000) {
           // Play back one fix-interval late (steady, even motion)
           const u = Math.min(Math.max((now - p1.t) / fixDt, 0.0), 1.0);
@@ -1921,7 +2019,12 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     update();
     map.on('move zoom resize', update);
     const ghost = L.marker([pendingFlyTo.lat, pendingFlyTo.lon], {
-      icon: L.divIcon({ className: 'flyto-target-marker', html: flyToTargetSvg(0.55), iconSize: [28, 28], iconAnchor: [14, 14] }),
+      icon: L.divIcon({
+        className: 'flyto-target-marker',
+        html: flyToTargetSvg(0.55),
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      }),
       pane: 'missionMarkersPane',
       zIndexOffset: 310,
       interactive: false,
@@ -1988,7 +2091,12 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     if (!activeFlyToTarget) return;
     const check = (position: { lat: number; lon: number }) => {
       if (position.lat === 0 && position.lon === 0) return;
-      const { distanceM } = computeDistanceAndBearing(position.lat, position.lon, activeFlyToTarget.lat, activeFlyToTarget.lon);
+      const { distanceM } = computeDistanceAndBearing(
+        position.lat,
+        position.lon,
+        activeFlyToTarget.lat,
+        activeFlyToTarget.lon
+      );
       // A little over the usual 2 m waypoint radius, so a vehicle holding just outside it still counts as there.
       if (distanceM < FLY_TO_ARRIVAL_M) setActiveFlyToTarget(null);
     };
@@ -2048,32 +2156,32 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       return;
     }
     const draw = (position: { lat: number; lon: number }) => {
-    if (!mapInstanceRef.current) return;
+      if (!mapInstanceRef.current) return;
 
-    if (position.lat === 0 && position.lon === 0) {
-      if (flyToLineRef.current) {
-        flyToLineRef.current.remove();
-        flyToLineRef.current = null;
+      if (position.lat === 0 && position.lon === 0) {
+        if (flyToLineRef.current) {
+          flyToLineRef.current.remove();
+          flyToLineRef.current = null;
+        }
+        return;
       }
-      return;
-    }
 
-    const latLngs: [number, number][] = [
-      [position.lat, position.lon],
-      [activeFlyToTarget.lat, activeFlyToTarget.lon],
-    ];
+      const latLngs: [number, number][] = [
+        [position.lat, position.lon],
+        [activeFlyToTarget.lat, activeFlyToTarget.lon],
+      ];
 
-    if (flyToLineRef.current) {
-      flyToLineRef.current.setLatLngs(latLngs);
-    } else {
-      flyToLineRef.current = L.polyline(latLngs, {
-        color: '#38bdf8',
-        weight: 2.5,
-        dashArray: '6, 6',
-        opacity: 0.9,
-        pane: 'missionLinesPane',
-      }).addTo(mapInstanceRef.current);
-    }
+      if (flyToLineRef.current) {
+        flyToLineRef.current.setLatLngs(latLngs);
+      } else {
+        flyToLineRef.current = L.polyline(latLngs, {
+          color: '#38bdf8',
+          weight: 2.5,
+          dashArray: '6, 6',
+          opacity: 0.9,
+          pane: 'missionLinesPane',
+        }).addTo(mapInstanceRef.current);
+      }
     };
     draw(useTelemetryStore.getState().position);
     return useTelemetryStore.subscribe((st, prev) => {
@@ -2102,7 +2210,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     setPendingFlyTo(null);
     // No link, no command: show nothing (the command feedback reports it as not sent).
     if (mavlinkConnection.getStatus() !== 'connected') {
-      sendTrackedCommand(encoder.createDoReposition(sysId, compId, lat, lon, alt), { label: 'Fly To', targetKey: 'action:reposition' });
+      sendTrackedCommand(encoder.createDoReposition(sysId, compId, lat, lon, alt), {
+        label: 'Fly To',
+        targetKey: 'action:reposition',
+      });
       return;
     }
 
@@ -2132,7 +2243,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     missionRadiiRef.current = [];
 
     // Filter valid waypoints
-    const validWps = missionWaypoints.filter((w) => cmdHasLocation(w.command) && (w.lat !== 0 || w.lon !== 0) && Math.abs(w.lat) <= 90 && Math.abs(w.lon) <= 180);
+    const validWps = missionWaypoints.filter(
+      (w) =>
+        cmdHasLocation(w.command) && (w.lat !== 0 || w.lon !== 0) && Math.abs(w.lat) <= 90 && Math.abs(w.lon) <= 180
+    );
     // The line follows the path the vehicle flies (missionPath): navigation items only (an ROI gets a pin, not a
     // leg), spline legs curved for a vehicle that flies them, skipped for one that doesn't.
     const ordered = [...missionWaypoints].sort((a, b) => a.seq - b.seq);
@@ -2144,7 +2258,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       frame: w.frame ?? 3,
       param1: w.param1 ?? 0,
     }));
-    missionPolylineRef.current.setLatLngs(joinLegs(missionPathLegs(pathItems, routeIndices(pathItems, vehicleSplines), vehicleSplines)));
+    missionPolylineRef.current.setLatLngs(
+      joinLegs(missionPathLegs(pathItems, routeIndices(pathItems, vehicleSplines), vehicleSplines))
+    );
     // While planning the vehicle's mission stays visible for comparison, dimmed and not clickable.
     missionPolylineRef.current.setStyle({ opacity: planning ? 0.35 : 1 });
 
@@ -2196,7 +2312,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         interactive: !planning,
       });
       if (!planning) {
-        m.bindPopup(`<b>${isHome ? 'Home Location (WP #0)' : `Waypoint #${wp.seq}`}</b><br/>Cmd: ${wp.command}<br/>Alt: ${popAlt(wp.alt)}<br/>Lat: ${wp.lat.toFixed(6)}<br/>Lon: ${wp.lon.toFixed(6)}`);
+        m.bindPopup(
+          `<b>${isHome ? 'Home Location (WP #0)' : `Waypoint #${wp.seq}`}</b><br/>Cmd: ${wp.command}<br/>Alt: ${popAlt(wp.alt)}<br/>Lat: ${wp.lat.toFixed(6)}<br/>Lon: ${wp.lon.toFixed(6)}`
+        );
       }
       m.addTo(mapInstanceRef.current!);
       missionMarkersRef.current.push(m);
@@ -2355,7 +2473,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         interactive: !planning,
       });
       if (!planning) {
-        m.bindPopup(`<b>Rally Point R${rp.seq + 1}</b><br/>Alt: ${popAlt(rp.alt)}<br/>Lat: ${rp.lat.toFixed(6)}<br/>Lon: ${rp.lon.toFixed(6)}`);
+        m.bindPopup(
+          `<b>Rally Point R${rp.seq + 1}</b><br/>Alt: ${popAlt(rp.alt)}<br/>Lat: ${rp.lat.toFixed(6)}<br/>Lon: ${rp.lon.toFixed(6)}`
+        );
       }
       m.addTo(mapInstanceRef.current!);
       rallyMarkersRef.current.push(m);
@@ -2445,18 +2565,18 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   // A full-width map keeps its shape, but no taller than the window below where it starts (fitBelow): on a wide
   // screen its shape would otherwise make it taller than the window.
   const aspectClass = isFullWidth
-    ? (aspectRatio === '1:1'
-        ? 'aspect-square min-h-[440px]'
-        : aspectRatio === '4:3'
+    ? aspectRatio === '1:1'
+      ? 'aspect-square min-h-[440px]'
+      : aspectRatio === '4:3'
         ? 'aspect-[16/9] md:aspect-[4/3] min-h-[440px]'
-        : 'aspect-[16/9] min-h-[440px]')
+        : 'aspect-[16/9] min-h-[440px]'
     : inPane
       ? 'h-full min-h-0'
       : 'h-full min-h-[350px] lg:min-h-[480px]';
 
   return (
     <Card
-      className={`border-zinc-800 bg-zinc-950/90 shadow-lg overflow-hidden flex flex-col w-full ${
+      className={`flex w-full flex-col overflow-hidden border-zinc-800 bg-zinc-950/90 shadow-lg ${
         // Maximized: fills the window below the navbar, under it (z-40) so its menus open over the map, and above
         // the dashboard. Dialogs (z-50) stay on top.
         maximized ? 'fixed inset-x-0 bottom-0 z-[39] rounded-none' : aspectClass
@@ -2464,51 +2584,58 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       ref={cardRef}
       style={maximized ? { top: navBottom } : isFullWidth && fitBelow ? { maxHeight: fitBelow } : undefined}
     >
-      <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
-        <div ref={headerRef} className="flex items-center justify-between gap-1.5 min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5 shrink-0">
-              <MapIcon className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+      <CardHeader className="border-b border-zinc-800 bg-zinc-900/60 px-3 py-1.5 sm:px-3.5">
+        <div ref={headerRef} className="flex min-w-0 items-center justify-between gap-1.5">
+          <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+            <CardTitle className="flex shrink-0 items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-zinc-300">
+              <MapIcon className="h-3.5 w-3.5 shrink-0 text-sky-400" />
               Map
             </CardTitle>
             {missionStatus.isFetching && (
               <Badge
                 variant={missionStatus.method === 'ftp' ? 'info' : 'secondary'}
-                className="text-[9px] font-mono px-1.5 py-0.5 shrink-0 flex items-center gap-1"
+                className="flex shrink-0 items-center gap-1 px-1.5 py-0.5 font-mono text-[9px]"
               >
                 <RefreshCw className="h-2.5 w-2.5 animate-spin" />
                 {missionStatus.method === 'ftp' ? 'MAVFTP' : 'STREAM'}
               </Badge>
             )}
             {planning && (
-              <Badge variant="warning" className="text-[10px] font-bold px-1.5 py-0.5 shrink-0 gap-1 tracking-wider" title={planDirty ? 'Planning: unsaved changes' : 'Planning'}>
+              <Badge
+                variant="warning"
+                className="shrink-0 gap-1 px-1.5 py-0.5 text-[10px] font-bold tracking-wider"
+                title={planDirty ? 'Planning: unsaved changes' : 'Planning'}
+              >
                 PLANNING
                 {/* The badge's own text colour: visible on its dark (night) and light amber (daylight) background. */}
                 {planDirty && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
               </Badge>
             )}
             {!hideBadges && !planning && (
-              <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex min-w-0 items-center gap-1.5">
                 {userWpCount > 0 && (
-                  <Badge variant="warning" className="text-[10px] font-mono px-1.5 py-0.5 shrink-0">
+                  <Badge variant="warning" className="shrink-0 px-1.5 py-0.5 font-mono text-[10px]">
                     {userWpCount} {userWpCount === 1 ? 'WP' : 'WPs'}
                   </Badge>
                 )}
                 {fencePoints.length > 0 && (
-                  <Badge variant="destructive" className="text-[10px] font-mono px-1.5 py-0.5 gap-1 shrink-0">
-                    <Shield className="h-2.5 w-2.5 inline" /> {fencePoints.length} Fence
+                  <Badge variant="destructive" className="shrink-0 gap-1 px-1.5 py-0.5 font-mono text-[10px]">
+                    <Shield className="inline h-2.5 w-2.5" /> {fencePoints.length} Fence
                   </Badge>
                 )}
                 {rallyPoints.length > 0 && (
-                  <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0.5 gap-1 text-[#f0abfc] border-[#9a337d]/40 bg-[#9a337d]/15 shrink-0">
-                    <Flag className="h-2.5 w-2.5 inline text-[#f0abfc]" /> {rallyPoints.length} Rally
+                  <Badge
+                    variant="secondary"
+                    className="shrink-0 gap-1 border-[#9a337d]/40 bg-[#9a337d]/15 px-1.5 py-0.5 font-mono text-[10px] text-[#f0abfc]"
+                  >
+                    <Flag className="inline h-2.5 w-2.5 text-[#f0abfc]" /> {rallyPoints.length} Rally
                   </Badge>
                 )}
               </div>
             )}
           </div>
 
-          <div ref={rightControlsRef} className="flex items-center gap-1 sm:gap-1.5 ml-auto shrink-0">
+          <div ref={rightControlsRef} className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5">
             <Button
               variant={flyToMode ? 'default' : 'outline'}
               size="sm"
@@ -2520,15 +2647,18 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                 planning
                   ? 'Fly To is off while planning'
                   : connected
-                  ? flyToMode
-                    ? 'Pick a point on the map (Esc to cancel)'
-                    : 'Fly to a point: click here, then the map. Right-click or long-press the map works too.'
-                  : 'Connect to a vehicle to use Fly To'
+                    ? flyToMode
+                      ? 'Pick a point on the map (Esc to cancel)'
+                      : 'Fly to a point: click here, then the map. Right-click or long-press the map works too.'
+                    : 'Connect to a vehicle to use Fly To'
               }
             >
               <Navigation className={`h-3.5 w-3.5 ${flyToMode ? '' : 'text-sky-300'}`} />
             </Button>
-            <AltitudeAction target={activeFlyToTarget ? { lat: activeFlyToTarget.lat, lon: activeFlyToTarget.lon } : null} disabled={!connected || planning} />
+            <AltitudeAction
+              target={activeFlyToTarget ? { lat: activeFlyToTarget.lat, lon: activeFlyToTarget.lon } : null}
+              disabled={!connected || planning}
+            />
 
             <Button
               variant={followVehicle ? 'default' : 'outline'}
@@ -2538,7 +2668,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                 followVehicleRef.current = true;
                 const lastFix = fixesRef.current[fixesRef.current.length - 1];
                 const position = useTelemetryStore.getState().position;
-                const target = displayPosRef.current ?? (lastFix ? { lat: lastFix.lat, lon: lastFix.lon } : { lat: position.lat, lon: position.lon });
+                const target =
+                  displayPosRef.current ??
+                  (lastFix ? { lat: lastFix.lat, lon: lastFix.lon } : { lat: position.lat, lon: position.lon });
                 if (mapInstanceRef.current && (target.lat !== 0 || target.lon !== 0)) {
                   isFlyingToRef.current = true;
                   mapInstanceRef.current.panTo([target.lat, target.lon], {
@@ -2554,9 +2686,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                   });
                 }
               }}
-              className={`h-7 w-7 p-0 text-xs font-bold ${
-                followVehicle ? 'bg-sky-500 text-white' : 'text-zinc-400'
-              }`}
+              className={`h-7 w-7 p-0 text-xs font-bold ${followVehicle ? 'bg-sky-500 text-white' : 'text-zinc-400'}`}
               title={followVehicle ? 'Centered on vehicle (click to re-center)' : 'Click to center and follow vehicle'}
             >
               <Crosshair className="h-3.5 w-3.5" />
@@ -2594,31 +2724,35 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
       {/* Progress / Status banner */}
       {(missionStatus.message || uploadError) && (
-        <div className="bg-zinc-900/90 border-b border-zinc-800 px-3 sm:px-4 py-1 text-[11px] font-mono flex items-center justify-between min-w-0 gap-2">
+        <div className="flex min-w-0 items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/90 px-3 py-1 font-mono text-[11px] sm:px-4">
           <span
-            className={`truncate min-w-0 ${
+            className={`min-w-0 truncate ${
               uploadError
-                ? 'text-red-400 font-medium'
+                ? 'font-medium text-red-400'
                 : missionStatus.isFetching || missionStatus.isUploading
-                ? 'text-amber-400 animate-pulse font-medium'
-                : 'text-emerald-400'
+                  ? 'animate-pulse font-medium text-amber-400'
+                  : 'text-emerald-400'
             }`}
             title={uploadError || missionStatus.message}
           >
             {uploadError || missionStatus.message}
           </span>
-          {!uploadError && (missionStatus.isFetching || missionStatus.isUploading) && missionStatus.method === 'ftp' && (
-            <span className="text-[10px] text-sky-400 font-bold shrink-0 ml-2">MAVFTP</span>
-          )}
-          {!uploadError && (missionStatus.isFetching || missionStatus.isUploading) && missionStatus.method === 'legacy' && (
-            <span className="text-[10px] text-purple-400 font-bold shrink-0 ml-2">ITEM-BY-ITEM</span>
-          )}
+          {!uploadError &&
+            (missionStatus.isFetching || missionStatus.isUploading) &&
+            missionStatus.method === 'ftp' && (
+              <span className="ml-2 shrink-0 text-[10px] font-bold text-sky-400">MAVFTP</span>
+            )}
+          {!uploadError &&
+            (missionStatus.isFetching || missionStatus.isUploading) &&
+            missionStatus.method === 'legacy' && (
+              <span className="ml-2 shrink-0 text-[10px] font-bold text-purple-400">ITEM-BY-ITEM</span>
+            )}
         </div>
       )}
 
       <CardContent
         ref={mapAreaRef}
-        className={`p-0 flex-1 relative ${inPane ? 'min-h-0' : 'min-h-[300px]'} h-full overflow-hidden`}
+        className={`relative flex-1 p-0 ${inPane ? 'min-h-0' : 'min-h-[300px]'} h-full overflow-hidden`}
         onDragEnter={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -2637,23 +2771,23 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         }}
         onDrop={handleFileDrop}
       >
-        <div ref={mapContainerRef} className={`w-full h-full ${inPane ? 'min-h-0' : 'min-h-[300px]'} z-0`} />
+        <div ref={mapContainerRef} className={`h-full w-full ${inPane ? 'min-h-0' : 'min-h-[300px]'} z-0`} />
 
         {/* Drag and Drop Upload Overlay */}
         {isDraggingOver && (
-          <div className="absolute inset-0 z-[500] bg-zinc-950/85 backdrop-blur-sm border-2 border-dashed border-sky-400 rounded-lg flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-150 pointer-events-none">
-            <div className="p-4 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-400 mb-3 animate-bounce">
+          <div className="animate-in fade-in pointer-events-none absolute inset-0 z-[500] flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-sky-400 bg-zinc-950/85 p-6 text-center backdrop-blur-sm duration-150">
+            <div className="mb-3 animate-bounce rounded-full border border-sky-500/30 bg-sky-500/10 p-4 text-sky-400">
               <Upload className="h-8 w-8" />
             </div>
-            <div className="text-base font-bold text-white mb-1">
+            <div className="mb-1 text-base font-bold text-white">
               {planning ? 'Drop a Mission File into the Draft' : 'Drop Mission, Geofence, or Rally Point File'}
             </div>
-            <div className="text-xs text-zinc-400 max-w-sm">
-              Supports <span className="text-sky-300 font-mono">.waypoints</span>,{' '}
-              <span className="text-sky-300 font-mono">.fence</span>,{' '}
-              <span className="text-sky-300 font-mono">.rally</span>,{' '}
-              <span className="text-sky-300 font-mono">.plan</span>, or binary{' '}
-              <span className="text-sky-300 font-mono">.dat</span>.{' '}
+            <div className="max-w-sm text-xs text-zinc-400">
+              Supports <span className="font-mono text-sky-300">.waypoints</span>,{' '}
+              <span className="font-mono text-sky-300">.fence</span>,{' '}
+              <span className="font-mono text-sky-300">.rally</span>,{' '}
+              <span className="font-mono text-sky-300">.plan</span>, or binary{' '}
+              <span className="font-mono text-sky-300">.dat</span>.{' '}
               {planning
                 ? 'Its mission, rally points and fence replace the drafts (undo brings them back). Nothing is sent to the vehicle.'
                 : 'Automatically uploads via high-speed MAVFTP with item-by-item fallback.'}
@@ -2667,7 +2801,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             and the readout keeps to one line so the column stays short: clipped at the column's width, lat/lon/alt
             first, so only the home vector at the end gives way on the narrowest maps. */}
         <div
-          className={`absolute top-2 left-2 flex flex-col items-start gap-1.5 pointer-events-none ${
+          className={`pointer-events-none absolute left-2 top-2 flex flex-col items-start gap-1.5 ${
             planning && planLayout === 'sheet' ? 'z-[440]' : 'z-[460]'
           }`}
           // Stops short of the side panel and of the layer switch at the top right.
@@ -2678,8 +2812,10 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           }}
         >
           <div
-            className={`bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] sm:text-xs font-mono text-zinc-300 flex items-center gap-2.5 pointer-events-none shadow-md ${
-              planning && planLayout === 'sheet' ? 'max-w-full flex-nowrap overflow-hidden whitespace-nowrap' : 'flex-wrap'
+            className={`pointer-events-none flex items-center gap-2.5 rounded-lg border border-zinc-800/80 bg-zinc-950/85 px-2.5 py-1 font-mono text-[11px] text-zinc-300 shadow-md backdrop-blur-md sm:text-xs ${
+              planning && planLayout === 'sheet'
+                ? 'max-w-full flex-nowrap overflow-hidden whitespace-nowrap'
+                : 'flex-wrap'
             }`}
           >
             <PositionReadout show={hasValidPosition} />
@@ -2699,10 +2835,21 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                 const m = mapInstanceRef.current;
                 if (!m) return null;
                 const b = m.getBounds();
-                return { bounds: { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() }, zoom: m.getZoom() };
+                return {
+                  bounds: { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() },
+                  zoom: m.getZoom(),
+                };
               }}
               layer={mapLayer}
-              layerName={mapLayer === 'street' ? 'street map' : mapLayer === 'custom' ? (useOfflineMapStore.getState().customSource?.name ?? 'custom') : mapLayer.startsWith('import:') ? 'imported' : 'satellite'}
+              layerName={
+                mapLayer === 'street'
+                  ? 'street map'
+                  : mapLayer === 'custom'
+                    ? (useOfflineMapStore.getState().customSource?.name ?? 'custom')
+                    : mapLayer.startsWith('import:')
+                      ? 'imported'
+                      : 'satellite'
+              }
               onShowLayer={setMapLayer}
               onFitBounds={(b) => {
                 setFollowVehicle(false);
@@ -2715,11 +2862,25 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           <TrafficBanner onFocus={(lat, lon) => mapInstanceRef.current?.panTo([lat, lon], { animate: true })} />
           {planning && (
             <div className="pointer-events-auto flex flex-col items-start gap-1.5">
-              <div className="flex items-center rounded-lg border border-zinc-700 bg-zinc-950/90 p-0.5 shadow-md" role="group" aria-label="Map tool">
+              <div
+                className="flex items-center rounded-lg border border-zinc-700 bg-zinc-950/90 p-0.5 shadow-md"
+                role="group"
+                aria-label="Map tool"
+              >
                 {(
                   [
-                    { tool: 'select', label: 'Select', icon: <MousePointer2 className="h-3.5 w-3.5" />, title: 'Select and drag waypoints' },
-                    { tool: 'add', label: 'Place', icon: <MapPinPlus className="h-3.5 w-3.5" />, title: 'Click the map to place waypoints, rally points or fence shapes (Esc to stop)' },
+                    {
+                      tool: 'select',
+                      label: 'Select',
+                      icon: <MousePointer2 className="h-3.5 w-3.5" />,
+                      title: 'Select and drag waypoints',
+                    },
+                    {
+                      tool: 'add',
+                      label: 'Place',
+                      icon: <MapPinPlus className="h-3.5 w-3.5" />,
+                      title: 'Click the map to place waypoints, rally points or fence shapes (Esc to stop)',
+                    },
                   ] as const
                 ).map((b) => (
                   <button
@@ -2742,7 +2903,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                 ))}
               </div>
               {terrainChecked(getVehicleCategory(heartbeat.type)) && terrainOn && (
-                <ProfileToggle disabledReason={planLayout === 'sheet' ? 'The profile needs a wider map (maximize it)' : undefined} />
+                <ProfileToggle
+                  disabledReason={planLayout === 'sheet' ? 'The profile needs a wider map (maximize it)' : undefined}
+                />
               )}
               {planTool === 'add' && (
                 <div className="rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md">
@@ -2759,9 +2922,14 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                 </div>
               )}
               {planNotice && (
-                <div className="rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md flex items-start gap-2">
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-zinc-950/90 px-2.5 py-1 text-[11px] text-amber-200 shadow-md">
                   <span className="min-w-0">{planNotice}</span>
-                  <button type="button" className="text-zinc-500 hover:text-zinc-200" onClick={() => setPlanNotice(null)} aria-label="Dismiss">
+                  <button
+                    type="button"
+                    className="text-zinc-500 hover:text-zinc-200"
+                    onClick={() => setPlanNotice(null)}
+                    aria-label="Dismiss"
+                  >
                     ×
                   </button>
                 </div>
@@ -2772,15 +2940,15 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
         {/* Fly-To prompt (mission progress moved to the footer below the map) */}
         {connected && (flyToMode || locating || locateError) && !pendingFlyTo && (
-          <div className="absolute bottom-2 left-2 right-2 sm:right-auto z-[400] bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 rounded-lg px-2.5 py-1 text-[11px] font-mono shadow-md flex items-center gap-2 flex-wrap">
+          <div className="absolute bottom-2 left-2 right-2 z-[400] flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/85 px-2.5 py-1 font-mono text-[11px] shadow-md backdrop-blur-md sm:right-auto">
             {locateError ? (
               <span className="text-amber-400">{locateError}</span>
             ) : locating ? (
-              <span className="text-sky-300 animate-pulse">Finding your location…</span>
+              <span className="animate-pulse text-sky-300">Finding your location…</span>
             ) : (
               <>
                 <span>
-                  <span className="text-sky-300 font-bold">Pick a point to fly to</span>
+                  <span className="font-bold text-sky-300">Pick a point to fly to</span>
                   <span className="text-zinc-500"> · Esc to cancel</span>
                 </span>
                 {canLocate && (
@@ -2812,7 +2980,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             onCancel={cancelFlyTo}
             extra={
               <>
-                {pendingFlyTo.accuracyM === undefined && <PointCameraButton lat={pendingFlyTo.lat} lon={pendingFlyTo.lon} onDone={cancelFlyTo} />}
+                {pendingFlyTo.accuracyM === undefined && (
+                  <PointCameraButton lat={pendingFlyTo.lat} lon={pendingFlyTo.lon} onDone={cancelFlyTo} />
+                )}
                 <PointGuidedActions
                   lat={pendingFlyTo.lat}
                   lon={pendingFlyTo.lon}
@@ -2840,17 +3010,22 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             onClose={closePlanMenu}
           />
         )}
-        {planning && showProfile && planLayout === 'side' && planLayer === 'mission' && terrainOn && terrainChecked(getVehicleCategory(heartbeat.type)) && (
-          // Along the bottom, left of the side panel (264 px wide, 8 px in).
-          <MissionProfileStrip
-            style={{ left: 8, right: 280, bottom: 8 }}
-            onShowPoint={(lat, lon) => {
-              setFollowVehicle(false);
-              followVehicleRef.current = false;
-              mapInstanceRef.current?.panTo([lat, lon], { animate: true });
-            }}
-          />
-        )}
+        {planning &&
+          showProfile &&
+          planLayout === 'side' &&
+          planLayer === 'mission' &&
+          terrainOn &&
+          terrainChecked(getVehicleCategory(heartbeat.type)) && (
+            // Along the bottom, left of the side panel (264 px wide, 8 px in).
+            <MissionProfileStrip
+              style={{ left: 8, right: 280, bottom: 8 }}
+              onShowPoint={(lat, lon) => {
+                setFollowVehicle(false);
+                followVehicleRef.current = false;
+                mapInstanceRef.current?.panTo([lat, lon], { animate: true });
+              }}
+            />
+          )}
         {planning && (
           <MissionPlanPanel
             layout={planLayout}
@@ -2930,28 +3105,31 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           <div className="space-y-4">
             {/* Explicit Armed / AUTO Flight Warning */}
             {(heartbeat.isArmed || heartbeat.modeName === 'AUTO') && (
-              <div className="p-3 rounded-lg bg-red-950/80 border border-red-500/70 text-red-200 text-xs flex items-start gap-2.5 shadow-md">
-                <AlertTriangle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2.5 rounded-lg border border-red-500/70 bg-red-950/80 p-3 text-xs text-red-200 shadow-md">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
                 <div>
-                  <b className="text-red-300 font-bold block mb-1">
-                    ACTIVE FLIGHT WARNING: VEHICLE IS {heartbeat.isArmed ? 'ARMED' : ''}{heartbeat.isArmed && heartbeat.modeName === 'AUTO' ? ' AND IN ' : ''}{heartbeat.modeName === 'AUTO' ? 'AUTO MODE' : ''}!
+                  <b className="mb-1 block font-bold text-red-300">
+                    ACTIVE FLIGHT WARNING: VEHICLE IS {heartbeat.isArmed ? 'ARMED' : ''}
+                    {heartbeat.isArmed && heartbeat.modeName === 'AUTO' ? ' AND IN ' : ''}
+                    {heartbeat.modeName === 'AUTO' ? 'AUTO MODE' : ''}!
                   </b>
-                  Uploading will immediately overwrite the active flight plan or geofence in mid-air. Ensure you intend to replace the active mission now.
+                  Uploading will immediately overwrite the active flight plan or geofence in mid-air. Ensure you intend
+                  to replace the active mission now.
                 </div>
               </div>
             )}
 
-            <div className="bg-zinc-900/70 border border-zinc-800 rounded-lg p-3 space-y-2 text-xs">
+            <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/70 p-3 text-xs">
               <div className="flex items-center justify-between text-zinc-300">
                 <span className="text-zinc-400">File Type:</span>
-                <Badge variant="outline" className="font-mono uppercase text-sky-400 border-sky-500/30">
+                <Badge variant="outline" className="border-sky-500/30 font-mono uppercase text-sky-400">
                   {pendingUpload.parsed.type}
                 </Badge>
               </div>
 
               {pendingUpload.parsed.sections && pendingUpload.parsed.sections.length > 1 ? (
-                <div className="space-y-1.5 pt-1 border-t border-zinc-800/60">
-                  <span className="text-zinc-400 block font-medium">Plan Sections:</span>
+                <div className="space-y-1.5 border-t border-zinc-800/60 pt-1">
+                  <span className="block font-medium text-zinc-400">Plan Sections:</span>
                   {pendingUpload.parsed.sections.map((s, idx) => (
                     <div key={idx} className="flex items-center justify-between pl-2 text-zinc-300">
                       <span className="capitalize">{s.type}:</span>
@@ -2966,12 +3144,12 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                 </div>
               )}
 
-              <p className="text-[11px] text-zinc-500 pt-1">
+              <p className="pt-1 text-[11px] text-zinc-500">
                 Preview route and boundaries are highlighted with dashed lines on the map.
               </p>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+            <div className="flex items-center justify-end gap-2 border-t border-zinc-800 pt-2">
               <Button variant="outline" size="sm" onClick={handleCancelUpload}>
                 Cancel
               </Button>

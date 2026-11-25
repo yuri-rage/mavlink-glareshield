@@ -24,18 +24,25 @@ export interface TlogStorage {
 }
 
 export class TlogStorageError extends Error {
-  constructor(message: string, public quota: boolean) {
+  constructor(
+    message: string,
+    public quota: boolean
+  ) {
     super(message);
   }
 }
 
 /** OPFS through the writer worker; null when this browser can't (no OPFS or workers). */
 export function createOpfsTlogStorage(): TlogStorage | null {
-  if (typeof Worker === 'undefined' || typeof navigator === 'undefined' || !(navigator.storage as any)?.getDirectory) return null;
+  if (typeof Worker === 'undefined' || typeof navigator === 'undefined' || !(navigator.storage as any)?.getDirectory)
+    return null;
   let worker: Worker | null = null;
   let nextId = 1;
   const pending = new Map<number, (r: TlogWorkerReply) => void>();
-  const call = (msg: Omit<TlogWorkerRequest, 'id'> & { op: TlogWorkerRequest['op'] }, transfer: Transferable[] = []) => {
+  const call = (
+    msg: Omit<TlogWorkerRequest, 'id'> & { op: TlogWorkerRequest['op'] },
+    transfer: Transferable[] = []
+  ) => {
     if (!worker) {
       worker = new Worker(new URL('./tlogWriter.worker.ts', import.meta.url), { type: 'module' });
       worker.onmessage = (e: MessageEvent<TlogWorkerReply>) => {
@@ -49,7 +56,8 @@ export function createOpfsTlogStorage(): TlogStorage | null {
       worker!.postMessage({ ...msg, id } as TlogWorkerRequest, transfer);
     });
   };
-  const folder = async () => (await (navigator.storage as any).getDirectory()).getDirectoryHandle(DIR, { create: true });
+  const folder = async () =>
+    (await (navigator.storage as any).getDirectory()).getDirectoryHandle(DIR, { create: true });
   return {
     open: (name, append) => call({ op: 'open', dir: DIR, name, append } as any),
     write: (data) => {
@@ -76,7 +84,9 @@ export function createOpfsTlogStorage(): TlogStorage | null {
 }
 
 /** In memory: for tests, and the shape the recorder expects. */
-export function createMemoryTlogStorage(opts: { quotaBytes?: number } = {}): TlogStorage & { data: Map<string, Uint8Array> } {
+export function createMemoryTlogStorage(
+  opts: { quotaBytes?: number } = {}
+): TlogStorage & { data: Map<string, Uint8Array> } {
   const data = new Map<string, Uint8Array>();
   let current: string | null = null;
   const used = () => [...data.values()].reduce((t, d) => t + d.length, 0);
@@ -89,7 +99,8 @@ export function createMemoryTlogStorage(opts: { quotaBytes?: number } = {}): Tlo
     },
     write: async (bytes) => {
       if (!current) throw new TlogStorageError('no log open', false);
-      if (opts.quotaBytes !== undefined && used() + bytes.length > opts.quotaBytes) throw new TlogStorageError('storage full', true);
+      if (opts.quotaBytes !== undefined && used() + bytes.length > opts.quotaBytes)
+        throw new TlogStorageError('storage full', true);
       const old = data.get(current)!;
       const next = new Uint8Array(old.length + bytes.length);
       next.set(old);
@@ -132,5 +143,14 @@ export function saveTlogIndex(index: Record<string, TlogMeta>) {
 export function metaFromFile(f: { name: string; size: number; lastModified: number }): TlogMeta {
   const m = /^(\d{4})-(\d\d)-(\d\d)_(\d\d)-(\d\d)-(\d\d)_sys(\d+)\.tlog$/.exec(f.name);
   const start = m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime() : f.lastModified;
-  return { name: f.name, sysId: m ? +m[7] : 0, vehicleType: -1, startMs: start, lastWriteMs: f.lastModified || start, bytes: f.size, closed: true, kept: false };
+  return {
+    name: f.name,
+    sysId: m ? +m[7] : 0,
+    vehicleType: -1,
+    startMs: start,
+    lastWriteMs: f.lastModified || start,
+    bytes: f.size,
+    closed: true,
+    kept: false,
+  };
 }

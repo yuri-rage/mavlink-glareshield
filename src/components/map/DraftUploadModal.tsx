@@ -4,12 +4,10 @@
 // fencing on outside it) it needs a second confirmation that names the consequence. Never a hard block.
 
 import React, { useEffect, useMemo } from 'react';
-import { paramManager } from '../../mavlink/paramManager';
+
 import { AlertTriangle, Upload } from 'lucide-react';
-import { Modal } from '../ui/modal';
-import { Button } from '../ui/button';
-import { compareDrafts, validateDraft, type MissionDraft } from '../../mavlink/missionDraft';
-import { compareRallyDrafts, validateRallyDraft, type RallyDraft } from '../../mavlink/rallyDraft';
+
+import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import {
   FENCE_PARAMS,
   fenceActionText,
@@ -20,10 +18,14 @@ import {
   type FenceDraft,
 } from '../../mavlink/fenceDraft';
 import { getVehicleCategory } from '../../mavlink/messages';
-import { useConfirmStep } from '../../lib/useWaypointNavigation';
+import { compareDrafts, validateDraft, type MissionDraft } from '../../mavlink/missionDraft';
+import { paramManager } from '../../mavlink/paramManager';
+import { compareRallyDrafts, validateRallyDraft, type RallyDraft } from '../../mavlink/rallyDraft';
 import { useMissionPlanStore } from '../../store/missionPlanStore';
 import { useMissionTerrainStore } from '../../store/missionTerrainStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
+import { Button } from '../ui/button';
+import { Modal } from '../ui/modal';
 
 interface VehicleState {
   vehicleType: number;
@@ -92,13 +94,17 @@ const UploadConfirm: React.FC<{
             <span className="font-mono">{p.vehicleCount}</span>
           </div>
           <div className="border-t border-zinc-800/70 pt-1.5">
-            <span className="text-zinc-400">{p.changes.length === 0 ? `No changes from ${p.subject}.` : `Changes (${p.changes.length}):`}</span>
+            <span className="text-zinc-400">
+              {p.changes.length === 0 ? `No changes from ${p.subject}.` : `Changes (${p.changes.length}):`}
+            </span>
             {listed.length > 0 && (
               <ul className="mt-1 space-y-0.5 font-mono text-[11px] text-zinc-300">
                 {listed.map((c, i) => (
                   <li key={i}>{c}</li>
                 ))}
-                {p.changes.length > listed.length && <li className="text-zinc-500">…and {p.changes.length - listed.length} more</li>}
+                {p.changes.length > listed.length && (
+                  <li className="text-zinc-500">…and {p.changes.length - listed.length} more</li>
+                )}
               </ul>
             )}
           </div>
@@ -142,11 +148,21 @@ const UploadConfirm: React.FC<{
 };
 
 /** Uploading the mission draft. In AUTO, where the vehicle flies the mission being replaced, confirm twice. */
-export const DraftUploadModal: React.FC<VehicleState & { vehicle: MissionDraft }> = ({ vehicle, vehicleType, armed, modeName, onConfirm, onCancel }) => {
+export const DraftUploadModal: React.FC<VehicleState & { vehicle: MissionDraft }> = ({
+  vehicle,
+  vehicleType,
+  armed,
+  modeName,
+  onConfirm,
+  onCancel,
+}) => {
   // The live draft: what this shows is what gets uploaded, even if it changes while the dialog is open.
   const draft = useMissionPlanStore((s) => s.history.present);
   const terrainIssues = useMissionTerrainStore((s) => s.issues);
-  const issues = useMemo(() => [...validateDraft(draft, getVehicleCategory(vehicleType)), ...terrainIssues], [draft, vehicleType, terrainIssues]);
+  const issues = useMemo(
+    () => [...validateDraft(draft, getVehicleCategory(vehicleType)), ...terrainIssues],
+    [draft, vehicleType, terrainIssues]
+  );
   const changes = useMemo(() => {
     const c = compareDrafts(vehicle, draft);
     return [...c.structural, ...c.params];
@@ -159,11 +175,18 @@ export const DraftUploadModal: React.FC<VehicleState & { vehicle: MissionDraft }
       vehicleCount={`${Math.max(0, vehicle.items.length - 1)} items`}
       subject="the vehicle’s mission"
       changes={changes}
-      issues={issues.map((i) => ({ label: i.index >= 1 ? `#${i.index}` : null, severity: i.severity, message: i.message }))}
+      issues={issues.map((i) => ({
+        label: i.index >= 1 ? `#${i.index}` : null,
+        severity: i.severity,
+        message: i.message,
+      }))}
       armed={armed}
       inUse={
         modeName === 'AUTO'
-          ? { heading: 'IN AUTO', text: 'The vehicle is flying its mission now. Uploading replaces it immediately: check which item it flies to next.' }
+          ? {
+              heading: 'IN AUTO',
+              text: 'The vehicle is flying its mission now. Uploading replaces it immediately: check which item it flies to next.',
+            }
           : null
       }
       armedText="Uploading replaces the mission on an armed vehicle."
@@ -176,7 +199,13 @@ export const DraftUploadModal: React.FC<VehicleState & { vehicle: MissionDraft }
 };
 
 /** Uploading the rally draft. During RTL, when the vehicle may be heading to a rally point, confirm twice. */
-export const RallyUploadModal: React.FC<VehicleState & { vehicle: RallyDraft }> = ({ vehicle, armed, modeName, onConfirm, onCancel }) => {
+export const RallyUploadModal: React.FC<VehicleState & { vehicle: RallyDraft }> = ({
+  vehicle,
+  armed,
+  modeName,
+  onConfirm,
+  onCancel,
+}) => {
   const draft = useMissionPlanStore((s) => s.rally.history.present);
   const homeKnown = useTelemetryStore((s) => s.homePosition.source !== 'none');
   const homeLat = useTelemetryStore((s) => s.homePosition.lat);
@@ -197,11 +226,18 @@ export const RallyUploadModal: React.FC<VehicleState & { vehicle: RallyDraft }> 
       vehicleCount={count(vehicle.points.length)}
       subject="the vehicle’s rally points"
       changes={changes}
-      issues={issues.map((i) => ({ label: i.index >= 0 ? `R${i.index + 1}` : null, severity: i.severity, message: i.message }))}
+      issues={issues.map((i) => ({
+        label: i.index >= 0 ? `R${i.index + 1}` : null,
+        severity: i.severity,
+        message: i.message,
+      }))}
       armed={armed}
       inUse={
         returning
-          ? { heading: `IN ${modeName}`, text: 'The vehicle may be returning to a rally point now. Uploading changes where it can go immediately.' }
+          ? {
+              heading: `IN ${modeName}`,
+              text: 'The vehicle may be returning to a rally point now. Uploading changes where it can go immediately.',
+            }
           : null
       }
       armedText="Uploading changes where the vehicle goes on RTL while it is armed."
@@ -218,7 +254,13 @@ export const RallyUploadModal: React.FC<VehicleState & { vehicle: RallyDraft }> 
  * against it with ArduPilot's rule: inside a new exclusion zone, or outside the inclusion zones, is a breach. Armed,
  * with fencing on, that means the fence action fires at once: allowed, after a second confirmation naming it.
  */
-export const FenceUploadModal: React.FC<VehicleState & { vehicle: FenceDraft }> = ({ vehicle, vehicleType, armed, onConfirm, onCancel }) => {
+export const FenceUploadModal: React.FC<VehicleState & { vehicle: FenceDraft }> = ({
+  vehicle,
+  vehicleType,
+  armed,
+  onConfirm,
+  onCancel,
+}) => {
   const draft = useMissionPlanStore((s) => s.fence.history.present);
   const lat = useTelemetryStore((s) => s.position.lat);
   const lon = useTelemetryStore((s) => s.position.lon);
@@ -237,14 +279,22 @@ export const FenceUploadModal: React.FC<VehicleState & { vehicle: FenceDraft }> 
   }, []);
   const inclusionUnion = fenceOptions !== undefined ? (Math.round(fenceOptions) & 2) !== 0 : undefined;
 
-  const issues = useMemo(() => validateFenceDraft(draft, { fenceEnable, fenceType, inclusionUnion }), [draft, fenceEnable, fenceType, inclusionUnion]);
+  const issues = useMemo(
+    () => validateFenceDraft(draft, { fenceEnable, fenceType, inclusionUnion }),
+    [draft, fenceEnable, fenceType, inclusionUnion]
+  );
   const changes = useMemo(() => fenceChanges(vehicle, draft), [vehicle, draft]);
 
   const fencingOn = fencingState({ sensorsPresent, sensorsEnabled, fenceEnable, fenceAction, fenceAutoEnable, armed });
   // Polygons and circles are enforced unless FENCE_TYPE is known to leave out bit 2 (value 4).
   const shapesEnforced = fenceType === undefined || (Math.round(fenceType) & 4) !== 0;
   const action = fenceActionText(category, fenceAction);
-  const positionKnown = Number.isFinite(lat) && Number.isFinite(lon) && !(lat === 0 && lon === 0) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+  const positionKnown =
+    Number.isFinite(lat) &&
+    Number.isFinite(lon) &&
+    !(lat === 0 && lon === 0) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lon) <= 180;
   const reasons = useMemo(
     () => (positionKnown ? fenceBreachReasons(draft, { lat, lon }, { inclusionUnion }) : []),
     [draft, lat, lon, positionKnown, inclusionUnion]
@@ -258,28 +308,43 @@ export const FenceUploadModal: React.FC<VehicleState & { vehicle: FenceDraft }> 
       label: null,
       severity: 'warning',
       message: `The vehicle is ${reasons.join(' and ')} of this fence. ${
-        armed ? 'Fencing is off or not enforcing these shapes now, but turning it on here breaches at once.' : 'With fencing on (or auto-enabled) it will fail its pre-arm check here.'
+        armed
+          ? 'Fencing is off or not enforcing these shapes now, but turning it on here breaches at once.'
+          : 'With fencing on (or auto-enabled) it will fail its pre-arm check here.'
       }`,
     });
   }
   if (!positionKnown && armed && fencingOn !== false) {
-    extra.push({ label: null, severity: 'warning', message: "The vehicle's position is unknown, so it couldn't be checked against the new fence." });
+    extra.push({
+      label: null,
+      severity: 'warning',
+      message: "The vehicle's position is unknown, so it couldn't be checked against the new fence.",
+    });
   }
 
   const n = draft.shapes.length;
-  const count = (d: FenceDraft) => `${d.shapes.length} shape${d.shapes.length === 1 ? '' : 's'}${d.returnPoint ? ' + return point' : ''}`;
+  const count = (d: FenceDraft) =>
+    `${d.shapes.length} shape${d.shapes.length === 1 ? '' : 's'}${d.returnPoint ? ' + return point' : ''}`;
   const onText = fencingOn === undefined ? 'unknown' : fencingOn ? 'ON' : 'off';
   return (
     <UploadConfirm
       title="Upload fence"
-      description={n === 0 ? "Clears the fence on the vehicle. The mission and rally points are not changed." : 'Replaces the fence on the vehicle. The mission and rally points are not changed.'}
+      description={
+        n === 0
+          ? 'Clears the fence on the vehicle. The mission and rally points are not changed.'
+          : 'Replaces the fence on the vehicle. The mission and rally points are not changed.'
+      }
       draftCount={count(draft)}
       vehicleCount={count(vehicle)}
       subject="the vehicle’s fence"
       changes={changes}
       issues={[
         ...extra,
-        ...issues.map((i) => ({ label: i.index >= 0 ? `F${i.index + 1}` : i.index === -2 ? 'RP' : null, severity: i.severity, message: i.message })),
+        ...issues.map((i) => ({
+          label: i.index >= 0 ? `F${i.index + 1}` : i.index === -2 ? 'RP' : null,
+          severity: i.severity,
+          message: i.message,
+        })),
       ]}
       armed={armed}
       inUse={
@@ -307,7 +372,11 @@ export const FenceUploadModal: React.FC<VehicleState & { vehicle: FenceDraft }> 
             <span>On breach</span>
             <span className="text-right font-mono text-zinc-300">{action ?? 'report only'}</span>
           </div>
-          {!shapesEnforced && <div className="text-amber-300">FENCE_TYPE doesn't enforce polygons and circles: this fence is stored but not enforced.</div>}
+          {!shapesEnforced && (
+            <div className="text-amber-300">
+              FENCE_TYPE doesn't enforce polygons and circles: this fence is stored but not enforced.
+            </div>
+          )}
           <div className="flex justify-between gap-2">
             <span>Vehicle position</span>
             <span className={`text-right font-mono ${breach ? 'font-bold text-red-300' : 'text-zinc-300'}`}>

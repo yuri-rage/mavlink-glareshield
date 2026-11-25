@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+
 import { X } from 'lucide-react';
+
 import type { WidgetDataBinding, WidgetUnitKind } from '../../types/widget';
 import { Input } from '../ui/input';
 
@@ -24,7 +26,7 @@ export const NumberField: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
   return (
-    <div className="space-y-1 min-w-0">
+    <div className="min-w-0 space-y-1">
       <label className={`text-[11px] font-medium ${labelClassName ?? 'text-zinc-400'}`}>{label}</label>
       <Input
         type="number"
@@ -38,7 +40,7 @@ export const NumberField: React.FC<{
           const parsed = e.target.value.trim() === '' ? undefined : parseFloat(e.target.value);
           onChange(parsed === undefined || Number.isNaN(parsed) ? undefined : parsed);
         }}
-        className="h-8 text-xs font-mono"
+        className="h-8 font-mono text-xs"
       />
     </div>
   );
@@ -98,7 +100,7 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
             <button
               type="button"
               onClick={onRemove}
-              className="p-1 rounded text-zinc-500 hover:text-red-400"
+              className="rounded p-1 text-zinc-500 hover:text-red-400"
               aria-label="Remove this value"
               title="Remove this value"
             >
@@ -107,8 +109,8 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
           )}
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-        <div className="space-y-1 min-w-0">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <div className="min-w-0 space-y-1">
           <label className="text-[11px] font-medium text-zinc-400">MAVLink Message</label>
           <select
             value={value.messageName}
@@ -128,7 +130,7 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
             ))}
           </select>
         </div>
-        <div className="space-y-1 min-w-0">
+        <div className="min-w-0 space-y-1">
           <label className="text-[11px] font-medium text-zinc-400">Field</label>
           {customField || fields.length === 0 ? (
             <div className="flex items-center gap-1.5">
@@ -137,7 +139,7 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
                 value={value.fieldName}
                 placeholder="decoded field name, e.g. remrssi"
                 onChange={(e) => set({ fieldName: e.target.value.trim() })}
-                className="h-8 text-xs font-mono"
+                className="h-8 font-mono text-xs"
                 spellCheck={false}
                 autoFocus={customField}
               />
@@ -177,9 +179,9 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {showLabel && (
-          <div className="space-y-1 min-w-0">
+          <div className="min-w-0 space-y-1">
             <label className="text-[11px] font-medium text-zinc-400">Label</label>
             <Input
               type="text"
@@ -190,11 +192,13 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
             />
           </div>
         )}
-        <div className="space-y-1 min-w-0">
+        <div className="min-w-0 space-y-1">
           <label className="text-[11px] font-medium text-zinc-400">Units</label>
           <select
             value={value.unitKind ?? 'none'}
-            onChange={(e) => set({ unitKind: e.target.value === 'none' ? undefined : (e.target.value as WidgetUnitKind) })}
+            onChange={(e) =>
+              set({ unitKind: e.target.value === 'none' ? undefined : (e.target.value as WidgetUnitKind) })
+            }
             className={SELECT_CLASS}
             title="Follow the speed / altitude units chosen in Link & Display Settings"
           >
@@ -205,18 +209,23 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
           </select>
         </div>
         {(value.unitKind ?? 'none') === 'none' && (
-          <div className="space-y-1 min-w-0">
+          <div className="min-w-0 space-y-1">
             <label className="text-[11px] font-medium text-zinc-400">Unit Label</label>
             <Input
               type="text"
               placeholder="V, %, °"
               value={value.unit ?? ''}
               onChange={(e) => set({ unit: e.target.value })}
-              className="h-8 text-xs font-mono"
+              className="h-8 font-mono text-xs"
             />
           </div>
         )}
-        <NumberField label="Multiplier" value={value.multiplier} placeholder="1" onChange={(v) => set({ multiplier: v })} />
+        <NumberField
+          label="Multiplier"
+          value={value.multiplier}
+          placeholder="1"
+          onChange={(v) => set({ multiplier: v })}
+        />
         <NumberField label="Offset" value={value.offset} placeholder="0" onChange={(v) => set({ offset: v })} />
         <NumberField
           label="Bit (bitmask fields)"
@@ -243,7 +252,7 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
           </>
         )}
         {showColor && (
-          <div className="space-y-1 min-w-0">
+          <div className="min-w-0 space-y-1">
             <label className="text-[11px] font-medium text-zinc-400">Color</label>
             <div className="flex items-center gap-1.5">
               <input
@@ -254,7 +263,11 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
                 aria-label="Series color"
               />
               {value.color && (
-                <button type="button" onClick={() => set({ color: undefined })} className="text-[10px] text-zinc-500 hover:text-zinc-300">
+                <button
+                  type="button"
+                  onClick={() => set({ color: undefined })}
+                  className="text-[10px] text-zinc-500 hover:text-zinc-300"
+                >
                   auto
                 </button>
               )}
@@ -264,7 +277,7 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
       </div>
 
       {showThresholds && (
-        <div className="pt-2 border-t border-zinc-800/80 grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+        <div className="grid grid-cols-1 items-end gap-2 border-t border-zinc-800/80 pt-2 sm:grid-cols-3">
           <NumberField
             label="Warning Threshold"
             labelClassName="text-amber-400/90"
@@ -279,7 +292,7 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
             placeholder="optional"
             onChange={(v) => set({ critThreshold: v })}
           />
-          <label className="flex items-center gap-1.5 text-[11px] text-zinc-300 cursor-pointer select-none h-8 pb-1">
+          <label className="flex h-8 cursor-pointer select-none items-center gap-1.5 pb-1 text-[11px] text-zinc-300">
             <input
               type="checkbox"
               checked={Boolean(value.thresholdInvert)}

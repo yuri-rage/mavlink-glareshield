@@ -277,7 +277,8 @@ export function toDisplayUnits(base: number, binding: WidgetDataBinding, system:
 function defaultDecimals(binding: WidgetDataBinding): number {
   const msg = baseMessageName(binding.messageName);
   const rawRc =
-    (msg === 'RC_CHANNELS' || msg === 'RC_CHANNELS_RAW') && (binding.fieldName === 'rssi' || /^chan\d+(?:_raw)?$/i.test(binding.fieldName));
+    (msg === 'RC_CHANNELS' || msg === 'RC_CHANNELS_RAW') &&
+    (binding.fieldName === 'rssi' || /^chan\d+(?:_raw)?$/i.test(binding.fieldName));
   const rawServo = msg === 'SERVO_OUTPUT_RAW' && /^servo\d+_raw$/i.test(binding.fieldName);
   return rawRc || rawServo ? 0 : 1;
 }
@@ -287,7 +288,11 @@ function formatNumber(value: number, decimals: number | undefined): string {
   return value.toFixed(Math.max(0, Math.min(6, decimals ?? 1)));
 }
 
-export function isStale(binding: WidgetDataBinding, staleAfterSec: number | undefined, now = Date.now()): { stale: boolean; ageMs?: number } {
+export function isStale(
+  binding: WidgetDataBinding,
+  staleAfterSec: number | undefined,
+  now = Date.now()
+): { stale: boolean; ageMs?: number } {
   const seen = getLastSeen(binding.messageName);
   if (seen === undefined) return { stale: false };
   const ageMs = now - seen;
@@ -312,7 +317,8 @@ export function readBinding(
     const v = toDisplayUnits(base, binding, system);
     return { base, value: v, text: formatNumber(v, binding.decimals ?? defaultDecimals(binding)), unit, stale, ageMs };
   }
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return { base: null, value: null, text: '--', unit, stale, ageMs };
+  if (typeof raw !== 'number' || !Number.isFinite(raw))
+    return { base: null, value: null, text: '--', unit, stale, ageMs };
   const base = applyBindingTransform(raw, binding);
   const value = toDisplayUnits(base, binding, system);
   return { base, value, text: formatNumber(value, binding.decimals ?? defaultDecimals(binding)), unit, stale, ageMs };
@@ -340,5 +346,7 @@ export function getAllBindings(def: Pick<CustomWidgetDefinition, 'binding' | 'bi
 
 /** Stable identity of a binding's base-unit series (what the sampler records). */
 export function bindingKey(binding: WidgetDataBinding): string {
-  return [binding.messageName, binding.fieldName, binding.multiplier ?? 1, binding.offset ?? 0, binding.bit ?? ''].join('|');
+  return [binding.messageName, binding.fieldName, binding.multiplier ?? 1, binding.offset ?? 0, binding.bit ?? ''].join(
+    '|'
+  );
 }

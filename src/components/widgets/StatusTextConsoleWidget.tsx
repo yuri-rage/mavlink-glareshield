@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { useInPane } from '../dashboard/paneContext';
+
+import { ArrowUpDown, MessageSquare, Terminal, Trash2, Volume2, VolumeX } from 'lucide-react';
+
+import { useAudioAlertsStore } from '../../lib/audioAlerts';
 import { useMessageSort } from '../../lib/useMessageSort';
 import { useTelemetryStore } from '../../store/telemetryStore';
-import { useAudioAlertsStore } from '../../lib/audioAlerts';
-import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Button } from '../ui/button';
+import { useInPane } from '../dashboard/paneContext';
 import { Badge } from '../ui/badge';
-import { Terminal, Trash2, Volume2, VolumeX, ArrowUpDown, MessageSquare } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
 export const StatusTextConsoleWidget: React.FC = () => {
   // In a Cockpit pane: fill it (no minimum heights; lists scroll inside).
@@ -23,20 +25,24 @@ export const StatusTextConsoleWidget: React.FC = () => {
     return 'secondary'; // Info, Debug
   };
 
-  const filtered = filterSeverity === null
-    ? statusMessages
-    : statusMessages.filter((m) => m.severity <= filterSeverity);
+  const filtered =
+    filterSeverity === null ? statusMessages : statusMessages.filter((m) => m.severity <= filterSeverity);
 
-  const { sortOrder, toggleSortOrder, displayed, scrollRef: scrollContainerRef, onScroll: handleScroll } = useMessageSort(
-    filtered,
-    'glareshield_messages_sort'
-  );
+  const {
+    sortOrder,
+    toggleSortOrder,
+    displayed,
+    scrollRef: scrollContainerRef,
+    onScroll: handleScroll,
+  } = useMessageSort(filtered, 'glareshield_messages_sort');
 
   return (
-    <Card className={`border-zinc-800 bg-zinc-950/90 shadow-md flex flex-col h-full ${inPane ? 'min-h-0' : 'min-h-[380px] sm:min-h-[540px]'}`}>
-      <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
+    <Card
+      className={`flex h-full flex-col border-zinc-800 bg-zinc-950/90 shadow-md ${inPane ? 'min-h-0' : 'min-h-[380px] sm:min-h-[540px]'}`}
+    >
+      <CardHeader className="border-b border-zinc-800 bg-zinc-900/60 px-3 py-1.5 sm:px-3.5">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
+          <CardTitle className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-zinc-300">
             <Terminal className="h-4 w-4 text-sky-400" />
             MESSAGES
           </CardTitle>
@@ -46,21 +52,25 @@ export const StatusTextConsoleWidget: React.FC = () => {
               variant="ghost"
               size="sm"
               onClick={toggleSortOrder}
-              className="h-7 px-2 text-xs font-sans font-semibold text-zinc-400 hover:text-zinc-200 gap-1"
+              className="h-7 gap-1 px-2 font-sans text-xs font-semibold text-zinc-400 hover:text-zinc-200"
               title={`Sort: ${sortOrder === 'newest' ? 'Newest first (click for Oldest)' : 'Oldest first (click for Newest)'}`}
             >
               <ArrowUpDown className="h-3.5 w-3.5 text-sky-400" />
-              <span className="hidden sm:inline capitalize">{sortOrder}</span>
+              <span className="hidden capitalize sm:inline">{sortOrder}</span>
             </Button>
 
             <Button
               variant="ghost"
               size="sm"
               onClick={toggleVoice}
-              className={`h-7 px-2 text-xs font-sans font-semibold gap-1 ${
+              className={`h-7 gap-1 px-2 font-sans text-xs font-semibold ${
                 voiceEnabled ? 'text-emerald-400 hover:text-emerald-300' : 'text-zinc-500 hover:text-zinc-300'
               }`}
-              title={voiceEnabled ? 'Spoken voice callouts enabled (click to mute voice)' : 'Spoken voice callouts muted (click to enable)'}
+              title={
+                voiceEnabled
+                  ? 'Spoken voice callouts enabled (click to mute voice)'
+                  : 'Spoken voice callouts muted (click to enable)'
+              }
             >
               <MessageSquare className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">{voiceEnabled ? 'Voice On' : 'Voice Off'}</span>
@@ -89,29 +99,29 @@ export const StatusTextConsoleWidget: React.FC = () => {
         </div>
       </CardHeader>
 
-      <CardContent className="p-2 sm:p-3 flex-1 min-h-0 flex flex-col">
+      <CardContent className="flex min-h-0 flex-1 flex-col p-2 sm:p-3">
         {/* Severity quick filters */}
-        <div className="flex items-center gap-1.5 mb-2 overflow-x-auto pb-1 text-xs">
+        <div className="mb-2 flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
           <button
             onClick={() => setFilterSeverity(null)}
-            className={`px-2 py-0.5 rounded text-xs font-sans font-semibold transition-colors ${
-              filterSeverity === null ? 'bg-zinc-700 text-white font-bold' : 'text-zinc-400 hover:text-zinc-200'
+            className={`rounded px-2 py-0.5 font-sans text-xs font-semibold transition-colors ${
+              filterSeverity === null ? 'bg-zinc-700 font-bold text-white' : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
             All ({statusMessages.length})
           </button>
           <button
             onClick={() => setFilterSeverity(4)}
-            className={`px-2 py-0.5 rounded text-xs font-sans font-semibold transition-colors ${
-              filterSeverity === 4 ? 'bg-amber-900 text-amber-200 font-bold' : 'text-zinc-400 hover:text-zinc-200'
+            className={`rounded px-2 py-0.5 font-sans text-xs font-semibold transition-colors ${
+              filterSeverity === 4 ? 'bg-amber-900 font-bold text-amber-200' : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
             Warnings+
           </button>
           <button
             onClick={() => setFilterSeverity(2)}
-            className={`px-2 py-0.5 rounded text-xs font-sans font-semibold transition-colors ${
-              filterSeverity === 2 ? 'bg-red-900 text-red-200 font-bold' : 'text-zinc-400 hover:text-zinc-200'
+            className={`rounded px-2 py-0.5 font-sans text-xs font-semibold transition-colors ${
+              filterSeverity === 2 ? 'bg-red-900 font-bold text-red-200' : 'text-zinc-400 hover:text-zinc-200'
             }`}
           >
             Critical Only
@@ -122,29 +132,35 @@ export const StatusTextConsoleWidget: React.FC = () => {
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className={`flex-1 bg-black/60 rounded-xl border border-zinc-800 p-1.5 font-mono text-xs overflow-y-auto ${inPane ? 'min-h-0' : 'min-h-[240px] max-h-[68vh]'} space-y-0.5 select-text`}
+          className={`flex-1 overflow-y-auto rounded-xl border border-zinc-800 bg-black/60 p-1.5 font-mono text-xs ${inPane ? 'min-h-0' : 'max-h-[68vh] min-h-[240px]'} select-text space-y-0.5`}
         >
           {displayed.length === 0 ? (
-            <div className="text-zinc-600 text-center py-8 italic">
-              No STATUSTEXT messages received yet.
-            </div>
+            <div className="py-8 text-center italic text-zinc-600">No STATUSTEXT messages received yet.</div>
           ) : (
             displayed.map((msg) => (
-              <div key={msg.id} className="flex items-center gap-1.5 hover:bg-zinc-900/60 py-0.5 px-1.5 rounded transition-colors text-[13px]">
-                <span className="text-zinc-500 text-[11px] whitespace-nowrap font-mono">{msg.time}</span>
-                <Badge variant={getSeverityBadgeVariant(msg.severity)} className="text-[10px] px-1 py-0 h-4 leading-none">
+              <div
+                key={msg.id}
+                className="flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[13px] transition-colors hover:bg-zinc-900/60"
+              >
+                <span className="whitespace-nowrap font-mono text-[11px] text-zinc-500">{msg.time}</span>
+                <Badge
+                  variant={getSeverityBadgeVariant(msg.severity)}
+                  className="h-4 px-1 py-0 text-[10px] leading-none"
+                >
                   {msg.severityLabel}
                 </Badge>
                 {msg.count !== undefined && msg.count > 1 && (
                   <Badge
                     variant="outline"
-                    className="text-[10px] font-mono px-1 py-0 h-4 leading-none bg-sky-950/70 border-sky-600/40 text-sky-300 font-bold shrink-0 shadow-sm"
+                    className="h-4 shrink-0 border-sky-600/40 bg-sky-950/70 px-1 py-0 font-mono text-[10px] font-bold leading-none text-sky-300 shadow-sm"
                     title={`${msg.count} identical messages`}
                   >
                     ×{msg.count}
                   </Badge>
                 )}
-                <span className={`flex-1 break-all ${msg.severity <= 3 ? 'text-red-300 font-bold' : msg.severity === 4 ? 'text-amber-300' : 'text-zinc-200'}`}>
+                <span
+                  className={`flex-1 break-all ${msg.severity <= 3 ? 'font-bold text-red-300' : msg.severity === 4 ? 'text-amber-300' : 'text-zinc-200'}`}
+                >
                   {msg.text}
                 </span>
               </div>

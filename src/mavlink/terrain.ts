@@ -10,7 +10,8 @@
 /** Zoom of the elevation tiles: about 38 m per pixel at the equator (31 m at 35 deg), the source data's own scale. */
 export const TERRAIN_ZOOM = 12;
 export const TILE_SIZE = 256;
-export const terrariumUrl = (z: number, x: number, y: number) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+export const terrariumUrl = (z: number, x: number, y: number) =>
+  `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
 export const TERRAIN_ATTRIBUTION = 'Terrain: AWS Terrain Tiles (Mapzen; SRTM, USGS 3DEP, others)';
 
 /** Fractional tile coordinates (web mercator) of a point at zoom z. */
@@ -40,7 +41,12 @@ export interface TileKey {
  * Height (m) at a point, from decoded tiles fetched by `getTile` (null when a tile isn't available). Bilinear between
  * pixel centres; at a tile edge it reads the neighbouring tile.
  */
-export function sampleHeight(lat: number, lon: number, getTile: (tx: number, ty: number) => Float32Array | null, z = TERRAIN_ZOOM): number | null {
+export function sampleHeight(
+  lat: number,
+  lon: number,
+  getTile: (tx: number, ty: number) => Float32Array | null,
+  z = TERRAIN_ZOOM
+): number | null {
   const { x, y } = tileCoords(lat, lon, z);
   // Pixel coordinates in the whole map, pixel centres at +0.5.
   const px = x * TILE_SIZE - 0.5;
@@ -104,7 +110,12 @@ export function apOffset(lat: number, lon: number, north: number, east: number):
 }
 
 /** The 16 points of one sub-grid (gridbit) of a block, in TERRAIN_DATA order (x north outer, y east inner). */
-export function subgridPoints(blockLat: number, blockLon: number, spacing: number, gridbit: number): { lat: number; lon: number }[] {
+export function subgridPoints(
+  blockLat: number,
+  blockLon: number,
+  spacing: number,
+  gridbit: number
+): { lat: number; lon: number }[] {
   const idxX = Math.floor(gridbit / TERRAIN_GRID_BLOCK_MUL_Y) * TERRAIN_GRID_MAVLINK_SIZE;
   const idxY = (gridbit % TERRAIN_GRID_BLOCK_MUL_Y) * TERRAIN_GRID_MAVLINK_SIZE;
   const out: { lat: number; lon: number }[] = [];
@@ -120,7 +131,8 @@ export function subgridPoints(blockLat: number, blockLon: number, spacing: numbe
 /** The sub-grids a TERRAIN_REQUEST asks for (set bits of its 56-bit mask). */
 export function requestedGridbits(mask: bigint): number[] {
   const out: number[] = [];
-  for (let b = 0; b < TERRAIN_GRID_BLOCK_MUL_X * TERRAIN_GRID_BLOCK_MUL_Y; b++) if ((mask >> BigInt(b)) & 1n) out.push(b);
+  for (let b = 0; b < TERRAIN_GRID_BLOCK_MUL_X * TERRAIN_GRID_BLOCK_MUL_Y; b++)
+    if ((mask >> BigInt(b)) & 1n) out.push(b);
   return out;
 }
 

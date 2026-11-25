@@ -2,7 +2,7 @@
 // the PNGs in the browser's Cache API (so they survive reloads and work offline once fetched), and answers height
 // queries. Fetching and decoding are injectable so tests can run without a browser.
 
-import { TERRAIN_ZOOM, decodeTerrarium, sampleHeight, terrariumUrl, tilesFor } from '../mavlink/terrain';
+import { decodeTerrarium, sampleHeight, TERRAIN_ZOOM, terrariumUrl, tilesFor } from '../mavlink/terrain';
 
 /** Fetches a tile's PNG bytes (null when it can't), and decodes PNG bytes into RGBA pixels. */
 export interface TerrainIO {
@@ -33,10 +33,16 @@ export const browserTerrainIO: TerrainIO = {
     }
   },
   decodePng: async (png) => {
-    const bmp = await createImageBitmap(png, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' } as ImageBitmapOptions);
+    const bmp = await createImageBitmap(png, {
+      colorSpaceConversion: 'none',
+      premultiplyAlpha: 'none',
+    } as ImageBitmapOptions);
     const canvas: OffscreenCanvas | HTMLCanvasElement =
-      typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(bmp.width, bmp.height) : Object.assign(document.createElement('canvas'), { width: bmp.width, height: bmp.height });
-    const ctx = canvas.getContext('2d', { willReadFrequently: true }) as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+      typeof OffscreenCanvas !== 'undefined'
+        ? new OffscreenCanvas(bmp.width, bmp.height)
+        : Object.assign(document.createElement('canvas'), { width: bmp.width, height: bmp.height });
+    const ctx = canvas.getContext('2d', { willReadFrequently: true }) as
+      OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
     ctx.drawImage(bmp, 0, 0);
     bmp.close();
     return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -49,7 +55,10 @@ export class TerrainService {
   private failedAt = new Map<string, number>();
   public enabled = true;
 
-  constructor(private io: TerrainIO, private zoom = TERRAIN_ZOOM) {}
+  constructor(
+    private io: TerrainIO,
+    private zoom = TERRAIN_ZOOM
+  ) {}
 
   private key = (x: number, y: number) => `${this.zoom}/${x}/${y}`;
 

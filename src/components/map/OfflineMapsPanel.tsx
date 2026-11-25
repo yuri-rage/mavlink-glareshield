@@ -2,35 +2,43 @@
 // area from it, download terrain, import MBTiles, and see and delete what's stored. See lib/offlineTiles.ts.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Download, FileUp, HardDrive, MapPinned, Mountain, Square, Trash2, X } from 'lucide-react';
+
 import L from 'leaflet';
-import { Modal } from '../ui/modal';
-import { useOfflineMapStore, type CustomTileSource } from '../../store/offlineMapStore';
+import { Download, FileUp, HardDrive, MapPinned, Mountain, Square, Trash2, X } from 'lucide-react';
+
 import {
   AVG_TILE_BYTES,
-  MAX_DOWNLOAD_TILES,
   countTiles,
+  MAX_DOWNLOAD_TILES,
   newAreaId,
-  preloadMbtilesReader,
   offlineAvailable,
+  preloadMbtilesReader,
   requestPersistence,
   storageInfo,
-  tileUrl,
   tilesIn,
+  tileUrl,
   validTemplate,
   type LatLngBoundsLike,
   type OfflineArea,
 } from '../../lib/offlineTiles';
-import { TERRAIN_ZOOM, terrariumUrl } from '../../mavlink/terrain';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
+import { TERRAIN_ZOOM, terrariumUrl } from '../../mavlink/terrain';
+import { useOfflineMapStore, type CustomTileSource } from '../../store/offlineMapStore';
+import { Modal } from '../ui/modal';
 import type { MapLayerType } from './MapViewMenu';
 
 /** At most this many terrain tiles at once (each about 100 KB). */
 const MAX_TERRAIN_TILES = 2000;
 
-const mb = (b: number) => (b >= 1e9 ? `${(b / 1e9).toFixed(2)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(0, Math.round(b / 1e3))} KB`);
+const mb = (b: number) =>
+  b >= 1e9
+    ? `${(b / 1e9).toFixed(2)} GB`
+    : b >= 1e6
+      ? `${(b / 1e6).toFixed(1)} MB`
+      : `${Math.max(0, Math.round(b / 1e3))} KB`;
 // Never squeezed by a full-width field beside it: one line, its own width.
-const BTN = 'inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2 text-[11px] font-bold disabled:opacity-40';
+const BTN =
+  'inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-2 text-[11px] font-bold disabled:opacity-40';
 const PLAIN = `${BTN} border-zinc-700 text-zinc-200 hover:bg-zinc-800`;
 const PRIMARY = `${BTN} border-sky-600 bg-sky-600 text-white hover:bg-sky-500`;
 const FIELD = 'h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-2 text-xs text-zinc-100';
@@ -48,10 +56,24 @@ interface Props {
   onFitBounds: (b: LatLngBoundsLike) => void;
 }
 
-const KIND_LABEL: Record<OfflineArea['kind'], string> = { kept: 'Kept', downloaded: 'Downloaded', imported: 'Imported', terrain: 'Terrain' };
+const KIND_LABEL: Record<OfflineArea['kind'], string> = {
+  kept: 'Kept',
+  downloaded: 'Downloaded',
+  imported: 'Imported',
+  terrain: 'Terrain',
+};
 
-export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, layerName, layer, onShowLayer, onFitBounds }) => {
-  const { areas, refresh, remove, keeping, startKeeping, stopKeeping, customSource, setCustomSource, deleting } = useOfflineMapStore();
+export const OfflineMapsPanel: React.FC<Props> = ({
+  isOpen,
+  onClose,
+  getView,
+  layerName,
+  layer,
+  onShowLayer,
+  onFitBounds,
+}) => {
+  const { areas, refresh, remove, keeping, startKeeping, stopKeeping, customSource, setCustomSource, deleting } =
+    useOfflineMapStore();
   const available = offlineAvailable();
   const [storage, setStorage] = useState<{ usage?: number; quota?: number; persisted?: boolean }>({});
   const [keepName, setKeepName] = useState('');
@@ -68,12 +90,18 @@ export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, la
   }, [isOpen, available]);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Offline maps" description="Map tiles and terrain kept for use without internet" size="xl">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Offline maps"
+      description="Map tiles and terrain kept for use without internet"
+      size="xl"
+    >
       <div className="space-y-3 text-xs text-zinc-300">
         {!available ? (
           <p className="rounded-lg border border-amber-700/60 bg-amber-950/40 p-3 text-amber-200">
-            Offline maps need a secure page: open the app over https (the bridge can serve it, --ssl-cert / --ssl-key) or on
-            localhost. Browsers don't offer storage for them on a plain http address.
+            Offline maps need a secure page: open the app over https (the bridge can serve it, --ssl-cert / --ssl-key)
+            or on localhost. Browsers don't offer storage for them on a plain http address.
           </p>
         ) : (
           <>
@@ -84,8 +112,9 @@ export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, la
                 Keep an area while you view it
               </h3>
               <p className="text-[11px] leading-snug text-zinc-400">
-                Pan and zoom over the area at the zoom levels you'll need: every {layerName} tile the map loads is kept. The
-                built-in imagery and street tiles can only be kept this way (their providers don't allow bulk downloads).
+                Pan and zoom over the area at the zoom levels you'll need: every {layerName} tile the map loads is kept.
+                The built-in imagery and street tiles can only be kept this way (their providers don't allow bulk
+                downloads).
               </p>
               {/* A keep under way first: its Stop stays here whatever layer is showing now. */}
               {keeping ? (
@@ -99,10 +128,17 @@ export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, la
                   </button>
                 </div>
               ) : layer.startsWith('import:') ? (
-                <p className="text-[11px] text-zinc-500">The imported map showing is stored already: switch to another layer to keep it.</p>
+                <p className="text-[11px] text-zinc-500">
+                  The imported map showing is stored already: switch to another layer to keep it.
+                </p>
               ) : (
                 <div className="flex gap-2">
-                  <input className={FIELD} placeholder="Area name (e.g. North field)" value={keepName} onChange={(e) => setKeepName(e.target.value)} />
+                  <input
+                    className={FIELD}
+                    placeholder="Area name (e.g. North field)"
+                    value={keepName}
+                    onChange={(e) => setKeepName(e.target.value)}
+                  />
                   <button
                     type="button"
                     className={PRIMARY}
@@ -135,7 +171,11 @@ export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, la
               {storage.persisted === false && (
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-amber-300">
                   The browser may clear this storage when space runs low.
-                  <button type="button" className={PLAIN} onClick={() => void requestPersistence().then(() => storageInfo().then(setStorage))}>
+                  <button
+                    type="button"
+                    className={PLAIN}
+                    onClick={() => void requestPersistence().then(() => storageInfo().then(setStorage))}
+                  >
                     Ask to keep it
                   </button>
                 </div>
@@ -227,8 +267,14 @@ const AreaRow: React.FC<{
   );
 };
 
-const CustomSourceSection: React.FC<{ source: CustomTileSource | null; onSave: (s: CustomTileSource | null) => void; onShow: () => void }> = ({ source, onSave, onShow }) => {
-  const [draft, setDraft] = useState<CustomTileSource>(source ?? { name: 'My tiles', url: '', maxZoom: 19, subdomains: 'abc', attribution: '' });
+const CustomSourceSection: React.FC<{
+  source: CustomTileSource | null;
+  onSave: (s: CustomTileSource | null) => void;
+  onShow: () => void;
+}> = ({ source, onSave, onShow }) => {
+  const [draft, setDraft] = useState<CustomTileSource>(
+    source ?? { name: 'My tiles', url: '', maxZoom: 19, subdomains: 'abc', attribution: '' }
+  );
   const valid = validTemplate(draft.url.trim());
   return (
     <section className={SECTION}>
@@ -239,11 +285,28 @@ const CustomSourceSection: React.FC<{ source: CustomTileSource | null; onSave: (
         (CORS: Access-Control-Allow-Origin).
       </p>
       <div className="grid gap-2 sm:grid-cols-[1fr_2fr]">
-        <input className={FIELD} placeholder="Name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} aria-label="Source name" />
-        <input className={FIELD} placeholder="https://…/{z}/{x}/{y}.png" value={draft.url} onChange={(e) => setDraft({ ...draft, url: e.target.value })} aria-label="Tile URL template" />
+        <input
+          className={FIELD}
+          placeholder="Name"
+          value={draft.name}
+          onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+          aria-label="Source name"
+        />
+        <input
+          className={FIELD}
+          placeholder="https://…/{z}/{x}/{y}.png"
+          value={draft.url}
+          onChange={(e) => setDraft({ ...draft, url: e.target.value })}
+          aria-label="Tile URL template"
+        />
         <label className="flex items-center gap-2 text-[11px] text-zinc-400">
           Max zoom
-          <select className={`${FIELD} w-16`} value={draft.maxZoom} onChange={(e) => setDraft({ ...draft, maxZoom: Number(e.target.value) })} aria-label="Max zoom">
+          <select
+            className={`${FIELD} w-16`}
+            value={draft.maxZoom}
+            onChange={(e) => setDraft({ ...draft, maxZoom: Number(e.target.value) })}
+            aria-label="Max zoom"
+          >
             {Array.from({ length: 24 }, (_, i) => i + 1).map((z) => (
               <option key={z} value={z}>
                 {z}
@@ -251,13 +314,32 @@ const CustomSourceSection: React.FC<{ source: CustomTileSource | null; onSave: (
             ))}
           </select>
           Subdomains
-          <input className={`${FIELD} w-16`} value={draft.subdomains} onChange={(e) => setDraft({ ...draft, subdomains: e.target.value })} />
+          <input
+            className={`${FIELD} w-16`}
+            value={draft.subdomains}
+            onChange={(e) => setDraft({ ...draft, subdomains: e.target.value })}
+          />
         </label>
-        <input className={FIELD} placeholder="Attribution" value={draft.attribution} onChange={(e) => setDraft({ ...draft, attribution: e.target.value })} aria-label="Attribution" />
+        <input
+          className={FIELD}
+          placeholder="Attribution"
+          value={draft.attribution}
+          onChange={(e) => setDraft({ ...draft, attribution: e.target.value })}
+          aria-label="Attribution"
+        />
       </div>
-      {draft.url.trim() !== '' && !valid && <p className="text-[11px] text-amber-300">The URL needs {'{z}'}, {'{x}'} and {'{y}'} (or {'{-y}'}), and http(s).</p>}
+      {draft.url.trim() !== '' && !valid && (
+        <p className="text-[11px] text-amber-300">
+          The URL needs {'{z}'}, {'{x}'} and {'{y}'} (or {'{-y}'}), and http(s).
+        </p>
+      )}
       <div className="flex gap-2">
-        <button type="button" className={PRIMARY} disabled={!valid} onClick={() => onSave({ ...draft, url: draft.url.trim() })}>
+        <button
+          type="button"
+          className={PRIMARY}
+          disabled={!valid}
+          onClick={() => onSave({ ...draft, url: draft.url.trim() })}
+        >
           Save
         </button>
         {source && (
@@ -276,7 +358,10 @@ const CustomSourceSection: React.FC<{ source: CustomTileSource | null; onSave: (
 };
 
 /** Download the current view: from your tile source (a zoom range), and/or the open terrain tiles. */
-const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileSource | null }> = ({ getView, source }) => {
+const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileSource | null }> = ({
+  getView,
+  source,
+}) => {
   const { job, jobError, startDownload, cancelJob } = useOfflineMapStore();
   const view = getView();
   const startZoom = view ? Math.max(0, Math.floor(view.zoom)) : 10;
@@ -304,7 +389,9 @@ const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileS
     const urls =
       kind === 'terrain'
         ? [...tilesIn(view.bounds, TERRAIN_ZOOM, TERRAIN_ZOOM)].map((t) => terrariumUrl(t.z, t.x, t.y))
-        : [...tilesIn(view.bounds, zMin, zMax)].map((t) => tileUrl(source!.url, t.z, t.x, t.y, source!.subdomains, L.Browser.retina));
+        : [...tilesIn(view.bounds, zMin, zMax)].map((t) =>
+            tileUrl(source!.url, t.z, t.x, t.y, source!.subdomains, L.Browser.retina)
+          );
     const area: OfflineArea = {
       id: newAreaId(),
       name: name.trim() || (kind === 'terrain' ? 'Terrain' : 'Downloaded area'),
@@ -348,7 +435,12 @@ const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileS
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
                 From {source.name}, zoom
-                <select className={`${FIELD} w-16`} value={zMin} onChange={(e) => setZMin(Number(e.target.value))} aria-label="From zoom">
+                <select
+                  className={`${FIELD} w-16`}
+                  value={zMin}
+                  onChange={(e) => setZMin(Number(e.target.value))}
+                  aria-label="From zoom"
+                >
                   {zooms(0, zMax).map((z) => (
                     <option key={z} value={z}>
                       {z}
@@ -356,7 +448,12 @@ const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileS
                   ))}
                 </select>
                 to
-                <select className={`${FIELD} w-16`} value={zMax} onChange={(e) => setZMax(Number(e.target.value))} aria-label="To zoom">
+                <select
+                  className={`${FIELD} w-16`}
+                  value={zMax}
+                  onChange={(e) => setZMax(Number(e.target.value))}
+                  aria-label="To zoom"
+                >
                   {zooms(zMin, source.maxZoom).map((z) => (
                     <option key={z} value={z}>
                       {z}
@@ -367,8 +464,18 @@ const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileS
                   {count.toLocaleString()} tiles, about {mb(count * AVG_TILE_BYTES)}
                 </span>
               </div>
-              {tooMany && <p className="text-[11px] text-amber-300">More than {MAX_DOWNLOAD_TILES.toLocaleString()} tiles: zoom in on a smaller area, or lower the top zoom.</p>}
-              <button type="button" className={PRIMARY} disabled={!view || tooMany || count === 0 || job !== null} onClick={() => run('downloaded')}>
+              {tooMany && (
+                <p className="text-[11px] text-amber-300">
+                  More than {MAX_DOWNLOAD_TILES.toLocaleString()} tiles: zoom in on a smaller area, or lower the top
+                  zoom.
+                </p>
+              )}
+              <button
+                type="button"
+                className={PRIMARY}
+                disabled={!view || tooMany || count === 0 || job !== null}
+                onClick={() => run('downloaded')}
+              >
                 <Download className="h-3 w-3" />
                 Download from {source.name}
               </button>
@@ -378,9 +485,15 @@ const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileS
           )}
           <div className="flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-2">
             <span className="text-[11px] text-zinc-400">
-              Terrain heights for this area (open data, for the terrain profile and clearance checks): {terrainCount} tiles
+              Terrain heights for this area (open data, for the terrain profile and clearance checks): {terrainCount}{' '}
+              tiles
             </span>
-            <button type="button" className={PLAIN} disabled={!view || terrainCount === 0 || terrainCount > MAX_TERRAIN_TILES || job !== null} onClick={() => run('terrain')}>
+            <button
+              type="button"
+              className={PLAIN}
+              disabled={!view || terrainCount === 0 || terrainCount > MAX_TERRAIN_TILES || job !== null}
+              onClick={() => run('terrain')}
+            >
               <Mountain className="h-3 w-3" />
               Download terrain
             </button>
@@ -426,7 +539,8 @@ const ImportSection: React.FC<{ onDone: (a: OfflineArea) => void }> = ({ onDone 
       />
       {importing ? (
         <p className="font-mono text-[11px]">
-          Importing {importing.label}: {importing.done} / {importing.total || '…'} tiles (carries on with this window closed)
+          Importing {importing.label}: {importing.done} / {importing.total || '…'} tiles (carries on with this window
+          closed)
         </p>
       ) : (
         <button type="button" className={PLAIN} disabled={job !== null} onClick={() => fileRef.current?.click()}>

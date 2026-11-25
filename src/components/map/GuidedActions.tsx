@@ -6,26 +6,41 @@
 // asks for a second press naming the consequence.
 
 import React, { useEffect, useRef, useState } from 'react';
+
 import { ArrowUpDown, Gauge, Home, Orbit, Pause, Play, RotateCcw, RotateCw } from 'lucide-react';
-import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
-import { useUnitsStore } from '../../store/unitsStore';
-import { mavlinkConnection } from '../../mavlink/connection';
-import { getVehicleCategory } from '../../mavlink/messages';
-import { canChangeAltitude, canChangeSpeed, canOrbit, canPause, changeAltitude, changeSpeed, orbit, pauseContinue, setHome, type CommandIntSpec } from '../../mavlink/guidedActions';
-import { useConnectionParam } from '../../lib/useConnectionParam';
+
 import { useLengthUnit, useSpeedUnit, wholeLength } from '../../lib/inputUnits';
+import { useConnectionParam } from '../../lib/useConnectionParam';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
+import { mavlinkConnection } from '../../mavlink/connection';
+import { distanceM } from '../../mavlink/fenceDraft';
+import {
+  canChangeAltitude,
+  canChangeSpeed,
+  canOrbit,
+  canPause,
+  changeAltitude,
+  changeSpeed,
+  orbit,
+  pauseContinue,
+  setHome,
+  type CommandIntSpec,
+} from '../../mavlink/guidedActions';
+import { getVehicleCategory } from '../../mavlink/messages';
 import { terrainService } from '../../mavlink/terrainBoot';
 import { useLastVehicleStore } from '../../store/lastVehicleStore';
-import { describeAck, type AckView } from '../widgets/custom/panelModel';
+import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
+import { useUnitsStore } from '../../store/unitsStore';
 import { AckChip } from '../widgets/custom/panelKit';
-import { distanceM } from '../../mavlink/fenceDraft';
+import { describeAck, type AckView } from '../widgets/custom/panelModel';
 
 function useSender() {
   const [ack, setAck] = useState<AckView | null>(null);
   const send = (spec: CommandIntSpec, onAccepted?: () => void) => {
     const hb = useTelemetryStore.getState().heartbeat;
-    const packet = mavlinkConnection.getEncoder().createCommandInt(hb.systemId, hb.componentId || 1, spec.command, spec.frame, spec.params);
+    const packet = mavlinkConnection
+      .getEncoder()
+      .createCommandInt(hb.systemId, hb.componentId || 1, spec.command, spec.frame, spec.params);
     setAck({ status: 'pending', text: 'Sent, awaiting acknowledgement', time: Date.now() });
     void sendTrackedCommand(packet, { label: spec.label }).then((info) => {
       setAck(describeAck(info));
@@ -38,7 +53,8 @@ function useSender() {
 const BTN = 'flex h-7 w-full items-center justify-center gap-1.5 rounded-md border text-[11px] font-bold';
 const CONFIRM = 'border-amber-500 bg-amber-600 text-zinc-950';
 const PLAIN = 'border-zinc-600 text-zinc-200 hover:bg-zinc-800';
-const FIELD = 'h-7 w-16 rounded border border-zinc-700 bg-zinc-900 text-center font-mono text-xs text-zinc-100 focus:border-sky-500 focus:outline-none';
+const FIELD =
+  'h-7 w-16 rounded border border-zinc-700 bg-zinc-900 text-center font-mono text-xs text-zinc-100 focus:border-sky-500 focus:outline-none';
 
 /** Set home to the vehicle's position: confirmed first (RTL and relative altitudes move with it). */
 const SetHomeHereButton: React.FC = () => {
@@ -46,7 +62,11 @@ const SetHomeHereButton: React.FC = () => {
   const { ack, send } = useSender();
   return (
     <div className="space-y-1">
-      {confirm.armed && <p className="text-[10px] leading-snug text-amber-300">Home moves to where the vehicle is now: RTL returns there, and heights above home are measured from it.</p>}
+      {confirm.armed && (
+        <p className="text-[10px] leading-snug text-amber-300">
+          Home moves to where the vehicle is now: RTL returns there, and heights above home are measured from it.
+        </p>
+      )}
       <button
         type="button"
         className={`${BTN} ${confirm.armed ? CONFIRM : PLAIN}`}
@@ -93,7 +113,13 @@ const SpeedSection: React.FC<{ open: boolean }> = ({ open }) => {
   if (!canChangeSpeed(category)) return null;
   const typed = Number(input);
   const fmt = (ms: number) => `${Number(spd.fromSi(ms).toFixed(1))} ${spd.unit}`;
-  const plan = changeSpeed(category, modeName, input.trim() !== '' && Number.isFinite(typed) ? spd.toSi(typed) : NaN, { min, max }, fmt);
+  const plan = changeSpeed(
+    category,
+    modeName,
+    input.trim() !== '' && Number.isFinite(typed) ? spd.toSi(typed) : NaN,
+    { min, max },
+    fmt
+  );
   const backToDefault = plane ? changeSpeed(category, modeName, null, {}, fmt) : null;
   return (
     <form
@@ -107,7 +133,13 @@ const SpeedSection: React.FC<{ open: boolean }> = ({ open }) => {
         <label htmlFor="guided-speed" className="mr-auto font-bold text-zinc-200">
           {plane ? 'Airspeed' : 'Speed'}
         </label>
-        <input id="guided-speed" inputMode="decimal" value={input} onChange={(e) => setInput(e.target.value)} className={FIELD} />
+        <input
+          id="guided-speed"
+          inputMode="decimal"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          className={FIELD}
+        />
         <span className="text-[10px] text-zinc-500">{spd.unit}</span>
       </div>
       {plan?.warning && <p className="text-[10px] leading-snug text-amber-300">{plan.warning}</p>}
@@ -117,7 +149,12 @@ const SpeedSection: React.FC<{ open: boolean }> = ({ open }) => {
           Change {plane ? 'airspeed' : 'speed'}
         </button>
         {backToDefault && (
-          <button type="button" onClick={() => send(backToDefault.spec)} title="Back to AIRSPEED_CRUISE" className={`${BTN} ${PLAIN} w-auto px-2`}>
+          <button
+            type="button"
+            onClick={() => send(backToDefault.spec)}
+            title="Back to AIRSPEED_CRUISE"
+            className={`${BTN} ${PLAIN} w-auto px-2`}
+          >
             Default
           </button>
         )}
@@ -136,11 +173,21 @@ const PauseSection: React.FC = () => {
   return (
     <div className="space-y-1 border-t border-zinc-800 pt-2">
       <div className="flex gap-1">
-        <button type="button" onClick={() => send(pauseContinue(true))} title={`Stop and hold position (${modeName} stays on)`} className={`${BTN} ${PLAIN}`}>
+        <button
+          type="button"
+          onClick={() => send(pauseContinue(true))}
+          title={`Stop and hold position (${modeName} stays on)`}
+          className={`${BTN} ${PLAIN}`}
+        >
           <Pause className="h-3.5 w-3.5" />
           Pause
         </button>
-        <button type="button" onClick={() => send(pauseContinue(false))} title={modeName === 'AUTO' ? 'Carry on with the mission' : 'Carry on to the guided target'} className={`${BTN} ${PLAIN}`}>
+        <button
+          type="button"
+          onClick={() => send(pauseContinue(false))}
+          title={modeName === 'AUTO' ? 'Carry on with the mission' : 'Carry on to the guided target'}
+          className={`${BTN} ${PLAIN}`}
+        >
           <Play className="h-3.5 w-3.5" />
           Resume
         </button>
@@ -154,7 +201,10 @@ const PauseSection: React.FC = () => {
  * The map header's altitude button: a card to change the vehicle's altitude (Copter, Plane) and to set home to its
  * position. `target` is the Fly-to target being flown to, if any (Copter keeps going there at the new height).
  */
-export const AltitudeAction: React.FC<{ target: { lat: number; lon: number } | null; disabled: boolean }> = ({ target, disabled }) => {
+export const AltitudeAction: React.FC<{ target: { lat: number; lon: number } | null; disabled: boolean }> = ({
+  target,
+  disabled,
+}) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   const len = useLengthUnit();
@@ -192,7 +242,9 @@ export const AltitudeAction: React.FC<{ target: { lat: number; lon: number } | n
   const pos = useTelemetryStore((s) => (open ? s.position : null));
   const here = pos && (pos.lat || pos.lon) ? { lat: pos.lat, lon: pos.lon, isTarget: false } : null;
   const holdAt = modeName === 'GUIDED' && target ? { ...target, isTarget: true } : here;
-  const plan = canChangeAltitude(category) ? changeAltitude(category, modeName, altM, holdAt, (m) => formatAltitude(m).full) : null;
+  const plan = canChangeAltitude(category)
+    ? changeAltitude(category, modeName, altM, holdAt, (m) => formatAltitude(m).full)
+    : null;
 
   const go = () => {
     if (!plan) return;
@@ -227,13 +279,34 @@ export const AltitudeAction: React.FC<{ target: { lat: number; lon: number } | n
                 <label htmlFor="guided-alt" className="mr-auto font-bold text-zinc-200">
                   Altitude
                 </label>
-                <input id="guided-alt" inputMode="decimal" value={input} onChange={(e) => { setInput(e.target.value); confirm.cancel(); }} className={FIELD} />
+                <input
+                  id="guided-alt"
+                  inputMode="decimal"
+                  value={input}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    confirm.cancel();
+                  }}
+                  className={FIELD}
+                />
                 <span className="text-[10px] text-zinc-500">{len.unit} above home</span>
               </div>
-              {plan && <p className={`text-[10px] leading-snug ${plan.switchesToGuided ? 'text-amber-300' : 'text-zinc-400'}`}>{plan.note}</p>}
-              <button type="submit" disabled={!plan} className={`${BTN} ${confirm.armed ? CONFIRM : 'border-sky-600 bg-sky-600 text-white hover:bg-sky-500'} disabled:opacity-40`}>
+              {plan && (
+                <p className={`text-[10px] leading-snug ${plan.switchesToGuided ? 'text-amber-300' : 'text-zinc-400'}`}>
+                  {plan.note}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={!plan}
+                className={`${BTN} ${confirm.armed ? CONFIRM : 'border-sky-600 bg-sky-600 text-white hover:bg-sky-500'} disabled:opacity-40`}
+              >
                 <ArrowUpDown className="h-3.5 w-3.5" />
-                {confirm.armed ? 'Confirm: switch to GUIDED' : plan?.switchesToGuided ? 'Switch to GUIDED & change altitude' : 'Change altitude'}
+                {confirm.armed
+                  ? 'Confirm: switch to GUIDED'
+                  : plan?.switchesToGuided
+                    ? 'Switch to GUIDED & change altitude'
+                    : 'Change altitude'}
               </button>
               <AckChip ack={ack} />
             </form>
@@ -256,7 +329,12 @@ export const AltitudeAction: React.FC<{ target: { lat: number; lon: number } | n
  * altitude is the ground's at the point (terrain tiles); without it, home keeps its current altitude, and the
  * confirmation says so.
  */
-export const PointGuidedActions: React.FC<{ lat: number; lon: number; altRelM: number; onDone: () => void }> = ({ lat, lon, altRelM, onDone }) => {
+export const PointGuidedActions: React.FC<{ lat: number; lon: number; altRelM: number; onDone: () => void }> = ({
+  lat,
+  lon,
+  altRelM,
+  onDone,
+}) => {
   const category = getVehicleCategory(useTelemetryStore((s) => s.heartbeat.type));
   const home = useTelemetryStore((s) => s.homePosition);
   const len = useLengthUnit();
@@ -314,7 +392,12 @@ export const PointGuidedActions: React.FC<{ lat: number; lon: number; altRelM: n
               {ccw ? <RotateCcw className="h-3.5 w-3.5" /> : <RotateCw className="h-3.5 w-3.5" />}
             </button>
           </div>
-          <button type="button" disabled={!orbitSpec} onClick={() => orbitSpec && orbitSend.send(orbitSpec, () => setTimeout(onDone, 600))} className={`${BTN} ${PLAIN} disabled:opacity-40`}>
+          <button
+            type="button"
+            disabled={!orbitSpec}
+            onClick={() => orbitSpec && orbitSend.send(orbitSpec, () => setTimeout(onDone, 600))}
+            className={`${BTN} ${PLAIN} disabled:opacity-40`}
+          >
             <Orbit className="h-3.5 w-3.5" />
             Orbit here ({ccw ? 'CCW' : 'CW'})
           </button>
@@ -327,9 +410,13 @@ export const PointGuidedActions: React.FC<{ lat: number; lon: number; altRelM: n
             {ground === 'loading'
               ? 'Looking up the ground height here…'
               : `Home moves ${moved !== null ? `${formatDistance(moved).full.toLowerCase()} ` : ''}to this point${
-                  dAlt !== null ? `, ground ${formatAltitude(Math.abs(dAlt)).full} ${dAlt >= 0 ? 'higher' : 'lower'}` : ''
+                  dAlt !== null
+                    ? `, ground ${formatAltitude(Math.abs(dAlt)).full} ${dAlt >= 0 ? 'higher' : 'lower'}`
+                    : ''
                 }: RTL returns here, and heights above home are measured from it.${
-                  groundM === null ? ` No terrain height here: home keeps its altitude (${formatAltitude(home.alt).full} MSL).` : ''
+                  groundM === null
+                    ? ` No terrain height here: home keeps its altitude (${formatAltitude(home.alt).full} MSL).`
+                    : ''
                 }`}
           </p>
         )}

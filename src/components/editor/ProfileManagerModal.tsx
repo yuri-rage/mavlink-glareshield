@@ -1,11 +1,13 @@
-import { profileVehicleControls } from '../../lib/vehicleControls';
 import React, { useState } from 'react';
+
+import { AlertTriangle, Check, Copy, Download, Layers, RotateCcw, Upload } from 'lucide-react';
+
+import { downloadFile } from '../../lib/download';
+import { profileVehicleControls } from '../../lib/vehicleControls';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { DashboardProfile } from '../../types/widget';
-import { Modal } from '../ui/modal';
 import { Button } from '../ui/button';
-import { Download, Upload, RotateCcw, Copy, Check, AlertTriangle, Layers } from 'lucide-react';
-import { downloadFile } from '../../lib/download';
+import { Modal } from '../ui/modal';
 
 interface ProfileManagerModalProps {
   isOpen: boolean;
@@ -20,7 +22,11 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
   const [pendingProfile, setPendingProfile] = useState<DashboardProfile | null>(null);
 
   const handleDownload = () => {
-    downloadFile(`mavlink-glareshield-profile-${new Date().toISOString().slice(0, 10)}.json`, exportProfileJson(), 'application/json');
+    downloadFile(
+      `mavlink-glareshield-profile-${new Date().toISOString().slice(0, 10)}.json`,
+      exportProfileJson(),
+      'application/json'
+    );
   };
 
   const handleCopy = () => {
@@ -100,12 +106,10 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
     >
       <div className="space-y-4">
         {/* Export / Download Section */}
-        <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">
+        <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
-              Export Active Profile
-            </span>
-            <span className="text-[10px] text-zinc-500 font-mono">
+            <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">Export Active Profile</span>
+            <span className="font-mono text-[10px] text-zinc-500">
               {profile.tabs.length} tabs • {profile.customWidgets.length} custom widgets
             </span>
           </div>
@@ -115,18 +119,13 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
               variant="default"
               size="sm"
               onClick={handleDownload}
-              className="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold gap-1.5 h-8 text-xs"
+              className="h-8 flex-1 gap-1.5 bg-sky-500 text-xs font-bold text-white hover:bg-sky-600"
             >
               <Download className="h-3.5 w-3.5" />
               Download .json Profile
             </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCopy}
-              className="h-8 px-3 text-xs border-zinc-700 gap-1"
-            >
+            <Button variant="outline" size="sm" onClick={handleCopy} className="h-8 gap-1 border-zinc-700 px-3 text-xs">
               {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
               {copied ? 'Copied' : 'Copy'}
             </Button>
@@ -135,14 +134,16 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
 
         {/* Import Preview Confirmation */}
         {pendingProfile && (
-          <div className="p-4 bg-zinc-900 border border-sky-500/50 rounded-xl space-y-3">
-            <div className="flex items-center gap-2 text-sky-400 font-bold text-sm">
+          <div className="space-y-3 rounded-xl border border-sky-500/50 bg-zinc-900 p-4">
+            <div className="flex items-center gap-2 text-sm font-bold text-sky-400">
               <Layers className="h-4 w-4" />
               <span>Import Profile Preview: {pendingProfile.name || 'Untitled Profile'}</span>
             </div>
 
-            <div className="text-xs text-zinc-300 space-y-1.5 font-mono">
-              <div><b className="text-zinc-400">Version:</b> {pendingProfile.version || '1.0.0'}</div>
+            <div className="space-y-1.5 font-mono text-xs text-zinc-300">
+              <div>
+                <b className="text-zinc-400">Version:</b> {pendingProfile.version || '1.0.0'}
+              </div>
               <div>
                 <b className="text-zinc-400">Tabs ({pendingProfile.tabs.length}):</b>{' '}
                 {pendingProfile.tabs.map((t) => t.title).join(', ')}
@@ -158,27 +159,27 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
                 return (
                   <>
                     {custom.length > 0 && (
-                      <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded mt-2 space-y-1 text-amber-200">
-                        <div className="font-bold flex items-center gap-1.5 text-amber-300">
+                      <div className="mt-2 space-y-1 rounded border border-amber-600/40 bg-amber-950/40 p-2.5 text-amber-200">
+                        <div className="flex items-center gap-1.5 font-bold text-amber-300">
                           <AlertTriangle className="h-4 w-4" />
                           Custom widgets that act on the vehicle:
                         </div>
-                        <ul className="list-disc list-inside text-[11px] text-zinc-300 space-y-0.5">
+                        <ul className="list-inside list-disc space-y-0.5 text-[11px] text-zinc-300">
                           {custom.map((c, i) => (
                             <li key={`${c.name}-${i}`}>
                               <b>{c.name}</b>: {c.controls.join('; ')}
                             </li>
                           ))}
                         </ul>
-                        <div className="text-[11px] text-amber-400 mt-1">
+                        <div className="mt-1 text-[11px] text-amber-400">
                           * Confirmation is enforced on every imported command and parameter write.
                         </div>
                       </div>
                     )}
                     {builtin.length > 0 && (
-                      <div className="text-[11px] text-zinc-400 mt-2">
-                        <b className="text-zinc-300">Built-in widgets with vehicle controls</b> (their own confirmations, as
-                        when you place them yourself): {builtin.map((c) => c.name).join(', ')}.
+                      <div className="mt-2 text-[11px] text-zinc-400">
+                        <b className="text-zinc-300">Built-in widgets with vehicle controls</b> (their own
+                        confirmations, as when you place them yourself): {builtin.map((c) => c.name).join(', ')}.
                       </div>
                     )}
                   </>
@@ -191,16 +192,11 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
                 variant="default"
                 size="sm"
                 onClick={confirmApplyProfile}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                className="flex-1 bg-emerald-600 font-bold text-white hover:bg-emerald-700"
               >
                 Confirm & Apply Profile
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPendingProfile(null)}
-                className="text-zinc-400"
-              >
+              <Button variant="outline" size="sm" onClick={() => setPendingProfile(null)} className="text-zinc-400">
                 Cancel
               </Button>
             </div>
@@ -208,23 +204,16 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
         )}
 
         {/* Import Section */}
-        <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl space-y-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 block">
-            Import Profile (.json)
-          </span>
+        <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+          <span className="block text-xs font-bold uppercase tracking-wider text-zinc-300">Import Profile (.json)</span>
 
           <label className="block">
-            <input
-              type="file"
-              accept=".json"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
+            <input type="file" accept=".json" onChange={handleFileUpload} className="hidden" />
             <Button
               variant="outline"
               size="sm"
               type="button"
-              className="w-full gap-1.5 h-9 border-dashed border-zinc-700 text-zinc-300 pointer-events-none"
+              className="pointer-events-none h-9 w-full gap-1.5 border-dashed border-zinc-700 text-zinc-300"
             >
               <Upload className="h-4 w-4 text-emerald-400" />
               Choose JSON File to Import
@@ -235,7 +224,7 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
             placeholder="Or paste JSON profile text here..."
             value={jsonText}
             onChange={(e) => setJsonText(e.target.value)}
-            className="w-full h-20 rounded-lg border border-zinc-800 bg-zinc-950 p-2 font-mono text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+            className="h-20 w-full rounded-lg border border-zinc-800 bg-zinc-950 p-2 font-mono text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600"
           />
 
           {jsonText.trim() && (
@@ -243,26 +232,22 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
               size="sm"
               variant="default"
               onClick={handleTextImport}
-              className="w-full h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="h-8 w-full bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-700"
             >
               Apply Pasted Profile
             </Button>
           )}
 
-          {importStatus && (
-            <p className="text-xs text-center font-bold text-sky-400 animate-pulse">
-              {importStatus}
-            </p>
-          )}
+          {importStatus && <p className="animate-pulse text-center text-xs font-bold text-sky-400">{importStatus}</p>}
         </div>
 
         {/* Reset to Factory Defaults */}
-        <div className="pt-1 flex items-center justify-between border-t border-zinc-800">
+        <div className="flex items-center justify-between border-t border-zinc-800 pt-1">
           <Button
             variant="ghost"
             size="sm"
             onClick={handleReset}
-            className="text-red-400 hover:text-red-300 hover:bg-red-950/30 gap-1.5 text-xs"
+            className="gap-1.5 text-xs text-red-400 hover:bg-red-950/30 hover:text-red-300"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             Reset to Default Layout

@@ -4,10 +4,12 @@
 // the profile doesn't re-render the map.
 
 import { useEffect } from 'react';
+
 import L from 'leaflet';
+
 import { useMissionTerrainStore } from '../../store/missionTerrainStore';
-import { useUnitsStore } from '../../store/unitsStore';
 import { useTerrainStore } from '../../store/terrainStore';
+import { useUnitsStore } from '../../store/unitsStore';
 
 /** How close (px) the pointer must be to the route on the map to pick a profile point. */
 const PICK_PX = 14;
@@ -28,10 +30,24 @@ export function useProfileLink(mapRef: React.MutableRefObject<L.Map | null>, rea
       }
       const agl = p.alt !== null && p.terrain !== null ? p.alt - p.terrain : null;
       const low = agl !== null && p.checked && agl < useTerrainStore.getState().clearanceM;
-      const label = agl !== null ? `${useUnitsStore.getState().formatAltitude(agl).full} above terrain` : 'terrain unknown';
+      const label =
+        agl !== null ? `${useUnitsStore.getState().formatAltitude(agl).full} above terrain` : 'terrain unknown';
       if (!marker) {
-        marker = L.circleMarker([p.lat, p.lon], { radius: 6, weight: 2, color: '#09090b', fillColor: '#38bdf8', fillOpacity: 1, interactive: false, pane: 'markerPane' })
-          .bindTooltip(label, { permanent: true, direction: 'top', offset: [0, -8], className: 'font-mono text-[10px]' })
+        marker = L.circleMarker([p.lat, p.lon], {
+          radius: 6,
+          weight: 2,
+          color: '#09090b',
+          fillColor: '#38bdf8',
+          fillOpacity: 1,
+          interactive: false,
+          pane: 'markerPane',
+        })
+          .bindTooltip(label, {
+            permanent: true,
+            direction: 'top',
+            offset: [0, -8],
+            className: 'font-mono text-[10px]',
+          })
           .addTo(map);
       } else {
         marker.setLatLng([p.lat, p.lon]);

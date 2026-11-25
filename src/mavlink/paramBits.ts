@@ -38,7 +38,9 @@ export function bitmaskSummary(value: number, bitmask: Record<number, string>, m
   const bits = setBits(value);
   if (bits.length === 0) return 'None';
   const names = bits.map((b) => bitmask[b] ?? `bit ${b}`);
-  return names.length <= maxNames ? names.join(', ') : `${names.slice(0, maxNames).join(', ')} +${names.length - maxNames}`;
+  return names.length <= maxNames
+    ? names.join(', ')
+    : `${names.slice(0, maxNames).join(', ')} +${names.length - maxNames}`;
 }
 
 /** Named values as [value, label] pairs, in numeric order. */

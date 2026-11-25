@@ -35,14 +35,21 @@ function autopilotVersion(sysId: number, capabilities: number): Uint8Array {
   return vehicle(sysId).packV2(MAVLINK_MSG_ID.AUTOPILOT_VERSION, payload);
 }
 const heartbeat = (sysId: number) =>
-  vehicle(sysId).packV2(MAVLINK_MSG_ID.HEARTBEAT, new Uint8Array([0, 0, 0, 0, /*quad*/ 2, /*ArduPilot*/ 3, 0x81, 4, 3]));
+  vehicle(sysId).packV2(
+    MAVLINK_MSG_ID.HEARTBEAT,
+    new Uint8Array([0, 0, 0, 0, /*quad*/ 2, /*ArduPilot*/ 3, 0x81, 4, 3])
+  );
 
 // Decoding
 {
   const payload = new Uint8Array(78);
   new DataView(payload.buffer).setUint32(0, CAPABILITY_MISSION_RALLY | 4, true);
   const d = decodePayload(MAVLINK_MSG_ID.AUTOPILOT_VERSION, payload);
-  check('AUTOPILOT_VERSION: capabilities decoded', (d.capabilities & CAPABILITY_MISSION_RALLY) !== 0 && (d.capabilities & 4) !== 0, String(d.capabilities));
+  check(
+    'AUTOPILOT_VERSION: capabilities decoded',
+    (d.capabilities & CAPABILITY_MISSION_RALLY) !== 0 && (d.capabilities & 4) !== 0,
+    String(d.capabilities)
+  );
 }
 
 feed(heartbeat(1));
@@ -56,7 +63,10 @@ check('capability bit set: supported', useTelemetryStore.getState().rallySupport
 
 useTelemetryStore.setState({ rallySupport: 'unsupported' });
 feed(autopilotVersion(1, 4 | CAPABILITY_MISSION_RALLY));
-check('an explicit "unsupported" answer stands over the bit', useTelemetryStore.getState().rallySupport === 'unsupported');
+check(
+  'an explicit "unsupported" answer stands over the bit',
+  useTelemetryStore.getState().rallySupport === 'unsupported'
+);
 
 // Another vehicle: start over. (The store only switches vehicle after 10 s of silence from the first.)
 {
@@ -64,8 +74,11 @@ check('an explicit "unsupported" answer stands over the bit', useTelemetryStore.
   Date.now = () => realNow() + 20000;
   feed(heartbeat(2));
   Date.now = realNow;
-  check('another vehicle: back to unknown', useTelemetryStore.getState().heartbeat.systemId === 2 && useTelemetryStore.getState().rallySupport === 'unknown',
-    `${useTelemetryStore.getState().heartbeat.systemId} ${useTelemetryStore.getState().rallySupport}`);
+  check(
+    'another vehicle: back to unknown',
+    useTelemetryStore.getState().heartbeat.systemId === 2 && useTelemetryStore.getState().rallySupport === 'unknown',
+    `${useTelemetryStore.getState().heartbeat.systemId} ${useTelemetryStore.getState().rallySupport}`
+  );
 }
 
 // The same vehicle back after a silence (rebooted, reflashed, another SITL binary): start over too.
@@ -80,5 +93,7 @@ check('an explicit "unsupported" answer stands over the bit', useTelemetryStore.
   check('same vehicle back after a silence: back to unknown', useTelemetryStore.getState().rallySupport === 'unknown');
 }
 
-console.log(failures.length ? `\n${failures.length} rally support check(s) FAILED` : '\nAll rally support checks PASSED');
+console.log(
+  failures.length ? `\n${failures.length} rally support check(s) FAILED` : '\nAll rally support checks PASSED'
+);
 process.exit(failures.length ? 1 : 0);

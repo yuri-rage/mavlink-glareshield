@@ -7,7 +7,11 @@
 
 export type AltitudeReference = 'agl' | 'msl';
 
-export function displayAltitudeM(mode: AltitudeReference, position: { alt: number; relativeAlt: number }, vfrAlt: number): number {
+export function displayAltitudeM(
+  mode: AltitudeReference,
+  position: { alt: number; relativeAlt: number },
+  vfrAlt: number
+): number {
   if (mode === 'agl') return position.relativeAlt;
   return position.alt !== 0 ? position.alt : vfrAlt;
 }

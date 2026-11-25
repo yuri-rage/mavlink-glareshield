@@ -63,7 +63,8 @@ export function answerVideoProblem(sdp: string): string | null {
   const sections = sdp.split(/\r?\n(?=m=)/);
   const video = sections.find((sec) => sec.startsWith('m=video'));
   if (!video) return 'the answer has no video';
-  if (/^m=video 0 /.test(video)) return 'the server refused the video (unsupported codec? browsers play H.264, VP8, VP9, AV1; not H.265)';
+  if (/^m=video 0 /.test(video))
+    return 'the server refused the video (unsupported codec? browsers play H.264, VP8, VP9, AV1; not H.265)';
   if (/\r?\na=inactive/.test(video)) return 'the server sends no video on this stream';
   return null;
 }
@@ -77,7 +78,11 @@ export class WhepSession {
   /** Aborted by stop(): wakes the ICE wait and cancels the POST. */
   private abort = new AbortController();
 
-  constructor(private url: string, private deps: WhepDeps, private opts: WhepOptions = {}) {}
+  constructor(
+    private url: string,
+    private deps: WhepDeps,
+    private opts: WhepOptions = {}
+  ) {}
 
   private authHeaders(): Record<string, string> {
     return this.opts.token ? { Authorization: `Bearer ${this.opts.token}` } : {};
@@ -85,7 +90,9 @@ export class WhepSession {
 
   /** DELETE a session resource (best effort; keepalive, so also as the page goes). */
   private release(resource: string): Promise<unknown> {
-    return this.deps.fetch(resource, { method: 'DELETE', headers: this.authHeaders(), keepalive: true }).catch(() => undefined);
+    return this.deps
+      .fetch(resource, { method: 'DELETE', headers: this.authHeaders(), keepalive: true })
+      .catch(() => undefined);
   }
 
   /**
@@ -168,9 +175,17 @@ export class WhepSession {
       } catch {
         // No body.
       }
-      const why = res.status === 401 || res.status === 403 ? 'not authorised (token?)' : res.status === 404 ? 'no such stream' : `HTTP ${res.status}`;
+      const why =
+        res.status === 401 || res.status === 403
+          ? 'not authorised (token?)'
+          : res.status === 404
+            ? 'no such stream'
+            : `HTTP ${res.status}`;
       const codecHint = /codec/i.test(reason) ? ' (browsers play H.264, VP8, VP9, AV1; not H.265)' : '';
-      throw new WhepError(`the WHEP endpoint refused: ${why}${reason && !why.includes(reason) ? `: ${reason}` : ''}${codecHint}`, res.status);
+      throw new WhepError(
+        `the WHEP endpoint refused: ${why}${reason && !why.includes(reason) ? `: ${reason}` : ''}${codecHint}`,
+        res.status
+      );
     }
     const answer = await res.text();
     if (!answer.trim().startsWith('v=')) throw new WhepError('the WHEP endpoint answered without an SDP');
@@ -185,7 +200,10 @@ export class WhepSession {
       return await Promise.race([
         videoArrived,
         new Promise<never>((_, reject) => {
-          trackTimer = setTimeout(() => reject(new WhepError('no video track arrived (unsupported codec, e.g. H.265?)')), this.opts.trackTimeoutMs ?? TRACK_TIMEOUT_MS);
+          trackTimer = setTimeout(
+            () => reject(new WhepError('no video track arrived (unsupported codec, e.g. H.265?)')),
+            this.opts.trackTimeoutMs ?? TRACK_TIMEOUT_MS
+          );
           // A stop while waiting ends the wait at once.
           onAbort = () => reject(new WhepError('stopped'));
           this.abort.signal.addEventListener('abort', onAbort);
@@ -206,9 +224,19 @@ export class WhepSession {
     if (!pc) return null;
     try {
       let n: number | null = null;
-      (await pc.getStats()).forEach((r: { type?: string; kind?: string; mediaType?: string; framesDecoded?: number; framesReceived?: number; packetsReceived?: number }) => {
-        if (r.type === 'inbound-rtp' && (r.kind ?? r.mediaType) === 'video') n = r.framesDecoded ?? r.framesReceived ?? r.packetsReceived ?? n;
-      });
+      (await pc.getStats()).forEach(
+        (r: {
+          type?: string;
+          kind?: string;
+          mediaType?: string;
+          framesDecoded?: number;
+          framesReceived?: number;
+          packetsReceived?: number;
+        }) => {
+          if (r.type === 'inbound-rtp' && (r.kind ?? r.mediaType) === 'video')
+            n = r.framesDecoded ?? r.framesReceived ?? r.packetsReceived ?? n;
+        }
+      );
       return n;
     } catch {
       return null;

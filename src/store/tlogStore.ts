@@ -1,6 +1,7 @@
 // Telemetry logging: the settings (on/off, size cap) saved in this browser, and the recorder's state for the UI.
 
 import { create } from 'zustand';
+
 import type { TlogMeta } from '../mavlink/tlog';
 
 const KEY_ENABLED = 'mavlink_glareshield_tlog_enabled';

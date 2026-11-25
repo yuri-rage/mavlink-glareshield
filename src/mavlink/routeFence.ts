@@ -8,8 +8,8 @@
 //   FENCE_ALT_MAX_TP), for items given relative to home.
 // With FENCE_TYPE unknown, the drawn fence shapes are still checked (they're what the user is looking at).
 
-import type { DraftIssue } from './missionDraft';
 import { fenceBreachReasons, type FenceDraft } from './fenceDraft';
+import type { DraftIssue } from './missionDraft';
 
 /** A leg to check: item indices of its ends (0 is home), the item a warning goes on, and the route drawn. */
 export interface FenceLeg {
@@ -56,7 +56,8 @@ function distanceM(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
  */
 function samples(pts: [number, number][], step: number): { lat: number; lon: number }[] {
   let total = 0;
-  for (let i = 1; i < pts.length; i++) total += distanceM({ lat: pts[i - 1][0], lon: pts[i - 1][1] }, { lat: pts[i][0], lon: pts[i][1] });
+  for (let i = 1; i < pts.length; i++)
+    total += distanceM({ lat: pts[i - 1][0], lon: pts[i - 1][1] }, { lat: pts[i][0], lon: pts[i][1] });
   const spacing = Math.max(step, total / MAX_SAMPLES);
   const out: { lat: number; lon: number }[] = [];
   for (let i = 0; i < pts.length; i++) {
@@ -65,7 +66,8 @@ function samples(pts: [number, number][], step: number): { lat: number; lon: num
     if (i === pts.length - 1) break;
     const b = { lat: pts[i + 1][0], lon: pts[i + 1][1] };
     const n = Math.floor(distanceM(a, b) / spacing);
-    for (let k = 1; k < n; k++) out.push({ lat: a.lat + ((b.lat - a.lat) * k) / n, lon: a.lon + ((b.lon - a.lon) * k) / n });
+    for (let k = 1; k < n; k++)
+      out.push({ lat: a.lat + ((b.lat - a.lat) * k) / n, lon: a.lon + ((b.lon - a.lon) * k) / n });
   }
   return out;
 }
@@ -81,7 +83,12 @@ export function routeFenceIssues(
   const off = ctx.enabled === false ? ' (fencing is off)' : '';
   const known = ctx.types !== undefined;
   const polygons = fence.shapes.length > 0 && (!known || (ctx.types! & FENCE_TYPE_POLYGON) !== 0);
-  const circle = known && ctx.home !== undefined && (ctx.types! & FENCE_TYPE_CIRCLE) !== 0 && ctx.circleRadius !== undefined && ctx.circleRadius > 0;
+  const circle =
+    known &&
+    ctx.home !== undefined &&
+    (ctx.types! & FENCE_TYPE_CIRCLE) !== 0 &&
+    ctx.circleRadius !== undefined &&
+    ctx.circleRadius > 0;
   const altMax = known && (ctx.types! & FENCE_TYPE_ALT_MAX) !== 0 && ctx.altMax !== undefined && ctx.altMax > 0;
   const name = (i: number) => (i === 0 ? 'home' : `#${i}`);
 
@@ -91,18 +98,28 @@ export function routeFenceIssues(
     const reasons: string[] = [];
     for (const p of samples(leg.latLngs, SAMPLE_M)) {
       const here = polygons ? fenceBreachReasons(fence, p, { inclusionUnion: ctx.inclusionUnion }) : [];
-      if (circle && distanceM(ctx.home!, p) > ctx.circleRadius!) here.push(`beyond the ${fmt(ctx.circleRadius!)} circle around home`);
+      if (circle && distanceM(ctx.home!, p) > ctx.circleRadius!)
+        here.push(`beyond the ${fmt(ctx.circleRadius!)} circle around home`);
       for (const r of here) if (!reasons.includes(r)) reasons.push(r);
     }
     if (reasons.length > 0) {
-      issues.push({ index: leg.at ?? leg.to, severity: 'warning', message: `The leg from ${name(leg.from)} to ${name(leg.to)} goes ${reasons.join(', and ')}${off}.` });
+      issues.push({
+        index: leg.at ?? leg.to,
+        severity: 'warning',
+        message: `The leg from ${name(leg.from)} to ${name(leg.to)} goes ${reasons.join(', and ')}${off}.`,
+      });
     }
   }
   if (altMax) {
     items.forEach((it, i) => {
       if (i === 0) return;
       const relative = it.frame === MAV_FRAME_GLOBAL_RELATIVE_ALT || it.frame === MAV_FRAME_GLOBAL_RELATIVE_ALT_INT;
-      if (relative && it.z > ctx.altMax!) issues.push({ index: i, severity: 'warning', message: `#${i} is above the fence's maximum altitude (${fmt(ctx.altMax!)})${off}.` });
+      if (relative && it.z > ctx.altMax!)
+        issues.push({
+          index: i,
+          severity: 'warning',
+          message: `#${i} is above the fence's maximum altitude (${fmt(ctx.altMax!)})${off}.`,
+        });
     });
   }
   return issues;

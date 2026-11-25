@@ -4,24 +4,26 @@
 // the vehicle to face it: that asks first, naming it.
 
 import React, { useEffect, useRef, useState } from 'react';
+
 import { Camera, Crosshair } from 'lucide-react';
-import { useGimbalStore, gimbalEnabled } from '../../store/gimbalStore';
-import { useTelemetryStore, sendTrackedCommand } from '../../store/telemetryStore';
+
+import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { mavlinkConnection } from '../../mavlink/connection';
-import { getVehicleCategory } from '../../mavlink/messages';
 import {
+  forwardYaw,
   GIMBAL_CAP,
+  gimbalLimits,
   MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW,
   MAV_CMD_DO_SET_ROI_LOCATION,
   MAV_CMD_DO_SET_ROI_NONE,
-  forwardYaw,
-  gimbalLimits,
   pitchYawParams,
   roiTurnsVehicle,
 } from '../../mavlink/gimbal';
-import { describeAck, type AckView } from '../widgets/custom/panelModel';
+import { getVehicleCategory } from '../../mavlink/messages';
+import { gimbalEnabled, useGimbalStore } from '../../store/gimbalStore';
+import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
 import { AckChip } from '../widgets/custom/panelKit';
-import { useConfirmStep } from '../../lib/useWaypointNavigation';
+import { describeAck, type AckView } from '../widgets/custom/panelModel';
 
 function useSender() {
   const [ack, setAck] = useState<AckView | null>(null);
@@ -73,8 +75,17 @@ export const GimbalControlBody: React.FC = () => {
   const clearRoi = () => useGimbalStore.getState().set({ roi: null });
   const point = (p: number, y: number, label: string) => {
     const { sys, comp } = target();
-    const params = pitchYawParams({ deviceId: deviceId(), pitchDeg: clamp(p, pitchMin, pitchMax), yawDeg: canYaw ? clamp(y, yawMin, yawMax) : 0, yawLock: yawLock ?? false });
-    send(mavlinkConnection.getEncoder().createCommandLong(sys, comp, MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW, params), label, clearRoi);
+    const params = pitchYawParams({
+      deviceId: deviceId(),
+      pitchDeg: clamp(p, pitchMin, pitchMax),
+      yawDeg: canYaw ? clamp(y, yawMin, yawMax) : 0,
+      yawLock: yawLock ?? false,
+    });
+    send(
+      mavlinkConnection.getEncoder().createCommandLong(sys, comp, MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW, params),
+      label,
+      clearRoi
+    );
   };
   /** Forward / Down: along the vehicle (with yaw lock that's the vehicle's true heading, not north). */
   const alongVehicle = (p: number, label: string) => {
@@ -86,14 +97,32 @@ export const GimbalControlBody: React.FC = () => {
   const mode = (o: { retract?: boolean; neutral?: boolean; yawLock?: boolean }, label: string) => {
     const { sys, comp } = target();
     const leavesTarget = Boolean(o.retract || o.neutral);
-    send(mavlinkConnection.getEncoder().createCommandLong(sys, comp, MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW, pitchYawParams({ deviceId: deviceId(), ...o })), label, leavesTarget ? clearRoi : undefined);
+    send(
+      mavlinkConnection
+        .getEncoder()
+        .createCommandLong(
+          sys,
+          comp,
+          MAV_CMD_DO_GIMBAL_MANAGER_PITCHYAW,
+          pitchYawParams({ deviceId: deviceId(), ...o })
+        ),
+      label,
+      leavesTarget ? clearRoi : undefined
+    );
   };
   const stopRoi = () => {
     const { sys, comp } = target();
-    send(mavlinkConnection.getEncoder().createCommandLong(sys, comp, MAV_CMD_DO_SET_ROI_NONE, [deviceId(), 0, 0, 0, 0, 0, 0]), 'Gimbal: stop pointing', () => useGimbalStore.getState().set({ roi: null }));
+    send(
+      mavlinkConnection
+        .getEncoder()
+        .createCommandLong(sys, comp, MAV_CMD_DO_SET_ROI_NONE, [deviceId(), 0, 0, 0, 0, 0, 0]),
+      'Gimbal: stop pointing',
+      () => useGimbalStore.getState().set({ roi: null })
+    );
   };
 
-  const BTN = 'rounded-md border border-zinc-700 px-2 py-1 text-[10px] font-bold text-zinc-200 hover:bg-zinc-800 disabled:opacity-40';
+  const BTN =
+    'rounded-md border border-zinc-700 px-2 py-1 text-[10px] font-bold text-zinc-200 hover:bg-zinc-800 disabled:opacity-40';
   const has = (f: number) => !info || (info.capFlags & f) !== 0;
   return (
     <div className="w-64 space-y-2 text-[11px]">
@@ -111,31 +140,69 @@ export const GimbalControlBody: React.FC = () => {
           <span>Pitch</span>
           <span className="font-mono">{pitch}°</span>
         </span>
-        <input type="range" min={Math.round(pitchMin)} max={Math.round(pitchMax)} step={1} value={pitch} onChange={(e) => setPitch(Number(e.target.value))} className="w-full accent-sky-500" aria-label="Pitch" />
+        <input
+          type="range"
+          min={Math.round(pitchMin)}
+          max={Math.round(pitchMax)}
+          step={1}
+          value={pitch}
+          onChange={(e) => setPitch(Number(e.target.value))}
+          className="w-full accent-sky-500"
+          aria-label="Pitch"
+        />
       </label>
       <label className="block space-y-0.5">
         <span className="flex justify-between text-[10px] text-zinc-400">
           <span>Yaw {yawLock ? '(true heading, held)' : '(relative to the vehicle)'}</span>
           <span className="font-mono">{canYaw ? `${yaw}°` : 'no pan'}</span>
         </span>
-        <input type="range" disabled={!canYaw} min={Math.round(yawMin)} max={Math.round(yawMax)} step={1} value={yaw} onChange={(e) => setYaw(Number(e.target.value))} className="w-full accent-sky-500 disabled:opacity-40" aria-label="Yaw" />
+        <input
+          type="range"
+          disabled={!canYaw}
+          min={Math.round(yawMin)}
+          max={Math.round(yawMax)}
+          step={1}
+          value={yaw}
+          onChange={(e) => setYaw(Number(e.target.value))}
+          className="w-full accent-sky-500 disabled:opacity-40"
+          aria-label="Yaw"
+        />
       </label>
       <div className="grid grid-cols-3 gap-1">
-        <button type="button" className={`${BTN} col-span-3 border-sky-700 text-sky-300`} onClick={() => point(pitch, yaw, `Gimbal: pitch ${pitch}°, yaw ${yaw}°`)}>
+        <button
+          type="button"
+          className={`${BTN} col-span-3 border-sky-700 text-sky-300`}
+          onClick={() => point(pitch, yaw, `Gimbal: pitch ${pitch}°, yaw ${yaw}°`)}
+        >
           Point
         </button>
         <button type="button" className={BTN} onClick={() => alongVehicle(0, 'Gimbal: forward')}>
           Forward
         </button>
-        <button type="button" className={BTN} disabled={pitchMin > -89} title={pitchMin > -89 ? `Pitch limit is ${Math.round(pitchMin)}°` : 'Straight down'} onClick={() => alongVehicle(-90, 'Gimbal: down')}>
+        <button
+          type="button"
+          className={BTN}
+          disabled={pitchMin > -89}
+          title={pitchMin > -89 ? `Pitch limit is ${Math.round(pitchMin)}°` : 'Straight down'}
+          onClick={() => alongVehicle(-90, 'Gimbal: down')}
+        >
           Down
         </button>
-        <button type="button" className={BTN} disabled={!has(GIMBAL_CAP.HAS_NEUTRAL)} onClick={() => mode({ neutral: true }, 'Gimbal: neutral')}>
+        <button
+          type="button"
+          className={BTN}
+          disabled={!has(GIMBAL_CAP.HAS_NEUTRAL)}
+          onClick={() => mode({ neutral: true }, 'Gimbal: neutral')}
+        >
           Neutral
         </button>
       </div>
       <div className="flex items-center justify-between gap-1">
-        <div className="grid flex-1 grid-cols-2 gap-0.5 rounded-md border border-zinc-800 bg-zinc-900 p-0.5" role="radiogroup" aria-label="Gimbal yaw">
+        <div
+          className="grid flex-1 grid-cols-2 gap-0.5 rounded-md border border-zinc-800 bg-zinc-900 p-0.5"
+          role="radiogroup"
+          aria-label="Gimbal yaw"
+        >
           {[false, true].map((lock) => (
             <button
               key={String(lock)}
@@ -151,7 +218,12 @@ export const GimbalControlBody: React.FC = () => {
             </button>
           ))}
         </div>
-        <button type="button" className={BTN} disabled={!has(GIMBAL_CAP.HAS_RETRACT)} onClick={() => mode({ retract: true }, 'Gimbal: retract')}>
+        <button
+          type="button"
+          className={BTN}
+          disabled={!has(GIMBAL_CAP.HAS_RETRACT)}
+          onClick={() => mode({ retract: true }, 'Gimbal: retract')}
+        >
           Retract
         </button>
       </div>
@@ -160,7 +232,9 @@ export const GimbalControlBody: React.FC = () => {
           Stop pointing at the target
         </button>
       )}
-      <p className="text-[10px] leading-snug text-zinc-500">Right-click the map to point the camera at a place. RC gimbal input takes over when moved.</p>
+      <p className="text-[10px] leading-snug text-zinc-500">
+        Right-click the map to point the camera at a place. RC gimbal input takes over when moved.
+      </p>
       <AckChip ack={ack} />
     </div>
   );
@@ -180,7 +254,9 @@ export const PointCameraButton: React.FC<{ lat: number; lon: number; onDone: () 
     confirm.cancel();
     const { sys, comp } = target();
     // COMMAND_INT, height 0 above home: the place on the ground (taken as home's height).
-    const packet = mavlinkConnection.getEncoder().createCommandInt(sys, comp, MAV_CMD_DO_SET_ROI_LOCATION, 3, [deviceId(), 0, 0, 0, lat * 1e7, lon * 1e7, 0]);
+    const packet = mavlinkConnection
+      .getEncoder()
+      .createCommandInt(sys, comp, MAV_CMD_DO_SET_ROI_LOCATION, 3, [deviceId(), 0, 0, 0, lat * 1e7, lon * 1e7, 0]);
     send(packet, 'Gimbal: point here', () => {
       useGimbalStore.getState().set({ roi: { lat, lon } });
       setTimeout(onDone, 600);
@@ -188,12 +264,18 @@ export const PointCameraButton: React.FC<{ lat: number; lon: number; onDone: () 
   };
   return (
     <div className="space-y-1">
-      {confirm.armed && <p className="text-[10px] leading-snug text-amber-300">The gimbal can&apos;t pan: the vehicle will turn to face this point.</p>}
+      {confirm.armed && (
+        <p className="text-[10px] leading-snug text-amber-300">
+          The gimbal can&apos;t pan: the vehicle will turn to face this point.
+        </p>
+      )}
       <button
         type="button"
         onClick={go}
         className={`flex h-7 w-full items-center justify-center gap-1.5 rounded-md border text-[11px] font-bold ${
-          confirm.armed ? 'border-amber-500 bg-amber-600 text-zinc-950' : 'border-zinc-600 text-zinc-200 hover:bg-zinc-800'
+          confirm.armed
+            ? 'border-amber-500 bg-amber-600 text-zinc-950'
+            : 'border-zinc-600 text-zinc-200 hover:bg-zinc-800'
         }`}
       >
         <Crosshair className="h-3.5 w-3.5" />
