@@ -252,3 +252,80 @@ export function buildPreset(preset: CockpitPresetId, existing: PlacedWidget[], n
   const layout = sanitizeCockpit({ header, root }, widgets.map((w) => w.instanceId)) ?? { header: null, root: null };
   return { widgets, layout };
 }
+
+// ------------------------------------------------------------------------------------------------
+// Editing (the Cockpit editor): pure operations on the tree; the store reconciles the result.
+// ------------------------------------------------------------------------------------------------
+
+/** Where a pane goes relative to another: beside it (left/right), above or below it, or in its place (swap). */
+export type DropZone = 'left' | 'right' | 'top' | 'bottom' | 'center';
+
+const replaceNode = (root: CockpitNode, match: (n: CockpitNode) => boolean, make: (n: CockpitNode) => CockpitNode): CockpitNode => {
+  if (match(root)) return make(root);
+  if (isPane(root)) return root;
+  return { ...root, children: root.children.map((c) => replaceNode(c, match, make)) };
+};
+
+/**
+ * The layout with `newId` put beside, above or below the pane `targetId`, which gives up half its room. Next to a
+ * pane in a split of the same direction it becomes a sibling (no deeper nesting), else the pane becomes a split.
+ */
+export function splitPane(layout: CockpitLayout, targetId: string, side: Exclude<DropZone, 'center'>, newId: string): CockpitLayout {
+  if (!layout.root) return { ...layout, root: { pane: newId } };
+  const dir: 'row' | 'column' = side === 'left' || side === 'right' ? 'row' : 'column';
+  const before = side === 'left' || side === 'top';
+  const fresh: CockpitNode = { pane: newId };
+  let done = false;
+  const walk = (n: CockpitNode): CockpitNode => {
+    if (done || isPane(n)) return n;
+    const i = n.children.findIndex((c) => isPane(c) && c.pane === targetId);
+    if (i >= 0 && n.split === dir) {
+      done = true;
+      const half = n.sizes[i] / 2;
+      const children = [...n.children];
+      const sizes = [...n.sizes];
+      children.splice(before ? i : i + 1, 0, fresh);
+      sizes.splice(i, 1, ...(before ? [half, half] : [half, half]));
+      return { ...n, children, sizes };
+    }
+    return { ...n, children: n.children.map(walk) };
+  };
+  const root = walk(layout.root);
+  if (done) return { ...layout, root };
+  // Not beside a sibling of that direction: the pane becomes a split of itself and the new one.
+  return {
+    ...layout,
+    root: replaceNode(
+      layout.root,
+      (n) => isPane(n) && n.pane === targetId,
+      (n) => ({ split: dir, children: before ? [fresh, n] : [n, fresh], sizes: [50, 50] })
+    ),
+  };
+}
+
+/** The layout with the pane showing `oldId` showing `newId` instead. */
+export function replacePane(layout: CockpitLayout, oldId: string, newId: string): CockpitLayout {
+  if (!layout.root) return layout;
+  return { ...layout, root: replaceNode(layout.root, (n) => isPane(n) && n.pane === oldId, () => ({ pane: newId })) };
+}
+
+/** The layout with two panes' widgets exchanged (each keeps the other's place and size). */
+export function swapPanes(layout: CockpitLayout, a: string, b: string): CockpitLayout {
+  if (!layout.root || a === b) return layout;
+  const swap = (n: CockpitNode): CockpitNode =>
+    isPane(n) ? (n.pane === a ? { pane: b } : n.pane === b ? { pane: a } : n) : { ...n, children: n.children.map(swap) };
+  return { ...layout, root: swap(layout.root) };
+}
+
+/**
+ * The layout with the pane `srcId` moved to `zone` of the pane `targetId`: the centre swaps them; an edge takes it
+ * out of its place (its neighbours take the room) and splits the target there.
+ */
+export function movePane(layout: CockpitLayout, srcId: string, targetId: string, zone: DropZone, widgetIds: Iterable<string>): CockpitLayout {
+  if (srcId === targetId) return layout;
+  if (zone === 'center') return swapPanes(layout, srcId, targetId);
+  const ids = [...widgetIds];
+  const without = removeFromLayout(layout, srcId, ids);
+  if (!panesInOrder(without).includes(targetId)) return layout;
+  return sanitizeCockpit(splitPane(without, targetId, zone, srcId), ids) ?? layout;
+}

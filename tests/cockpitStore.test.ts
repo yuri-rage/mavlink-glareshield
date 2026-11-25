@@ -51,6 +51,27 @@ check('back to Flow keeps the layout', hud().mode === undefined && !!hud().cockp
 st().setTabMode('tab-flight', 'cockpit');
 check('and Cockpit again restores it', JSON.stringify(hud().cockpit) === kept);
 
+// The editor's actions.
+{
+  st().applyCockpitPreset('tab-flight', 'hd');
+  const before = hud().widgets.length;
+  st().splitInCockpit('tab-flight', 'w-hud', 'bottom', { widgetId: 'built-in-charts' });
+  const charts = hud().widgets.find((w) => w.widgetId === 'built-in-charts')!;
+  check('Add below: a new widget, in a pane under the HUD', hud().widgets.length === before + 1 && panesInOrder(hud().cockpit).indexOf(charts.instanceId) === panesInOrder(hud().cockpit).indexOf('w-hud') + 1);
+  st().unplaceFromCockpit('tab-flight', 'w-gps');
+  st().splitInCockpit('tab-flight', 'w-map-flight', 'right', { instanceId: 'w-gps' });
+  check('Add beside: a hidden widget comes back (no duplicate)', panesInOrder(hud().cockpit).includes('w-gps') && hud().widgets.filter((w) => w.widgetId === 'built-in-gps-card').length === 1);
+  st().replaceInCockpit('tab-flight', charts.instanceId, { widgetId: 'built-in-statustext' });
+  check('Change: the pane shows another widget; the old one stays on the tab, hidden', !panesInOrder(hud().cockpit).includes(charts.instanceId) && hud().widgets.some((w) => w.instanceId === charts.instanceId) && hud().widgets.some((w) => w.widgetId === 'built-in-statustext'));
+  const order = panesInOrder(hud().cockpit);
+  st().moveInCockpit('tab-flight', 'w-hud', 'w-map-flight', 'center');
+  const swapped = panesInOrder(hud().cockpit);
+  check('Swap: two panes exchange places', swapped.indexOf('w-hud') === order.indexOf('w-map-flight') && swapped.indexOf('w-map-flight') === order.indexOf('w-hud'));
+  st().moveInCockpit('tab-flight', 'w-vfr', 'w-hud', 'left');
+  const moved = panesInOrder(hud().cockpit);
+  check('Move to an edge: beside the target', moved.indexOf('w-vfr') === moved.indexOf('w-hud') - 1);
+}
+
 // A custom widget placed in the layout, then deleted: gone from the tab and the layout.
 const customId = st().profile.customWidgets[0].id;
 st().addWidgetToActiveTab(customId);

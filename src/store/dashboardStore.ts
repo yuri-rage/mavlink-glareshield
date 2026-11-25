@@ -1,6 +1,6 @@
 import { sanitizeWidgetDefinition } from '../lib/widgetValidation';
 import { create } from 'zustand';
-import { appendPane, buildPreset, removeFromLayout, sanitizeCockpit, setSplitSizes, type CockpitPresetId } from '../lib/cockpitLayout';
+import { appendPane, buildPreset, movePane, removeFromLayout, replacePane, sanitizeCockpit, setSplitSizes, splitPane, type CockpitPresetId, type DropZone } from '../lib/cockpitLayout';
 import {
   CockpitLayout,
   DashboardProfile,
@@ -153,6 +153,16 @@ function placeWidget(layout: CockpitLayout | undefined, instanceId: string, widg
   return quickActions && !current.header ? { ...current, header: instanceId } : appendPane(current, instanceId);
 }
 
+/** What a pane is to show: a new widget of a type, or a widget already on the tab (hidden from the layout). */
+export type PaneSource = { widgetId: string } | { instanceId: string };
+
+/** The tab with the widget for `what` (added when it's a new one), and its instance ID. */
+function sourceInstance(tab: DashboardTab, what: PaneSource): { tab: DashboardTab; instanceId: string } {
+  if ('instanceId' in what) return { tab, instanceId: what.instanceId };
+  const instanceId = newInstanceId();
+  return { tab: { ...tab, widgets: [...tab.widgets, { instanceId, widgetId: what.widgetId, colSpan: 6 }] }, instanceId };
+}
+
 const newInstanceId = () => `w-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
 function loadInitialProfile(): DashboardProfile {
@@ -235,6 +245,12 @@ interface DashboardState {
   placeInCockpit: (tabId: string, instanceId: string) => void;
   /** Take a widget out of the layout (it stays on the tab, unplaced). */
   unplaceFromCockpit: (tabId: string, instanceId: string) => void;
+  /** Put a widget beside, above or below a pane: a new one of a type, or one of the tab's hidden widgets. */
+  splitInCockpit: (tabId: string, targetInstanceId: string, side: Exclude<DropZone, 'center'>, what: PaneSource) => void;
+  /** Show another widget in a pane (the one it showed stays on the tab, hidden). */
+  replaceInCockpit: (tabId: string, targetInstanceId: string, what: PaneSource) => void;
+  /** Move a pane beside, above or below another, or (centre) swap the two. */
+  moveInCockpit: (tabId: string, srcInstanceId: string, targetInstanceId: string, zone: DropZone) => void;
   /** Change one tab (made consistent and saved). */
   updateTab: (tabId: string, fn: (tab: DashboardTab) => DashboardTab) => void;
 
@@ -453,6 +469,28 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   unplaceFromCockpit: (tabId, instanceId) => {
     get().updateTab(tabId, (tab) =>
       tab.cockpit ? { ...tab, cockpit: removeFromLayout(tab.cockpit, instanceId, tab.widgets.map((w) => w.instanceId)) } : tab
+    );
+  },
+
+  splitInCockpit: (tabId, target, side, what) => {
+    get().updateTab(tabId, (t) => {
+      if (!t.cockpit) return t;
+      const { tab, instanceId } = sourceInstance(t, what);
+      return { ...tab, cockpit: splitPane(tab.cockpit!, target, side, instanceId) };
+    });
+  },
+
+  replaceInCockpit: (tabId, target, what) => {
+    get().updateTab(tabId, (t) => {
+      if (!t.cockpit) return t;
+      const { tab, instanceId } = sourceInstance(t, what);
+      return { ...tab, cockpit: replacePane(tab.cockpit!, target, instanceId) };
+    });
+  },
+
+  moveInCockpit: (tabId, src, target, zone) => {
+    get().updateTab(tabId, (tab) =>
+      tab.cockpit ? { ...tab, cockpit: movePane(tab.cockpit, src, target, zone, tab.widgets.map((w) => w.instanceId)) } : tab
     );
   },
 

@@ -3,11 +3,12 @@
 // mode (a stray drag in flight must not rearrange the instruments); in flight they're thin inert seams. Each pane is
 // a size container (@container), so widgets lay out by the pane's width, and tells its widget to fill it (PaneContext).
 
-import React, { Fragment, useEffect } from 'react';
+import React, { Fragment, useEffect, useState } from 'react';
 import { Group, Panel, Separator, useGroupRef } from 'react-resizable-panels';
-import { EyeOff, Lock } from 'lucide-react';
+import { EyeOff, GripVertical, Lock, Trash2 } from 'lucide-react';
 import type { CockpitNode, DashboardTab, PlacedWidget } from '../../types/widget';
-import { isPane, minLayoutSize, widgetMinSize, type Size } from '../../lib/cockpitLayout';
+import { isPane, minLayoutSize, panesInOrder, widgetMinSize, type DropZone, type Size } from '../../lib/cockpitLayout';
+import { BUILTIN_PANELS } from '../../lib/builtinWidgets';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { HeaderSlotContext, PaneContext } from './paneContext';
@@ -98,8 +99,224 @@ const SplitView: React.FC<SplitProps> = ({ tab, node, path, isEditing, minFor, r
   );
 };
 
+/** The data type a dragged pane carries (its instance ID). */
+const PANE_DRAG_TYPE = 'application/x-glareshield-pane';
+
+/** Which part of a pane a pointer is over: an edge (within a quarter of the way in) or the centre. */
+function zoneAt(rect: DOMRect, x: number, y: number): DropZone {
+  const fx = (x - rect.left) / rect.width;
+  const fy = (y - rect.top) / rect.height;
+  const edge = Math.min(fx, 1 - fx, fy, 1 - fy);
+  if (edge > 0.25) return 'center';
+  if (edge === fx) return 'left';
+  if (edge === 1 - fx) return 'right';
+  return edge === fy ? 'top' : 'bottom';
+}
+
+const ZONE_CLASS: Record<DropZone, string> = {
+  left: 'inset-y-0 left-0 w-1/2',
+  right: 'inset-y-0 right-0 w-1/2',
+  top: 'inset-x-0 top-0 h-1/2',
+  bottom: 'inset-x-0 bottom-0 h-1/2',
+  center: 'inset-3',
+};
+const ZONE_TEXT: Record<DropZone, string> = { left: 'Put it on the left', right: 'Put it on the right', top: 'Put it above', bottom: 'Put it below', center: 'Swap places' };
+
+interface OverlayProps {
+  tab: DashboardTab;
+  placed: PlacedWidget;
+  title: string;
+  titleOf: (widgetId: string) => string;
+  min: Size;
+  dragging: string | null;
+  setDragging: (id: string | null) => void;
+}
+
+/**
+ * A pane in Edit mode: its widget locked (as in Flow tabs), with a bar to arrange it: drag it onto another pane (an
+ * edge puts it there, the centre swaps them), add a widget beside or below it, change what it shows, swap it with
+ * another, hide it (it stays on the tab) or delete it from the tab. The menus do everything the drag does, for the
+ * keyboard.
+ */
+export const PaneEditOverlay: React.FC<OverlayProps> = ({ tab, placed, title, titleOf, min, dragging, setDragging }) => {
+  const id = placed.instanceId;
+  const customWidgets = useDashboardStore((s) => s.profile.customWidgets);
+  const { unplaceFromCockpit, splitInCockpit, replaceInCockpit, moveInCockpit, removeWidgetFromActiveTab } = useDashboardStore.getState();
+  const [zone, setZone] = useState<DropZone | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const shown = new Set(panesInOrder(tab.cockpit));
+  const hidden = tab.widgets.filter((w) => !shown.has(w.instanceId));
+  const others = panesInOrder({ header: null, root: tab.cockpit?.root ?? null }).filter((p) => p !== id);
+  const catalog = [
+    ...Object.keys(BUILTIN_PANELS).map((w) => ({ id: w, name: titleOf(w) })),
+    ...customWidgets.map((w) => ({ id: w.id, name: w.name })),
+  ];
+  const nameOf = (instanceId: string) => titleOf(tab.widgets.find((w) => w.instanceId === instanceId)?.widgetId ?? '');
+  // Option values: "w:<widgetId>" a new widget of that type, "i:<instanceId>" a hidden one of this tab's.
+  const sourceOptions = (
+    <>
+      {hidden.length > 0 && (
+        <optgroup label="Hidden on this tab">
+          {hidden.map((w) => (
+            <option key={w.instanceId} value={`i:${w.instanceId}`}>
+              {titleOf(w.widgetId)}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      <optgroup label="New widget">
+        {catalog.map((c) => (
+          <option key={c.id} value={`w:${c.id}`}>
+            {c.name}
+          </option>
+        ))}
+      </optgroup>
+    </>
+  );
+  const source = (v: string) => (v.startsWith('i:') ? { instanceId: v.slice(2) } : { widgetId: v.slice(2) });
+  const selectClass = 'h-6 max-w-[6.5rem] rounded border border-zinc-700 bg-zinc-950 px-1 text-[10px] font-semibold text-zinc-300';
+
+  return (
+    <div
+      className="absolute inset-0 z-20 flex flex-col rounded-xl bg-zinc-950/55 ring-1 ring-dashed ring-sky-500/50 select-none"
+      onDragOver={(e) => {
+        // A pane being dragged (its own data type: known before any re-render; not some other drag, e.g. a file).
+        if (!e.dataTransfer.types.includes(PANE_DRAG_TYPE) || dragging === id) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const z = zoneAt(e.currentTarget.getBoundingClientRect(), e.clientX, e.clientY);
+        if (z !== zone) setZone(z);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setZone(null);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        // From the drop itself (which pane, which part): the highlight's state may not have caught up yet.
+        const src = e.dataTransfer.getData(PANE_DRAG_TYPE) || dragging;
+        const at = zoneAt(e.currentTarget.getBoundingClientRect(), e.clientX, e.clientY);
+        if (src && src !== id && tab.widgets.some((w) => w.instanceId === src)) moveInCockpit(tab.id, src, id, at);
+        setZone(null);
+        setDragging(null);
+      }}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-1 border-b border-zinc-700/70 bg-zinc-900/95 px-1.5 py-1 text-[11px]">
+        <span
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData(PANE_DRAG_TYPE, id);
+            setDragging(id);
+          }}
+          onDragEnd={() => setDragging(null)}
+          className="flex min-w-0 cursor-grab items-center gap-1 font-bold text-sky-300 active:cursor-grabbing"
+          title="Drag onto another pane: an edge puts it there, the centre swaps them"
+        >
+          <GripVertical className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+          <Lock className="h-3 w-3 shrink-0 text-amber-400" />
+          <span className="truncate">{title}</span>
+        </span>
+        <span className="flex flex-wrap items-center gap-1">
+          <select
+            value=""
+            className={selectClass}
+            aria-label={`Add a widget beside or below ${title}`}
+            title="Add a widget beside or below this one"
+            onChange={(e) => {
+              const [side, v] = [e.target.value.slice(0, e.target.value.indexOf('|')), e.target.value.slice(e.target.value.indexOf('|') + 1)];
+              if (v) splitInCockpit(tab.id, id, side as 'right' | 'bottom', source(v));
+            }}
+          >
+            <option value="">Add…</option>
+            {(['right', 'bottom'] as const).map((side) => (
+              <optgroup key={side} label={side === 'right' ? 'To its right:' : 'Below it:'}>
+                {hidden.map((w) => (
+                  <option key={w.instanceId} value={`${side}|i:${w.instanceId}`}>
+                    {titleOf(w.widgetId)} (hidden)
+                  </option>
+                ))}
+                {catalog.map((c) => (
+                  <option key={c.id} value={`${side}|w:${c.id}`}>
+                    {c.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <select
+            value=""
+            className={selectClass}
+            aria-label={`Change what ${title} shows`}
+            title="Show another widget here (this one stays on the tab, hidden)"
+            onChange={(e) => e.target.value && replaceInCockpit(tab.id, id, source(e.target.value))}
+          >
+            <option value="">Change…</option>
+            {sourceOptions}
+          </select>
+          {others.length > 0 && (
+            <select
+              value=""
+              className={selectClass}
+              aria-label={`Swap ${title} with another pane`}
+              title="Swap places with another pane"
+              onChange={(e) => e.target.value && moveInCockpit(tab.id, id, e.target.value, 'center')}
+            >
+              <option value="">Swap…</option>
+              {others.map((o) => (
+                <option key={o} value={o}>
+                  {nameOf(o)}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            type="button"
+            onClick={() => unplaceFromCockpit(tab.id, id)}
+            className="rounded p-1 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+            title="Hide: take it out of the layout (it stays on the tab)"
+            aria-label={`Hide ${title}`}
+          >
+            <EyeOff className="h-3 w-3" />
+          </button>
+          {confirmDelete ? (
+            <span className="flex items-center gap-1 rounded border border-red-500/40 bg-red-950/90 px-1 text-[10px] text-red-200">
+              Delete?
+              <button type="button" onClick={() => removeWidgetFromActiveTab(id)} className="rounded bg-red-600 px-1 font-bold text-white">
+                Yes
+              </button>
+              <button type="button" onClick={() => setConfirmDelete(false)} className="rounded bg-zinc-800 px-1">
+                No
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="rounded p-1 text-red-400 hover:bg-zinc-800 hover:text-red-300"
+              title="Delete it from the tab"
+              aria-label={`Delete ${title}`}
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          )}
+        </span>
+      </div>
+      <div className="relative flex flex-1 items-center justify-center text-[10px] text-zinc-400">
+        {dragging && dragging !== id ? 'Drop on an edge to put it there, in the middle to swap' : `Drag the dividers to resize · min ${min.w}×${min.h}`}
+        {zone && dragging !== id && (
+          <div className={`pointer-events-none absolute ${ZONE_CLASS[zone]} flex items-center justify-center rounded-lg border-2 border-sky-400 bg-sky-500/25`}>
+            <span className="rounded bg-sky-950/95 px-2 py-0.5 text-[11px] font-bold text-sky-200">{ZONE_TEXT[zone]}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, titleOf, headerRef }) => {
   const unplace = useDashboardStore((s) => s.unplaceFromCockpit);
+  /** The pane being dragged (Edit mode), by instance ID. */
+  const [dragging, setDragging] = useState<string | null>(null);
   const byId = new Map(tab.widgets.map((w) => [w.instanceId, w]));
   const minFor = (id: string) => widgetMinSize(byId.get(id)?.widgetId ?? '');
   const layout = tab.cockpit!;
@@ -118,28 +335,15 @@ export const CockpitView: React.FC<Props> = ({ tab, isEditing, renderWidget, tit
           </PaneContext.Provider>
         </div>
         {isEditing && (
-          // Edit mode: the widget's controls are locked (as in Flow tabs), its name and size shown, and it can be
-          // taken out of the layout (it stays on the tab, listed as not shown).
-          <div className="absolute inset-0 z-20 flex flex-col rounded-xl bg-zinc-950/55 ring-1 ring-dashed ring-sky-500/50 select-none">
-            <div className="flex items-center justify-between gap-2 border-b border-zinc-700/70 bg-zinc-900/95 px-2 py-1 text-[11px]">
-              <span className="flex min-w-0 items-center gap-1.5 font-bold text-sky-300">
-                <Lock className="h-3 w-3 shrink-0 text-amber-400" />
-                <span className="truncate">{titleOf(placed.widgetId)}</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => unplace(tab.id, id)}
-                className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-                title="Take this widget out of the layout (it stays on the tab)"
-              >
-                <EyeOff className="h-3 w-3" />
-                Hide
-              </button>
-            </div>
-            <div className="flex flex-1 items-center justify-center text-[10px] text-zinc-400">
-              Drag the dividers to resize · min {minFor(id).w}×{minFor(id).h}
-            </div>
-          </div>
+          <PaneEditOverlay
+            tab={tab}
+            placed={placed}
+            title={titleOf(placed.widgetId)}
+            titleOf={titleOf}
+            min={minFor(id)}
+            dragging={dragging}
+            setDragging={setDragging}
+          />
         )}
       </div>
     );
