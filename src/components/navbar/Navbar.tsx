@@ -1,9 +1,10 @@
-import { TlogIndicator, TlogSettings } from './TlogSettings';
+import { TlogIndicator } from './TlogSettings';
 import { TakeoverBanner, VehiclePicker } from './VehiclePicker';
 import { displayAltitudeM } from '../../lib/displayAltitude';
-import { AdsbSettings } from './AdsbSettings';
-import { TerrainSettings } from './TerrainSettings';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useRef, useEffect } from 'react';
+import type { SettingsTab } from './SettingsDialog';
+
+const SettingsDialog = lazy(() => import('./SettingsDialog'));
 import { useConnectionStore } from '../../store/connectionStore';
 import {
   useTelemetryStore,
@@ -11,14 +12,10 @@ import {
   sendTrackedCommand,
 } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
-import { useAudioAlertsStore, type VoiceEngine } from '../../lib/audioAlerts';
-import { mavlinkConnection, isLoopbackWs, getWssHost, SERIAL_BAUD_RATES } from '../../mavlink/connection';
-import { getSerialApi, requestSerialDevice } from '../../mavlink/transport';
+import { mavlinkConnection } from '../../mavlink/connection';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Modal } from '../ui/modal';
-import { RestoreDefaults } from './RestoreDefaults';
-import { Input } from '../ui/input';
 import {
   WifiOff,
   Shield,
@@ -38,13 +35,9 @@ import {
   X,
   Sun,
   Moon,
-  Volume2,
-  VolumeX,
-  Milestone,
   RefreshCw,
-  ExternalLink,
 } from 'lucide-react';
-import { BandwidthProfile, messageRateManager } from '../../mavlink/rateManager';
+import { messageRateManager } from '../../mavlink/rateManager';
 import {
   getVehicleCategory,
   getVehicleCategoryLabel,
@@ -136,18 +129,9 @@ export const Navbar: React.FC = () => {
     url,
     linkKind,
     serialBaud,
-    setLinkKind,
-    setSerialBaud,
     status,
-    errorMessage,
-    bandwidthProfile,
     stats,
-    setUrl,
-    setBandwidthProfile,
-    gcsSystemId,
-    setGcsSystemId,
     connect,
-    disconnect,
   } = useConnectionStore();
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
   // Landed and VTOL state (EXTENDED_SYS_STATE), for the arm menu. Copter and Plane send it; Rover doesn't.
@@ -188,33 +172,11 @@ export const Navbar: React.FC = () => {
   const firmwareRaw = useTelemetryStore((state) => state.firmwareRaw);
   const commandFeedback = useTelemetryStore((state) => state.commandFeedback);
   const clearCommandFeedback = useTelemetryStore((state) => state.clearCommandFeedback);
-  const {
-    system: unitSystem,
-    setSystem: setUnitSystem,
-    altitudeMode,
-    setAltitudeMode,
-  } = useUnitsStore();
-  const {
-    soundEnabled,
-    voiceEnabled,
-    waypointAnnounceEnabled,
-    ttsStatus,
-    voiceEngine,
-    setVoiceEngine,
-    ttsDownloadProgress,
-    toggleSound,
-    toggleVoice,
-    toggleWaypointAnnounce,
-  } = useAudioAlertsStore();
 
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
-  const [inputUrl, setInputUrl] = useState(url);
-  const [inputLinkKind, setInputLinkKind] = useState(linkKind);
-  const [inputSerialBaud, setInputSerialBaud] = useState(serialBaud);
-  const [serialPickerNotice, setSerialPickerNotice] = useState<string | null>(null);
-  const serialApi = getSerialApi();
-  // Kept as typed (an empty field stays empty, not 0); checked when the settings are applied.
-  const [inputGcsSysId, setInputGcsSysId] = useState(String(gcsSystemId));
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('link');
+  // The dialog's code is fetched the first time it opens, then kept (closing doesn't unload it).
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [isPreArmMenuOpen, setIsPreArmMenuOpen] = useState(false);
   const [daylightMode, setDaylightMode] = useState<boolean>(() => {
@@ -311,12 +273,9 @@ export const Navbar: React.FC = () => {
     });
   };
 
-  const openConnectModal = () => {
-    setInputUrl(url);
-    setInputLinkKind(linkKind);
-    setInputSerialBaud(serialBaud);
-    setSerialPickerNotice(null);
-    setInputGcsSysId(String(gcsSystemId));
+  const openConnectModal = (tab: SettingsTab = 'link') => {
+    setSettingsTab(tab);
+    setSettingsLoaded(true);
     mavlinkConnection.pauseReconnect();
     setIsConnectModalOpen(true);
   };
@@ -324,35 +283,6 @@ export const Navbar: React.FC = () => {
   const handleCloseConnectModal = () => {
     setIsConnectModalOpen(false);
     mavlinkConnection.resumeReconnect();
-  };
-
-  const handleConnectSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (status === 'connected') return;
-    if (inputLinkKind === 'serial') {
-      // The device picker needs the user gesture, so it must be the first thing awaited here.
-      const picked = await requestSerialDevice();
-      if (!picked) {
-        setSerialPickerNotice('No device selected. Choose the telemetry radio or flight controller in the browser prompt.');
-        return;
-      }
-      setSerialPickerNotice(null);
-      setSerialBaud(inputSerialBaud);
-    }
-    setLinkKind(inputLinkKind);
-    setUrl(inputUrl);
-    // A whole number 1-255, else the ID stays as it was.
-    const sysId = Number(inputGcsSysId);
-    if (Number.isInteger(sysId) && sysId >= 1 && sysId <= 255) setGcsSystemId(sysId);
-    setIsConnectModalOpen(false);
-    mavlinkConnection.resumeReconnect();
-    connect();
-  };
-
-  const handleDisconnect = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    disconnect();
   };
 
   const vehicleCategory = getVehicleCategory(heartbeat.type);
@@ -405,7 +335,7 @@ export const Navbar: React.FC = () => {
           <Badge
             variant="success"
             className="h-7 px-2 sm:px-2.5 text-xs font-sans font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center hover:bg-emerald-950/80 transition-colors shadow-sm"
-            onClick={openConnectModal}
+            onClick={() => openConnectModal()}
             title={`Connected: ${linkKind === 'serial' ? `serial @ ${serialBaud} baud` : url} (click for Link & Page Configuration)`}
           >
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
@@ -417,7 +347,7 @@ export const Navbar: React.FC = () => {
           <Badge
             variant="warning"
             className="h-7 px-2 sm:px-2.5 text-xs font-sans font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center shadow-sm"
-            onClick={openConnectModal}
+            onClick={() => openConnectModal()}
             title="Connecting to MAVLink endpoint (click for Link & Page Configuration)..."
           >
             <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping shrink-0" />
@@ -429,7 +359,7 @@ export const Navbar: React.FC = () => {
           <Badge
             variant="destructive"
             className="h-7 px-2 sm:px-2.5 text-xs font-sans font-semibold gap-1.5 cursor-pointer rounded-lg flex items-center shadow-sm"
-            onClick={openConnectModal}
+            onClick={() => openConnectModal()}
             title="Connection error (click for Link & Page Configuration)"
           >
             <WifiOff className="h-3.5 w-3.5 shrink-0" />
@@ -441,7 +371,7 @@ export const Navbar: React.FC = () => {
           <Button
             variant="default"
             size="sm"
-            onClick={openConnectModal}
+            onClick={() => openConnectModal()}
             className="h-7 px-2 sm:px-2.5 text-xs font-sans font-semibold bg-sky-500 hover:bg-sky-600 text-white gap-1.5 rounded-lg flex items-center shadow-sm"
             title="Connect to MAVLink endpoint & open Page Configuration"
           >
@@ -775,7 +705,7 @@ export const Navbar: React.FC = () => {
               </div>
             )}
 
-            <TlogIndicator onClick={openConnectModal} />
+            <TlogIndicator onClick={() => openConnectModal('data')} />
 
             {/* Daylight / Dark Cockpit Theme Toggle (Rank 7) */}
             <Button
@@ -799,7 +729,7 @@ export const Navbar: React.FC = () => {
               type="button"
               variant="outline"
               size="sm"
-              onClick={openConnectModal}
+              onClick={() => openConnectModal()}
               className="h-7 px-2 border-zinc-800 bg-zinc-900/70 text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-lg gap-1 shrink-0"
               title="Settings (Units, Link, Altitude Mode & Audio)"
               aria-label="Settings"
@@ -962,439 +892,18 @@ export const Navbar: React.FC = () => {
       </div>
     </header>
 
-      {/* Link & Display Settings Modal */}
-      <Modal
-        isOpen={isConnectModalOpen}
-        onClose={handleCloseConnectModal}
-        title="Link & Display Settings"
-        description="Configure your MAVLink link (WebSocket or USB serial), display units, altitude reference, audio callouts, and telemetry bandwidth."
-      >
-        <form onSubmit={handleConnectSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-zinc-300">Link Type</label>
-            <div className="grid grid-cols-2 gap-1 p-0.5 rounded-lg bg-zinc-900 border border-zinc-800" role="radiogroup">
-              {(
-                [
-                  ['websocket', 'WebSocket'],
-                  ['serial', serialApi === 'web-usb-serial' ? 'USB (WebUSB)' : 'USB Serial'],
-                ] as const
-              ).map(([kind, label]) => (
-                <button
-                  key={kind}
-                  type="button"
-                  role="radio"
-                  aria-checked={inputLinkKind === kind}
-                  disabled={status === 'connected'}
-                  onClick={() => {
-                    setInputLinkKind(kind);
-                    setSerialPickerNotice(null);
-                  }}
-                  className={
-                    'text-xs py-1.5 rounded-md transition-colors disabled:opacity-60 ' +
-                    (inputLinkKind === kind ? 'bg-sky-500/20 text-sky-300 font-medium' : 'text-zinc-400 hover:text-zinc-200')
-                  }
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {inputLinkKind === 'serial' && (
-            <div className="space-y-2">
-              {serialApi === null ? (
-                <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-950/25 text-amber-200 text-[11px] leading-relaxed">
-                  This browser cannot open USB serial devices. Use Chrome or Edge on a desktop, or Chrome on Android, or
-                  connect through the companion bridge over WebSocket.
-                </div>
-              ) : (
-                <>
-                  {serialApi === 'web-serial' && (
-                    <>
-                      <label className="text-xs font-medium text-zinc-300">Baud Rate</label>
-                      <select
-                        value={inputSerialBaud}
-                        onChange={(e) => setInputSerialBaud(Number(e.target.value))}
-                        disabled={status === 'connected'}
-                        className="w-full h-8 rounded-md border border-zinc-800 bg-zinc-950 px-2 font-mono text-xs text-zinc-200"
-                      >
-                        {SERIAL_BAUD_RATES.map((baud) => (
-                          <option key={baud} value={baud}>
-                            {baud}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  )}
-                  <p className="text-[11px] text-zinc-500 leading-relaxed">
-                    {serialApi === 'web-serial' ? (
-                      <>
-                        Telemetry radios (SiK) usually run at <code className="text-sky-400">57600</code>; a flight
-                        controller's own USB port ignores the baud rate. <strong>Connect Now</strong> opens the browser's
-                        port picker; reconnects reuse the chosen port.
-                      </>
-                    ) : (
-                      <>
-                        Android has no Web Serial, so the board is opened over WebUSB. This reaches a flight controller's
-                        own USB port (a USB virtual COM port); FTDI and CP210x telemetry radios are not supported this way.
-                      </>
-                    )}
-                  </p>
-                  {serialPickerNotice && (
-                    <div className="p-2 rounded-lg border border-amber-500/30 bg-amber-950/25 text-amber-200 text-[11px]">
-                      {serialPickerNotice}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {inputLinkKind === 'websocket' && (
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-zinc-300">WebSocket URL or Host:Port</label>
-              <Input
-                type="text"
-                value={inputUrl}
-                onChange={(e) => setInputUrl(e.target.value)}
-                placeholder="ws://localhost:56781"
-                className="font-mono text-xs"
-              />
-              <p className="text-[11px] text-zinc-500">
-                Default companion bridge endpoint is <code className="text-sky-400">ws://localhost:56781</code>. Saved automatically for page reloads.
-              </p>
-
-              {typeof window !== 'undefined' && window.location.protocol === 'https:' && inputUrl.trim().startsWith('ws://') && !isLoopbackWs(inputUrl.trim()) && (
-                <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-950/25 text-amber-200 text-xs space-y-1 mt-2">
-                  <div className="font-semibold flex items-center gap-1.5 text-amber-300">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                    HTTPS Mixed Content Restriction
-                  </div>
-                  <p className="text-[11px] text-zinc-300 leading-relaxed">
-                    You are loading Glareshield over HTTPS. Browsers strictly block unencrypted <code className="text-amber-300">ws://</code> connections as Mixed Active Content.
-                  </p>
-                  <div className="text-[11px] text-zinc-400 space-y-0.5 pt-0.5">
-                    <div>• <strong>Secure:</strong> Use <code className="text-emerald-400">wss://</code> (e.g. bridge with <code className="text-zinc-300">--ssl-cert</code> or reverse proxy).</div>
-                    <div>• <strong>Firefox:</strong> In <code className="text-zinc-300">about:config</code>, set <code className="text-zinc-300">network.websocket.allowInsecureFromHTTPS</code> to <code className="text-zinc-300">true</code>.</div>
-                  </div>
-                </div>
-              )}
-
-              {(() => {
-                const wssHost = getWssHost(inputUrl);
-                if (!wssHost) return null;
-                return (
-                  <div className="p-2.5 rounded-lg border border-sky-500/30 bg-sky-950/25 text-sky-200 text-xs space-y-1.5 mt-2">
-                    <div className="font-semibold flex items-center justify-between text-sky-300">
-                      <div className="flex items-center gap-1.5">
-                        <Shield className="h-3.5 w-3.5 shrink-0 text-sky-400" />
-                        Self-Signed Certificate Trust
-                      </div>
-                      <a
-                        href={`https://${wssHost}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] font-medium text-sky-400 hover:text-sky-300 underline"
-                      >
-                        Open in Tab
-                        <ExternalLink className="h-3 w-3 shrink-0" />
-                      </a>
-                    </div>
-                    <p className="text-[11px] text-zinc-300 leading-relaxed">
-                      If using a self-signed certificate, browsers require a one-time trust step. Open{' '}
-                      <a
-                        href={`https://${wssHost}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sky-400 hover:underline font-mono inline-flex items-center gap-0.5"
-                      >
-                        https://{wssHost}
-                        <ExternalLink className="h-2.5 w-2.5 inline" />
-                      </a>{' '}
-                      in a new tab, proceed past the certificate warning, then connect.
-                    </p>
-                  </div>
-                );
-              })()}
-
-            </div>
-          )}
-
-          {errorMessage && (
-            <div className="p-2.5 rounded-lg border border-red-500/30 bg-red-950/25 text-red-300 text-xs flex items-start gap-2">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-400 mt-0.5" />
-              <div className="text-[11px] leading-relaxed">
-                <span className="font-semibold text-red-300">Link Error: </span>
-                {errorMessage}
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-zinc-300">GCS System ID</label>
-            <Input
-              type="number"
-              min="1"
-              max="255"
-              value={inputGcsSysId}
-              onChange={(e) => setInputGcsSysId(e.target.value)}
-              className="font-mono text-xs"
-            />
-            {(() => {
-              const n = Number(inputGcsSysId);
-              return !(Number.isInteger(n) && n >= 1 && n <= 255) ? (
-                <p className="text-[11px] text-amber-300">A whole number from 1 to 255; until then the ID stays {gcsSystemId}.</p>
-              ) : null;
-            })()}
-            <p className="text-[11px] text-zinc-500">
-              Default is <code className="text-sky-400">255</code> (matches ArduPilot <code className="text-zinc-300">SYSID_MYGCS</code>). Use 254 if connecting simultaneously alongside Mission Planner on 255.
-            </p>
-          </div>
-
-          {/* Speed & Distance Units (4-Way: m/s, km/h, mph, kts) */}
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-zinc-300">Speed & Distance Units</label>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { id: 'ms', label: 'm/s', desc: 'Metric SI (m/s, m, km)' },
-                { id: 'kmh', label: 'km/h', desc: 'Metric (km/h, m, km)' },
-                { id: 'mph', label: 'mph', desc: 'Imperial Statute (mph, ft, mi)' },
-                { id: 'kts', label: 'kts', desc: 'Aviation Nautical (kts, ft, nm)' },
-              ].map(({ id, label, desc }) => (
-                <button
-                  type="button"
-                  key={id}
-                  onClick={() => setUnitSystem(id as any)}
-                  className={`p-2 rounded-lg border text-center transition-all ${
-                    unitSystem === id
-                      ? 'border-sky-500 bg-sky-950/40 text-sky-200'
-                      : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
-                  }`}
-                  title={desc}
-                >
-                  <div className="font-sans font-bold text-xs">{label}</div>
-                  <div className="text-[9px] text-zinc-500 mt-0.5 truncate">
-                    {id === 'ms' || id === 'kmh' ? 'Metric' : id === 'mph' ? 'Statute' : 'Nautical'}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Altitude Reference Mode (AGL vs MSL) */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-zinc-300">Altitude Reference</label>
-              <span className="text-[10px] text-zinc-500 font-sans">
-                Currently: <span className="font-mono">{altitudeMode.toUpperCase()}</span>
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setAltitudeMode('agl')}
-                className={`p-2.5 rounded-lg border text-left transition-all ${
-                  altitudeMode === 'agl'
-                    ? 'border-emerald-500 bg-emerald-950/40 text-emerald-200'
-                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
-                }`}
-              >
-                <div className="font-semibold text-xs flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
-                  AGL (Above Ground)
-                </div>
-                <div className="text-[10px] text-zinc-400 mt-0.5">
-                  Relative height above home launch coordinate.
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAltitudeMode('msl')}
-                className={`p-2.5 rounded-lg border text-left transition-all ${
-                  altitudeMode === 'msl'
-                    ? 'border-sky-500 bg-sky-950/40 text-sky-200'
-                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
-                }`}
-              >
-                <div className="font-semibold text-xs flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-sky-400 shrink-0" />
-                  MSL (Mean Sea Level)
-                </div>
-                <div className="text-[10px] text-zinc-400 mt-0.5">
-                  True geodetic altitude above sea level datum.
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* Field Theme & Audio Callouts (Rank 4 & Rank 7) */}
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-zinc-300">Field Visibility & Audio Callouts</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <button
-                type="button"
-                onClick={() => setDaylightMode((v) => !v)}
-                className={`p-2.5 rounded-lg border text-left transition-all ${
-                  daylightMode
-                    ? 'border-amber-500 bg-amber-950/40 text-amber-200'
-                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:border-zinc-700'
-                }`}
-              >
-                <div className="font-semibold text-xs flex items-center gap-1.5">
-                  {daylightMode ? <Sun className="h-3.5 w-3.5 text-amber-400" /> : <Moon className="h-3.5 w-3.5 text-sky-400" />}
-                  {daylightMode ? 'Daylight' : 'Dark Cockpit'}
-                </div>
-                <div className="text-[10px] text-zinc-400 mt-0.5">
-                  {daylightMode ? 'High-contrast sun mode' : 'Standard night/indoor'}
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={toggleSound}
-                className={`p-2.5 rounded-lg border text-left transition-all ${
-                  soundEnabled
-                    ? 'border-emerald-500 bg-emerald-950/40 text-emerald-200'
-                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
-                }`}
-              >
-                <div className="font-semibold text-xs flex items-center gap-1.5">
-                  {soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-emerald-400" /> : <VolumeX className="h-3.5 w-3.5 text-zinc-500" />}
-                  Alert Chimes
-                </div>
-                <div className="text-[10px] text-zinc-400 mt-0.5">
-                  {soundEnabled ? 'Enabled' : 'Muted'}
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={toggleVoice}
-                className={`p-2.5 rounded-lg border text-left transition-all ${
-                  voiceEnabled && soundEnabled
-                    ? 'border-sky-500 bg-sky-950/40 text-sky-200'
-                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
-                }`}
-              >
-                <div className="font-semibold text-xs flex items-center gap-1.5">
-                  <Volume2 className="h-3.5 w-3.5 text-sky-400" />
-                  Voice Callouts
-                </div>
-                <div className="text-[10px] text-zinc-400 mt-0.5">
-                  {voiceEnabled && soundEnabled && voiceEngine === 'browser'
-                    ? 'Device voice'
-                    : voiceEnabled && soundEnabled
-                    ? ttsStatus === 'downloading'
-                      ? `Downloading Betty (${ttsDownloadProgress}%)`
-                      : ttsStatus === 'ready'
-                      ? 'Betty Neural TTS Ready'
-                      : 'Spoken modes/alerts'
-                    : 'Off'}
-                </div>
-              </button>
-              <label className="col-span-full flex items-center justify-between gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-2.5 py-1.5 text-[11px] text-zinc-300">
-                <span title="The neural voice downloads a ~60 MB model and uses some 150-250 MB of memory; the device voice uses the browser's own speech">
-                  Voice engine
-                </span>
-                <select
-                  value={voiceEngine}
-                  onChange={(e) => setVoiceEngine(e.target.value as VoiceEngine)}
-                  className="rounded border border-zinc-700 bg-zinc-950 px-1.5 py-0.5 text-[11px] text-zinc-100"
-                >
-                  <option value="neural">Neural (Betty, ~60 MB)</option>
-                  <option value="browser">Device voice (light)</option>
-                </select>
-              </label>
-
-              <button
-                type="button"
-                onClick={toggleWaypointAnnounce}
-                className={`p-2.5 rounded-lg border text-left transition-all ${
-                  waypointAnnounceEnabled && voiceEnabled && soundEnabled
-                    ? 'border-emerald-500 bg-emerald-950/40 text-emerald-200'
-                    : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
-                }`}
-              >
-                <div className="font-semibold text-xs flex items-center gap-1.5">
-                  <Milestone className="h-3.5 w-3.5 text-emerald-400" />
-                  Announce WPs
-                </div>
-                <div className="text-[10px] text-zinc-400 mt-0.5">
-                  {waypointAnnounceEnabled && voiceEnabled && soundEnabled
-                    ? 'Speaks "waypoint n"'
-                    : 'Off'}
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-zinc-300">Bandwidth Optimization Profile</label>
-            <div className="grid grid-cols-3 gap-2">
-              {(['low', 'standard', 'high'] as BandwidthProfile[]).map((p) => (
-                <button
-                  type="button"
-                  key={p}
-                  onClick={() => setBandwidthProfile(p)}
-                  className={`p-2.5 rounded-lg border text-left transition-all ${
-                    bandwidthProfile === p
-                      ? 'border-sky-500 bg-sky-950/40 text-sky-200'
-                      : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
-                  }`}
-                >
-                  <div className="font-semibold text-xs capitalize">{p}</div>
-                  <div className="text-[10px] text-zinc-400 mt-0.5">
-                    {p === 'low'
-                      ? 'SiK Radio (57.6k)'
-                      : p === 'standard'
-                      ? 'Standard 115k'
-                      : 'High Speed WiFi'}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <TlogSettings />
-
-          <AdsbSettings />
-
-          <TerrainSettings />
-
-          <div className="pt-3 border-t border-zinc-800">
-            <RestoreDefaults />
-          </div>
-
-          <div className="flex items-center justify-between pt-2">
-            {status === 'connected' ? (
-              <Button
-                key="btn-disconnect-link"
-                type="button"
-                variant="destructive"
-                size="sm"
-                onClick={handleDisconnect}
-              >
-                Disconnect Link
-              </Button>
-            ) : (
-              <Button
-                key="btn-connect-now"
-                type="submit"
-                variant="default"
-                size="sm"
-                disabled={inputLinkKind === 'serial' && serialApi === null}
-                className="bg-sky-500 hover:bg-sky-600 text-white"
-              >
-                Connect Now
-              </Button>
-            )}
-            <Button type="button" variant="ghost" size="sm" onClick={handleCloseConnectModal}>
-              Close
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      {/* Settings (loaded on first open) */}
+      {settingsLoaded && (
+        <Suspense fallback={null}>
+          <SettingsDialog
+            open={isConnectModalOpen}
+            onClose={handleCloseConnectModal}
+            initialTab={settingsTab}
+            daylightMode={daylightMode}
+            setDaylightMode={setDaylightMode}
+          />
+        </Suspense>
+      )}
 
       {/* Pre-Arm & Subsystem Health Modal */}
       <Modal
