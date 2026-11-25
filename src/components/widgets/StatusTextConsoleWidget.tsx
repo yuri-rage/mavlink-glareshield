@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useInPane } from '../dashboard/paneContext';
 import { useMessageSort } from '../../lib/useMessageSort';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useAudioAlertsStore } from '../../lib/audioAlerts';
@@ -8,6 +9,8 @@ import { Badge } from '../ui/badge';
 import { Terminal, Trash2, Volume2, VolumeX, ArrowUpDown, MessageSquare } from 'lucide-react';
 
 export const StatusTextConsoleWidget: React.FC = () => {
+  // In a Cockpit pane: fill it (no minimum heights; lists scroll inside).
+  const inPane = useInPane();
   const statusMessages = useTelemetryStore((state) => state.statusMessages);
   const clearMessages = useTelemetryStore((state) => state.clearMessages);
   const { soundEnabled, toggleSound, voiceEnabled, toggleVoice } = useAudioAlertsStore();
@@ -30,7 +33,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
   );
 
   return (
-    <Card className="border-zinc-800 bg-zinc-950/90 shadow-md flex flex-col h-full min-h-[380px] sm:min-h-[540px]">
+    <Card className={`border-zinc-800 bg-zinc-950/90 shadow-md flex flex-col h-full ${inPane ? 'min-h-0' : 'min-h-[380px] sm:min-h-[540px]'}`}>
       <CardHeader className="py-1.5 px-3 sm:px-3.5 bg-zinc-900/60 border-b border-zinc-800">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5">
@@ -119,7 +122,7 @@ export const StatusTextConsoleWidget: React.FC = () => {
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 bg-black/60 rounded-xl border border-zinc-800 p-1.5 font-mono text-xs overflow-y-auto min-h-[240px] max-h-[68vh] space-y-0.5 select-text"
+          className={`flex-1 bg-black/60 rounded-xl border border-zinc-800 p-1.5 font-mono text-xs overflow-y-auto ${inPane ? 'min-h-0' : 'min-h-[240px] max-h-[68vh]'} space-y-0.5 select-text`}
         >
           {displayed.length === 0 ? (
             <div className="text-zinc-600 text-center py-8 italic">

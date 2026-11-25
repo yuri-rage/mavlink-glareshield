@@ -1,4 +1,5 @@
 import 'leaflet/dist/leaflet.css';
+import { useInPane } from '../dashboard/paneContext';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { displayAltitudeM } from '../../lib/displayAltitude';
 import { useTelemetryStore, sendTrackedCommand, computeDistanceAndBearing } from '../../store/telemetryStore';
@@ -319,7 +320,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
   const hasValidPosition = hasFix && (connected || hasConnectedInSession);
 
-  const isFullWidth = colSpan === 12;
+  // In a Cockpit pane the map fills the pane: no shape of its own (the Shape menu goes) and no window-fit cap.
+  const inPane = useInPane();
+  const isFullWidth = colSpan === 12 && !inPane;
   const [aspectRatio, setAspectRatio] = useState<'4:3' | '16:9' | '1:1'>(() => {
     try {
       if (typeof localStorage !== 'undefined') {
@@ -793,13 +796,20 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   // Invalidate map size on container resize
   useEffect(() => {
     if (!mapContainerRef.current) return;
+    // At most once a frame, without animation: dragging a Cockpit divider resizes the map on every pointer move.
+    let frame = 0;
     const ro = new ResizeObserver(() => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
-      }
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        mapInstanceRef.current?.invalidateSize({ animate: false });
+      });
     });
     ro.observe(mapContainerRef.current);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
   }, []);
 
   // Scroll and touch zoom centering during follow
@@ -2440,7 +2450,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         : aspectRatio === '4:3'
         ? 'aspect-[16/9] md:aspect-[4/3] min-h-[440px]'
         : 'aspect-[16/9] min-h-[440px]')
-    : 'h-full min-h-[350px] lg:min-h-[480px]';
+    : inPane
+      ? 'h-full min-h-0'
+      : 'h-full min-h-[350px] lg:min-h-[480px]';
 
   return (
     <Card

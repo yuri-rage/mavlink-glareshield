@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CONTENT_WIDTH_CLASS, useLayoutStore } from '../../store/layoutStore';
+import { layoutFits, minLayoutSize, panesInOrder, widgetMinSize } from '../../lib/cockpitLayout';
+import { CockpitView } from './CockpitView';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CustomWidgetDefinition, PlacedWidget } from '../../types/widget';
 import { renderBuiltinWidget } from '../widgets/builtinRegistry';
@@ -21,6 +23,8 @@ import {
   Sliders,
   Lock,
   ChevronRight,
+  Eye,
+  LayoutPanelTop,
 } from 'lucide-react';
 
 interface DashboardGridProps {
@@ -60,6 +64,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
     updateWidgetRowSpan,
     moveWidget,
     reorderWidgetsInActiveTab,
+    placeInCockpit,
   } = useDashboardStore();
 
   const [newTabTitle, setNewTabTitle] = useState('');
@@ -78,6 +83,52 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
   const [dropTargetTabIdx, setDropTargetTabIdx] = useState<number | null>(null);
 
   const activeTab = profile.tabs.find((t) => t.id === activeTabId) || profile.tabs[0];
+
+  // ----------------------------------------------------------------------------------------------
+  // Cockpit tabs: panes filling the window, when the window holds the layout's minimums; stacked (like a Flow tab)
+  // when it doesn't (a phone, a small window). The room is measured from where the content starts, which is the same
+  // either way, so switching between the two doesn't change the measurement (no flicker).
+  // ----------------------------------------------------------------------------------------------
+  const cockpit = activeTab?.mode === 'cockpit' ? activeTab.cockpit : undefined;
+  const isCockpit = Boolean(cockpit && (cockpit.root || cockpit.header));
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  /** The pinned header's height, as last measured (it isn't shown while stacked). */
+  const headerHeightRef = useRef(100);
+  const [stacked, setStacked] = useState(false);
+  useLayoutEffect(() => {
+    if (!isCockpit || !cockpit) {
+      setStacked(false);
+      return;
+    }
+    const byId = new Map(activeTab.widgets.map((w) => [w.instanceId, w.widgetId]));
+    const need = minLayoutSize(cockpit.root, (id) => widgetMinSize(byId.get(id) ?? ''));
+    const measure = () => {
+      const el = contentRef.current;
+      if (!el) return;
+      if (headerRef.current) headerHeightRef.current = headerRef.current.offsetHeight + 6;
+      const rect = el.getBoundingClientRect();
+      const top = rect.top + window.scrollY;
+      const room = { w: rect.width, h: window.innerHeight - top - 16 - (cockpit.header ? headerHeightRef.current : 0) };
+      setStacked(!layoutFits(need, room));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    // Banners and the edit toolbar above move the content: watch the page.
+    const ro = new ResizeObserver(measure);
+    ro.observe(document.body);
+    return () => {
+      window.removeEventListener('resize', measure);
+      ro.disconnect();
+    };
+  }, [isCockpit, cockpit, activeTab]);
+  const fill = isCockpit && !stacked;
+  useEffect(() => {
+    useLayoutStore.setState({ cockpitFill: fill });
+    return () => useLayoutStore.setState({ cockpitFill: false });
+  }, [fill]);
+  const placedIds = new Set(panesInOrder(cockpit));
+  const unplaced = isCockpit ? activeTab.widgets.filter((w) => !placedIds.has(w.instanceId)) : [];
 
   const getWidgetTitle = (widgetId: string): string => {
     const BUILTIN_TITLES: Record<string, string> = {
@@ -158,7 +209,16 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
   };
 
   return (
-    <div className={`flex-1 flex flex-col p-3 sm:p-5 ${CONTENT_WIDTH_CLASS[contentWidth]} mx-auto w-full space-y-4`}>
+    <div
+      className={
+        isCockpit
+          ? // A Cockpit tab: the whole window's width; as panes, exactly the height left below the navbar (App). The
+            // same padding stacked or not, so its content starts at the same place and the room it measures is the
+            // same either way.
+            `flex-1 flex flex-col p-2 sm:p-3 w-full gap-2 ${fill ? 'min-h-0' : ''}`
+          : `flex-1 flex flex-col p-3 sm:p-5 ${CONTENT_WIDTH_CLASS[contentWidth]} mx-auto w-full space-y-4`
+      }
+    >
       {/* Tab Navigation Bar */}
       <div className="flex items-center justify-between border-b border-zinc-800 pb-2 gap-2 relative">
         {/* Scrollable Tabs with Mobile Scroll Hint */}
@@ -365,8 +425,61 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
         )}
       </div>
 
-      {/* Grid of Widgets */}
-      {activeTab && activeTab.widgets.length > 0 ? (
+      {/* Edit mode, Cockpit tab: the tab's widgets the layout doesn't show. */}
+      {isEditing && isCockpit && unplaced.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed border-zinc-700 bg-zinc-900/60 px-2.5 py-1.5 text-[11px] text-zinc-400">
+          <span className="font-semibold text-zinc-300">Not shown in this layout:</span>
+          {unplaced.map((w) => (
+            <span key={w.instanceId} className="flex items-center gap-1 rounded border border-zinc-700 bg-zinc-950 px-1.5 py-0.5">
+              {getWidgetTitle(w.widgetId)}
+              <button
+                type="button"
+                onClick={() => placeInCockpit(activeTab.id, w.instanceId)}
+                className="flex items-center gap-0.5 text-sky-300 hover:text-sky-200"
+                title="Show it as a new pane"
+              >
+                <Eye className="h-3 w-3" />
+                Show
+              </button>
+              <button
+                type="button"
+                onClick={() => removeWidgetFromActiveTab(w.instanceId)}
+                className="text-zinc-500 hover:text-red-400"
+                title="Remove it from the tab"
+                aria-label={`Remove ${getWidgetTitle(w.widgetId)} from the tab`}
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {isCockpit && fill ? (
+        <div ref={contentRef} className="flex min-h-0 flex-1 flex-col">
+          <CockpitView tab={activeTab} isEditing={isEditing} renderWidget={renderWidgetContent} titleOf={getWidgetTitle} headerRef={headerRef} />
+        </div>
+      ) : isCockpit ? (
+        // Too small for the panes: the same widgets, stacked in reading order.
+        <div ref={contentRef} className="flex flex-col gap-3">
+          {isEditing && (
+            <p className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 px-2.5 py-1.5 text-[11px] text-zinc-400">
+              <LayoutPanelTop className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+              This Cockpit tab is shown stacked: the window is smaller than its panes need. Arrange it on a larger screen.
+            </p>
+          )}
+          {panesInOrder(cockpit).map((id) => {
+            const w = activeTab.widgets.find((x) => x.instanceId === id);
+            if (!w) return null;
+            return (
+              <div key={id} className="@container relative">
+                <ErrorBoundary fallbackTitle={getWidgetTitle(w.widgetId)}>{renderWidgetContent(w)}</ErrorBoundary>
+                {isEditing && <div className="absolute inset-0 z-20 rounded-xl ring-1 ring-dashed ring-zinc-700" title="Locked while editing" />}
+              </div>
+            );
+          })}
+        </div>
+      ) : activeTab && activeTab.widgets.length > 0 ? (
         <div className="grid grid-cols-12 gap-3 sm:gap-4 items-stretch">
           {activeTab.widgets.map((widget, idx) => {
             const colSpan = widget.colSpan || 6;
@@ -414,7 +527,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                   setDraggedWidgetIdx(null);
                   setDropTargetWidgetIdx(null);
                 }}
-                className={`${getColSpanClass(colSpan)} relative group transition-all flex flex-col h-full ${
+                className={`${getColSpanClass(colSpan)} @container relative group transition-all flex flex-col h-full ${
                   isBeingDragged ? 'opacity-40 scale-[0.99]' : ''
                 } ${isDropTarget ? 'ring-2 ring-sky-400 rounded-xl bg-sky-950/20' : ''}`}
               >

@@ -2,6 +2,7 @@
 // its latest fields, decoded from the dialect (ArduPilot's ardupilotmega.xml) with their units. Filter by name or ID,
 // pause to read, clear to start over. Collecting runs only while the widget is shown.
 
+import { useInPane } from '../dashboard/paneContext';
 import React, { useEffect, useState } from 'react';
 import { Pause, Play, Search, Trash2, Waves } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -36,6 +37,8 @@ function componentLabel(compId: number): string {
 }
 
 export const InspectorWidget: React.FC = () => {
+  // In a Cockpit pane: fill it (no minimum heights; lists scroll inside).
+  const inPane = useInPane();
   const [, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
   const [filter, setFilter] = useState('');
@@ -114,8 +117,8 @@ export const InspectorWidget: React.FC = () => {
             aria-label="Filter messages"
           />
         </label>
-        <div className="grid min-h-0 flex-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-          <div className="max-h-[60vh] min-h-[8rem] overflow-y-auto rounded-md border border-zinc-800">
+        <div className={`grid min-h-0 flex-1 gap-2 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] ${inPane ? '@2xl:grid-rows-1 grid-rows-2' : ''}`}>
+          <div className={`${inPane ? 'min-h-0' : 'max-h-[60vh] min-h-[8rem]'} overflow-y-auto rounded-md border border-zinc-800`}>
             {groups.length === 0 && (
               <p className="p-2 text-zinc-500">
                 {inspector.entries.size > 0
@@ -151,7 +154,7 @@ export const InspectorWidget: React.FC = () => {
               );
             })}
           </div>
-          <div className="max-h-[60vh] min-h-[8rem] overflow-y-auto rounded-md border border-zinc-800">
+          <div className={`${inPane ? 'min-h-0' : 'max-h-[60vh] min-h-[8rem]'} overflow-y-auto rounded-md border border-zinc-800`}>
             {!sel ? (
               <p className="p-2 text-zinc-500">Select a message for its latest fields.</p>
             ) : (

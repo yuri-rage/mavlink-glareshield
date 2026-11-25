@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useState, useEffect } from 'react';
+import { useLayoutStore } from './store/layoutStore';
 import { VehicleSwitchDialog } from './components/navbar/VehiclePicker';
 import { Navbar } from './components/navbar/Navbar';
 import { EditToolbar } from './components/editor/EditToolbar';
@@ -26,6 +27,7 @@ const AudioAlerts: React.FC = () => {
 export const App: React.FC = () => {
   // Only the action: subscribing to the whole store would re-render the entire dashboard on every 1 s stats tick.
   const connect = useConnectionStore((s) => s.connect);
+  const cockpitFill = useLayoutStore((s) => s.cockpitFill);
 
 
   const [isAddWidgetOpen, setIsAddWidgetOpen] = useState(false);
@@ -39,7 +41,11 @@ export const App: React.FC = () => {
   }, [connect]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-sky-500/30 overflow-x-clip">
+    // A Cockpit tab shown as panes: the page is exactly the window's height and doesn't scroll; the navbar (and its
+    // banners, and the edit toolbar) take what they need and the panes take the rest, by flexbox alone.
+    <div
+      className={`${cockpitFill ? 'h-dvh overflow-hidden' : 'min-h-screen overflow-x-clip'} bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-sky-500/30`}
+    >
       {/* Global audio alerts, active across all tabs */}
       <AudioAlerts />
 
@@ -56,7 +62,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Responsive Dashboard Area */}
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 min-h-0 flex flex-col">
         <DashboardGrid
           onEditCustomWidget={(cw) => {
             setEditingCustomWidget(cw);
