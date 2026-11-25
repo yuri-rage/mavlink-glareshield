@@ -26,7 +26,7 @@ const DEFAULT_PROFILE: DashboardProfile = {
         { instanceId: 'w-vfr', widgetId: 'built-in-vfr-hud', colSpan: 4 },
         { instanceId: 'w-battery', widgetId: 'built-in-battery-card', colSpan: 4 },
         { instanceId: 'w-gps', widgetId: 'built-in-gps-card', colSpan: 4 },
-        { instanceId: 'w-messages-mini', widgetId: 'built-in-statustext-mini', colSpan: 6 },
+        { instanceId: 'w-messages-mini', widgetId: 'built-in-statustext-mini', colSpan: 12 },
       ],
       mode: 'cockpit',
       cockpit: {

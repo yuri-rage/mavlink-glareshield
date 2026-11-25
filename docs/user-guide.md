@@ -33,7 +33,9 @@ In Edit Mode the toolbar has **Add Widget**, **Profiles & Backup**, and a switch
 **Cockpit**. Tabs can be added, renamed, deleted and dragged into another order.
 
 Out of the box, **HUD**, **Moving Map** and **Configuration** are Cockpit tabs (HUD with a wide layout for ultrawide
-screens too) and **Telemetry** is a Flow tab. **Restore defaults** (Settings → Data) brings these back.
+screens too) and **Telemetry** is a Flow tab. To get these defaults back without touching your other settings, use
+**Reset to Default Layout** (Edit Mode → **Profiles & Backup**). **Restore defaults** (Settings → Data) resets
+everything instead, including the link, units and alerts.
 
 ### Flow tabs
 
