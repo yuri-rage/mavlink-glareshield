@@ -889,14 +889,17 @@ export const Navbar: React.FC = () => {
       </div>
     </header>
 
-      {/* Settings */}
-      <SettingsDialog
-        open={isConnectModalOpen}
-        onClose={handleCloseConnectModal}
-        initialTab={settingsTab}
-        daylightMode={daylightMode}
-        setDaylightMode={setDaylightMode}
-      />
+      {/* Settings: mounted only while open, so its store subscriptions (the connection stats tick every second)
+          don't re-render it while closed. */}
+      {isConnectModalOpen && (
+        <SettingsDialog
+          open
+          onClose={handleCloseConnectModal}
+          initialTab={settingsTab}
+          daylightMode={daylightMode}
+          setDaylightMode={setDaylightMode}
+        />
+      )}
 
       {/* Pre-Arm & Subsystem Health Modal */}
       <Modal
