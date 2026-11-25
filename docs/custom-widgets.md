@@ -175,7 +175,7 @@ Trim maps to 0. When the parameters haven't been downloaded yet, the scaling ass
 
 ### Units
 
-With `unitKind` set, the value is converted into the units chosen in **Link & Display Settings**:
+With `unitKind` set, the value is converted into the units chosen in **Settings → Display**:
 
 | `unitKind` | Source value must be in | Shown as |
 |---|---|---|

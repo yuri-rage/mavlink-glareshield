@@ -1,6 +1,6 @@
 # MAVLink Glareshield
 
-A widget-based web application for bidirectional ArduPilot control and telemetry over WebSocket. Features a main dashboard panel, heads-up display (HUD), tactical map, dynamic bandwidth negotiation, and a declarative JSON custom widget engine.
+A widget-based web ground control station for ArduPilot, in the browser: telemetry and control over WebSocket or USB serial, a heads-up display, a moving map with mission planning, and a dashboard you arrange yourself, from a phone to an ultrawide.
 
 Designed to remove the "glare" from more fully featured GCS applications and focus on core display elements with a high degree of flexibility and user customization options.
 
@@ -18,12 +18,17 @@ Designed to remove the "glare" from more fully featured GCS applications and foc
 
 ## Features
 
-- **Heads-Up Display (HUD) & Tactical Map**: Canvas artificial horizon, speed/altitude tapes, Leaflet moving map with waypoints, polygon geofences, rally points, mission upload from a file (or drag-and-drop), and saving the mission, fence and rally points to QGC `.plan` or `.waypoints` files.
-- **Flight Controls & Autopilot Commands**: Slide-to-confirm Arm/Disarm, flight mode switching, speed adjustment, and quick actions (RTL, Pause/Loiter, Land, Takeoff).
-- **Fast MAVLink & MAVFTP Engine**: Native in-browser MAVLink framing and high-speed MAVFTP parameter and mission sync with automatic legacy streaming fallback.
-- **RTK / NTRIP Correction Injection**: Real-time RTCM3 correction streaming to your vehicle from NTRIP casters or local USB base stations.
-- **Telemetry & Voice Alerts**: Battery, dual-GNSS, vibration, and autopilot notices with configurable audio chimes and text-to-speech callouts.
-- **Customizable Dashboard**: Multi-tab drag-and-drop layout with declarative widgets (gauges, charts, switches, sliders, and parameter controls).
+- **Flight display**: a canvas HUD (attitude, speed and altitude tapes, heading, an optional low-latency camera feed behind it) and a moving map with the vehicle, home, its trail, the mission, fences and rally points.
+- **Flight controls**: slide-to-arm, flight modes, quick actions (Takeoff with a checklist, Auto, Loiter, RTL, Land), and guided actions from the map: fly here, orbit, change altitude and speed, pause, set home. Anything consequential asks first, naming what will happen.
+- **Mission planning**: edit missions, geofences and rally points on the map, with checks as you go (route against the fence, altitude over terrain), an altitude profile, undo/redo, and QGC `.plan` / `.waypoints` / ArduPilot `.dat` files.
+- **Dashboard**: tabs of widgets, either a scrolling grid (**Flow**) or panes that fill the window with no scrolling (**Cockpit**), with presets, drag-to-arrange, and a second layout for ultrawide screens. Phones get the same widgets stacked.
+- **Maps offline**: keep the imagery you've browsed, download areas from your own tile server, import MBTiles, and store terrain for use without internet.
+- **Awareness**: ADS-B traffic with warnings, terrain data (served to the vehicle and used for planning), several vehicles on one link, battery / GNSS / EKF / vibration health, and spoken alerts.
+- **Parameters and logs**: the full parameter list with metadata and search, comparing against a `.param` file with verified writes, onboard (DataFlash) log download, and telemetry logs (`.tlog`) recorded in the browser.
+- **Fast MAVLink and MAVFTP**: in-browser MAVLink framing, MAVFTP for parameters, missions and logs with item-by-item fallback, and RTK / NTRIP corrections to the vehicle.
+- **Custom widgets**: declarative JSON widgets (gauges, charts, LEDs, switches, sliders, parameter controls), safe from arbitrary code.
+
+📖 **[User Guide](docs/user-guide.md)**: how to use all of the above.
 
 ---
 
@@ -50,13 +55,15 @@ Choose either Mission Planner or the Docker bridge:
 ### 2. Connect in Glareshield
 
 1. Open **[https://glareshield.yurirage.com](https://glareshield.yurirage.com)** in your browser.
-2. Click **Connect** in the top right.
+2. Click the connection pill (top right) or **Settings** to open the **Link** tab.
 3. Enter your bridge address:
    - **Same computer (Mission Planner)**: `ws://localhost:56781`
    - **Local network (Docker)**: `wss://<bridge-ip>:56781/`
-4. Click **Connect Now**.
+4. Click **Connect**.
 
-**USB serial, no bridge (Chrome / Edge, or Chrome on Android):** in the same dialog choose **Link Type → USB Serial**, pick the baud rate, click **Connect Now**, and select your telemetry radio or flight controller. See [Direct USB Serial](docs/connection-guide.md#option-5-direct-usb-serial-no-bridge).
+**USB serial, no bridge (Chrome / Edge, or Chrome on Android):** on the same tab choose **Link type → USB serial**, pick the baud rate, click **Connect**, and select your telemetry radio or flight controller. See [Direct USB Serial](docs/connection-guide.md#option-5-direct-usb-serial-no-bridge).
+
+Then see the **[User Guide](docs/user-guide.md)** for the dashboard, flying, planning and the rest.
 
 📖 **For detailed setup (including USB Serial radios, TCP, direct Python bridge usage, self-signed certificate acceptance, and remote tunnels), see the [Browser & Network Connection Guide](docs/connection-guide.md).** To serve the bridge over `wss://` with a trusted certificate from your own domain, see [Reverse Proxy Setup](docs/reverse-proxy.md).
 
@@ -67,8 +74,8 @@ Choose either Mission Planner or the Docker bridge:
 For contributors or anyone wishing to run a local development server or build offline bundles:
 
 ### Requirements
-- Node.js 18+ and npm
-- Python 3.10+ (for bridge or mock telemetry)
+- Node.js 22+ and npm (as CI uses)
+- Python 3.10+ (for the bridge, mock telemetry and the bridge tests: `pip install -r bridge/requirements-test.txt`)
 
 ### Development Server
 ```bash
@@ -81,17 +88,21 @@ Open `http://localhost:3000` in your browser.
 
 ### Testing & Build
 ```bash
-# Run unit tests and pymavlink golden vector validation
+# Every tests/*.test.ts, in parallel (unit, golden vectors, MAVFTP simulator, regressions, ...)
 npm test
 
-# Run regression tests
-npm run test:regressions
+# Only some: any part of a file name
+npm test -- cockpit mission
 
-# Build production bundle
+# Type-check and build the production bundle
 npm run build
 ```
 
-For advanced testing workflows (e.g. regenerating golden vectors or running mock bridge telemetry validation), see [tests/README.md](tests/README.md).
+The build is stamped with its commit (shown at the foot of Settings), and a running app offers to reload when a newer build is deployed. For the Python checks, regenerating golden vectors and the rest, see [tests/README.md](tests/README.md).
+
+### Deployment
+
+Pushes to `master` run `.github/workflows/ci.yml`: unit tests, bridge tests and the build, then (only when all pass) a deploy to Cloudflare Workers from the build's output, configured by `wrangler.jsonc`.
 
 ---
 

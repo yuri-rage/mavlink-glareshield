@@ -220,7 +220,7 @@ The names only resolve inside your network, but an access list keeps every servi
 ## 8. Connect
 
 1. Open [https://glareshield.yurirage.com](https://glareshield.yurirage.com) on any device on the LAN.
-2. Open **Link Settings** (gear icon) and connect to:
+2. Open **Settings → Link** (the gear icon) and connect to:
    ```text
    wss://mav.home.example.com
    ```
@@ -234,6 +234,10 @@ For the HUD video:
    https://cam.home.example.com/api/stream.mjpeg?src=hud
    ```
 3. Set **Format** to **MJPEG Stream (HTTP)**.
+
+For lower latency, use WebRTC instead: set **Format** to **WebRTC (WHEP), low latency** and **Stream URL** to
+`https://cam.home.example.com/api/webrtc?src=hud` (go2rtc answers WHEP there). Browsers play H.264, VP8, VP9 and AV1
+over WebRTC, not H.265.
 
 The CAM badge on the HUD shows the feed's state; click it to reconnect.
 
