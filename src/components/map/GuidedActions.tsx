@@ -188,8 +188,9 @@ export const AltitudeAction: React.FC<{ target: { lat: number; lon: number } | n
   const typed = Number(input);
   const altM = input.trim() !== '' && Number.isFinite(typed) ? len.toSi(typed) : NaN;
   // Copter keeps going to the Fly-to target while it is in GUIDED; otherwise it holds where it is.
-  const pos = useTelemetryStore((s) => s.position);
-  const here = pos.lat || pos.lon ? { lat: pos.lat, lon: pos.lon, isTarget: false } : null;
+  // The position only while the card is open: closed, a fix doesn't re-render the map header's button.
+  const pos = useTelemetryStore((s) => (open ? s.position : null));
+  const here = pos && (pos.lat || pos.lon) ? { lat: pos.lat, lon: pos.lon, isTarget: false } : null;
   const holdAt = modeName === 'GUIDED' && target ? { ...target, isTarget: true } : here;
   const plan = canChangeAltitude(category) ? changeAltitude(category, modeName, altM, holdAt, (m) => formatAltitude(m).full) : null;
 

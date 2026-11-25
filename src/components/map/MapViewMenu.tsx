@@ -26,9 +26,24 @@ const ASPECTS: { value: MapAspect; label: string }[] = [
   { value: '1:1', label: 'Square 1:1' },
 ];
 
-export const MapViewMenu: React.FC<MapViewMenuProps> = ({ layer, onLayer, aspect, onAspect, onFit, onClearTrace }) => {
-  // The trail's length, read here so a new point re-renders this menu, not the map.
+/**
+ * "Clear flight trace" with the trail's point count: its own subscription, rendered only while the menu is open, so
+ * a new trail point doesn't re-render the closed View button.
+ */
+const ClearTraceItem: React.FC<{ onClick: () => void }> = ({ onClick }) => {
   const tracePoints = useTelemetryStore((s) => s.flightTrace.length);
+  return (
+    <MenuItem
+      icon={<Eraser className="h-3.5 w-3.5 text-amber-400" />}
+      label="Clear flight trace"
+      detail={tracePoints > 0 ? String(tracePoints) : undefined}
+      disabled={tracePoints === 0}
+      onClick={onClick}
+    />
+  );
+};
+
+export const MapViewMenu: React.FC<MapViewMenuProps> = ({ layer, onLayer, aspect, onAspect, onFit, onClearTrace }) => {
   const showTraffic = useAdsbSettingsStore((s) => s.showOnMap);
   return (
   <HeaderMenu icon={<Layers className="h-3.5 w-3.5 text-sky-400" />} label="View" title="Map imagery, shape and view" widthClass="w-56">
@@ -67,13 +82,7 @@ export const MapViewMenu: React.FC<MapViewMenuProps> = ({ layer, onLayer, aspect
             label="Fit vehicle and mission"
             onClick={run(onFit)}
           />
-          <MenuItem
-            icon={<Eraser className="h-3.5 w-3.5 text-amber-400" />}
-            label="Clear flight trace"
-            detail={tracePoints > 0 ? String(tracePoints) : undefined}
-            disabled={tracePoints === 0}
-            onClick={run(onClearTrace)}
-          />
+          <ClearTraceItem onClick={run(onClearTrace)} />
         </>
       );
     }}

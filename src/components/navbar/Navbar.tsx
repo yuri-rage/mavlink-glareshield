@@ -112,7 +112,9 @@ const AltSpeedPill: React.FC<{ active: boolean; plane: boolean }> = ({ active, p
 
 const HomePill: React.FC<{ active: boolean }> = ({ active }) => {
   const home = useTelemetryStore((s) => s.homePosition);
+  // The formatter is one stable function: subscribe to the units too, so a change of units re-renders this.
   const formatHomeVector = useUnitsStore((s) => s.formatHomeVector);
+  useUnitsStore((s) => s.system);
   return (
     <div
       className="flex items-center gap-1.5 shrink-0"
