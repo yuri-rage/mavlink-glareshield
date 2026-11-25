@@ -5,7 +5,8 @@ import { useUnitsStore } from '../../store/unitsStore';
 import { lengthUnit, useLengthUnit } from '../../lib/inputUnits';
 import { offlineAwareTileLayer } from './offlineTileLayer';
 import { useOfflineMapStore } from '../../store/offlineMapStore';
-import { IMPORT_HOST } from '../../lib/offlineTiles';
+import { IMPORT_HOST, effectiveSubdomains } from '../../lib/offlineTiles';
+import { escapeHtml } from '../../mavlink/adsb';
 import { OfflineMapsPanel } from './OfflineMapsPanel';
 import { AltitudeAction, PointGuidedActions } from './GuidedActions';
 import { messageRateManager } from '../../mavlink/rateManager';
@@ -395,7 +396,20 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   );
   useEffect(() => {
     void useOfflineMapStore.getState().refresh();
+    // Keeping starts: the tiles already on screen are kept too (only new loads would be otherwise).
+    return useOfflineMapStore.subscribe((st, prev) => {
+      if (!st.keeper || st.keeper === prev.keeper || st.keepingLayer !== mapLayerRef.current) return;
+      const layer = activeTileLayerRef.current as (L.TileLayer & { _tiles?: Record<string, { coords: L.Coords; loaded?: number }> }) | null;
+      for (const t of Object.values(layer?._tiles ?? {})) if (t.loaded) void st.keeper.keepTile(layer!.getTileUrl(t.coords));
+    });
   }, []);
+  // The layer shown is gone (its imported set deleted, your tile source removed): back to Satellite. Only once the
+  // stored areas are read, so a saved imported layer isn't dropped while they load.
+  const areasLoaded = useOfflineMapStore((s) => s.areasLoaded);
+  const hasCustomSource = useOfflineMapStore((s) => s.customSource !== null);
+  useEffect(() => {
+    if ((mapLayer === 'custom' && !hasCustomSource) || (areasLoaded && offlineLayerKey === 'missing')) setMapLayer('satellite');
+  }, [mapLayer, hasCustomSource, areasLoaded, offlineLayerKey]);
   const mapLayerRef = useRef(mapLayer);
   mapLayerRef.current = mapLayer;
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -850,8 +864,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     if (layerType === 'custom' && offline.customSource) {
       const src = offline.customSource;
       return offlineAwareTileLayer(src.url, {
-        attribution: src.attribution || src.name,
-        subdomains: src.subdomains || 'abc',
+        // Leaflet writes attributions as HTML: what the user typed (or a file brought) is shown as text.
+        attribution: escapeHtml(src.attribution || src.name),
+        subdomains: effectiveSubdomains(src.subdomains),
         maxNativeZoom: src.maxZoom,
         maxZoom: MAP_MAX_ZOOM,
         crossOrigin: true,
@@ -861,7 +876,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       const area = offline.areas.find((a) => `import:${a.id}` === layerType);
       if (area) {
         return offlineAwareTileLayer(`${IMPORT_HOST}/${area.id}/{z}/{x}/{y}`, {
-          attribution: area.attribution || area.name,
+          // From the file's metadata: escaped, never HTML (Leaflet sets attributions with innerHTML).
+          attribution: escapeHtml(area.attribution || area.name),
           minNativeZoom: area.minZoom,
           maxNativeZoom: area.maxZoom,
           maxZoom: MAP_MAX_ZOOM,
@@ -889,12 +905,15 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     }
   };
 
-  /** While an area is being kept, every tile this layer loads goes into it (imported sets are offline already). */
+  /**
+   * While an area is being kept, every tile this layer loads goes into it: only the layer it was started on (a
+   * switch to another doesn't mix its tiles in), and never an imported set (offline already).
+   */
   const keepTilesFrom = (layer: L.TileLayer, type: MapLayerType): L.TileLayer => {
     if (type.startsWith('import:')) return layer;
     layer.on('tileload', (e: L.TileEvent) => {
-      const keeper = useOfflineMapStore.getState().keeper;
-      if (keeper) void keeper.keepTile(layer.getTileUrl(e.coords));
+      const { keeper, keepingLayer } = useOfflineMapStore.getState();
+      if (keeper && keepingLayer === type) void keeper.keepTile(layer.getTileUrl(e.coords));
     });
     return layer;
   };
@@ -2614,6 +2633,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                 const b = m.getBounds();
                 return { bounds: { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() }, zoom: m.getZoom() };
               }}
+              layer={mapLayer}
               layerName={mapLayer === 'street' ? 'street map' : mapLayer === 'custom' ? (useOfflineMapStore.getState().customSource?.name ?? 'custom') : mapLayer.startsWith('import:') ? 'imported' : 'satellite'}
               onShowLayer={setMapLayer}
               onFitBounds={(b) => {

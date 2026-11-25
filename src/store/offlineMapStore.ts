@@ -2,7 +2,17 @@
 // area being kept while browsing, if any.
 
 import { create } from 'zustand';
-import { AreaKeeper, deleteArea, listAreas, newAreaId, offlineAvailable, validTemplate, type OfflineArea } from '../lib/offlineTiles';
+import { AreaKeeper, deleteArea, downloadArea, importMbtiles, listAreas, newAreaId, offlineAvailable, validTemplate, type OfflineArea } from '../lib/offlineTiles';
+
+/** A download or import in progress: runs on with the panel closed (stopped only by its Stop button). */
+export interface OfflineJob {
+  kind: 'downloaded' | 'terrain' | 'import';
+  label: string;
+  done: number;
+  total: number;
+  failed: number;
+  bytes: number;
+}
 
 const KEY = 'mavlink_glareshield_tile_source';
 
@@ -38,13 +48,25 @@ interface OfflineMapState {
   customSource: CustomTileSource | null;
   setCustomSource: (s: CustomTileSource | null) => void;
   areas: OfflineArea[];
+  /** The stored areas have been read (until then an imported layer can't be told from a deleted one). */
+  areasLoaded: boolean;
   refresh: () => Promise<void>;
+  /** Areas being deleted (thousands of tiles take a moment). */
+  deleting: string[];
   remove: (id: string) => Promise<void>;
   /** The area being kept while browsing: every tile the map loads is added to it. */
   keeping: OfflineArea | null;
   keeper: AreaKeeper | null;
-  startKeeping: (name: string, source: string) => void;
+  /** The layer being kept (its name in `source`): tiles of another layer aren't added. */
+  keepingLayer: string | null;
+  startKeeping: (name: string, source: string, layer: string) => void;
   stopKeeping: () => Promise<void>;
+  job: OfflineJob | null;
+  jobError: string | null;
+  jobAbort: AbortController | null;
+  startDownload: (area: OfflineArea, urls: string[], label: string) => Promise<void>;
+  startImport: (file: File) => Promise<OfflineArea | null>;
+  cancelJob: () => void;
 }
 
 export const useOfflineMapStore = create<OfflineMapState>((set, get) => ({
@@ -59,30 +81,81 @@ export const useOfflineMapStore = create<OfflineMapState>((set, get) => ({
     set({ customSource: s });
   },
   areas: [],
+  areasLoaded: false,
   refresh: async () => {
-    if (!offlineAvailable()) return;
+    if (!offlineAvailable()) {
+      set({ areasLoaded: true });
+      return;
+    }
     try {
-      set({ areas: await listAreas() });
+      set({ areas: await listAreas(), areasLoaded: true });
     } catch {
       // IndexedDB unavailable (private window): nothing stored.
+      set({ areasLoaded: true });
     }
   },
+  deleting: [],
   remove: async (id) => {
-    await deleteArea(id);
-    await get().refresh();
+    // The area being kept is still being written: not deleted from under it.
+    if (get().keeping?.id === id) return;
+    set((s) => ({ deleting: [...s.deleting, id] }));
+    try {
+      await deleteArea(id);
+    } finally {
+      set((s) => ({ deleting: s.deleting.filter((x) => x !== id) }));
+      await get().refresh();
+    }
   },
   keeping: null,
   keeper: null,
-  startKeeping: (name, source) => {
+  keepingLayer: null,
+  startKeeping: (name, source, layer) => {
     if (get().keeper || !offlineAvailable()) return;
     const area: OfflineArea = { id: newAreaId(), name: name.trim() || 'Kept area', kind: 'kept', source, tiles: 0, bytes: 0, created: Date.now() };
     const keeper = new AreaKeeper(area, (a) => set({ keeping: a }));
-    set({ keeper, keeping: area });
+    set({ keeper, keeping: area, keepingLayer: layer });
   },
+  job: null,
+  jobError: null,
+  jobAbort: null,
+  startDownload: async (area, urls, label) => {
+    if (get().job) return;
+    const ac = new AbortController();
+    set({ job: { kind: area.kind === 'terrain' ? 'terrain' : 'downloaded', label, done: 0, total: urls.length, failed: 0, bytes: 0 }, jobAbort: ac, jobError: null });
+    try {
+      const result = await downloadArea(area, urls, {
+        signal: ac.signal,
+        onProgress: (done, failed, bytes) => set((s) => (s.job ? { job: { ...s.job, done, failed, bytes } } : {})),
+      });
+      if (result.tiles === 0) {
+        set({ jobError: 'Nothing could be downloaded. Check the source address and the connection; a tile server must allow other sites (CORS: Access-Control-Allow-Origin).' });
+      }
+    } catch (e: unknown) {
+      set({ jobError: e instanceof Error ? e.message : 'The download failed.' });
+    } finally {
+      set({ job: null, jobAbort: null });
+      await get().refresh();
+    }
+  },
+  startImport: async (file) => {
+    if (get().job) return null;
+    set({ job: { kind: 'import', label: file.name, done: 0, total: 0, failed: 0, bytes: 0 }, jobError: null });
+    try {
+      const area = await importMbtiles(file, (done, total) => set((s) => (s.job ? { job: { ...s.job, done, total } } : {})));
+      return area;
+    } catch (e: unknown) {
+      set({ jobError: e instanceof Error ? e.message : 'The file could not be read.' });
+      return null;
+    } finally {
+      set({ job: null });
+      await get().refresh();
+    }
+  },
+  cancelJob: () => get().jobAbort?.abort(),
   stopKeeping: async () => {
     const keeper = get().keeper;
     if (!keeper) return;
-    set({ keeper: null, keeping: null });
+    set({ keeper: null, keeping: null, keepingLayer: null });
     const area = await keeper.stop();
     // An area nothing was kept in isn't listed.
     if (area.tiles === 0) await deleteArea(area.id);

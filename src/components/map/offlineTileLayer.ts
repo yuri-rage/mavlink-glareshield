@@ -2,12 +2,12 @@
 // loads the tile as usual: offline maps work with or without the service worker, and in development.
 
 import L from 'leaflet';
-import { offlineTileUrl } from '../../lib/offlineTiles';
+import { IMPORT_HOST, offlineTileUrl } from '../../lib/offlineTiles';
 
 type TileImg = HTMLImageElement & { _offlineObjectUrl?: string };
 
 const OfflineAwareTileLayer = L.TileLayer.extend({
-  createTile(this: L.TileLayer & { _tileOnLoad: Function; _tileOnError: Function }, coords: L.Coords, done: L.DoneCallback) {
+  createTile(this: L.TileLayer & { _tileOnLoad: Function; _tileOnError: Function; _map?: L.Map }, coords: L.Coords, done: L.DoneCallback) {
     const tile = document.createElement('img') as TileImg;
     const release = () => {
       if (tile._offlineObjectUrl) {
@@ -29,8 +29,20 @@ const OfflineAwareTileLayer = L.TileLayer.extend({
     tile.setAttribute('role', 'presentation');
     const url = this.getTileUrl(coords);
     void offlineTileUrl(url).then((stored) => {
-      if (stored) tile._offlineObjectUrl = stored;
-      tile.src = stored ?? url;
+      // Removed while the store was looked in (Leaflet sets the empty image), or the layer gone: don't load it.
+      if (!this._map || tile.getAttribute('src') === L.Util.emptyImageUrl) {
+        if (stored) URL.revokeObjectURL(stored);
+        return;
+      }
+      if (stored) {
+        tile._offlineObjectUrl = stored;
+        tile.src = stored;
+      } else if (url.startsWith(`${IMPORT_HOST}/`)) {
+        // An imported set without this tile: there is nowhere else to get it (the address is only a cache key).
+        this._tileOnError(done, tile, new Error('Not in the imported set'));
+      } else {
+        tile.src = url;
+      }
     });
     return tile;
   },

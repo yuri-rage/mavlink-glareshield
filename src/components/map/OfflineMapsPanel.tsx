@@ -3,15 +3,15 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Download, FileUp, HardDrive, MapPinned, Mountain, Square, Trash2, X } from 'lucide-react';
+import L from 'leaflet';
 import { Modal } from '../ui/modal';
 import { useOfflineMapStore, type CustomTileSource } from '../../store/offlineMapStore';
 import {
   AVG_TILE_BYTES,
   MAX_DOWNLOAD_TILES,
   countTiles,
-  downloadArea,
-  importMbtiles,
   newAreaId,
+  preloadMbtilesReader,
   offlineAvailable,
   requestPersistence,
   storageInfo,
@@ -25,6 +25,9 @@ import { TERRAIN_ZOOM, terrariumUrl } from '../../mavlink/terrain';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import type { MapLayerType } from './MapViewMenu';
 
+/** At most this many terrain tiles at once (each about 100 KB). */
+const MAX_TERRAIN_TILES = 2000;
+
 const mb = (b: number) => (b >= 1e9 ? `${(b / 1e9).toFixed(2)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(0, Math.round(b / 1e3))} KB`);
 const BTN = 'inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[11px] font-bold disabled:opacity-40';
 const PLAIN = `${BTN} border-zinc-700 text-zinc-200 hover:bg-zinc-800`;
@@ -37,16 +40,17 @@ interface Props {
   onClose: () => void;
   /** The map's current view: what a download covers, and the zoom it starts at. */
   getView: () => { bounds: LatLngBoundsLike; zoom: number } | null;
-  /** The layer showing now (what keeping keeps), by name. */
+  /** The layer showing now (what keeping keeps), by name and type. */
   layerName: string;
+  layer: MapLayerType;
   onShowLayer: (layer: MapLayerType) => void;
   onFitBounds: (b: LatLngBoundsLike) => void;
 }
 
 const KIND_LABEL: Record<OfflineArea['kind'], string> = { kept: 'Kept', downloaded: 'Downloaded', imported: 'Imported', terrain: 'Terrain' };
 
-export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, layerName, onShowLayer, onFitBounds }) => {
-  const { areas, refresh, remove, keeping, startKeeping, stopKeeping, customSource, setCustomSource } = useOfflineMapStore();
+export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, layerName, layer, onShowLayer, onFitBounds }) => {
+  const { areas, refresh, remove, keeping, startKeeping, stopKeeping, customSource, setCustomSource, deleting } = useOfflineMapStore();
   const available = offlineAvailable();
   const [storage, setStorage] = useState<{ usage?: number; quota?: number; persisted?: boolean }>({});
   const [keepName, setKeepName] = useState('');
@@ -56,6 +60,11 @@ export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, la
     void refresh();
     void storageInfo().then(setStorage);
   }, [isOpen, refresh, areas.length]);
+  // Online with the panel open: load the MBTiles reader now, so the browser has it (cached with the app) for an
+  // import made offline later.
+  useEffect(() => {
+    if (isOpen && available && navigator.onLine) void preloadMbtilesReader();
+  }, [isOpen, available]);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Offline maps" description="Map tiles and terrain kept for use without internet" size="xl">
@@ -94,7 +103,7 @@ export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, la
                     type="button"
                     className={PRIMARY}
                     onClick={() => {
-                      startKeeping(keepName, layerName);
+                      startKeeping(keepName, layerName, layer);
                       setKeepName('');
                       onClose();
                     }}
@@ -106,7 +115,7 @@ export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, la
             </section>
 
             <CustomSourceSection source={customSource} onSave={setCustomSource} onShow={() => onShowLayer('custom')} />
-            <DownloadSection getView={getView} source={customSource} onDone={() => void refresh()} />
+            <DownloadSection getView={getView} source={customSource} />
             <ImportSection onDone={(a) => void refresh().then(() => onShowLayer(`import:${a.id}`))} />
 
             {/* Stored */}
@@ -132,7 +141,15 @@ export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, la
               ) : (
                 <ul className="divide-y divide-zinc-800">
                   {areas.map((a) => (
-                    <AreaRow key={a.id} area={a} onRemove={() => void remove(a.id)} onShowLayer={onShowLayer} onFitBounds={onFitBounds} onClose={onClose} />
+                    <AreaRow
+                      key={a.id}
+                      area={a}
+                      busy={deleting.includes(a.id) ? 'Deleting…' : keeping?.id === a.id ? 'Being kept' : null}
+                      onRemove={() => void remove(a.id)}
+                      onShowLayer={onShowLayer}
+                      onFitBounds={onFitBounds}
+                      onClose={onClose}
+                    />
                   ))}
                 </ul>
               )}
@@ -146,11 +163,13 @@ export const OfflineMapsPanel: React.FC<Props> = ({ isOpen, onClose, getView, la
 
 const AreaRow: React.FC<{
   area: OfflineArea;
+  /** Why it can't be deleted now (deleting already, or being kept), or null. */
+  busy: string | null;
   onRemove: () => void;
   onShowLayer: (layer: MapLayerType) => void;
   onFitBounds: (b: LatLngBoundsLike) => void;
   onClose: () => void;
-}> = ({ area, onRemove, onShowLayer, onFitBounds, onClose }) => {
+}> = ({ area, busy, onRemove, onShowLayer, onFitBounds, onClose }) => {
   const del = useConfirmStep();
   return (
     <li className="flex flex-wrap items-center gap-2 py-1.5">
@@ -188,6 +207,8 @@ const AreaRow: React.FC<{
       )}
       <button
         type="button"
+        disabled={busy !== null}
+        title={busy ?? undefined}
         className={`${BTN} ${del.armed ? 'border-red-500 bg-red-600 text-white' : 'border-zinc-700 text-red-300 hover:bg-red-950/50'}`}
         onClick={() => {
           if (!del.armed) return del.arm();
@@ -196,7 +217,7 @@ const AreaRow: React.FC<{
         }}
       >
         <Trash2 className="h-3 w-3" />
-        {del.armed ? 'Confirm delete' : 'Delete'}
+        {busy ?? (del.armed ? 'Confirm delete' : 'Delete')}
       </button>
     </li>
   );
@@ -210,14 +231,21 @@ const CustomSourceSection: React.FC<{ source: CustomTileSource | null; onSave: (
       <h3 className="font-bold text-zinc-100">Your tile source</h3>
       <p className="text-[11px] leading-snug text-zinc-400">
         A tile server you run or are licensed to download from (e.g. https://tiles.example.com/{'{z}/{x}/{y}'}.png). It
-        becomes a map layer, and areas can be downloaded from it.
+        becomes a map layer, and areas can be downloaded from it. The server must allow other sites to load its tiles
+        (CORS: Access-Control-Allow-Origin).
       </p>
       <div className="grid gap-2 sm:grid-cols-[1fr_2fr]">
         <input className={FIELD} placeholder="Name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} aria-label="Source name" />
         <input className={FIELD} placeholder="https://…/{z}/{x}/{y}.png" value={draft.url} onChange={(e) => setDraft({ ...draft, url: e.target.value })} aria-label="Tile URL template" />
         <label className="flex items-center gap-2 text-[11px] text-zinc-400">
           Max zoom
-          <input className={`${FIELD} w-16`} inputMode="numeric" value={draft.maxZoom} onChange={(e) => setDraft({ ...draft, maxZoom: Math.min(24, Math.max(1, Number(e.target.value) || 1)) })} />
+          <select className={`${FIELD} w-16`} value={draft.maxZoom} onChange={(e) => setDraft({ ...draft, maxZoom: Number(e.target.value) })} aria-label="Max zoom">
+            {Array.from({ length: 24 }, (_, i) => i + 1).map((z) => (
+              <option key={z} value={z}>
+                {z}
+              </option>
+            ))}
+          </select>
           Subdomains
           <input className={`${FIELD} w-16`} value={draft.subdomains} onChange={(e) => setDraft({ ...draft, subdomains: e.target.value })} />
         </label>
@@ -244,35 +272,31 @@ const CustomSourceSection: React.FC<{ source: CustomTileSource | null; onSave: (
 };
 
 /** Download the current view: from your tile source (a zoom range), and/or the open terrain tiles. */
-const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileSource | null; onDone: () => void }> = ({ getView, source, onDone }) => {
+const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileSource | null }> = ({ getView, source }) => {
+  const { job, jobError, startDownload, cancelJob } = useOfflineMapStore();
   const view = getView();
   const startZoom = view ? Math.max(0, Math.floor(view.zoom)) : 10;
   const [name, setName] = useState('');
   const [zMin, setZMin] = useState(startZoom);
   const [zMax, setZMax] = useState(source ? Math.min(source.maxZoom, startZoom + 3) : startZoom);
-  const [progress, setProgress] = useState<{ done: number; total: number; failed: number; bytes: number; what: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  useEffect(() => () => abortRef.current?.abort(), []);
   // The source set (or changed) with the panel open: offer up to three levels deeper, within its maximum.
   useEffect(() => {
-    if (source) setZMax(Math.min(source.maxZoom, startZoom + 3));
+    if (source) setZMax(Math.min(source.maxZoom, Math.max(zMin, startZoom + 3)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source?.maxZoom, source?.url]);
 
   const count = view && source ? countTiles(view.bounds, zMin, zMax) : 0;
   const terrainCount = view ? countTiles(view.bounds, TERRAIN_ZOOM, TERRAIN_ZOOM) : 0;
   const tooMany = count > MAX_DOWNLOAD_TILES;
+  const zooms = (lo: number, hi: number) => Array.from({ length: Math.max(0, hi - lo + 1) }, (_, i) => lo + i);
 
-  const run = async (kind: 'downloaded' | 'terrain') => {
+  const run = (kind: 'downloaded' | 'terrain') => {
     if (!view) return;
-    setError(null);
-    const ac = new AbortController();
-    abortRef.current = ac;
+    // The URLs the map will ask for: the same subdomains, and @2x on a high-density screen as Leaflet adds it.
     const urls =
       kind === 'terrain'
         ? [...tilesIn(view.bounds, TERRAIN_ZOOM, TERRAIN_ZOOM)].map((t) => terrariumUrl(t.z, t.x, t.y))
-        : [...tilesIn(view.bounds, zMin, zMax)].map((t) => tileUrl(source!.url, t.z, t.x, t.y, source!.subdomains));
+        : [...tilesIn(view.bounds, zMin, zMax)].map((t) => tileUrl(source!.url, t.z, t.x, t.y, source!.subdomains, L.Browser.retina));
     const area: OfflineArea = {
       id: newAreaId(),
       name: name.trim() || (kind === 'terrain' ? 'Terrain' : 'Downloaded area'),
@@ -285,20 +309,7 @@ const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileS
       bytes: 0,
       created: Date.now(),
     };
-    setProgress({ done: 0, total: urls.length, failed: 0, bytes: 0, what: kind === 'terrain' ? 'terrain' : source!.name });
-    try {
-      const result = await downloadArea(area, urls, {
-        signal: ac.signal,
-        onProgress: (done, failed, bytes) => setProgress((p) => (p ? { ...p, done, failed, bytes } : p)),
-      });
-      if (result.tiles === 0) setError('Nothing could be downloaded (check the source and the connection).');
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'The download failed.');
-    } finally {
-      abortRef.current = null;
-      setProgress(null);
-      onDone();
-    }
+    void startDownload(area, urls, kind === 'terrain' ? 'terrain' : source!.name);
   };
 
   return (
@@ -307,19 +318,20 @@ const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileS
         <Download className="h-3.5 w-3.5 text-sky-400" />
         Download the area in view
       </h3>
-      {progress ? (
+      {job && job.kind !== 'import' ? (
         <div className="space-y-1.5">
           <div className="h-2 overflow-hidden rounded bg-zinc-800">
-            <div className="h-full bg-sky-500" style={{ width: `${(100 * progress.done) / Math.max(1, progress.total)}%` }} />
+            <div className="h-full bg-sky-500" style={{ width: `${(100 * job.done) / Math.max(1, job.total)}%` }} />
           </div>
           <div className="flex items-center gap-2 font-mono text-[11px]">
-            {progress.what}: {progress.done} / {progress.total} tiles, {mb(progress.bytes)}
-            {progress.failed > 0 && <span className="text-amber-300">{progress.failed} failed</span>}
-            <button type="button" className={`${PLAIN} ml-auto`} onClick={() => abortRef.current?.abort()}>
+            {job.label}: {job.done} / {job.total} tiles, {mb(job.bytes)}
+            {job.failed > 0 && <span className="text-amber-300">{job.failed} failed</span>}
+            <button type="button" className={`${PLAIN} ml-auto`} onClick={cancelJob}>
               <X className="h-3 w-3" />
               Stop (keep what arrived)
             </button>
           </div>
+          <p className="text-[10px] text-zinc-500">It carries on with this window closed.</p>
         </div>
       ) : (
         <>
@@ -328,15 +340,27 @@ const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileS
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
                 From {source.name}, zoom
-                <input className={`${FIELD} w-14`} inputMode="numeric" value={zMin} onChange={(e) => setZMin(Math.max(0, Math.min(zMax, Number(e.target.value) || 0)))} aria-label="From zoom" />
+                <select className={`${FIELD} w-16`} value={zMin} onChange={(e) => setZMin(Number(e.target.value))} aria-label="From zoom">
+                  {zooms(0, zMax).map((z) => (
+                    <option key={z} value={z}>
+                      {z}
+                    </option>
+                  ))}
+                </select>
                 to
-                <input className={`${FIELD} w-14`} inputMode="numeric" value={zMax} onChange={(e) => setZMax(Math.min(source.maxZoom, Math.max(zMin, Number(e.target.value) || 0)))} aria-label="To zoom" />
+                <select className={`${FIELD} w-16`} value={zMax} onChange={(e) => setZMax(Number(e.target.value))} aria-label="To zoom">
+                  {zooms(zMin, source.maxZoom).map((z) => (
+                    <option key={z} value={z}>
+                      {z}
+                    </option>
+                  ))}
+                </select>
                 <span className={`font-mono ${tooMany ? 'text-amber-300' : 'text-zinc-300'}`}>
                   {count.toLocaleString()} tiles, about {mb(count * AVG_TILE_BYTES)}
                 </span>
               </div>
               {tooMany && <p className="text-[11px] text-amber-300">More than {MAX_DOWNLOAD_TILES.toLocaleString()} tiles: zoom in on a smaller area, or lower the top zoom.</p>}
-              <button type="button" className={PRIMARY} disabled={!view || tooMany || count === 0} onClick={() => void run('downloaded')}>
+              <button type="button" className={PRIMARY} disabled={!view || tooMany || count === 0 || job !== null} onClick={() => run('downloaded')}>
                 <Download className="h-3 w-3" />
                 Download from {source.name}
               </button>
@@ -348,22 +372,27 @@ const DownloadSection: React.FC<{ getView: Props['getView']; source: CustomTileS
             <span className="text-[11px] text-zinc-400">
               Terrain heights for this area (open data, for the terrain profile and clearance checks): {terrainCount} tiles
             </span>
-            <button type="button" className={PLAIN} disabled={!view || terrainCount === 0 || terrainCount > 2000} onClick={() => void run('terrain')}>
+            <button type="button" className={PLAIN} disabled={!view || terrainCount === 0 || terrainCount > MAX_TERRAIN_TILES || job !== null} onClick={() => run('terrain')}>
               <Mountain className="h-3 w-3" />
               Download terrain
             </button>
+            {terrainCount > MAX_TERRAIN_TILES && (
+              <span className="w-full text-[11px] text-amber-300">
+                More than {MAX_TERRAIN_TILES.toLocaleString()} terrain tiles: zoom in on a smaller area.
+              </span>
+            )}
           </div>
         </>
       )}
-      {error && <p className="text-[11px] text-red-300">{error}</p>}
+      {jobError && <p className="text-[11px] text-red-300">{jobError}</p>}
     </section>
   );
 };
 
 const ImportSection: React.FC<{ onDone: (a: OfflineArea) => void }> = ({ onDone }) => {
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { job, jobError, startImport } = useOfflineMapStore();
+  const importing = job?.kind === 'import' ? job : null;
   return (
     <section className={SECTION}>
       <h3 className="flex items-center gap-1.5 font-bold text-zinc-100">
@@ -383,29 +412,21 @@ const ImportSection: React.FC<{ onDone: (a: OfflineArea) => void }> = ({ onDone 
           const f = e.target.files?.[0];
           e.target.value = '';
           if (!f) return;
-          setError(null);
-          setProgress({ done: 0, total: 0 });
-          try {
-            const area = await importMbtiles(f, (done, total) => setProgress({ done, total }));
-            onDone(area);
-          } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'The file could not be read.');
-          } finally {
-            setProgress(null);
-          }
+          const area = await startImport(f);
+          if (area) onDone(area);
         }}
       />
-      {progress ? (
+      {importing ? (
         <p className="font-mono text-[11px]">
-          Importing: {progress.done} / {progress.total || '…'} tiles
+          Importing {importing.label}: {importing.done} / {importing.total || '…'} tiles (carries on with this window closed)
         </p>
       ) : (
-        <button type="button" className={PLAIN} onClick={() => fileRef.current?.click()}>
+        <button type="button" className={PLAIN} disabled={job !== null} onClick={() => fileRef.current?.click()}>
           <FileUp className="h-3 w-3" />
           Choose a file…
         </button>
       )}
-      {error && <p className="text-[11px] text-red-300">{error}</p>}
+      {jobError && !job && <p className="text-[11px] text-red-300">{jobError}</p>}
     </section>
   );
 };
