@@ -450,7 +450,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose, initialTab = 'l
               Connect
             </Button>
           )}
-          <span className="font-mono text-[10px] text-zinc-600" title={BUILD.sha ? `Build ${BUILD.id} (commit ${BUILD.sha})` : `Build ${BUILD.id}`}>
+          <span className="font-mono text-[10px] text-zinc-500" title={BUILD.sha ? `Build ${BUILD.id} (commit ${BUILD.sha})` : `Build ${BUILD.id}`}>
             Glareshield {buildLabel()}
           </span>
           <Button type="button" variant="ghost" size="sm" onClick={onClose}>

@@ -5,7 +5,7 @@
 //
 // In CI the commit is GITHUB_SHA; locally, git. Without either (a source tarball), the build time stands in.
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 /** The build description from its parts (pure, for the tests). */
 export function describeBuild({ sha, date, dirty = false, now = new Date() }) {
@@ -22,9 +22,10 @@ export function describeBuild({ sha, date, dirty = false, now = new Date() }) {
   return { id: `${day}-${short}${suffix}`, sha, date: day, dirty };
 }
 
-function git(args) {
+/** git with an argument list (no shell: nothing from the environment is interpreted). */
+function git(...args) {
   try {
-    return execSync(`git ${args}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || null;
+    return execFileSync('git', args, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || null;
   } catch {
     return null;
   }
@@ -32,9 +33,9 @@ function git(args) {
 
 /** The build description for this checkout (environment and git). */
 export function readBuildInfo(env = process.env) {
-  const sha = env.GITHUB_SHA || git('rev-parse HEAD');
+  const sha = env.GITHUB_SHA || git('rev-parse', 'HEAD');
   // The commit's own date (stable for a given commit), not the build day.
-  const date = sha ? git(`show -s --format=%cs ${sha}`) : null;
-  const dirty = !env.GITHUB_SHA && sha ? Boolean(git('status --porcelain --untracked-files=no')) : false;
+  const date = sha ? git('show', '-s', '--format=%cs', sha) : null;
+  const dirty = !env.GITHUB_SHA && sha ? Boolean(git('status', '--porcelain', '--untracked-files=no')) : false;
   return describeBuild({ sha, date, dirty });
 }

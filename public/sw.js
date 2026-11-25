@@ -84,8 +84,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Same-origin app shell & assets: network-first falling back to cache. API calls are never cached.
-  if (url.origin === self.location.origin && !url.pathname.startsWith('/api/')) {
+  // Same-origin app shell & assets: network-first falling back to cache. API calls are never cached, nor the deployed
+  // build's version (the app polls it with a cache-busting query: each poll would be a new cache entry).
+  if (url.origin === self.location.origin && !url.pathname.startsWith('/api/') && url.pathname !== '/version.json') {
     event.respondWith(
       fetch(req)
         .then((res) => {
