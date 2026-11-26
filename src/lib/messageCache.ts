@@ -61,6 +61,23 @@ let vehicleSystemId: number | undefined;
 let vehicleType: number | undefined;
 /** Link quality: the active vehicle's autopilot's sequence numbers (linkQuality.ts). */
 const linkMeter = new LinkQualityMeter();
+/** Link quality once a second for the last two minutes (the Link widget's chart): kept here, so a widget mounted later
+ *  (another tab, a new pane) has the history. */
+const LINK_HISTORY_S = 120;
+const linkHistory: { t: number; quality: number | null }[] = [];
+const linkSampler = setInterval(() => {
+  if (!lastSeen.has('LINK')) return;
+  const now = Date.now();
+  linkHistory.push({ t: now, quality: linkMeter.snapshot(now).quality });
+  if (linkHistory.length > LINK_HISTORY_S) linkHistory.splice(0, linkHistory.length - LINK_HISTORY_S);
+}, 1000);
+// In Node (the tests) the timer mustn't keep the process alive; browsers have no unref.
+(linkSampler as unknown as { unref?: () => void }).unref?.();
+
+/** Link quality once a second, oldest first (up to two minutes). */
+export function getLinkHistory(): readonly { t: number; quality: number | null }[] {
+  return linkHistory;
+}
 
 /** Flatten a decoded payload to numeric fields; arrays become `name[0]`, `name[1]`, ... */
 function numericFields(decoded: Record<string, unknown>): Record<string, number> {
@@ -216,6 +233,7 @@ export function resetMessageCache(): void {
   vehicleSystemId = undefined;
   vehicleType = undefined;
   linkMeter.reset();
+  linkHistory.length = 0;
 }
 
 mavlinkConnection.onPacket((packet) => recordPacket(packet));

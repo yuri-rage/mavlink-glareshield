@@ -8,6 +8,7 @@ import { SetSpeedWidget } from '../glareshield/SetSpeedWidget';
 import { HudWidget } from '../hud/HudWidget';
 import { BatteryWidget } from './BatteryWidget';
 import { GpsWidget } from './GpsWidget';
+import { LinkWidget } from './LinkWidget';
 import { MiniStatusTextWidget } from './MiniStatusTextWidget';
 import { StatusTextConsoleWidget } from './StatusTextConsoleWidget';
 import { VfrHudWidget } from './VfrHudWidget';
@@ -62,6 +63,8 @@ export function renderBuiltinWidget(widgetId: string, colSpan: number): React.Re
       return <StatusTextConsoleWidget />;
     case 'built-in-statustext-mini':
       return <MiniStatusTextWidget />;
+    case 'built-in-link':
+      return <LinkWidget />;
     case 'built-in-parameters':
       return lazyWidget(<ParametersWidget />);
     case 'built-in-charts':

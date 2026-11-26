@@ -190,7 +190,10 @@ for confirmation before sending anything.
 - **Link**: the status bar's **LINK** shows how much of the vehicle's telemetry is getting through: the % of its
   packets received over the last 5 seconds (from their sequence numbers, as Mission Planner's link bars), with bars
   in green (90 % and up), amber or red. Its tooltip has the counts, and a telemetry radio's signal at both ends when
-  the radio reports it. Custom widgets can show the same figures (the `LINK` source).
+  the radio reports it. The **Link** widget (Add Widget) shows it all in a card: downlink quality, packets received
+  and lost, the packet rate, uplink loss (the vehicle's count of our packets it lost), the radio's signal and noise at
+  both ends, and quality over the last two minutes; its settings button picks which. Custom widgets can show the same
+  figures (the `LINK` source).
 
 Every command shows its result (accepted, refused and why, or no answer).
 

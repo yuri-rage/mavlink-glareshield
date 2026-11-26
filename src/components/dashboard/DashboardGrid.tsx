@@ -315,6 +315,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       'built-in-vfr-hud': 'VFR Telemetry',
       'built-in-statustext': 'Messages',
       'built-in-statustext-mini': 'Mini Messages',
+      'built-in-link': 'Link',
       'built-in-parameters': 'Parameters',
       'built-in-charts': 'Telemetry Graphs',
       'built-in-pid-tuning': 'PID Tuning',

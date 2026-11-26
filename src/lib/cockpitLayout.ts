@@ -268,6 +268,8 @@ export function widgetMinSize(widgetId: string, custom?: CustomWidgetDefinition)
       return { w: 320, h: 240 };
     case 'built-in-statustext':
       return { w: 300, h: 180 };
+    case 'built-in-link':
+      return { w: 260, h: 220 };
     case 'built-in-statustext-mini':
       return { w: 260, h: 110 };
     case 'built-in-glareshield':
