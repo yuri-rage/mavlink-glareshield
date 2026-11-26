@@ -2,7 +2,7 @@
 // much of ours it loses, the packet rate, a telemetry radio's signal at both ends, and quality over the last two
 // minutes. Which of these it shows is chosen in its settings (the same for every Link card).
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { Radio, Settings2 } from 'lucide-react';
 
@@ -119,6 +119,23 @@ const QualityChart: React.FC<{ points: readonly { t: number; quality: number | n
 export const LinkWidget: React.FC = () => {
   const [opts, setOpts] = useState<LinkWidgetOptions>(loadOptions);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The settings menu closes on a click outside it (or its button) and on Escape.
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (!menuRef.current?.contains(t) && !menuButtonRef.current?.contains(t)) setSettingsOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setSettingsOpen(false);
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [settingsOpen]);
   const [link, setLink] = useState<LinkStats>(() => getLinkStats());
   const [rate, setRate] = useState(() => mavlinkConnection.stats.packetsPerSecond);
   const [history, setHistory] = useState(() => [...getLinkHistory()]);
@@ -166,6 +183,7 @@ export const LinkWidget: React.FC = () => {
               </Badge>
             )}
             <button
+              ref={menuButtonRef}
               type="button"
               onClick={() => setSettingsOpen((v) => !v)}
               aria-expanded={settingsOpen}
@@ -179,7 +197,10 @@ export const LinkWidget: React.FC = () => {
         </div>
       </CardHeader>
       {settingsOpen && (
-        <div className="absolute right-2 top-9 z-20 w-60 space-y-1 rounded-lg border border-zinc-700 bg-zinc-950/95 p-2 shadow-xl backdrop-blur-sm">
+        <div
+          ref={menuRef}
+          className="absolute right-2 top-9 z-20 w-60 space-y-1 rounded-lg border border-zinc-700 bg-zinc-950/95 p-2 shadow-xl backdrop-blur-sm"
+        >
           {OPTION_LABELS.map(([k, label, hint]) => (
             <label
               key={k}
