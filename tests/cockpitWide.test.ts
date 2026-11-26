@@ -26,6 +26,13 @@ check(
 check('a phone in landscape (915x310) stays standard', variantFor(true, 915, 310) === 'standard');
 
 const st = () => useDashboardStore.getState();
+// The tests' own profile (not the app's default, which may change): loaded as an import would.
+const { COCKPIT_FIXTURE } = await import('./fixtures/cockpitFixture.ts');
+const loadFixture = () => {
+  st().importProfileJson(JSON.stringify(COCKPIT_FIXTURE));
+  st().setActiveTab('tab-flight');
+};
+loadFixture();
 const hud = () => st().profile.tabs.find((t) => t.id === 'tab-flight')!;
 st().setActiveTab('tab-flight');
 // Start from a HUD tab without a wide layout (the default has one), to make it here.
@@ -151,7 +158,7 @@ check(
 // dashboard shows (the first), not on nothing.
 {
   const { shownTabId } = await import('../src/store/dashboardStore.ts');
-  st().resetToDefaults();
+  loadFixture();
   const first = st().profile.tabs[0].id;
   st().setActiveTab('no-such-tab');
   check('a stale id resolves to the first tab', shownTabId(st()) === first);
@@ -165,7 +172,7 @@ check(
 
 // Deleting the pinned bar (the default HUD tab pins it in both layouts): gone from the tab and both headers.
 {
-  st().resetToDefaults();
+  loadFixture();
   st().setActiveTab('tab-flight');
   st().removeWidgetFromActiveTab('w-glareshield');
   const t = st().profile.tabs.find((x) => x.id === 'tab-flight')!;
@@ -197,7 +204,7 @@ check(
     chooseFit('standard', false, false) === 'stacked' && chooseFit('standard', false, null) === 'stacked'
   );
 
-  st().resetToDefaults();
+  loadFixture();
   st().addLayout('tab-flight', 'compact');
   check(
     'add compact: a copy of the standard layout, and it is the one edited',
@@ -247,7 +254,7 @@ check(
     'remove compact: gone, standard edited again, the others kept',
     !hud().cockpitCompact && st().editVariant === 'standard' && !!hud().cockpitWide
   );
-  st().resetToDefaults();
+  loadFixture();
 }
 
 console.log(failures.length ? `\n${failures.length} wide-layout check(s) FAILED` : '\nAll wide-layout checks PASSED');
