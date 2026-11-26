@@ -257,12 +257,17 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
           const gutter = parent
             ? parent.getBoundingClientRect().left + parseFloat(getComputedStyle(parent).paddingLeft || '0')
             : 12;
-          const box = {
-            w: Math.min(window.innerWidth - 2 * gutter, preview.w - 2 * gutter),
-            h: Math.min(window.innerHeight - top - 12 + chrome, preview.h - (top - chrome) - 12),
-          };
+          // The laptop's room: its window less what sits above the content, the editor's bars aside.
+          const laptopH = preview.h - (top - chrome) - 12;
+          const w = Math.min(window.innerWidth - 2 * gutter, preview.w - 2 * gutter);
+          // The frame drawn: no taller than the space left below its top (with the editor's bars counted back in, it
+          // ran past the bottom of a window only a little taller than the laptop's, clipped by the page).
+          const box = { w, h: Math.min(window.innerHeight - top - 12, laptopH) };
           setPreviewBox((b) => (b && b.w === box.w && b.h === box.h ? b : box));
-          const room = { w: box.w, h: box.h - (editing?.header ? header : 0) };
+          // The fit: the room the laptop would give (the panes may be squeezed by the bars meanwhile, as when editing
+          // without a frame).
+          const roomH = Math.min(window.innerHeight - top - 12 + chrome, laptopH);
+          const room = { w, h: roomH - (editing?.header ? header : 0) };
           setFitFor(layoutFits(needOf(activeTab, editing), room) ? variant : 'stacked');
         } else {
           setPreviewBox(null);
