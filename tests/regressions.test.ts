@@ -581,12 +581,12 @@ for (const [type, landCmd, opts, label] of [
     `0->${calcUserWpCount(0)}, 1->${calcUserWpCount(1)}, 5->${calcUserWpCount(5)}`
   );
 
-  // 9. Default dashboard tabs: HUD, Moving Map, Telemetry, and Configuration in order
+  // 9. Default dashboard tabs: Flight, Map and Tuning in order
   useDashboardStore.getState().resetToDefaults();
   const tabTitles = useDashboardStore.getState().profile.tabs.map((t: any) => t.title);
-  const expectedTitles = ['HUD', 'Moving Map', 'Telemetry', 'Configuration'];
+  const expectedTitles = ['Flight', 'Map', 'Tuning'];
   check(
-    'default tab titles in order: HUD, Moving Map, Telemetry, and Configuration',
+    'default tab titles in order: Flight, Map and Tuning',
     JSON.stringify(tabTitles) === JSON.stringify(expectedTitles),
     JSON.stringify(tabTitles)
   );

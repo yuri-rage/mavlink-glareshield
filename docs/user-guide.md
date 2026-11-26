@@ -4,6 +4,7 @@ How to use Glareshield once it's connected. To connect, see the [README quicksta
 [Connection Guide](connection-guide.md). To build your own widgets, see the [Custom Widget Guide](custom-widgets.md).
 
 - [Dashboard and layouts](#dashboard-and-layouts)
+  - [The default dashboard](#the-default-dashboard)
   - [Flow tabs](#flow-tabs)
   - [Cockpit tabs](#cockpit-tabs)
   - [Arranging a Cockpit tab](#arranging-a-cockpit-tab)
@@ -33,10 +34,43 @@ is sent to the vehicle by accident. **Finish Edit** returns to flying.
 In Edit Mode the toolbar has **Add Widget**, **Profiles & Backup**, and a switch for the tab's layout: **Flow** or
 **Cockpit**. Tabs can be added, renamed, deleted and dragged into another order.
 
-Out of the box, **HUD**, **Moving Map** and **Configuration** are Cockpit tabs (HUD with a wide layout for ultrawide
-screens too) and **Telemetry** is a Flow tab. To get these defaults back without touching your other settings, use
-**Reset to Default Layout** (Edit Mode → **Profiles & Backup**). **Restore defaults** (Settings → Data) resets
-everything instead, including the link, units and alerts.
+### The default dashboard
+
+Out of the box the dashboard is three Cockpit tabs. They start from an arrangement Mission Planner users will know (the
+HUD at the top left, the map filling the right) and add values that warn, health bars, charts and curated parameter
+lists, with layouts for ultrawide screens and laptops.
+
+- **Flight**: **Arm & Modes** pinned on top; the HUD over **Vitals** on the left; the map on the right, with **Track
+  Error** and messages under it.
+  - **Vitals**: battery %, voltage and current; GNSS HDOP, link loss and a throttle gauge; vibration and EKF variance
+    bars. Battery (30 / 15 %), HDOP (1.4, ArduPilot's GPS_HDOP_GOOD default, / 2.0) and link loss (5 / 15 %) turn
+    amber, then red, past their limits, as do the vibration and EKF bars at theirs; the card's border shows the worst.
+    Values read "--" until the vehicle has sent them.
+  - **Track Error** charts cross-track and altitude error: how well it holds its path in Auto and Guided, for every
+    vehicle type. Mission progress is on the map.
+  - On an ultrawide: HUD and Vitals, the map, then Track Error over the messages. On a laptop: HUD, Vitals and the map
+    side by side, messages under the map.
+- **Map**: the map, full window, to fly from (fly here, guided actions, mission control) and to plan (the map's
+  **Mission** menu → **Edit mission on map**).
+- **Tuning**: PID tuning over three curated parameter lists; on the right, a map and Track Error (to watch a tuning
+  flight) over the full parameter list. On a laptop, PID tuning beside the parameter list. Where PID tuning is short
+  of room, its two charts take turns (**Response** / **Terms**).
+  - **Attitude Tuning**: the rate and angle controllers' gains (Copter and Rover `ATC_*`; Plane `RLL_RATE_*`,
+    `PTCH_RATE_*`, `YAW_RATE_*`), without the filter and slew settings.
+  - **Navigation**: Copter `WPNAV_*`, `LOIT_*` and the position controller's gains; Plane `NAVL1_*`, `WP_*`, the main
+    `TECS_*` limits and the airspeeds.
+  - **Failsafes & RTL**: `FS_*`, the battery failsafes, `RTL_*` and the fence's enable and action.
+
+  The lists are patterns, so each vehicle shows only the parameters it has. Edit them with the widget's **Edit** button
+  (`-` leaves matches out, e.g. `-*_SMAX`). Writes always ask first.
+
+Vitals, Track Error and the parameter lists are ordinary custom widgets: change their values and limits in Edit Mode
+with the widget's **Edit** button (set the battery limits for your pack). A few more custom widgets (bus voltage, RC
+channels, a wind rose, a speed setter, an RTL button) are in **Add Widget** as examples, on no tab.
+
+Your dashboard is saved in the browser, so changing the default doesn't touch it. To get the default back without
+touching your other settings, use **Reset to Default Layout** (Edit Mode → **Profiles & Backup**). **Restore defaults**
+(Settings → Data) resets everything instead, including the link, units and alerts.
 
 ### Flow tabs
 
@@ -133,7 +167,7 @@ imports one. An imported profile is checked first: anything in it that can act o
 commands or write parameters, built-in controls) is listed before you accept it, and imported custom widgets always ask
 for confirmation before sending anything.
 
-[`examples/`](../examples/) has profiles and widgets to import, such as a full ground-station dashboard.
+[`examples/`](../examples/) has widgets to import, such as one for a zero-turn mower.
 
 ---
 

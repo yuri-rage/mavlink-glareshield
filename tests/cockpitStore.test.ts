@@ -27,25 +27,68 @@ loadFixture();
 const hud = () => st().profile.tabs.find((t) => t.id === 'tab-flight')!;
 st().setActiveTab('tab-flight');
 
-// The defaults: the flying tabs and Configuration are Cockpit tabs (HUD with a wide layout too), Telemetry is Flow,
-// and every default layout is already clean (sanitizing leaves it as written).
+// The app's default (Ground Station): Flight, Map and Tuning, all Cockpit; Flight with wide and compact layouts,
+// Tuning with a compact one; every layout clean as written, its widgets on the tab, and each fitting the room it's
+// for (minimum sizes against a 1366x768 laptop's panes for the compact layouts). Then the tests' own fixture.
 {
   const { reconcileTab } = await import('../src/store/dashboardStore.ts');
-  const tabs = st().profile.tabs;
-  const mode = (id: string) => tabs.find((t) => t.id === id)?.mode ?? 'flow';
+  const { minLayoutSize, widgetMinSize, layoutFits } = await import('../src/lib/cockpitLayout.ts');
+  // Content, not key order.
+  const norm = (x: any): any =>
+    Array.isArray(x)
+      ? x.map(norm)
+      : x && typeof x === 'object'
+        ? Object.fromEntries(
+            Object.keys(x)
+              .sort()
+              .map((k) => [k, norm(x[k])])
+          )
+        : x;
+  st().resetToDefaults();
+  const p = st().profile;
+  const tab = (id: string) => p.tabs.find((t) => t.id === id)!;
   check(
-    'defaults: HUD, Moving Map and Configuration are Cockpit; Telemetry is Flow',
-    mode('tab-flight') === 'cockpit' &&
-      mode('tab-map') === 'cockpit' &&
-      mode('tab-console') === 'cockpit' &&
-      mode('tab-telemetry') === 'flow'
+    'default: Flight, Map and Tuning, all Cockpit',
+    p.tabs.map((t) => `${t.title}:${t.mode}`).join() === 'Flight:cockpit,Map:cockpit,Tuning:cockpit',
+    p.tabs.map((t) => `${t.title}:${t.mode}`).join()
   );
-  check('defaults: HUD has a wide layout', !!hud().cockpitWide);
   check(
-    'defaults: every layout is valid as written',
-    tabs.every((t) => JSON.stringify(reconcileTab(t)) === JSON.stringify(t)),
-    tabs.map((t) => t.id).join()
+    'default: Flight has wide and compact layouts, Tuning a compact one',
+    !!tab('tab-flight').cockpitWide && !!tab('tab-flight').cockpitCompact && !!tab('tab-tuning').cockpitCompact
   );
+  check(
+    'default: every layout is valid as written',
+    p.tabs.every((t) => JSON.stringify(norm(reconcileTab(t))) === JSON.stringify(norm(t))),
+    p.tabs.map((t) => t.id).join()
+  );
+  check(
+    'default: every widget a layout shows is a known widget (built in or one of its custom widgets)',
+    p.tabs.every((t) =>
+      t.widgets.every((w) => w.widgetId.startsWith('built-in-') || p.customWidgets.some((c) => c.id === w.widgetId))
+    )
+  );
+  const minFor = (t: any) => (id: string) => {
+    const wid = t.widgets.find((w: any) => w.instanceId === id)?.widgetId ?? '';
+    return widgetMinSize(
+      wid,
+      p.customWidgets.find((c) => c.id === wid)
+    );
+  };
+  // A 1366x768 laptop's browser window (1366x657) leaves about 1342x446 for panes, less a pinned bar (~58 px).
+  const laptop = (l: any) => ({ w: 1342, h: 446 - (l.header ? 58 : 0) });
+  for (const id of ['tab-flight', 'tab-tuning']) {
+    const c = tab(id).cockpitCompact!;
+    const need = minLayoutSize(c.root, minFor(tab(id)));
+    check(
+      `default: ${tab(id).title}'s compact layout fits a 1366x768 laptop (needs ${need.w}x${need.h})`,
+      layoutFits(need, laptop(c))
+    );
+  }
+  check(
+    'default: the custom widget samples are there (on no tab)',
+    p.customWidgets.some((c) => c.id === 'custom-rtl-btn')
+  );
+  loadFixture();
 }
 
 // From here, a HUD tab as an older profile has it (Flow, no layouts), to switch it ourselves.
