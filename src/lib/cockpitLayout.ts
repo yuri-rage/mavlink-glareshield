@@ -300,6 +300,68 @@ export function minLayoutSize(root: CockpitNode | null, minFor: (instanceId: str
     : { w: Math.max(...kids.map((k) => k.w)), h: kids.reduce((a, k) => a + k.h, 0) + seps };
 }
 
+// ------------------------------------------------------------------------------------------------
+// The stacked grid: a layout too big for the window, shown as a grid of its widgets (like a Flow tab)
+// ------------------------------------------------------------------------------------------------
+
+/** Gap between the stacked grid's cells (px): Tailwind gap-3. */
+export const STACKED_GAP_PX = 12;
+
+/**
+ * The most a widget's minimum width asks of the stacked grid (px). The pane minimums keep a pane's content readable at
+ * a fixed height; stacked, widgets lay out as in a Flow tab (their natural height), where ~310 px cards are normal.
+ */
+export const STACKED_MIN_W_CAP = 320;
+
+/** Columns of the stacked grid for its width (px): 4 from 1200, 3 from 900, 2 from 600, else 1 (phones). */
+export function stackedColumns(width: number): number {
+  return width >= 1200 ? 4 : width >= 900 ? 3 : width >= 600 ? 2 : 1;
+}
+
+/** Each pane's share of the layout's width (0-1): row splits divide it by their sizes; column splits pass it on. */
+export function paneWidthShares(root: CockpitNode | null): Map<string, number> {
+  const out = new Map<string, number>();
+  const walk = (n: CockpitNode, share: number) => {
+    if (isPane(n)) out.set(n.pane, share);
+    else n.children.forEach((c, i) => walk(c, n.split === 'row' ? (share * (n.sizes[i] ?? 0)) / 100 : share));
+  };
+  if (root) walk(root, 1);
+  return out;
+}
+
+/**
+ * Columns a widget spans in the stacked grid: about its pane's share of the layout's width (a wide map stays wide),
+ * and at least enough columns for its minimum width (capped: STACKED_MIN_W_CAP); never more than the grid has.
+ */
+export function stackedSpan(share: number, minW: number, cols: number, width: number): number {
+  const col = (width - STACKED_GAP_PX * (cols - 1)) / cols;
+  const forShare = Math.round(share * cols);
+  const need = Math.min(minW, STACKED_MIN_W_CAP);
+  const forMin = col > 0 ? Math.ceil((need + STACKED_GAP_PX) / (col + STACKED_GAP_PX) - 1e-9) : cols;
+  return Math.max(1, Math.min(cols, Math.max(forShare, forMin)));
+}
+
+/**
+ * The spans laid in reading order, each row ending flush: a widget that doesn't fit what's left of a row starts the
+ * next, and the row's last widget widens to fill the gap (no holes, the order kept). The last row fills too.
+ */
+export function packStackedRows(spans: number[], cols: number): number[] {
+  const out = [...spans];
+  let used = 0;
+  let last = -1;
+  out.forEach((span, i) => {
+    if (used + span > cols && last >= 0) {
+      out[last] += cols - used;
+      used = 0;
+    }
+    used += span;
+    last = i;
+    if (used === cols) used = 0;
+  });
+  if (used > 0 && last >= 0) out[last] += cols - used;
+  return out;
+}
+
 /** Whether the panes fit the room, with `slack` px to spare (so the choice doesn't flicker at the boundary). */
 export function layoutFits(need: Size, room: Size, slack = 0): boolean {
   return need.w + slack <= room.w && need.h + slack <= room.h;
