@@ -42,8 +42,9 @@ curated parameter lists, with layouts for ultrawide screens, laptops and phones.
 
 - **Flight**: **Arm & Modes** pinned on top; the HUD over **Vitals** on the left; the map on the right, with **Track
   Error** and messages under it.
-  - **Vitals**: battery %, voltage and current; GNSS HDOP, link loss and a throttle gauge; vibration and EKF variance
-    bars. Battery (30 / 15 %), HDOP (1.4, ArduPilot's GPS_HDOP_GOOD default, / 2.0) and link loss (5 / 15 %) turn
+  - **Vitals**: battery %, voltage and current; GNSS HDOP, a **Logging** light and a throttle gauge; vibration and EKF
+    variance bars. Logging is the onboard logger's health: it turns red (FAILED) when logging fails, e.g. a missing or
+    failing SD card. Battery (30 / 15 %) and HDOP (1.4, ArduPilot's GPS_HDOP_GOOD default, / 2.0) turn
     amber, then red, past their limits, as do the vibration and EKF bars at theirs; the card's border shows the worst.
     Values read "--" until the vehicle has sent them.
   - **Track Error** charts cross-track and altitude error: how well it holds its path in Auto and Guided, for every
