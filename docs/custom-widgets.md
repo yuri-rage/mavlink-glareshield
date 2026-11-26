@@ -599,7 +599,7 @@ Every write waits for the vehicle to echo the new value back. The row shows **wr
 | `paramSet` field | Meaning |
 |---|---|
 | `params` | The entries, in order. An exact name such as `BATT_CAPACITY` keeps its place, and is listed even when the vehicle doesn't have it (as **not on this vehicle**), so a typo shows. A pattern with `*` or `?`, such as `BATT_*`, `FS_?_*` or `*_ENABLE`, adds every matching downloaded parameter, alphabetically. An entry starting with `-`, such as `-BATT2_*`, leaves matches out. Each name appears once. |
-| `confirmation` | Ask before every write. Always `true` after an import. |
+| `confirmation` | Ask before every write. On unless set to `false` (as for a single parameter control). Always `true` after an import. |
 
 Patterns need the vehicle's parameter list. Until it's downloaded, the card offers a **Download** button. Exact names are requested one by one on their own. A card lists at most 150 rows; narrow the patterns if more match.
 

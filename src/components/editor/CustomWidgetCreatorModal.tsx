@@ -373,7 +373,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
 
   // Parameter set config: one entry per line (or comma separated)
   const [paramSetText, setParamSetText] = useState('');
-  const [paramSetConfirm, setParamSetConfirm] = useState(false);
+  const [paramSetConfirm, setParamSetConfirm] = useState(true);
   const downloadedParamNames = useTelemetryStore((s) => s.parameters);
   const paramSetEntries = useMemo(() => sanitizeParamSetEntries(paramSetText.split(/[\s,]+/)), [paramSetText]);
   const paramSetPreview = useMemo(
@@ -497,7 +497,8 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     setMultiBarGroup(w?.multiBarConfig?.group ?? 'rc-8');
 
     setParamSetText((w?.paramSet?.params ?? []).join('\n'));
-    setParamSetConfirm(Boolean(w?.paramSet?.confirmation));
+    // As single-parameter controls: confirm unless the widget says not to.
+    setParamSetConfirm(w?.paramSet?.confirmation !== false);
 
     const pc = w?.paramControl;
     setParamId(pc?.paramId || 'WPNAV_SPEED');
