@@ -8,11 +8,11 @@
 //   next destination), the previous spline's destination velocity, or the previous straight leg's direction
 //   (origin - its own origin). Otherwise zero.
 // - Destination velocity v1: if the spline waypoint has no hold time (param1 = 0) and the next navigation command
-//   has a location: towards that next point, from the origin if it is also a spline ("leave in the direction of the
+//   has a location: toward that next point, from the origin if it is also a spline ("leave in the direction of the
 //   full arc"), from the destination if not. Otherwise zero.
 // - Both are scaled down together when |v0| + |v1| > 4 × |d - o| (SPLINE_FACTOR), to limit overshoot.
 // - Velocities are zero across a change between terrain and non-terrain altitude.
-// Velocities are vectors in metres, not unit vectors: their length shapes the curve. ArduPilot computes them with
+// Velocities are vectors in meters, not unit vectors: their length shapes the curve. ArduPilot computes them with
 // every point in one frame (NED from the EKF origin), so altitudes are put into one frame here too: height above
 // home (relative items as they are, MSL items less home's MSL altitude). Mixing raw MSL and relative altitudes
 // would add the site elevation to the vertical component and, through the overshoot limit, flatten the curve.
@@ -53,7 +53,7 @@ const mul = (a: V3, k: number): V3 => [a[0] * k, a[1] * k, a[2] * k];
 const len = (a: V3) => Math.hypot(a[0], a[1], a[2]);
 const ZERO: V3 = [0, 0, 0];
 
-/** Local metres (east, north, up) around a reference point; fine over the size of a mission. `up` is passed in:
+/** Local meters (east, north, up) around a reference point; fine over the size of a mission. `up` is passed in:
  *  height above home, or NaN when it can't be known (an MSL item without home's MSL altitude). */
 function makeFrame(lat0: number, lon0: number) {
   const mPerDegLat = 111320;
@@ -186,7 +186,7 @@ export function missionPathLegs(items: PathItem[], route: number[], splines: boo
       }
     }
 
-    // Destination velocity: towards the next navigation point, if the spline doesn't hold and there is one.
+    // Destination velocity: toward the next navigation point, if the spline doesn't hold and there is one.
     let v1: V3 = ZERO;
     const nextI = (to.param1 ?? 0) === 0 ? nextNavPoint(toI) : null;
     if (nextI !== null && isTerrain(items[nextI].frame) === terrain) {

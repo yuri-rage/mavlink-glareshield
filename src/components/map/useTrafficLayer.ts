@@ -1,5 +1,5 @@
-// ADS-B traffic on the map: an aircraft symbol pointing along its heading, coloured by threat (sky, amber caution,
-// red alert, magenta for an emergency squawk), labelled with callsign and height relative to the vehicle, faded when
+// ADS-B traffic on the map: an aircraft symbol pointing along its heading, colored by threat (sky, amber caution,
+// red alert, magenta for an emergency squawk), labeled with callsign and height relative to the vehicle, faded when
 // its report is getting old. Click for details. Markers are updated in place (reports arrive several times a second).
 
 import { useEffect, useRef } from 'react';
@@ -26,16 +26,16 @@ const PANE = 'trafficPane';
 const COLOURS = { none: '#38bdf8', caution: '#f59e0b', alert: '#ef4444', emergency: '#e879f9' };
 
 function icon(a: TrafficAircraft, t: Threat | null, stale: boolean, label: string): L.DivIcon {
-  const colour = emergencySquawk(a.squawk) ? COLOURS.emergency : COLOURS[t?.level ?? 'none'];
+  const color = emergencySquawk(a.squawk) ? COLOURS.emergency : COLOURS[t?.level ?? 'none'];
   const rot = a.headingDeg ?? 0;
   const plane = `<svg width="26" height="26" viewBox="-13 -13 26 26" style="transform:rotate(${rot}deg)">
     <path d="M0,-11 L2,-3 L10,2 L10,4 L2,2 L1.5,8 L4,10 L4,11.5 L0,10.5 L-4,11.5 L-4,10 L-1.5,8 L-2,2 L-10,4 L-10,2 L-2,-3 Z"
-      fill="${colour}" stroke="#09090b" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
+      fill="${color}" stroke="#09090b" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
   return L.divIcon({
     className: '',
     html: `<div style="opacity:${stale ? 0.4 : 1};display:flex;flex-direction:column;align-items:center;width:90px;margin-left:-32px">
       ${plane}
-      <div style="margin-top:1px;padding:0 3px;border-radius:3px;background:rgba(9,9,11,0.8);color:${colour};font:700 10px/13px ui-monospace,monospace;white-space:nowrap">${escapeHtml(label)}</div>
+      <div style="margin-top:1px;padding:0 3px;border-radius:3px;background:rgba(9,9,11,0.8);color:${color};font:700 10px/13px ui-monospace,monospace;white-space:nowrap">${escapeHtml(label)}</div>
     </div>`,
     iconSize: [26, 26],
     iconAnchor: [13, 13],

@@ -66,7 +66,7 @@ const handleIcon = L.divIcon({
   iconAnchor: [10, 10],
 });
 
-/** A rally point flag: magenta (the vehicle's rally colour), "R1"…; the selected one blue and larger. */
+/** A rally point flag: magenta (the vehicle's rally color), "R1"…; the selected one blue and larger. */
 function rallyIcon(label: string, selected: boolean, dim: boolean): L.DivIcon {
   const fill = selected ? '#0ea5e9' : '#d946ef';
   const scale = selected ? 1.2 : 1;

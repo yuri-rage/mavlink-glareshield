@@ -19,7 +19,7 @@ function panelKind(p: WidgetPanelDefinition): string {
 /** Display types in the order the creator offers them, with their names. */
 export const PANEL_TYPE_OPTIONS: { value: PanelDisplayType; label: string }[] = [
   { value: 'stat-card', label: 'Stat Card (Digital readout)' },
-  { value: 'value-list', label: 'Value List (Several labelled readouts)' },
+  { value: 'value-list', label: 'Value List (Several labeled readouts)' },
   { value: 'gauge-linear', label: 'Linear Gauge (Horizontal bar)' },
   { value: 'gauge-radial', label: 'Radial Gauge (Dial with needle)' },
   { value: 'sparkline', label: 'Time-Series Chart (One or more values over time)' },

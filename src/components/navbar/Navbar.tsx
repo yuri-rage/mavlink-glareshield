@@ -88,7 +88,7 @@ const BatteryPill: React.FC<{ active: boolean }> = ({ active }) => {
   );
 };
 
-/** Four rising bars, `filled` of them lit (Wi-Fi style), in the colour of the level. */
+/** Four rising bars, `filled` of them lit (Wi-Fi style), in the color of the level. */
 const SignalBars: React.FC<{ filled: number; className: string }> = ({ filled, className }) => (
   <svg viewBox="0 0 16 14" className={`h-3.5 w-3.5 shrink-0 ${className}`} aria-hidden="true">
     {[0, 1, 2, 3].map((i) => (
@@ -108,7 +108,7 @@ const SignalBars: React.FC<{ filled: number; className: string }> = ({ filled, c
 
 /**
  * The link to the vehicle, as Mission Planner's bars: % of its packets received over the last 5 s (from their
- * sequence numbers), coloured by level; the radio's signal in the tooltip when a telemetry radio reports it.
+ * sequence numbers), colored by level; the radio's signal in the tooltip when a telemetry radio reports it.
  */
 const LinkPill: React.FC<{ active: boolean }> = ({ active }) => {
   const [link, setLink] = useState<LinkStats>(() => getLinkStats());

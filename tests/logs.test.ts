@@ -226,8 +226,8 @@ try {
   cancelErr = (e as Error).message;
 }
 check(
-  'cancel: rejects with Cancelled and sends LOG_REQUEST_END',
-  cancelErr === 'Cancelled' && sent.includes('end') && !logManager.busy,
+  'cancel: rejects with Canceled and sends LOG_REQUEST_END',
+  cancelErr === 'Canceled' && sent.includes('end') && !logManager.busy,
   `${cancelErr} | ${sent.join(' | ')}`
 );
 

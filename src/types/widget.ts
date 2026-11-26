@@ -64,10 +64,10 @@ export interface WidgetGaugeConfig {
    * 'multiple': one gauge per value, each with its own range, thresholds, multiplier and offset.
    */
   layout?: 'marker' | 'multiple';
-  /** Dial sweep in degrees, centred on 12 o'clock. */
+  /** Dial sweep in degrees, centered on 12 o'clock. */
   sweep?: 180 | 240 | 270;
   style?: 'arc' | 'needle' | 'both';
-  /** Approximate number of labelled major ticks (rounded to "nice" values). */
+  /** Approximate number of labeled major ticks (rounded to "nice" values). */
   majorTicks?: number;
   /** Minor ticks between each pair of major ticks. */
   minorTicks?: number;

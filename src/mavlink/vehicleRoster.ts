@@ -226,7 +226,7 @@ export function observePacket(packet: MavlinkPacket, data: any, now = Date.now()
   const v = live.get(packet.systemId);
   if (v && data) {
     if (id === MAVLINK_MSG_ID.GLOBAL_POSITION_INT) {
-      // Decoded already (parser.ts): degrees, metres, heading in degrees (rawHdg 65535: unknown).
+      // Decoded already (parser.ts): degrees, meters, heading in degrees (rawHdg 65535: unknown).
       v.lat = data.lat;
       v.lon = data.lon;
       v.relAlt = data.relative_alt;

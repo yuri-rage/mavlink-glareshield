@@ -47,7 +47,7 @@ export const HeaderMenu: React.FC<HeaderMenuProps> = ({ icon, label, title, chil
       const below = window.innerHeight - btn.bottom - margin;
       const above = btn.top - margin;
       const up = panel.scrollHeight > below && above > below;
-      // Right-aligned with the button, but kept on screen at both edges (a button left of centre on a narrow phone
+      // Right-aligned with the button, but kept on screen at both edges (a button left of center on a narrow phone
       // would otherwise push a wide panel off the left edge).
       const right = Math.max(
         margin,

@@ -32,7 +32,7 @@ const near = (a: number, b: number, tol = 1e-6) => Math.abs(a - b) <= tol;
     Array.from(h).join(',')
   );
   const c = t.tileCoords(0, 0, 1);
-  check('tile coords: 0,0 at zoom 1 is the centre', near(c.x, 1) && near(c.y, 1));
+  check('tile coords: 0,0 at zoom 1 is the center', near(c.x, 1) && near(c.y, 1));
   const abq = t.tileCoords(35, -106, 12);
   check(
     'tile coords: 35,-106 at zoom 12',
@@ -54,7 +54,7 @@ const near = (a: number, b: number, tol = 1e-6) => Math.abs(a - b) <= tol;
   const expect = x * 256 - 0.5 + 1000 * (y * 256 - 0.5);
   const h = t.sampleHeight(35, -106, tile, z)!;
   check('bilinear sample is exact on a linear surface', Math.abs(h - expect) < 0.05 * 1000, `${h} vs ${expect}`);
-  // On a tile edge: the neighbour is read.
+  // On a tile edge: the neighbor is read.
   const edgeLon = ((Math.floor(x) + 1) / 2 ** z) * 360 - 180; // the next tile's west edge
   const reads = new Set<string>();
   t.sampleHeight(35, edgeLon, (tx, ty) => (reads.add(`${tx}/${ty}`), tile(tx, ty)), z);

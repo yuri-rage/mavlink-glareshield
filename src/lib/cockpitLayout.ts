@@ -106,7 +106,7 @@ export function panesInOrder(layout: CockpitLayout | null | undefined): string[]
   return out;
 }
 
-/** The layout with a widget taken out (its space goes to its neighbours). */
+/** The layout with a widget taken out (its space goes to its neighbors). */
 export function removeFromLayout(
   layout: CockpitLayout,
   instanceId: string,
@@ -571,8 +571,8 @@ export function swapPanes(layout: CockpitLayout, a: string, b: string): CockpitL
 }
 
 /**
- * The layout with the pane `srcId` moved to `zone` of the pane `targetId`: the centre swaps them; an edge takes it
- * out of its place (its neighbours take the room) and splits the target there.
+ * The layout with the pane `srcId` moved to `zone` of the pane `targetId`: the center swaps them; an edge takes it
+ * out of its place (its neighbors take the room) and splits the target there.
  */
 export function movePane(
   layout: CockpitLayout,

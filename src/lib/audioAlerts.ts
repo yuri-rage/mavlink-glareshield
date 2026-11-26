@@ -158,7 +158,7 @@ async function startBufferPlayback(ctx: AudioContext, buffer: AudioBuffer) {
       } catch {}
     }
 
-    // If a priority alert intervened and cancelled playback while resuming, abort cleanly
+    // If a priority alert intervened and canceled playback while resuming, abort cleanly
     if (!isPlaybackStarting) {
       return;
     }

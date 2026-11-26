@@ -9,7 +9,7 @@
  *   # then:
  *   npx tsx tests/sitl/planning.sitl.ts            (or SITL_WS=ws://host:port/ to use another bridge)
  *
- * It uploads and reads back over MAVFTP and item-by-item, uploads rally points (whole metres, an MSL frame) and
+ * It uploads and reads back over MAVFTP and item-by-item, uploads rally points (whole meters, an MSL frame) and
  * clears them, then arms in AUTO to show why a mission upload while the mission runs must go item-by-item. It changes the SITL
  * vehicle's mission, rally points, mode and arming state: use a throwaway SITL instance.
  */
@@ -101,15 +101,15 @@ function mission(n: number) {
   );
 }
 
-// 3. Rally points: whole metres, an MSL point, read back and verified; then cleared.
+// 3. Rally points: whole meters, an MSL point, read back and verified; then cleared.
 {
   let rally = r.addRallyPoint({ points: [] }, null, HOME.lat + 0.002, HOME.lon - 0.001).draft;
   rally = r.addRallyPoint(rally, 0, HOME.lat - 0.0015, HOME.lon + 0.001).draft;
-  rally = r.updateRallyPoint(rally, 1, { alt: 1630.48, frame: 0 }); // e.g. typed in feet: kept to whole metres
+  rally = r.updateRallyPoint(rally, 1, { alt: 1630.48, frame: 0 }); // e.g. typed in feet: kept to whole meters
   const res = await missionManager.uploadRallyAndReadBack(r.rallyDraftToItems(rally), sys, comp);
   const v = r.checkRallyReadBack(rally, res.readBack, res.readOk);
   check(
-    'rally points: uploaded and verified (whole metres, MSL frame kept)',
+    'rally points: uploaded and verified (whole meters, MSL frame kept)',
     res.success && v.status === 'verified',
     `${res.method} ${v.status} ${v.differences.join('; ')} frames ${res.readBack.map((p) => p.frame).join(',')}`
   );
@@ -169,7 +169,7 @@ function mission(n: number) {
       `forced MAVFTP while armed in AUTO: method ${forced.method}, vehicle now holds ${afterFtp.length - 1} items (sent ${short.items.length - 1})`
     );
     check(
-      "armed in AUTO over MAVFTP: the old mission's tail survives (the ArduPilot behaviour the fix avoids)",
+      "armed in AUTO over MAVFTP: the old mission's tail survives (the ArduPilot behavior the fix avoids)",
       forced.method === 'ftp' && afterFtp.length > short.items.length,
       `${afterFtp.length - 1} items`
     );

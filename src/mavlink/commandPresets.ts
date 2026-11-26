@@ -235,7 +235,7 @@ export const COMMAND_PRESETS: CommandPreset[] = [
     label: 'Terminate',
     commandId: 185,
     params: p(1),
-    hint: 'Irreversible in flight: the vehicle stops flying (AFS/termination behaviour).',
+    hint: 'Irreversible in flight: the vehicle stops flying (AFS/termination behavior).',
   },
   {
     key: 'scripting-restart',

@@ -249,7 +249,7 @@ const J = JSON.stringify;
     J(m.root) === J({ split: 'row', children: [{ pane: 'c' }, { pane: 'a' }, { pane: 'b' }], sizes: [25, 25, 50] }),
     J(m.root)
   );
-  check('move to the centre: a swap', J(panesInOrder(movePane(three, 'c', 'a', 'center', ids))) === J(['c', 'b', 'a']));
+  check('move to the center: a swap', J(panesInOrder(movePane(three, 'c', 'a', 'center', ids))) === J(['c', 'b', 'a']));
   check('move onto itself: nothing', movePane(three, 'a', 'a', 'left', ids) === three);
   const sib = movePane(base, 'a', 'b', 'right', ids);
   check(

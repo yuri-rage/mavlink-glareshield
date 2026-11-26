@@ -112,12 +112,12 @@ const ShapeEditor: React.FC<{
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         <NumField
-          label={shape.kind === 'circle' ? 'Centre lat' : 'Centre lat (moves all)'}
+          label={shape.kind === 'circle' ? 'Center lat' : 'Center lat (moves all)'}
           value={centre.lat}
           digits={7}
           onCommit={(v) => moveTo(v, centre.lon)}
         />
-        <NumField label="Centre lon" value={centre.lon} digits={7} onCommit={(v) => moveTo(centre.lat, v)} />
+        <NumField label="Center lon" value={centre.lon} digits={7} onCommit={(v) => moveTo(centre.lat, v)} />
       </div>
       {shape.kind === 'circle' ? (
         <NumField

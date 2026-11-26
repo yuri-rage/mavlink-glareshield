@@ -15,7 +15,7 @@ function check(name: string, ok: boolean, detail = '') {
 const near = (a: number, b: number, tol = 1e-6) => Math.abs(a - b) <= tol;
 const nearV = (a: number[], b: number[], tol = 1e-6) => a.every((v, i) => near(v, b[i], tol));
 
-// The Hermite curve itself, in metres.
+// The Hermite curve itself, in meters.
 {
   const o: [number, number, number] = [0, 0, 0];
   const d: [number, number, number] = [100, 0, 0];

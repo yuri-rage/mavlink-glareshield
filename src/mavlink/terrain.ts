@@ -2,9 +2,9 @@
 // the US), and ArduPilot's terrain grid (AP_Terrain), so the app can answer the vehicle's TERRAIN_REQUESTs. Pure;
 // fetching and caching is lib/terrainService.ts.
 //
-// AP_Terrain: the vehicle asks for a block of 7 x 8 sub-grids, each 4 x 4 points `grid_spacing` metres apart,
+// AP_Terrain: the vehicle asks for a block of 7 x 8 sub-grids, each 4 x 4 points `grid_spacing` meters apart,
 // starting at the block's south-west corner (TERRAIN_REQUEST: lat, lon, grid_spacing, and a 56-bit mask of the
-// sub-grids it lacks). Each answer (TERRAIN_DATA) is one sub-grid: gridbit, and 16 heights in metres above sea level,
+// sub-grids it lacks). Each answer (TERRAIN_DATA) is one sub-grid: gridbit, and 16 heights in meters above sea level,
 // x north, y east. Points are placed with ArduPilot's Location::offset, so they match the vehicle's own.
 
 /** Zoom of the elevation tiles: about 38 m per pixel at the equator (31 m at 35 deg), the source data's own scale. */
@@ -39,10 +39,10 @@ export interface TileKey {
 
 /**
  * Inland basins below sea level: a box [south, west, north, east] in degrees, and the floor, the lowest real surface
- * in it (land or a lake's surface, in these tiles, with a few metres' margin). Inside one, a height below sea level is
+ * in it (land or a lake's surface, in these tiles, with a few meters' margin). Inside one, a height below sea level is
  * kept down to the floor; anything lower is a lake bed (ETOPO1 fills some lakes at coarse zooms). None of the boxes
- * reaches the open sea. Coastal land a few metres below sea level (Dutch polders, the Fens, New Orleans, deltas) is
- * left out: there it reads 0, a few metres high, which the vehicle's own arming correction (TERRAIN_OFS_MAX) absorbs
+ * reaches the open sea. Coastal land a few meters below sea level (Dutch polders, the Fens, New Orleans, deltas) is
+ * left out: there it reads 0, a few meters high, which the vehicle's own arming correction (TERRAIN_OFS_MAX) absorbs
  * near home.
  */
 export const BELOW_SEA_BASINS: readonly {
@@ -95,7 +95,7 @@ export const landHeight = (h: number, lat: number, lon: number) => (h >= 0 ? h :
 
 /**
  * Height (m) at a point, from decoded tiles fetched by `getTile` (null when a tile isn't available). Bilinear between
- * pixel centres; at a tile edge it reads the neighbouring tile. Sea floor reads 0 (landHeight).
+ * pixel centers; at a tile edge it reads the neighboring tile. Sea floor reads 0 (landHeight).
  */
 export function sampleHeight(
   lat: number,
@@ -104,7 +104,7 @@ export function sampleHeight(
   z = TERRAIN_ZOOM
 ): number | null {
   const { x, y } = tileCoords(lat, lon, z);
-  // Pixel coordinates in the whole map, pixel centres at +0.5.
+  // Pixel coordinates in the whole map, pixel centers at +0.5.
   const px = x * TILE_SIZE - 0.5;
   const py = y * TILE_SIZE - 0.5;
   const x0 = Math.floor(px);
@@ -157,7 +157,7 @@ export const TERRAIN_GRID_BLOCK_MUL_X = 7;
 export const TERRAIN_GRID_BLOCK_MUL_Y = 8;
 const LATLON_TO_M_INV = 89.83204953368922;
 
-/** ArduPilot's Location::offset_latlng: lat/lon in 1e7 degrees, moved `north` and `east` metres. */
+/** ArduPilot's Location::offset_latlng: lat/lon in 1e7 degrees, moved `north` and `east` meters. */
 export function apOffset(lat: number, lon: number, north: number, east: number): { lat: number; lon: number } {
   const dlat = Math.trunc(north * LATLON_TO_M_INV);
   const scale = Math.max(Math.cos((lat + dlat / 2) * 1e-7 * (Math.PI / 180)), 0.01);
@@ -192,5 +192,5 @@ export function requestedGridbits(mask: bigint): number[] {
   return out;
 }
 
-/** TERRAIN_DATA heights: whole metres in int16 range. */
+/** TERRAIN_DATA heights: whole meters in int16 range. */
 export const toTerrainInt16 = (h: number) => Math.max(-32768, Math.min(32767, Math.round(h)));

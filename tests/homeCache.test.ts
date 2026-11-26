@@ -1,5 +1,5 @@
 /**
- * The last known home survives a reload, for centring the map before a fix. It is kept apart from the live home: a
+ * The last known home survives a reload, for centering the map before a fix. It is kept apart from the live home: a
  * saved home may be another site or vehicle, so it must never stand in for what the vehicle reports (or block the
  * live sources, which only fill an empty home). Only a move of home itself is written, not its distance/bearing.
  *

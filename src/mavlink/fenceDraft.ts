@@ -166,13 +166,13 @@ export function fenceDraftToPoints(draft: FenceDraft): FencePoint[] {
 }
 
 // ------------------------------------------------------------------------------------------------
-// Geometry (local metres; fine at fence scale)
+// Geometry (local meters; fine at fence scale)
 // ------------------------------------------------------------------------------------------------
 
 const M_PER_DEG_LAT = 111320;
 const mPerDegLon = (lat: number) => 111320 * Math.cos((lat * Math.PI) / 180);
 
-/** Great-circle-free distance in metres, accurate at fence scale. */
+/** Great-circle-free distance in meters, accurate at fence scale. */
 export function distanceM(a: LatLon, b: LatLon): number {
   const dx = (b.lon - a.lon) * mPerDegLon((a.lat + b.lat) / 2);
   const dy = (b.lat - a.lat) * M_PER_DEG_LAT;
@@ -200,13 +200,13 @@ export function insidePolygon(p: LatLon, vertices: LatLon[]): boolean {
   return inside;
 }
 
-/** The polygon's centre handle: the average of its vertices. */
+/** The polygon's center handle: the average of its vertices. */
 export function polygonCenter(vertices: LatLon[]): LatLon {
   const n = Math.max(1, vertices.length);
   return { lat: vertices.reduce((s, v) => s + v.lat, 0) / n, lon: vertices.reduce((s, v) => s + v.lon, 0) / n };
 }
 
-/** Area in m² (shoelace, local metres). */
+/** Area in m² (shoelace, local meters). */
 export function polygonAreaM2(vertices: LatLon[]): number {
   if (vertices.length < 3) return 0;
   const o = vertices[0];
@@ -444,12 +444,12 @@ export function removeVertex(draft: FenceDraft, s: number, v: number): FenceDraf
   return withShape(draft, s, { ...shape, vertices: shape.vertices.filter((_, i) => i !== v) });
 }
 
-/** Move a whole shape so its centre handle lands on `to` (a polygon keeps its shape; a circle moves its centre). */
+/** Move a whole shape so its center handle lands on `to` (a polygon keeps its shape; a circle moves its center). */
 export function moveShape(draft: FenceDraft, s: number, to: LatLon): FenceDraft {
   const shape = assertShape(draft, s);
   if (shape.kind === 'circle') return withShape(draft, s, { ...shape, center: to });
   const c = polygonCenter(shape.vertices);
-  // Each vertex keeps its offset from the centre in metres, not degrees, so the polygon keeps its shape and size
+  // Each vertex keeps its offset from the center in meters, not degrees, so the polygon keeps its shape and size
   // wherever it goes (a degree of longitude shrinks with latitude).
   const vertices = shape.vertices.map((v) => {
     const north = (v.lat - c.lat) * M_PER_DEG_LAT;
@@ -469,7 +469,7 @@ export function setReturnPoint(draft: FenceDraft, at: LatLon | null): FenceDraft
   return { ...draft, returnPoint: at };
 }
 
-/** A square polygon of side `sizeM` centred on `at`: a starting shape to drag into place. */
+/** A square polygon of side `sizeM` centered on `at`: a starting shape to drag into place. */
 export function squareAt(at: LatLon, sizeM: number, inclusion: boolean): FenceShape {
   const h = sizeM / 2;
   return {
@@ -527,7 +527,7 @@ export function validateFenceDraft(draft: FenceDraft, ctx: FenceCheckContext = {
         err(i, 'The polygon crosses itself: the vehicle would misjudge inside and outside.');
       if (s.vertices.length > 255) err(i, 'A polygon can have at most 255 vertices.');
     } else {
-      if (!validPos(s.center)) err(i, 'The circle has no valid centre.');
+      if (!validPos(s.center)) err(i, 'The circle has no valid center.');
       if (!(Number.isFinite(s.radius) && s.radius > 0)) err(i, 'The circle needs a positive radius.');
     }
   });
@@ -575,7 +575,7 @@ export function compareFenceDrafts(a: FenceDraft, b: FenceDraft): string[] {
         out.push(`${name}: ${p.vertices.length} vertices vs ${q.vertices.length}`);
       else if (!p.vertices.every((v, k) => samePos(v, q.vertices[k]))) out.push(`${name}: a vertex differs`);
     } else if (p.kind === 'circle' && q.kind === 'circle') {
-      if (!samePos(p.center, q.center)) out.push(`${name}: centre differs`);
+      if (!samePos(p.center, q.center)) out.push(`${name}: center differs`);
       if (Math.abs(p.radius - q.radius) > 0.01) out.push(`${name}: radius ${p.radius} vs ${q.radius}`);
     }
   }

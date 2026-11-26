@@ -169,7 +169,7 @@ const BUILT_IN_CATALOG = [
     name: 'Mini STATUSTEXT',
     category: 'telemetry',
     description:
-      'Compact message log, newest first. Control-widget height by default; grows with taller neighbours. Also fits in composite cards.',
+      'Compact message log, newest first. Control-widget height by default; grows with taller neighbors. Also fits in composite cards.',
     icon: Terminal,
     defaultSpan: 4,
   },

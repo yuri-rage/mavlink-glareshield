@@ -86,7 +86,7 @@ screen size: on a narrow window the grid drops from four columns to three, two, 
 In Edit Mode each widget has a width (¼ to full), a height (Compact, Normal, Tall), arrows to move it earlier or later,
 and can be dragged onto another to swap them.
 
-How wide a Flow tab may grow is set in **Settings → Display → Content width**: **Standard** (1280 px, centred),
+How wide a Flow tab may grow is set in **Settings → Display → Content width**: **Standard** (1280 px, centered),
 **Wide** (1680 px) or **Full** (the whole window, for ultrawide and 4K screens). A full-width map keeps to the window's
 height either way.
 
@@ -217,7 +217,7 @@ Anything that moves home or takes the vehicle out of its mode asks for a second 
 ### Several vehicles on one link
 
 When more than one vehicle is heard on the link, a **SYS n / N** chip appears in the navbar: the vehicle being
-commanded, of how many. The others show on the map as violet arrows labelled with their ID and mode.
+commanded, of how many. The others show on the map as violet arrows labeled with their ID and mode.
 
 - **Switching**: choose a vehicle from the chip's menu, or click its arrow on the map. If the current vehicle is armed,
   or a transfer (mission, parameters, logs) is under way, you're asked first, with what will happen. After a switch,
@@ -281,13 +281,13 @@ position and is no longer drawn on the map.
 
 The map's **View** menu chooses the imagery (**Satellite** or **Street map**), its shape (on a full-width map in a Flow
 tab; in a Cockpit pane the map fills the pane), whether ADS-B traffic is shown, **Fit vehicle and mission**, and
-**Clear flight trace**. The header's crosshair button centres on the vehicle and follows it. While planning, the
+**Clear flight trace**. The header's crosshair button centers on the vehicle and follows it. While planning, the
 planner's maximize button fills the window with the map.
 
 While connected, a strip under the map shows the current waypoint, the distance to it, the cross-track error (how far
 it is off the line to that waypoint) and the ETA, with controls to restart the mission or jump to a waypoint. Distance
 and cross-track show while it follows a path (armed in Auto, Guided or RTL), "--" otherwise; small cross-track errors
-show in tenths of an inch or of a centimetre, for RTK and precision work. If the mission hasn't been downloaded yet,
+show in tenths of an inch or of a centimeter, for RTK and precision work. If the mission hasn't been downloaded yet,
 the strip says so and has a **Download** button; it says when the vehicle has no mission at all.
 
 **Offline maps…** (View menu) keeps imagery for use without internet:
@@ -307,7 +307,7 @@ Stored tiles are kept in this browser and used whenever the network can't supply
 
 ## Traffic (ADS-B) and terrain
 
-**ADS-B**: aircraft the vehicle reports (from an ADS-B receiver) are drawn on the map, coloured by threat, labelled
+**ADS-B**: aircraft the vehicle reports (from an ADS-B receiver) are drawn on the map, colored by threat, labeled
 with callsign and relative height; click one for its details. An aircraft within the caution or alert limits raises a
 banner and a spoken warning. **Settings → Traffic & terrain** shows or hides them, turns warnings on or off, and sets
 the limits (range, height, and the predicted closest approach). The vehicle only forwards traffic within its

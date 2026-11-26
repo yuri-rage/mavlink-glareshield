@@ -59,7 +59,7 @@ export const MapMissionFooter: React.FC<FooterProps> = ({ isFetching, onFetch })
   const noMission = missionState === 1; // MISSION_STATE_NO_MISSION
 
   // Distance and cross-track error mean something only while it follows a path (Auto, Guided, RTL...): "--" otherwise.
-  // Not "wp_dist > 0": that's whole metres, so it read 0 in the last metre before each waypoint and blanked both just
+  // Not "wp_dist > 0": that's whole meters, so it read 0 in the last meter before each waypoint and blanked both just
   // as it got there.
   const hasTarget = followsPath(modeName, armed);
   const notFollowing = 'Shown while it follows a path (armed in Auto, Guided or RTL)';

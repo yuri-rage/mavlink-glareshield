@@ -15,8 +15,8 @@ export const CMD_NAV_RALLY_POINT = 5100;
 export const DEFAULT_RALLY_ALT = 30;
 
 /**
- * ArduPilot stores a rally point's altitude as a whole number of metres (AP_Rally's RallyLocation.alt is an int16),
- * so the draft keeps whole metres too: otherwise 100 ft (30.48 m) would read back as 30 m and never verify.
+ * ArduPilot stores a rally point's altitude as a whole number of meters (AP_Rally's RallyLocation.alt is an int16),
+ * so the draft keeps whole meters too: otherwise 100 ft (30.48 m) would read back as 30 m and never verify.
  */
 export function rallyAlt(m: number): number {
   return Number.isFinite(m) ? Math.round(m) : m;
@@ -127,7 +127,7 @@ export function addRallyPoint(
   return { draft: { points }, index: at };
 }
 
-/** Change a point's fields. Altitude is kept to whole metres (see rallyAlt). */
+/** Change a point's fields. Altitude is kept to whole meters (see rallyAlt). */
 export function updateRallyPoint(draft: RallyDraft, index: number, patch: Partial<RallyItem>): RallyDraft {
   assertIndex(draft, index);
   const points = [...draft.points];

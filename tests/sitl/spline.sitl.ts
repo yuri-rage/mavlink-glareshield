@@ -157,7 +157,7 @@ try {
 unsub();
 log(`recorded ${track.length} positions`);
 
-// Distance from each track point to a drawn polyline, in metres (flat earth, fine at this size).
+// Distance from each track point to a drawn polyline, in meters (flat earth, fine at this size).
 const toXY = (lat: number, lon: number) => [
   (lon - H.lon) * 111320 * Math.cos((H.lat * Math.PI) / 180),
   (lat - H.lat) * 111320,

@@ -175,7 +175,7 @@ check(
   };
   const m = mp.terrainIssues(pr as any, [{ from: 0, to: 1, spline: false, latLngs: [] }] as any, 30)[0].message;
   check('a fraction below: "1 m below"', /goes 1 m below/.test(m), m);
-  // In feet, 0.3 m is 1 ft below (the 1-unit floor is the formatter's, not a whole metre first: that read "3 ft").
+  // In feet, 0.3 m is 1 ft below (the 1-unit floor is the formatter's, not a whole meter first: that read "3 ft").
   const ftWhole = (v: number) => `${v > 0 ? Math.max(1, Math.round(v * 3.28084)) : Math.round(v * 3.28084)} ft`;
   const f = mp.terrainIssues(pr as any, [{ from: 0, to: 1, spline: false, latLngs: [] }] as any, 30, ftWhole)[0]
     .message;

@@ -66,7 +66,7 @@ export function useCommandSender() {
   const [ack, setAck] = useState<AckView | null>(null);
   /** `onResult` hears the outcome (accepted / in progress / rejected, which includes no response). */
   const send = (packet: Uint8Array, label: string, onResult?: (status: AckView['status']) => void) => {
-    setAck({ status: 'pending', text: 'Sent, awaiting acknowledgement', time: Date.now() });
+    setAck({ status: 'pending', text: 'Sent, awaiting acknowledgment', time: Date.now() });
     void sendTrackedCommand(packet, { label }).then((info) => {
       const view = describeAck(info);
       setAck(view);
@@ -180,7 +180,7 @@ export interface PanelProps {
   alert: AlertState;
   /** Every displayed reading is stale. */
   staleAll: boolean;
-  /** Colour scheme after alerts, as Tailwind classes and an accent hex. */
+  /** Color scheme after alerts, as Tailwind classes and an accent hex. */
   scheme: SchemeClasses;
   accentHex: string;
 }

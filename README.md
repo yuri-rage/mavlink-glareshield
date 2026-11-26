@@ -128,6 +128,6 @@ See the **[Custom Widget Guide](docs/custom-widgets.md)** for the full format, e
 
 ---
 
-## Acknowledgements
+## Acknowledgments
 
 The link transports in `src/mavlink/transport/` (WebSocket, Web Serial, and serial over WebUSB for Android) are adapted from [ArduConfigurator](https://github.com/j-w9/arduconfigurator) (GPL-3.0-only). Each adapted file names its source and what was changed.

@@ -1,8 +1,8 @@
-// Units for values the user types: lengths and altitudes in feet or metres, speeds in the speed unit chosen (m/s,
+// Units for values the user types: lengths and altitudes in feet or meters, speeds in the speed unit chosen (m/s,
 // km/h, mph or kts), converted to and from the SI values the vehicle uses. One place for it, so every field agrees
 // with the display units (unitsStore) instead of each component converting its own way.
 //
-// Mission command params are labelled with their MAVLink unit ("Accept radius (m)", "Speed (m/s)"): paramUnitKind
+// Mission command params are labeled with their MAVLink unit ("Accept radius (m)", "Speed (m/s)"): paramUnitKind
 // reads that, so the item editor can show them in the user's units, or raw (as sent) when asked.
 
 import { useUnitsStore, type UnitSystem } from '../store/unitsStore';
@@ -24,7 +24,7 @@ const IDENTITY = (v: number) => v;
 
 export const isImperialSystem = (s: UnitSystem) => s === 'mph' || s === 'kts';
 
-/** Lengths and altitudes: feet with mph or kts, else metres. */
+/** Lengths and altitudes: feet with mph or kts, else meters. */
 export function lengthUnit(system: UnitSystem): InputUnit {
   return isImperialSystem(system)
     ? { unit: 'ft', fromSi: (m) => m * FT_PER_M, toSi: (ft) => ft / FT_PER_M, digits: 0 }

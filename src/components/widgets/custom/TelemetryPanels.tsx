@@ -118,7 +118,7 @@ export const RadialGaugePanel: React.FC<PanelProps> = (props) => {
   const dialRatio = (VIEW_HEIGHT[sweep] ?? 160) / 232;
   return (
     // The dial is absolutely positioned so it fits the card instead of sizing it: the card's height comes from its
-    // row (neighbouring widgets, or the row-height setting), with a modest minimum.
+    // row (neighboring widgets, or the row-height setting), with a modest minimum.
     <div
       className={`relative flex-1 ${multi && items.length > 4 ? 'min-h-[240px]' : ''}`}
       // In a Cockpit pane (fixed height) it may shrink further when space is short; with room it still grows.
@@ -373,7 +373,7 @@ export const ChartPanel: React.FC<PanelProps> = (props) => {
         fixedMin={min}
         fixedMax={max}
         dimmed={staleAll}
-        // A label the user set is always shown; an unlabelled single series is named by the card title instead.
+        // A label the user set is always shown; an unlabeled single series is named by the card title instead.
         legendLabels={bindings.some((b) => Boolean(b.label?.trim()))}
       />
     </div>

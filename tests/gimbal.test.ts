@@ -1,6 +1,6 @@
 /**
  * Gimbal checks: the gimbal manager messages (frames packed by pymavlink), the pointing command parameters, when
- * pointing at a place turns the vehicle, where the camera's centre ray meets the ground, and when a gimbal counts as
+ * pointing at a place turns the vehicle, where the camera's center ray meets the ground, and when a gimbal counts as
  * enabled.
  *
  * Run: npx tsx tests/gimbal.test.ts

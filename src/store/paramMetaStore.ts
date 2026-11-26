@@ -66,7 +66,7 @@ async function downloadWith(c: CatalogCandidate, signal: AbortSignal): Promise<R
 async function store(cache: Cache | null, c: CatalogCandidate, catalog: Record<string, ParamMeta>) {
   if (!cache) return;
   try {
-    // The parsed, trimmed catalogue is stored, not the raw file: smaller, and no parsing on the next load.
+    // The parsed, trimmed catalog is stored, not the raw file: smaller, and no parsing on the next load.
     await cache.put(
       c.url,
       new Response(JSON.stringify(catalog), {

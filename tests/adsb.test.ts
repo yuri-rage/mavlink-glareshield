@@ -150,7 +150,7 @@ check(
   useUnitsStore.getState().setSystem('mph');
   const mph = label(-30.48, 3);
   check(
-    'relative height: metres for km/h, feet for knots and mph',
+    'relative height: meters for km/h, feet for knots and mph',
     metric === '+50 m ↓' && kts === '+164 ft ↓' && mph === '−100 ft ↑',
     `${metric} / ${kts} / ${mph}`
   );

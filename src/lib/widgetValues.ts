@@ -40,7 +40,7 @@ type ParamTable = Record<string, { value: number } | undefined> | undefined;
 const negateIf = (reversed: boolean, v: number) => (reversed && v !== 0 ? -v : v);
 
 /**
- * Servo output `n` (1-based) normalised to [-1, 1] the way ArduPilot does it: SERVOn_MIN / _TRIM / _MAX, and
+ * Servo output `n` (1-based) normalized to [-1, 1] the way ArduPilot does it: SERVOn_MIN / _TRIM / _MAX, and
  * negated when SERVOn_REVERSED is set, so +1 always means the function's positive direction (right, up, more
  * throttle) whichever way the servo is mounted. RC input reversal (RCn_REVERSED / RCn_REV) never applies here.
  */
@@ -53,7 +53,7 @@ export function scaleServoOutput(pwm: number, n: number, params: ParamTable): nu
 }
 
 /**
- * RC input channel `n` (1-based) normalised to [-1, 1]: RCn_MIN / _TRIM / _MAX, negated when the input is
+ * RC input channel `n` (1-based) normalized to [-1, 1]: RCn_MIN / _TRIM / _MAX, negated when the input is
  * reversed (RCn_REVERSED = 1, or RCn_REV = -1 on older firmware), as ArduPilot's RC_Channel does.
  */
 export function scaleRcInput(pwm: number, n: number, params: ParamTable): number {

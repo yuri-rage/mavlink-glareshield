@@ -1,4 +1,4 @@
-// The other vehicles on the link (vehicleRoster), on the map: a violet arrow along each one's heading, labelled with
+// The other vehicles on the link (vehicleRoster), on the map: a violet arrow along each one's heading, labeled with
 // its system ID and mode, faded once its position is old. Click for a summary and a button to switch to it (the
 // switch is confirmed when something is at stake). Drawn from a store subscription, without re-rendering the map.
 
@@ -16,14 +16,14 @@ const PANE = 'otherVehiclesPane';
 const STALE_MS = 5000;
 
 function icon(v: RosterVehicle, stale: boolean): L.DivIcon {
-  const colour = v.armed ? '#c4b5fd' : '#a78bfa';
+  const color = v.armed ? '#c4b5fd' : '#a78bfa';
   const arrow = `<svg width="24" height="24" viewBox="-12 -12 24 24" style="transform:rotate(${v.heading ?? 0}deg)">
-    <path d="M0,-10 L7,8 L0,4 L-7,8 Z" fill="${colour}" stroke="#09090b" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+    <path d="M0,-10 L7,8 L0,4 L-7,8 Z" fill="${color}" stroke="#09090b" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
   return L.divIcon({
     className: '',
     html: `<div style="opacity:${stale ? 0.45 : 0.9};display:flex;flex-direction:column;align-items:center;width:96px;margin-left:-36px;cursor:pointer">
       ${arrow}
-      <div style="margin-top:1px;padding:0 3px;border-radius:3px;background:rgba(9,9,11,0.8);color:${colour};font:700 10px/13px ui-monospace,monospace;white-space:nowrap">SYS ${v.sysId} ${escapeHtml(v.modeName)}</div>
+      <div style="margin-top:1px;padding:0 3px;border-radius:3px;background:rgba(9,9,11,0.8);color:${color};font:700 10px/13px ui-monospace,monospace;white-space:nowrap">SYS ${v.sysId} ${escapeHtml(v.modeName)}</div>
     </div>`,
     iconSize: [24, 24],
     iconAnchor: [12, 12],

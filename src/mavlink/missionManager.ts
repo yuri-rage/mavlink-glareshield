@@ -45,7 +45,7 @@ const MISSION_RESULT_TEXT: Record<number, string> = {
   12: 'an invalid param 7 / altitude',
   13: 'an item out of sequence',
   14: 'denied',
-  15: 'cancelled',
+  15: 'canceled',
 };
 export const MAV_MISSION_UNSUPPORTED = 3;
 /** MAV_MISSION_RESULT for an item the vehicle didn't request next. */
@@ -111,7 +111,7 @@ export class MissionManager {
     this.setStatus({
       isFetching: false,
       method: 'idle',
-      message: 'Mission & fence sync cancelled',
+      message: 'Mission & fence sync canceled',
     });
     this.scheduleMessageClear(3500);
   }
@@ -211,7 +211,7 @@ export class MissionManager {
 
       this.legacyAbort = () => {
         if (isDone) return;
-        console.log(`[MissionManager] Legacy upload for type=${missionType} cancelled.`);
+        console.log(`[MissionManager] Legacy upload for type=${missionType} canceled.`);
         finish(false);
       };
 
@@ -392,7 +392,7 @@ export class MissionManager {
     // shorter mission leaves the old mission's last items behind (AP_Filesystem_Mission::finish_upload_mission). The
     // item-by-item protocol truncates to the new count whatever the state (MissionItemProtocol_Waypoints::truncate).
     // Every vehicle stops its mission on leaving AUTO (ModeAuto::exit; Sub's exit_mode), so in other modes clear()
-    // works and MAVFTP is safe. A mode the app doesn't recognise (named by number, e.g. COPTER_31) might be one
+    // works and MAVFTP is safe. A mode the app doesn't recognize (named by number, e.g. COPTER_31) might be one
     // running the mission: treat it as running. A switch into AUTO during a MAVFTP upload can still beat the clear;
     // the read-back after the upload reports that as not verified.
     const unrecognisedMode = /_\d+$/.test(hb.modeName);
@@ -690,7 +690,7 @@ export class MissionManager {
             type: parsed.type,
             count: totalCount,
             method: finalMethod,
-            error: 'Upload cancelled.',
+            error: 'Upload canceled.',
           };
         }
         const res = await this.uploadSection(
@@ -794,7 +794,7 @@ export class MissionManager {
 
       this.legacyAbort = () => {
         if (isDone) return;
-        console.log(`[MissionManager] Legacy stream for type=${missionType} cancelled.`);
+        console.log(`[MissionManager] Legacy stream for type=${missionType} canceled.`);
         finish(items);
       };
 
@@ -1046,7 +1046,7 @@ export class MissionManager {
     const legacyFence = await this.fetchLegacyItems(1, sysId, compId);
     if (this.isCancelled) return [];
     if (!this.lastLegacyComplete) {
-      // Timed out or cancelled: what arrived (maybe nothing) is not the vehicle's fence. Keep the one the map shows,
+      // Timed out or canceled: what arrived (maybe nothing) is not the vehicle's fence. Keep the one the map shows,
       // and return it so a caller's count agrees; lastFenceReadOk stays false.
       console.warn('[MissionManager] Fence stream incomplete; keeping the fence already known.');
       return useTelemetryStore.getState().fencePoints;
@@ -1158,7 +1158,7 @@ export class MissionManager {
 
     rallyPoints.sort((a, b) => a.seq - b.seq);
     if (!this.lastLegacyComplete) {
-      // Timed out or cancelled: what arrived (maybe nothing) is not the vehicle's list. Keep the rally points the map
+      // Timed out or canceled: what arrived (maybe nothing) is not the vehicle's list. Keep the rally points the map
       // already shows rather than replacing them with a partial or empty one, and return those, so a caller's count
       // (the download summary) agrees with the map. lastRallyReadOk stays false: callers that check it know.
       console.warn('[MissionManager] Rally point stream incomplete; keeping the rally points already known.');

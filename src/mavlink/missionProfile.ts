@@ -77,7 +77,7 @@ function distM(a: [number, number], b: [number, number]): number {
 }
 
 /**
- * The profile of `legs` (from missionPathLegs) through `items`, sampling about every `stepM` metres. `homeMslHint`
+ * The profile of `legs` (from missionPathLegs) through `items`, sampling about every `stepM` meters. `homeMslHint`
  * is home's MSL altitude when known from elsewhere (the vehicle); else the mission's home item, else the terrain.
  */
 export function missionProfile(
@@ -209,7 +209,7 @@ export function missionProfile(
 }
 
 /**
- * A height in whole metres, the default for the messages (the app passes one in the user's units). Any height above
+ * A height in whole meters, the default for the messages (the app passes one in the user's units). Any height above
  * zero is at least one unit: never "0 m below" for a fraction under.
  */
 const wholeMetres = (m: number) => `${m > 0 ? Math.max(1, Math.round(m)) : Math.round(m)} m`;

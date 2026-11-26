@@ -170,7 +170,7 @@ class LogManager {
         quiet();
       });
       // Cancel (a switch to another vehicle, the widget closing) ends the listing too.
-      this.cancelCurrent = () => done(new LogTransferError('Cancelled'));
+      this.cancelCurrent = () => done(new LogTransferError('Canceled'));
       mavlinkConnection.send(enc.createLogRequestList(sysId, compId));
       quiet();
     });
@@ -198,7 +198,7 @@ class LogManager {
     };
     try {
       const viaFtp = await this.tryFtp(entry, list, sysId, compId, onProgress, maxLogFiles, () => cancelled);
-      if (cancelled) throw new LogTransferError('Cancelled');
+      if (cancelled) throw new LogTransferError('Canceled');
       if (viaFtp) return { data: viaFtp, method: 'mavftp' };
       const data = await this.streamLogData(entry, sysId, compId, onProgress, (cancel) => {
         this.cancelCurrent = () => {
@@ -279,7 +279,7 @@ class LogManager {
         if (err) reject(err);
         else resolve(asm.data);
       };
-      setCancel(() => finish(new LogTransferError('Cancelled')));
+      setCancel(() => finish(new LogTransferError('Canceled')));
       const request = (ofs: number, count: number) =>
         mavlinkConnection.send(enc.createLogRequestData(sysId, compId, entry.id, ofs, count));
       const requestNextGap = () => {
@@ -317,7 +317,7 @@ class LogManager {
           onProgress({ received: asm.received, total: entry.size, method: 'mavlink' });
         }
         if (asm.complete) return finish();
-        if (done) return; // cancelled from the progress callback
+        if (done) return; // canceled from the progress callback
         // The end of the stream (a short or empty block at the end) with gaps left: fill them one by one, asking
         // for the next as each one completes.
         const streamEnded = !endSeen && gapEnd === 0 && d.count < LOG_DATA_LEN && d.ofs + d.count >= entry.size;

@@ -490,7 +490,7 @@ check(
   });
   check('sanitize: unknown display type falls back to a stat card', w.displayType === 'stat-card');
   check(
-    'sanitize: non-hex colours are dropped, hex kept',
+    'sanitize: non-hex colors are dropped, hex kept',
     w.binding?.color === undefined && w.bindings?.[0].color === '#ff0000'
   );
   check(
@@ -612,7 +612,7 @@ check(
   );
   check('staleSummary: all stale dims the panel', pm.staleSummary([a], [reading(1, true)]).all);
   check(
-    'effectiveScheme: alerts override the panel colour',
+    'effectiveScheme: alerts override the panel color',
     pm.effectiveScheme('crit', 'green') === 'red' &&
       pm.effectiveScheme('normal', 'green') === 'green' &&
       pm.effectiveScheme('normal', undefined) === 'default'
@@ -709,7 +709,7 @@ check(
     panels[0].name === 'Pressure' && panels[1].name === 'Pump Station'
   );
   check(
-    'cardPanels: card colour and stale timeout fill in, panel settings win',
+    'cardPanels: card color and stale timeout fill in, panel settings win',
     panels[0].colorScheme === 'blue' && panels[1].colorScheme === 'green' && panels.every((p) => p.staleAfterSec === 5)
   );
   check('cardPanels: panel ids are unique within the card', new Set(panels.map((p) => p.id)).size === 3);
@@ -754,7 +754,7 @@ check(
   check('sanitize: unknown panel types become stat cards', hostile.panels?.[1].displayType === 'stat-card');
   const h2: any = hostile.panels?.[2];
   check(
-    'sanitize: bad panel colour dropped, span clamped, title trimmed, unknown keys dropped',
+    'sanitize: bad panel color dropped, span clamped, title trimmed, unknown keys dropped',
     h2.colorScheme === undefined && h2.span === 1 && h2.title.length === 40 && !('evil' in h2)
   );
   check(
@@ -967,7 +967,7 @@ check(
   );
 }
 
-// Scaled values normalise like ArduPilot: SERVOn_REVERSED flips servo outputs, RCn_REVERSED / RCn_REV flip RC inputs.
+// Scaled values normalize like ArduPilot: SERVOn_REVERSED flips servo outputs, RCn_REVERSED / RCn_REV flip RC inputs.
 {
   const P = (o: Record<string, number>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { value: v }]));
   const { scaleServoOutput } = values;
@@ -1142,7 +1142,7 @@ check(
     colorScheme: 'purple',
     paramControl: { paramId: 'WPNAV_SPEED', options: 'fast', min: 'abc', step: 5 },
   } as any);
-  check('import: unknown top-level colour scheme dropped', bad.colorScheme === undefined);
+  check('import: unknown top-level color scheme dropped', bad.colorScheme === undefined);
   check(
     'import: non-list param options dropped, bad min dropped, good step kept',
     bad.paramControl?.options === undefined && bad.paramControl?.min === undefined && bad.paramControl?.step === 5,

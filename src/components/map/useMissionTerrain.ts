@@ -60,7 +60,7 @@ export function useMissionTerrain() {
       const profile = missionProfile(items, legs, (lat, lon) => terrainService.heightNow(lat, lon), {
         homeMslHint: hint,
       });
-      // Heights in the warnings in the user's units, whole feet or metres; above zero is at least 1 (never "0 ft below").
+      // Heights in the warnings in the user's units, whole feet or meters; above zero is at least 1 (never "0 ft below").
       const whole = (v: number) => (v > 0 ? Math.max(1, Math.round(v)) : Math.round(v));
       const fmt = (m: number) => (imperial ? `${whole(m * 3.28084)} ft` : `${whole(m)} m`);
       useMissionTerrainStore.setState({

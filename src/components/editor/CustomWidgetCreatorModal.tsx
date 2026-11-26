@@ -760,7 +760,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   /** Turn the current single widget into the first panel of a composite. */
   const makeComposite = () => {
     const first = { ...currentPanel(), span: 12 };
-    // The widget's description and colour stay with the card.
+    // The widget's description and color stay with the card.
     delete first.description;
     delete first.colorScheme;
     setPanels([first]);
@@ -1417,7 +1417,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                 {displayType === 'sparkline'
                   ? 'Each value is plotted as its own series on the same chart.'
                   : displayType === 'value-list'
-                    ? 'Each value gets its own labelled row.'
+                    ? 'Each value gets its own labeled row.'
                     : multiGauge
                       ? "Each value gets its own gauge with its own range, thresholds, multiplier and offset. A blank min or max uses the first gauge's."
                       : 'Drawn as a magenta marker on the same scale, e.g. a target against the actual value.'}

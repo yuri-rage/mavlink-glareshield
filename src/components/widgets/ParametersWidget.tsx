@@ -339,7 +339,7 @@ export const ParametersWidget: React.FC = () => {
       return matchesParamQuery(k, getParamMetadata(k), searchQuery);
     });
     return matched.sort((a, b) => a.localeCompare(b));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the catalogue changes what getParamMetadata returns
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the catalog changes what getParamMetadata returns
   }, [paramKeys, parameters, searchQuery, onlyModified, paramMetaCatalog]);
 
   const hasAnyDefaults = paramStatus.hasDefaults || Object.values(parameters).some((p) => p.defaultValue !== undefined);

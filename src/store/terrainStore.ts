@@ -61,7 +61,7 @@ export const useTerrainStore = create<TerrainState>((set, get) => {
       persist();
     },
     setClearanceM: (m) => {
-      // Hundredths of a metre, not whole metres: 50 ft is 15.24 m, and rounding it to 15 showed 49 ft.
+      // Hundredths of a meter, not whole meters: 50 ft is 15.24 m, and rounding it to 15 showed 49 ft.
       set({ clearanceM: Math.max(0, Math.min(1000, Math.round(m * 100) / 100)) });
       persist();
     },

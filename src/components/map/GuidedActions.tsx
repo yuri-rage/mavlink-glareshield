@@ -41,7 +41,7 @@ function useSender() {
     const packet = mavlinkConnection
       .getEncoder()
       .createCommandInt(hb.systemId, hb.componentId || 1, spec.command, spec.frame, spec.params);
-    setAck({ status: 'pending', text: 'Sent, awaiting acknowledgement', time: Date.now() });
+    setAck({ status: 'pending', text: 'Sent, awaiting acknowledgment', time: Date.now() });
     void sendTrackedCommand(packet, { label: spec.label }).then((info) => {
       setAck(describeAck(info));
       if (info.result === 0) onAccepted?.();

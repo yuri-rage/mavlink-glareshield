@@ -234,7 +234,7 @@ const ItemEditor: React.FC<{
                 type="button"
                 aria-pressed={paramUnits === u}
                 onClick={() => setParamUnits(u)}
-                title={u === 'raw' ? 'As sent to the vehicle: metres and m/s' : 'In the display units (Settings)'}
+                title={u === 'raw' ? 'As sent to the vehicle: meters and m/s' : 'In the display units (Settings)'}
                 className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${paramUnits === u ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:bg-zinc-800'}`}
               >
                 {u === 'raw' ? 'Raw' : `${lengthUnit(system).unit} · ${speedUnit(system).unit}`}
@@ -887,7 +887,7 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
                 onClick={addItem}
                 title={
                   cmdHasLocation(addCommand)
-                    ? `Insert after ${selected !== null && selected >= 1 ? `#${selected}` : 'the last item'}, at the map centre (or use Place on the map)`
+                    ? `Insert after ${selected !== null && selected >= 1 ? `#${selected}` : 'the last item'}, at the map center (or use Place on the map)`
                     : `Insert after ${selected !== null && selected >= 1 ? `#${selected}` : 'the last item'}`
                 }
                 className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-amber-500/50 bg-amber-500/15 px-2 text-[11px] font-bold text-amber-200 hover:bg-amber-500/25"

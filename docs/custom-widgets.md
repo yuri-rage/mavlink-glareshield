@@ -11,7 +11,7 @@ This guide covers:
 - [Display types](#display-types), each with an example
 - [Control widgets](#control-widgets): commands, toggles, sliders and parameters
 - [Composite widgets](#composite-widgets): several panels in one card, in JSON or the creator
-- [Stale data, alerts and colours](#stale-data-alerts-and-colours)
+- [Stale data, alerts and colors](#stale-data-alerts-and-colors)
 - [Limits and validation rules](#limits-and-validation-rules)
 - [Troubleshooting](#troubleshooting)
 
@@ -102,7 +102,7 @@ The smallest useful widget:
 | `feedback` | binding | | `toggle-switch` only: the field that reports the real on/off state. |
 | `stateThreshold` | number | | `indicator-led` and toggle `feedback`: "on" means the value is above this. Default `0`. |
 | `staleAfterSec` | number | | Seconds without the message before the widget shows **Stale**. Default `3`. |
-| `colorScheme` | `default` \| `green` \| `amber` \| `blue` \| `red` | | The widget's accent colour. |
+| `colorScheme` | `default` \| `green` \| `amber` \| `blue` \| `red` | | The widget's accent color. |
 | `panels` | panel[] | `composite` | The panels of a [composite widget](#composite-widgets). |
 | `minWidth`, `minHeight` | number | | Reserved. Not used yet. |
 
@@ -132,7 +132,7 @@ A binding says where a value comes from and how to present it.
 
 | Field | Meaning |
 |---|---|
-| `messageName` | MAVLink message name, for example `VFR_HUD`. Use `RC_CHANNELS (scaled)` or `SERVO_OUTPUT_RAW (scaled)` for normalised RC and servo values (see below). |
+| `messageName` | MAVLink message name, for example `VFR_HUD`. Use `RC_CHANNELS (scaled)` or `SERVO_OUTPUT_RAW (scaled)` for normalized RC and servo values (see below). |
 | `fieldName` | Field within the message. |
 | `multiplier`, `offset` | The displayed value is `raw × multiplier + offset`. Defaults are 1 and 0. |
 | `bit` | Read one bit of a bitmask field (0 = least significant, up to 31): the raw value becomes 0 or 1. For example, `RELAY_STATUS.on` with `bit: 2` is relay 3. |
@@ -143,15 +143,15 @@ A binding says where a value comes from and how to present it.
 | `warnThreshold`, `critThreshold` | Values where the widget turns amber and red. Gauges also draw these as zones. |
 | `thresholdInvert` | `false` (default): alert when the value is **above** the thresholds, as for temperature. `true`: alert when it is **below** them, as for voltage or satellite count. |
 | `label` | Name of the row, series or gauge, for widgets showing several values. A time-series chart always shows a label you set in its legend, even for a single series. |
-| `color` | Hex colour of the series or row, for example `#f59e0b`. Only hex colours are accepted. |
+| `color` | Hex color of the series or row, for example `#f59e0b`. Only hex colors are accepted. |
 
 ### Which fields can be bound
 
-**Any decoded field of any message the vehicle sends.** The creator lists a catalogue of common fields, adds the fields it has actually received from the vehicle (marked ●), and accepts any other name through **Other field…**.
+**Any decoded field of any message the vehicle sends.** The creator lists a catalog of common fields, adds the fields it has actually received from the vehicle (marked ●), and accepts any other name through **Other field…**.
 
-The messages the dashboard itself uses, such as `ATTITUDE`, `VFR_HUD`, `GLOBAL_POSITION_INT`, `SYS_STATUS` and `GPS_RAW_INT`, arrive already converted to engineering units: volts, amps, metres and degrees. For example, `SYS_STATUS.voltage_battery` is in volts and `GLOBAL_POSITION_INT.relative_alt` is in metres. A few convenience fields are also provided, such as `ATTITUDE.rollDeg`, `pitchDeg` and `yawDeg`. Fields of other messages are in their raw MAVLink units, for example centidegrees or millivolts. Check the value in the live preview, then set `multiplier` to convert it.
+The messages the dashboard itself uses, such as `ATTITUDE`, `VFR_HUD`, `GLOBAL_POSITION_INT`, `SYS_STATUS` and `GPS_RAW_INT`, arrive already converted to engineering units: volts, amps, meters and degrees. For example, `SYS_STATUS.voltage_battery` is in volts and `GLOBAL_POSITION_INT.relative_alt` is in meters. A few convenience fields are also provided, such as `ATTITUDE.rollDeg`, `pitchDeg` and `yawDeg`. Fields of other messages are in their raw MAVLink units, for example centidegrees or millivolts. Check the value in the live preview, then set `multiplier` to convert it.
 
-**Normalised RC and servo values.** `RC_CHANNELS (scaled)` (`chan1_scaled` … `chan16_scaled`) and `SERVO_OUTPUT_RAW (scaled)` (`servo1_scaled` … `servo16_scaled`) give each PWM value as a number from −1 to 1. The scaling uses the vehicle's own calibration:
+**Normalized RC and servo values.** `RC_CHANNELS (scaled)` (`chan1_scaled` … `chan16_scaled`) and `SERVO_OUTPUT_RAW (scaled)` (`servo1_scaled` … `servo16_scaled`) give each PWM value as a number from −1 to 1. The scaling uses the vehicle's own calibration:
 
 - RC channels use `RCn_MIN`, `RCn_TRIM` and `RCn_MAX`.
 - Servo outputs use `SERVOn_MIN`, `SERVOn_TRIM` and `SERVOn_MAX`.
@@ -214,7 +214,7 @@ Telemetry types take one value in `binding`. Some also take more in `bindings`:
 
 ### `stat-card`
 
-One large number with its unit, coloured by the thresholds.
+One large number with its unit, colored by the thresholds.
 
 ### `text-display`
 
@@ -233,7 +233,7 @@ A compact one-line readout, `<description>: <value> <unit>`, for when space is t
 
 ### `value-list`
 
-A table with one row per value. Each row has its own label, scaling, thresholds and colour, so related numbers fit in one card.
+A table with one row per value. Each row has its own label, scaling, thresholds and color, so related numbers fit in one card.
 
 ```json
 {
@@ -274,7 +274,7 @@ A dial. `binding.min` and `binding.max` set its range, and the thresholds draw g
 | `layout` | `marker`: one gauge, with the first extra value as a magenta marker. `multiple`: one gauge per value. | `marker` |
 | `sweep` | `180`, `240` or `270` degrees of arc | `240` |
 | `style` | `arc` (filled arc), `needle`, or `both` | `both` |
-| `majorTicks` | 2–12 labelled ticks | 5 |
+| `majorTicks` | 2–12 labeled ticks | 5 |
 | `minorTicks` | 0–9 ticks between major ticks | 4 |
 | `showZones` | draw threshold zones on the scale | `true` |
 
@@ -370,8 +370,8 @@ A preset group of bars, chosen with `multiBarConfig.group`. These take no `bindi
 
 | `group` | Shows |
 |---|---|
-| `rc-8` / `rc-8-scaled` | RC inputs 1–8, raw PWM or normalised −1…1 |
-| `servo-8` / `servo-8-scaled` | Servo outputs 1–8, raw PWM or normalised |
+| `rc-8` / `rc-8-scaled` | RC inputs 1–8, raw PWM or normalized −1…1 |
+| `servo-8` / `servo-8-scaled` | Servo outputs 1–8, raw PWM or normalized |
 | `esc-rpm`, `esc-temp`, `esc-current` | ESC telemetry, motors 1–4 |
 | `vibration-xyz` | Vibration on X, Y and Z |
 | `ekf-variances` | EKF velocity, horizontal and vertical position, and compass variances |
@@ -695,30 +695,30 @@ How a composite card behaves:
 
 - **Alerts.** Each panel's border turns amber or red with its own thresholds. The card's border and badge show the worst panel.
 - **Stale data.** The card's **Stale** badge covers every panel's values. Each panel dims on its own.
-- **Controls.** Each control panel confirms, sends and shows the vehicle's acknowledgement on its own. Arming one never affects another.
+- **Controls.** Each control panel confirms, sends and shows the vehicle's acknowledgment on its own. Arming one never affects another.
 - **Narrow cards.** In a card narrower than about 360 px, such as on a phone, a panel a third of the card wide or less (`span` 4 or less) takes half a row, so they pair up; wider panels take a full row.
 - **Import.** The import preview lists every panel and every command or parameter write in it, and confirmation is forced on all of them.
 
 ### Building a composite in the creator
 
 1. In the creator, set **Display UI Type** to **Composite (several panels in one card)**. Whatever you had set up becomes panel 1. For a built-in widget, set the panel type to **Built-in Widget** and pick one.
-2. **Add panel** adds another, up to 12. Click a panel in the list to edit it: the settings below the list then apply to that panel (its type, title, width, accent colour and everything else).
+2. **Add panel** adds another, up to 12. Click a panel in the list to edit it: the settings below the list then apply to that panel (its type, title, width, accent color and everything else).
 3. Set each panel's width in the list, and reorder panels with the arrows. The preview shows the card as laid out.
 4. **Save & Place** adds the card full width. **Export Widget JSON** saves the whole composite as one file.
 
-The card's name, description and accent colour are at the top, as for any widget. A panel left on **Same as the card** uses the card's colour. The list counts the values the card reads; past 32, the card can't be saved until some are removed.
+The card's name, description and accent color are at the top, as for any widget. A panel left on **Same as the card** uses the card's color. The list counts the values the card reads; past 32, the card can't be saved until some are removed.
 
 To turn a composite back into a single widget, choose **Single widget** in **Display UI Type**. The selected panel is kept, and the creator asks before dropping any others. This isn't offered while a built-in panel is selected: place a built-in widget from **Add Widget** instead.
 
 ---
 
-## Stale data, alerts and colours
+## Stale data, alerts and colors
 
 **Stale data.** If a widget's message hasn't arrived for `staleAfterSec` seconds (default 3), the value dims and the card shows **Stale**. A stale value never lights an LED, and it never drives a toggle's feedback state. Raise `staleAfterSec` for messages the vehicle sends slowly, such as `BATTERY_STATUS` at 1 Hz or less.
 
 **Alerts.** When a value crosses `warnThreshold` it turns amber, and past `critThreshold` it turns red. `thresholdInvert` decides which direction counts. On widgets showing several values, the card's border shows the worst state among them.
 
-**Colours.** `colorScheme` sets the widget's accent colour. Alerts override it. Series and row colours come from each binding's `color`, or from a built-in palette.
+**Colors.** `colorScheme` sets the widget's accent color. Alerts override it. Series and row colors come from each binding's `color`, or from a built-in palette.
 
 ---
 
@@ -746,7 +746,7 @@ These rules apply to everything imported, and to everything saved from the creat
 | `action.confirmation`, `paramControl.confirmation`, `paramSet.confirmation` | Forced to `true` on import. |
 | Duplicate `id` | Reassigned, with **(imported)** added to the name. |
 
-Fields the app doesn't recognise are kept in the file but have no effect.
+Fields the app doesn't recognize are kept in the file but have no effect.
 
 ---
 

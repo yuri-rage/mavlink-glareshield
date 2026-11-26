@@ -805,7 +805,7 @@ export interface DashboardState {
   moveToEdgeInCockpit: (tabId: string, srcInstanceId: string, side: Exclude<DropZone, 'center'>) => void;
   /** Show another widget in a pane (the one it showed stays on the tab, hidden). */
   replaceInCockpit: (tabId: string, targetInstanceId: string, what: PaneSource) => void;
-  /** Move a pane beside, above or below another, or (centre) swap the two. */
+  /** Move a pane beside, above or below another, or (center) swap the two. */
   moveInCockpit: (tabId: string, srcInstanceId: string, targetInstanceId: string, zone: DropZone) => void;
   /** Which of a tab's Cockpit layouts the editor works on (the wide one only if the tab has it). */
   editVariant: CockpitVariant;
@@ -934,7 +934,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set((state) => {
       const newTabs = state.profile.tabs.map((tab) => {
         if (tab.id !== activeTabId) return tab;
-        // Its pane goes too (its neighbours take the room).
+        // Its pane goes too (its neighbors take the room).
         return reconcileTab({ ...tab, widgets: tab.widgets.filter((w) => w.instanceId !== instanceId) });
       });
       const newProfile = { ...state.profile, tabs: newTabs, updatedAt: new Date().toISOString() };

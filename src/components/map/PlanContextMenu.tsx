@@ -34,7 +34,7 @@ export type PlanMenuTarget =
   | { kind: 'fence-vertex'; shape: number; vertex: number; x: number; y: number }
   | { kind: 'fence-return'; x: number; y: number };
 
-/** Side of the square the fence menu places, in metres. */
+/** Side of the square the fence menu places, in meters. */
 const FENCE_SQUARE_M = 100;
 
 /** Apply a rally edit that also picks the point to select. */
@@ -79,7 +79,7 @@ function commit(make: (d: MissionDraft) => { draft: MissionDraft; index: number 
 
 /**
  * The last bearing and distance entered (this session), so a pattern can be stepped out one waypoint at a time. The
- * distance is kept in metres, so it means the same after a change of units.
+ * distance is kept in meters, so it means the same after a change of units.
  */
 let lastBearingRange: { bearing: string; distanceM: number | null } = { bearing: '', distanceM: null };
 

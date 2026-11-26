@@ -326,10 +326,10 @@ const PARAM_ALIASES: Record<string, string> = {
   ARSPD_FBW_MAX: 'AIRSPEED_MAX',
 };
 
-// The catalogue for the connected vehicle and firmware, from ArduPilot's ParameterRepository (see paramCatalog.ts).
+// The catalog for the connected vehicle and firmware, from ArduPilot's ParameterRepository (see paramCatalog.ts).
 let activeCatalog: Record<string, ParamMeta> | null = null;
 
-/** Sets the catalogue that getParamMetadata looks in first; null falls back to the built-in descriptions. */
+/** Sets the catalog that getParamMetadata looks in first; null falls back to the built-in descriptions. */
 export function setActiveParamCatalog(catalog: Record<string, ParamMeta> | null) {
   activeCatalog = catalog;
 }

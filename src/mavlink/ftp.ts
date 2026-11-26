@@ -231,14 +231,14 @@ export class MavFtpClient {
     const nextTransfer = this.transferQueue.then(
       () => {
         if (this.queueGeneration !== generation) {
-          console.log(`[MAVFTP] Queued transfer of ${filePath} was cancelled.`);
+          console.log(`[MAVFTP] Queued transfer of ${filePath} was canceled.`);
           return null;
         }
         return this.executeReadFile(targetSys, targetComp, filePath, chunkSize, timeoutMs, onProgress, options);
       },
       () => {
         if (this.queueGeneration !== generation) {
-          console.log(`[MAVFTP] Queued transfer of ${filePath} was cancelled.`);
+          console.log(`[MAVFTP] Queued transfer of ${filePath} was canceled.`);
           return null;
         }
         return this.executeReadFile(targetSys, targetComp, filePath, chunkSize, timeoutMs, onProgress, options);
@@ -278,7 +278,7 @@ export class MavFtpClient {
 
       this.currentAbort = () => {
         if (isDone) return;
-        console.log(`[MAVFTP] Transfer of ${filePath} was cancelled.`);
+        console.log(`[MAVFTP] Transfer of ${filePath} was canceled.`);
         finish(null);
       };
 
@@ -605,14 +605,14 @@ export class MavFtpClient {
     const nextTransfer = this.transferQueue.then(
       () => {
         if (this.queueGeneration !== generation) {
-          console.log(`[MAVFTP] Queued write of ${filePath} was cancelled.`);
+          console.log(`[MAVFTP] Queued write of ${filePath} was canceled.`);
           return false;
         }
         return this.executeWriteFile(targetSys, targetComp, filePath, data, chunkSize, timeoutMs, onProgress);
       },
       () => {
         if (this.queueGeneration !== generation) {
-          console.log(`[MAVFTP] Queued write of ${filePath} was cancelled.`);
+          console.log(`[MAVFTP] Queued write of ${filePath} was canceled.`);
           return false;
         }
         return this.executeWriteFile(targetSys, targetComp, filePath, data, chunkSize, timeoutMs, onProgress);
@@ -649,7 +649,7 @@ export class MavFtpClient {
 
       this.currentAbort = () => {
         if (isDone) return;
-        console.log(`[MAVFTP] Write of ${filePath} was cancelled.`);
+        console.log(`[MAVFTP] Write of ${filePath} was canceled.`);
         finish(false);
       };
 

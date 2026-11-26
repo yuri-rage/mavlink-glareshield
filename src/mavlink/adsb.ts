@@ -145,7 +145,7 @@ function enOffset(a: { lat: number; lon: number }, b: { lat: number; lon: number
 /**
  * How much of a threat `t` is to the vehicle. Vertical checks need both altitudes; without them only the horizontal
  * ones decide (an aircraft of unknown altitude close by is a caution or alert). Closest approach assumes both keep
- * their current velocity. Traffic altitude may be barometric while the vehicle's is GNSS: tens of metres apart.
+ * their current velocity. Traffic altitude may be barometric while the vehicle's is GNSS: tens of meters apart.
  */
 export function assessThreat(
   t: TrafficAircraft,
@@ -249,7 +249,7 @@ export function relAltText(
 ): string {
   if (relAltM === null) return 'alt ?';
   const f = formatAltitude(Math.abs(relAltM));
-  // Whole units: separation to a tenth of a metre is false precision (altitude sources differ by tens of metres).
+  // Whole units: separation to a tenth of a meter is false precision (altitude sources differ by tens of meters).
   f.value = String(Math.round(Number(f.value)));
   const arrow = climbMs === null || Math.abs(climbMs) < 1 ? '' : climbMs > 0 ? ' ↑' : ' ↓';
   return `${relAltM >= 0 ? '+' : '−'}${f.value} ${f.unit}${arrow}`;

@@ -4,7 +4,7 @@
  *
  * Browsers' serial and USB APIs cannot run headlessly, so they are faked at the same seams the transports use
  * (a WebSocket-like object, a SerialPort-like object with streams, a USBDevice-like object). What that exercises
- * is the code that decides behaviour: status transitions, text vs binary routing, reconnect, device re-discovery
+ * is the code that decides behavior: status transitions, text vs binary routing, reconnect, device re-discovery
  * after a replug, CDC interface selection, and that MAVLink framing still reaches the parser.
  *
  * Run: npx tsx tests/transport.test.ts
@@ -324,7 +324,7 @@ check(
 );
 
 // ------------------------------------------------------------------------------------------------
-// B. MavlinkConnection over WebSocket (behaviour preserved from the pre-transport implementation)
+// B. MavlinkConnection over WebSocket (behavior preserved from the pre-transport implementation)
 // ------------------------------------------------------------------------------------------------
 {
   const conn = new MavlinkConnection('ws://bridge:56781', { reconnectDelayMs: 50 });
@@ -373,7 +373,7 @@ check(
     conn.send(new Uint8Array([0xfd])) && ws.sent.length === sentBefore + 1
   );
 
-  // Link drops: disconnected, then an automatic reconnect ~2 s later (unchanged behaviour).
+  // Link drops: disconnected, then an automatic reconnect ~2 s later (unchanged behavior).
   ws.serverClose(1006);
   check('MavlinkConnection/ws: a dropped socket reports disconnected', conn.getStatus() === 'disconnected');
   check('MavlinkConnection/ws: not a manual disconnect', conn.isManualDisconnect === false);
@@ -673,7 +673,7 @@ check(
   const t = new WebUsbSerialTransport('usb', { device });
   await t.connect();
   check(
-    'WebUsbSerialTransport: falls back to the second CDC interface when the first is taken (upstream behaviour)',
+    'WebUsbSerialTransport: falls back to the second CDC interface when the first is taken (upstream behavior)',
     t.getStatus().kind === 'connected' && device.calls.includes('claim:3')
   );
   const closing = t.disconnect();
