@@ -220,8 +220,9 @@ commanded, of how many. The others show on the map as violet arrows labelled wit
   or a transfer (mission, parameters, logs) is under way, you're asked first, with what will happen. After a switch,
   the new vehicle's parameters and home are read afresh; download its mission to see it.
 - **A silent vehicle**: if the commanded vehicle falls silent while another is heard, a banner offers to switch to it
-  (**Switch to n** / **Keep waiting**). Glareshield never takes over another aircraft by itself once two have been
-  heard together.
+  (**Switch to n** / **Keep waiting**), and says so aloud. Glareshield switches by itself only when it has heard one
+  vehicle at a time and the silent one was last heard disarmed (a vehicle rebooted with another system ID); never
+  when the silent one was armed, or once two have been heard together.
 
 To run several SITL vehicles, give each its own system ID (`MAV_SYSID` on current ArduPilot, `SYSID_THISMAV` on
 older releases) and point them all at the bridge's UDP port.

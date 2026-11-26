@@ -37,7 +37,7 @@ function autopilotVersion(sysId: number, capabilities: number): Uint8Array {
 const heartbeat = (sysId: number) =>
   vehicle(sysId).packV2(
     MAVLINK_MSG_ID.HEARTBEAT,
-    new Uint8Array([0, 0, 0, 0, /*quad*/ 2, /*ArduPilot*/ 3, 0x81, 4, 3])
+    new Uint8Array([0, 0, 0, 0, /*quad*/ 2, /*ArduPilot*/ 3, /*disarmed*/ 0x01, 4, 3])
   );
 
 // Decoding
