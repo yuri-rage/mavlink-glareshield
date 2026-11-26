@@ -11,7 +11,9 @@ export type TransportKind =
   | 'websocket'
   | 'web-serial'
   // Serial over WebUSB, for platforms with no Web Serial API (Android).
-  | 'web-usb-serial';
+  | 'web-usb-serial'
+  // A recorded telemetry log played back (read-only: nothing is ever sent).
+  | 'replay';
 
 export type TransportStatus =
   | { kind: 'idle' }

@@ -225,6 +225,8 @@ export class MavFtpClient {
     onProgress?: (bytesReceived: number, totalBytes: number) => void,
     options: ReadFileOptions = {}
   ): Promise<Uint8Array | null> {
+    // A replay has no vehicle to read from: fail at once (callers fall back or report), rather than time out.
+    if (mavlinkConnection.isReplaying()) return Promise.resolve(null);
     const generation = this.queueGeneration;
     const nextTransfer = this.transferQueue.then(
       () => {
@@ -598,6 +600,7 @@ export class MavFtpClient {
     timeoutMs = 1500,
     onProgress?: (bytesWritten: number, totalBytes: number) => void
   ): Promise<boolean> {
+    if (mavlinkConnection.isReplaying()) return Promise.resolve(false);
     const generation = this.queueGeneration;
     const nextTransfer = this.transferQueue.then(
       () => {

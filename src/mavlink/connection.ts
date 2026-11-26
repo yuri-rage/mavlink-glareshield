@@ -22,7 +22,12 @@ export interface ConnectionStats {
   packetsReceived: number;
   packetsSent: number;
   packetsPerSecond: number;
+  /** Sends dropped because the link is a replay (nothing is ever sent from a replay). */
+  sendsBlocked: number;
 }
+
+/** What a manager says when asked to talk to the vehicle during a replay. */
+export const REPLAY_READ_ONLY = 'Replaying a log: nothing is sent to a vehicle.';
 
 export type PacketCallback = (packet: MavlinkPacket) => void;
 export type StatusCallback = (status: ConnectionStatus, error?: string) => void;
@@ -104,6 +109,9 @@ export class MavlinkConnection {
   private statusListeners: Set<StatusCallback> = new Set();
   private sendListeners: Set<SendCallback> = new Set();
   private textListeners: Set<(msg: string) => void> = new Set();
+  private replayListeners: Set<(replaying: boolean) => void> = new Set();
+  /** The replay being played as the link, if any: read-only (every send is dropped). */
+  private replay: Transport | null = null;
 
   private status: ConnectionStatus = 'disconnected';
   private shouldReconnect = true;
@@ -119,6 +127,7 @@ export class MavlinkConnection {
     packetsReceived: 0,
     packetsSent: 0,
     packetsPerSecond: 0,
+    sendsBlocked: 0,
   };
   private lastPacketCount = 0;
   /** When bytes last arrived on the current link. */
@@ -146,7 +155,7 @@ export class MavlinkConnection {
    * Called when the browser reports the network is back or the page becomes visible again.
    */
   public checkLinkNow(now = Date.now()) {
-    if (this.isManualDisconnect || !this.shouldReconnect || this.isReconnectPaused) return;
+    if (this.replay || this.isManualDisconnect || !this.shouldReconnect || this.isReconnectPaused) return;
     if (this.status === 'disconnected' && this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
@@ -158,7 +167,8 @@ export class MavlinkConnection {
 
   /** Watchdog tick (every second while connected; exposed for tests). */
   public checkLinkSilence(now = Date.now()) {
-    if (this.status !== 'connected' || !this.transport) return;
+    // A paused replay is silent by design.
+    if (this.replay || this.status !== 'connected' || !this.transport) return;
     if (now - this.lastRxAt <= this.silenceTimeoutMs) return;
     const seconds = Math.round((now - this.lastRxAt) / 1000);
     this.silenceTimeoutMs = Math.min(LINK_SILENCE_TIMEOUT_MAX_MS, this.silenceTimeoutMs * 2);
@@ -180,6 +190,8 @@ export class MavlinkConnection {
     if (link.kind === 'websocket') this.url = link.url;
     if (sameLink(this.link, link)) return;
     this.link = { ...link };
+    // During a replay the new link is kept for afterwards; the replay goes on.
+    if (this.replay) return;
     if (this.status === 'connected' || this.status === 'connecting') {
       this.disconnect();
       this.connect();
@@ -213,7 +225,7 @@ export class MavlinkConnection {
   /** Send a text frame on the bridge's side channel. False on links without one (serial) or when not open. */
   public sendText(message: string): boolean {
     const transport = this.transport;
-    if (!transport || this.status !== 'connected' || !hasTextChannel(transport)) return false;
+    if (this.replay || !transport || this.status !== 'connected' || !hasTextChannel(transport)) return false;
     return transport.sendText(message);
   }
 
@@ -244,6 +256,8 @@ export class MavlinkConnection {
   }
 
   public connect() {
+    // A replay is the link until it is stopped (stopReplay, or disconnect()).
+    if (this.replay) return;
     this.isManualDisconnect = false;
     if (this.openingAttempt === this.connectAttempt) return;
     const current = this.transport?.getStatus().kind;
@@ -350,7 +364,8 @@ export class MavlinkConnection {
       case 'connected':
         this.lastRxAt = Date.now();
         this.setStatus('connected');
-        this.startHeartbeat();
+        // A replay has no vehicle to send our heartbeat to.
+        if (!this.replay) this.startHeartbeat();
         this.startStats();
         // Stream rates and the autopilot version are requested once a vehicle's heartbeat arrives
         // (telemetryStore), not into a link that may have nothing on the other end.
@@ -419,15 +434,82 @@ export class MavlinkConnection {
   }
 
   public disconnect() {
+    const wasReplay = this.replay !== null;
+    this.replay = null;
     this.isManualDisconnect = true;
     this.shouldReconnect = false;
     this.connectAttempt++;
     this.cleanup();
     this.detachTransport();
     this.setStatus('disconnected');
+    if (wasReplay) this.notifyReplay();
+  }
+
+  /** Whether the link is a replay: read-only, nothing is sent. */
+  public isReplaying(): boolean {
+    return this.replay !== null;
+  }
+
+  public onReplayChange(callback: (replaying: boolean) => void): () => void {
+    this.replayListeners.add(callback);
+    return () => this.replayListeners.delete(callback);
+  }
+
+  private notifyReplay() {
+    const replaying = this.replay !== null;
+    this.replayListeners.forEach((cb) => {
+      try {
+        cb(replaying);
+      } catch {}
+    });
+  }
+
+  /**
+   * Play a recorded log as the link. The current link is closed first (as Disconnect: no reconnect), and comes back
+   * only when asked (Connect) after the replay stops. While replaying, send() drops everything: nothing reaches any
+   * transport, so nothing reaches a vehicle.
+   */
+  public startReplay(transport: Transport) {
+    this.disconnect();
+    this.replay = transport;
+    this.isManualDisconnect = false;
+    this.parser = new MavlinkParser();
+    const attempt = ++this.connectAttempt;
+    this.transport = transport;
+    this.transportSubscriptions = [
+      transport.onFrame((chunk) => this.handleChunk(transport, chunk)),
+      transport.onStatus((status) => {
+        if (attempt === this.connectAttempt) this.handleTransportStatus(transport, status);
+      }),
+    ];
+    this.setStatus('connecting');
+    this.notifyReplay();
+    transport.connect().catch(() => {});
+  }
+
+  /** End the replay: back to disconnected, as after Disconnect. */
+  public stopReplay() {
+    if (this.replay) this.disconnect();
+  }
+
+  /**
+   * The replay starts over (a seek backwards): everything learned from it is dropped, as for a new connection, and
+   * the frames come again from the beginning.
+   */
+  public restartReplayStream() {
+    if (!this.replay) return;
+    this.parser = new MavlinkParser();
+    this.setStatus('disconnected');
+    this.setStatus('connected');
   }
 
   public send(data: Uint8Array): boolean {
+    // Read-only: a replay's frames came from a log, there is no vehicle to send to. Dropped before any transport,
+    // listener (the tlog recorder) or counter sees them.
+    if (this.replay) {
+      this.stats.sendsBlocked++;
+      return false;
+    }
     const transport = this.transport;
     if (!transport || this.status !== 'connected') return false;
     transport.send(data).catch((err) => {

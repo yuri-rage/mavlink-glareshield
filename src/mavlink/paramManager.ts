@@ -1,5 +1,5 @@
 import { useTelemetryStore } from '../store/telemetryStore';
-import { mavlinkConnection } from './connection';
+import { mavlinkConnection, REPLAY_READ_ONLY } from './connection';
 import { mavFtpClient } from './ftp';
 import { MAVLINK_MSG_ID } from './messages';
 import { decodePayload, MavlinkPacket } from './parser';
@@ -133,6 +133,10 @@ export class ParamManager {
 
   private requestMissingLegacyParams() {
     if (this.legacyExpected <= 0 || this.isCancelled) return;
+    if (mavlinkConnection.isReplaying()) {
+      this.setStatus({ isFetching: false, method: 'idle', message: REPLAY_READ_ONLY });
+      return;
+    }
     const missing: number[] = [];
     for (let i = 0; i < this.legacyExpected; i++) {
       if (!this.legacyIndices.has(i)) {
@@ -292,7 +296,7 @@ export class ParamManager {
   /** Ask the vehicle for one parameter by name (PARAM_REQUEST_READ). Widgets use this, not the encoder directly. */
   public requestParam(sysId: number, compId: number, name: string) {
     const id = name.trim().toUpperCase();
-    if (!id) return;
+    if (!id || mavlinkConnection.isReplaying()) return;
     this.singleReads.add(id);
     mavlinkConnection.send(mavlinkConnection.getEncoder().createParamRequestRead(sysId, compId, -1, id));
     this.scheduleBackgroundLoad(sysId, compId);
@@ -307,6 +311,7 @@ export class ParamManager {
    */
   private scheduleBackgroundLoad(sysId: number, compId: number) {
     if (this.backgroundLoad || this.status.isFetching || this.status.paramCount > 0) return;
+    if (mavlinkConnection.isReplaying()) return;
     if (mavlinkConnection.getStatus() !== 'connected') return;
     const hb = useTelemetryStore.getState().heartbeat;
     // Only once a vehicle is heard: with just the bridge connected the read would fail and use up the try.
@@ -408,6 +413,11 @@ export class ParamManager {
   public async fetchParameters(targetSys?: number, targetComp?: number, withDefaults = true) {
     if (mavlinkConnection.getStatus() !== 'connected') {
       console.warn('Cannot fetch parameters: not connected.');
+      return;
+    }
+    // A replay shows the parameters the log holds; there is no vehicle to download from.
+    if (mavlinkConnection.isReplaying()) {
+      this.setStatus({ message: REPLAY_READ_ONLY });
       return;
     }
 

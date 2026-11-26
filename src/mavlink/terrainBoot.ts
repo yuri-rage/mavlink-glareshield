@@ -31,7 +31,8 @@ mavlinkConnection.onPacket((p) => {
   if (p.systemId !== useTelemetryStore.getState().heartbeat.systemId) return;
   const d = decodePayload(p.messageId, p.payload);
   if (p.messageId === MAVLINK_MSG_ID.TERRAIN_REQUEST) {
-    void server.handle(d);
+    // A replayed request was answered at the time (the answers are not in the replay: they were ours).
+    if (!mavlinkConnection.isReplaying()) void server.handle(d);
   } else {
     useTerrainStore.setState({
       report: {

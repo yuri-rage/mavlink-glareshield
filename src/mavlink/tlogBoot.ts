@@ -17,9 +17,14 @@ function requestPersistence() {
   }
 }
 
-mavlinkConnection.onPacket((p) => tlogRecorder.onReceived(p));
+// A replay is not logged again: its frames come from a log already.
+mavlinkConnection.onPacket((p) => {
+  if (!mavlinkConnection.isReplaying()) tlogRecorder.onReceived(p);
+});
 mavlinkConnection.onSend((data) => tlogRecorder.onSent(data));
-mavlinkConnection.onStatus((status) => tlogRecorder.onStatus(status, mavlinkConnection.isManualDisconnect));
+mavlinkConnection.onStatus((status) => {
+  if (!mavlinkConnection.isReplaying()) tlogRecorder.onStatus(status, mavlinkConnection.isManualDisconnect);
+});
 useTlogStore.subscribe((s, prev) => {
   // A lower cap deletes old logs now, not at the next log.
   if (s.capMb !== prev.capMb) tlogRecorder.pruneNow();

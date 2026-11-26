@@ -97,7 +97,8 @@ setInterval(() => {
     !g.info &&
     infoAsked < INFO_TRIES &&
     hb.systemId > 0 &&
-    mavlinkConnection.getStatus() === 'connected'
+    mavlinkConnection.getStatus() === 'connected' &&
+    !mavlinkConnection.isReplaying()
   ) {
     infoAsked++;
     mavlinkConnection.send(
