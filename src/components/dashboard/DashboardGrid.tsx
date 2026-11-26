@@ -820,6 +820,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                       dragging={stackDragging}
                       setDragging={setStackDragging}
                       onEditCustomWidget={onEditCustomWidget}
+                      stacked
                     />
                   ))}
               </div>
