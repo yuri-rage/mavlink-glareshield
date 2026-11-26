@@ -384,9 +384,21 @@ interface DashboardState {
   resetToDefaults: () => void;
 }
 
+/**
+ * The tab the dashboard shows: the active one, or the first if the active id names no tab (the dashboard falls back
+ * the same way). The "active tab" actions act on this one, so they never silently miss the tab on screen.
+ */
+export function shownTabId(state: Pick<DashboardState, 'profile' | 'activeTabId'>): string {
+  const tabs = state.profile.tabs;
+  return tabs.some((t) => t.id === state.activeTabId) ? state.activeTabId : (tabs[0]?.id ?? state.activeTabId);
+}
+
+const initialProfile = loadInitialProfile();
+
 export const useDashboardStore = create<DashboardState>((set, get) => ({
-  profile: loadInitialProfile(),
-  activeTabId: 'tab-flight',
+  profile: initialProfile,
+  // The default HUD tab when the saved profile has it, else its first tab (an imported or edited profile may not).
+  activeTabId: shownTabId({ profile: initialProfile, activeTabId: 'tab-flight' }),
   isEditing: false,
 
   setActiveTab: (tabId: string) => set({ activeTabId: tabId }),
@@ -438,7 +450,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   addWidgetToActiveTab: (widgetId: string, colSpan = 6) => {
-    const { activeTabId } = get();
+    const activeTabId = shownTabId(get());
     const instanceId = `w-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
     set((state) => {
@@ -462,7 +474,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   removeWidgetFromActiveTab: (instanceId: string) => {
-    const { activeTabId } = get();
+    const activeTabId = shownTabId(get());
     set((state) => {
       const newTabs = state.profile.tabs.map((tab) => {
         if (tab.id !== activeTabId) return tab;
@@ -476,7 +488,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   updateWidgetColSpan: (instanceId: string, colSpan: number) => {
-    const { activeTabId } = get();
+    const activeTabId = shownTabId(get());
     set((state) => {
       const newTabs = state.profile.tabs.map((tab) => {
         if (tab.id !== activeTabId) return tab;
@@ -492,7 +504,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   updateWidgetRowSpan: (instanceId: string, rowSpan: number) => {
-    const { activeTabId } = get();
+    const activeTabId = shownTabId(get());
     set((state) => {
       const newTabs = state.profile.tabs.map((tab) => {
         if (tab.id !== activeTabId) return tab;
@@ -508,7 +520,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   moveWidget: (instanceId: string, direction: 'up' | 'down') => {
-    const { activeTabId } = get();
+    const activeTabId = shownTabId(get());
     set((state) => {
       const newTabs = state.profile.tabs.map((tab) => {
         if (tab.id !== activeTabId) return tab;
@@ -531,7 +543,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   reorderWidgetsInActiveTab: (fromIndex: number, toIndex: number) => {
-    const { activeTabId } = get();
+    const activeTabId = shownTabId(get());
     set((state) => {
       const newTabs = state.profile.tabs.map((tab) => {
         if (tab.id !== activeTabId) return tab;

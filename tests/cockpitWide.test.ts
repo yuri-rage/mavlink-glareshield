@@ -147,6 +147,22 @@ check(
   J(t.cockpitWide)
 );
 
+// A stale active tab id (a profile without the default 'tab-flight', after a reload): the actions act on the tab the
+// dashboard shows (the first), not on nothing.
+{
+  const { shownTabId } = await import('../src/store/dashboardStore.ts');
+  st().resetToDefaults();
+  const first = st().profile.tabs[0].id;
+  st().setActiveTab('no-such-tab');
+  check('a stale id resolves to the first tab', shownTabId(st()) === first);
+  const before = st().profile.tabs[0].widgets.length;
+  st().removeWidgetFromActiveTab(st().profile.tabs[0].widgets[0].instanceId);
+  check(
+    'Delete with a stale id removes the widget from the tab on screen',
+    st().profile.tabs[0].widgets.length === before - 1
+  );
+}
+
 // Deleting the pinned bar (the default HUD tab pins it in both layouts): gone from the tab and both headers.
 {
   st().resetToDefaults();
