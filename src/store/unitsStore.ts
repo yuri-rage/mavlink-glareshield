@@ -197,8 +197,8 @@ export const useUnitsStore = create<UnitsState>((set, get) => ({
   },
 
   // Cross-track error: small values matter (RTK and precision work), so no rounding to zero. Under a foot, tenths of
-  // an inch; under a metre, whole centimetres; above, feet or metres to a tenth. A value that rounds up to a foot
-  // (12.0 in) or a metre (100 cm) shows in the larger unit.
+  // an inch; under a metre, centimetres to a tenth; above, feet or metres to a tenth. A value that rounds up to a foot
+  // (12.0 in) or a metre (100.0 cm) shows in the larger unit.
   formatCrosstrack: (m: number) => {
     const isImp = get().isImperial();
     const safeM = Number.isFinite(m) ? m : 0;
@@ -215,9 +215,9 @@ export const useUnitsStore = create<UnitsState>((set, get) => ({
       }
       return big(safeM * 3.28084, 'ft');
     }
-    const cm = Math.round(safeM * 100);
+    const cm = Math.round(safeM * 1000) / 10;
     if (Math.abs(cm) < 100) {
-      const v = cm === 0 ? '0' : cm.toString();
+      const v = cm === 0 ? '0.0' : cm.toFixed(1);
       return { value: v, unit: 'cm', full: `${v} cm` };
     }
     return big(safeM, 'm');

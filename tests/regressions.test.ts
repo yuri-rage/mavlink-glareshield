@@ -531,12 +531,32 @@ for (const [type, landCmd, opts, label] of [
   );
   useUnitsStore.getState().setSystem('ms');
   check(
-    'crosstrack under a metre (metric): whole centimetres',
-    fx(0.47) === '47 cm' && fx(-0.03) === '-3 cm',
-    fx(0.47) + ' ' + fx(-0.03)
+    'crosstrack under a metre (metric): centimetres to a tenth',
+    fx(0.47) === '47.0 cm' && fx(-0.0312) === '-3.1 cm',
+    fx(0.47) + ' ' + fx(-0.0312)
   );
-  check('crosstrack that rounds to 100 cm: 1.0 m', fx(0.996) === '1.0 m', fx(0.996));
-  check('crosstrack zero (metric): 0 cm', fx(0) === '0 cm' && fx(-0.001) === '0 cm', fx(-0.001));
+  check('crosstrack just under a metre: centimetres', fx(0.996) === '99.6 cm', fx(0.996));
+  check('crosstrack that rounds to 100.0 cm: 1.0 m', fx(0.99996) === '1.0 m', fx(0.99996));
+  check('crosstrack zero (metric): 0.0 cm, no minus sign', fx(0) === '0.0 cm' && fx(-0.0001) === '0.0 cm', fx(-0.0001));
+
+  {
+    // MISSION_CURRENT's extensions: ArduPilot sends total 0 with no mission, so "no mission" is mission_state 1.
+    const { decodePayload } = await import('../src/mavlink/parser.ts');
+    const p = new Uint8Array([0, 0, 0, 0, 1]); // seq 0, total 0, mission_state NO_MISSION
+    const none = decodePayload(42, p);
+    const old = decodePayload(42, new Uint8Array([3, 0])); // older firmware: seq only (zero-truncated)
+    const some = decodePayload(42, new Uint8Array([2, 0, 3, 0, 2])); // seq 2 of 3, not started
+    check(
+      'MISSION_CURRENT: mission_state and total decoded (1 = no mission; 0 when not sent)',
+      none.mission_state === 1 &&
+        none.total === 0 &&
+        old.mission_state === 0 &&
+        old.seq === 3 &&
+        some.total === 3 &&
+        some.mission_state === 2,
+      JSON.stringify([none, old, some])
+    );
+  }
 
   {
     const { followsPath } = await import('../src/mavlink/guidedActions.ts');

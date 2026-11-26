@@ -3064,7 +3064,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         )}
       </CardContent>
 
-      <MapMissionFooter />
+      <MapMissionFooter isFetching={missionStatus.isFetching} onFetch={handleFetchMission} />
 
       {planning && rallyUploadVehicle && (
         <RallyUploadModal
