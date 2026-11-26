@@ -6,11 +6,41 @@
     {
       "id": "custom-mp-vitals",
       "name": "Vitals",
-      "description": "What needs attention at a glance: throttle, vibration and EKF health, battery and GNSS quality (HDOP). Values turn amber or red past their limits.",
+      "description": "What needs attention at a glance: battery, GNSS quality (HDOP) and throttle, with vibration and EKF health. Values turn amber or red past their limits.",
       "category": "telemetry",
       "displayType": "composite",
       "colorScheme": "default",
       "panels": [
+        {
+          "displayType": "stat-card",
+          "title": "Battery",
+          "span": 4,
+          "colorScheme": "green",
+          "binding": {
+            "messageName": "SYS_STATUS",
+            "fieldName": "battery_remaining",
+            "unit": "%",
+            "decimals": 0,
+            "min": 0,
+            "max": 100,
+            "warnThreshold": 30,
+            "critThreshold": 15,
+            "thresholdInvert": true
+          }
+        },
+        {
+          "displayType": "stat-card",
+          "title": "GNSS HDOP",
+          "span": 4,
+          "colorScheme": "blue",
+          "binding": {
+            "messageName": "GPS_RAW_INT",
+            "fieldName": "eph",
+            "decimals": 2,
+            "warnThreshold": 1.4,
+            "critThreshold": 2.0
+          }
+        },
         {
           "displayType": "gauge-radial",
           "title": "Throttle",
@@ -34,7 +64,7 @@
         {
           "displayType": "multi-bar",
           "title": "Vibration",
-          "span": 4,
+          "span": 6,
           "multiBarConfig": {
             "group": "vibration-xyz"
           }
@@ -42,39 +72,9 @@
         {
           "displayType": "multi-bar",
           "title": "EKF variances",
-          "span": 4,
+          "span": 6,
           "multiBarConfig": {
             "group": "ekf-variances"
-          }
-        },
-        {
-          "displayType": "stat-card",
-          "title": "Battery",
-          "span": 6,
-          "colorScheme": "green",
-          "binding": {
-            "messageName": "SYS_STATUS",
-            "fieldName": "battery_remaining",
-            "unit": "%",
-            "decimals": 0,
-            "min": 0,
-            "max": 100,
-            "warnThreshold": 30,
-            "critThreshold": 15,
-            "thresholdInvert": true
-          }
-        },
-        {
-          "displayType": "stat-card",
-          "title": "GNSS HDOP",
-          "span": 6,
-          "colorScheme": "blue",
-          "binding": {
-            "messageName": "GPS_RAW_INT",
-            "fieldName": "eph",
-            "decimals": 2,
-            "warnThreshold": 1.4,
-            "critThreshold": 2.0
           }
         }
       ]
@@ -92,6 +92,90 @@
         "unit": "m",
         "decimals": 1,
         "unitKind": "altitude"
+      }
+    },
+    {
+      "id": "custom-mp-attitude",
+      "name": "Attitude Tuning",
+      "description": "The rate and angle controllers' gains: Copter and Rover ATC_*, Plane RLL_ / PTCH_ / YAW_RATE_*. Only the vehicle's own are listed.",
+      "category": "control",
+      "displayType": "param-set",
+      "colorScheme": "blue",
+      "paramSet": {
+        "params": [
+          "ATC_RAT_RLL_*",
+          "ATC_RAT_PIT_*",
+          "ATC_RAT_YAW_*",
+          "ATC_ANG_*",
+          "ATC_ACCEL_*",
+          "RLL_RATE_*",
+          "PTCH_RATE_*",
+          "YAW_RATE_*",
+          "-*_SMAX",
+          "-*_PDMX",
+          "-*_NTF",
+          "-*_NEF",
+          "-*_FLT?",
+          "-*_D_FF"
+        ],
+        "confirmation": true
+      }
+    },
+    {
+      "id": "custom-mp-navigation",
+      "name": "Navigation",
+      "description": "How it flies between waypoints: Copter WPNAV_*, LOIT_* and position controller gains; Plane NAVL1_*, TECS speed and height limits, WP_* and airspeeds.",
+      "category": "control",
+      "displayType": "param-set",
+      "colorScheme": "green",
+      "paramSet": {
+        "params": [
+          "WPNAV_*",
+          "LOIT_SPEED*",
+          "LOIT_ACC_MAX*",
+          "PSC_POSXY_P*",
+          "PSC_VELXY_*",
+          "PSC_POSZ_P*",
+          "PSC_VELZ_P*",
+          "NAVL1_*",
+          "WP_*",
+          "TECS_CLMB_MAX*",
+          "TECS_SINK_*",
+          "TECS_TIME_CONST*",
+          "TECS_SPDWEIGHT*",
+          "TECS_PITCH_M*",
+          "AIRSPEED_CRUISE*",
+          "AIRSPEED_MIN*",
+          "AIRSPEED_MAX*",
+          "-*_SMAX",
+          "-*_PDMX",
+          "-*_NTF",
+          "-*_NEF",
+          "-*_FLT?",
+          "-*_D_FF"
+        ],
+        "confirmation": true
+      }
+    },
+    {
+      "id": "custom-mp-failsafes",
+      "name": "Failsafes & RTL",
+      "description": "What it does when something goes wrong: battery, radio and GCS failsafes, and the return home.",
+      "category": "control",
+      "displayType": "param-set",
+      "colorScheme": "red",
+      "paramSet": {
+        "params": [
+          "FS_*",
+          "BATT_FS_*",
+          "BATT_LOW_*",
+          "BATT_CRT_*",
+          "THR_FS*",
+          "RTL_*",
+          "FENCE_ENABLE*",
+          "FENCE_ACTION*"
+        ],
+        "confirmation": true
       }
     }
   ],
@@ -150,7 +234,7 @@
           "children": [
             {
               "split": "column",
-              "sizes": [40, 60],
+              "sizes": [44, 56],
               "children": [
                 {
                   "pane": "mp-hud"
@@ -251,39 +335,55 @@
       "mode": "cockpit",
       "widgets": [
         {
-          "instanceId": "mp-params",
-          "widgetId": "built-in-parameters",
-          "colSpan": 8
-        },
-        {
           "instanceId": "mp-pid",
           "widgetId": "built-in-pid-tuning",
+          "colSpan": 12
+        },
+        {
+          "instanceId": "mp-attitude",
+          "widgetId": "custom-mp-attitude",
           "colSpan": 4
         },
         {
-          "instanceId": "mp-console",
-          "widgetId": "built-in-statustext",
+          "instanceId": "mp-navigation",
+          "widgetId": "custom-mp-navigation",
+          "colSpan": 4
+        },
+        {
+          "instanceId": "mp-failsafes",
+          "widgetId": "custom-mp-failsafes",
+          "colSpan": 4
+        },
+        {
+          "instanceId": "mp-params",
+          "widgetId": "built-in-parameters",
           "colSpan": 12
         }
       ],
       "cockpit": {
         "header": null,
         "root": {
-          "split": "row",
-          "sizes": [60, 40],
+          "split": "column",
+          "sizes": [64, 36],
           "children": [
             {
-              "pane": "mp-params"
+              "pane": "mp-pid"
             },
             {
-              "split": "column",
-              "sizes": [65, 35],
+              "split": "row",
+              "sizes": [23, 23, 22, 32],
               "children": [
                 {
-                  "pane": "mp-pid"
+                  "pane": "mp-attitude"
                 },
                 {
-                  "pane": "mp-console"
+                  "pane": "mp-navigation"
+                },
+                {
+                  "pane": "mp-failsafes"
+                },
+                {
+                  "pane": "mp-params"
                 }
               ]
             }
