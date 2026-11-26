@@ -140,6 +140,14 @@ const SPEED_TYPE_AIRSPEED = 0;
 const SPEED_TYPE_GROUNDSPEED = 1;
 
 export const speedModes = (modeName: string) => modeName === 'AUTO' || modeName === 'GUIDED';
+
+/**
+ * Modes in which the vehicle follows a path to a target, so NAV_CONTROLLER_OUTPUT's distance and cross-track error
+ * mean something: missions, guided targets and the return modes, for every vehicle type. In the others (manual,
+ * stabilised, loiter, land) ArduPilot reports zeros or a stale target.
+ */
+const PATH_MODES = new Set(['AUTO', 'GUIDED', 'RTL', 'SMART_RTL', 'AUTO_RTL', 'QRTL', 'AVOID_ADSB', 'DOCK']);
+export const followsPath = (modeName: string, armed: boolean) => armed && PATH_MODES.has(modeName);
 export const canChangeSpeed = (c: VehicleCategory) => c === 'plane' || c === 'copter' || c === 'rover';
 
 export interface SpeedPlan {

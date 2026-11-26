@@ -517,6 +517,42 @@ for (const [type, landCmd, opts, label] of [
     JSON.stringify(xtImp)
   );
 
+  const fx = (m: number) => useUnitsStore.getState().formatCrosstrack(m).full;
+  // Imperial (still 'kts' here): tenths of an inch under a foot, for RTK and precision work.
+  check('crosstrack under a foot (imperial): tenths of an inch', fx(0.15) === '5.9 in', fx(0.15));
+  check('crosstrack under a foot, the other side: negative', fx(-0.25) === '-9.8 in', fx(-0.25));
+  check('crosstrack a few millimetres: not rounded to zero', fx(0.004) === '0.2 in', fx(0.004));
+  check('crosstrack just under a foot: inches', fx(0.302) === '11.9 in', fx(0.302));
+  check('crosstrack that rounds to 12.0 in: 1.0 ft', fx(0.3047) === '1.0 ft', fx(0.3047));
+  check(
+    'crosstrack zero (imperial): 0.0 in, no minus sign',
+    fx(0) === '0.0 in' && fx(-0.0001) === '0.0 in',
+    fx(-0.0001)
+  );
+  useUnitsStore.getState().setSystem('ms');
+  check(
+    'crosstrack under a metre (metric): whole centimetres',
+    fx(0.47) === '47 cm' && fx(-0.03) === '-3 cm',
+    fx(0.47) + ' ' + fx(-0.03)
+  );
+  check('crosstrack that rounds to 100 cm: 1.0 m', fx(0.996) === '1.0 m', fx(0.996));
+  check('crosstrack zero (metric): 0 cm', fx(0) === '0 cm' && fx(-0.001) === '0 cm', fx(-0.001));
+
+  {
+    const { followsPath } = await import('../src/mavlink/guidedActions.ts');
+    check(
+      'cross-track shown only armed in a path-following mode',
+      followsPath('AUTO', true) &&
+        followsPath('RTL', true) &&
+        followsPath('QRTL', true) &&
+        followsPath('DOCK', true) &&
+        !followsPath('AUTO', false) &&
+        !followsPath('LOITER', true) &&
+        !followsPath('MANUAL', true) &&
+        !followsPath('LAND', true)
+    );
+  }
+
   // 8. Map waypoint count badge (mission count minus 1 for home)
   const calcUserWpCount = (missionWpsCount: number) => Math.max(0, missionWpsCount - 1);
   check(

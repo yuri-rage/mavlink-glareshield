@@ -3,18 +3,20 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Navigation, RotateCcw, SkipForward, X } from 'lucide-react';
 
 import { formatEta, useConfirmStep, useWaypointNavigation } from '../../lib/useWaypointNavigation';
+import { followsPath } from '../../mavlink/guidedActions';
 import { getMavCmdName } from '../../mavlink/messages';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 
 /** One readout in a fixed-width slot, so changing numbers never resize the strip. */
-const Stat: React.FC<{ label: string; value: string; width: string; tone: string }> = ({
+const Stat: React.FC<{ label: string; value: string; width: string; tone: string; title?: string }> = ({
   label,
   value,
   width,
   tone,
+  title,
 }) => (
-  <span className="flex shrink-0 items-baseline gap-1">
+  <span className="flex shrink-0 items-baseline gap-1" title={title}>
     <span className="text-zinc-500">{label}</span>
     <b className={`${tone} inline-block whitespace-nowrap text-right tabular-nums`} style={{ minWidth: width }}>
       {value}
@@ -30,6 +32,8 @@ export const MapMissionFooter: React.FC = () => {
   const nav = useWaypointNavigation();
   const navController = useTelemetryStore((s) => s.navController);
   const groundspeed = useTelemetryStore((s) => s.vfr.groundspeed);
+  const modeName = useTelemetryStore((s) => s.heartbeat.modeName);
+  const armed = useTelemetryStore((s) => s.heartbeat.isArmed);
   const { formatDistance, formatCrosstrack, formatAltitude } = useUnitsStore();
   const [selected, setSelected] = useState<number>(nav.currentWaypointSeq || nav.minSeq);
   const selectRef = useRef<HTMLSelectElement>(null);
@@ -42,7 +46,11 @@ export const MapMissionFooter: React.FC = () => {
 
   if (!nav.connected || nav.userWpCount === 0) return null;
 
-  const hasTarget = navController.wpDist > 0;
+  // Distance and cross-track error mean something only while it follows a path (Auto, Guided, RTL...): "--" otherwise.
+  // Not "wp_dist > 0": that's whole metres, so it read 0 in the last metre before each waypoint and blanked both just
+  // as it got there.
+  const hasTarget = followsPath(modeName, armed);
+  const notFollowing = 'Shown while it follows a path (armed in Auto, Guided or RTL)';
   const dist = hasTarget ? formatDistance(navController.wpDist).full : '--';
   const xtrack = hasTarget ? formatCrosstrack(navController.xtrackError).full : '--';
   const eta = formatEta(navController.wpDist, groundspeed);
@@ -53,8 +61,20 @@ export const MapMissionFooter: React.FC = () => {
     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-t border-zinc-800 bg-zinc-900/60 px-2.5 py-1.5 font-mono text-[11px]">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
         <Stat label="WP" value={`${nav.currentWaypointSeq}/${nav.maxSeq}`} width="5ch" tone="text-amber-300" />
-        <Stat label="Dist" value={dist} width="8ch" tone="text-sky-400" />
-        <Stat label="XTrk" value={xtrack} width="9ch" tone={xtrackWarn ? 'text-amber-400' : 'text-zinc-300'} />
+        <Stat
+          label="Dist"
+          value={dist}
+          width="8ch"
+          tone="text-sky-400"
+          title={hasTarget ? 'Distance to the target waypoint' : notFollowing}
+        />
+        <Stat
+          label="XTrk"
+          value={xtrack}
+          width="9ch"
+          tone={xtrackWarn ? 'text-amber-400' : 'text-zinc-300'}
+          title={hasTarget ? 'Cross-track error: how far it is off the line to the target' : notFollowing}
+        />
         <Stat label="ETA" value={eta} width="7ch" tone="text-emerald-400" />
       </div>
 

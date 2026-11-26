@@ -206,6 +206,11 @@ tab; in a Cockpit pane the map fills the pane), whether ADS-B traffic is shown, 
 **Clear flight trace**. The header's crosshair button centres on the vehicle and follows it. While planning, the
 planner's maximize button fills the window with the map.
 
+With a mission on the vehicle, a strip under the map shows the current waypoint, the distance to it, the cross-track
+error (how far it is off the line to that waypoint) and the ETA, with controls to restart the mission or jump to a
+waypoint. Distance and cross-track show while it follows a path (armed in Auto, Guided or RTL), "--" otherwise. Small
+cross-track errors show in tenths of an inch or whole centimetres, for RTK and precision work.
+
 **Offline maps…** (View menu) keeps imagery for use without internet:
 
 - **Keep while browsing**: name an area, **Start keeping**, and every tile the map loads is stored until you stop
