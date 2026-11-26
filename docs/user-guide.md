@@ -368,7 +368,7 @@ fields), **RTK / NTRIP** (corrections to the vehicle), and **Gimbal** controls o
 | :--- | :--- |
 | Link | WebSocket or USB serial, the bridge address, GCS system ID, telemetry rate; Connect / Disconnect |
 | Display | Speed and distance units, altitude reference (AGL / MSL), theme (Dark cockpit / Daylight), content width |
-| Alerts | Chimes, voice callouts (a neural voice, or the device's own), waypoint announcements |
+| Alerts | Chimes, voice callouts (a neural voice, or the device's own), waypoint announcements. The neural voice downloads once (about 80 MB with its runtime) and then works offline |
 | Traffic & terrain | ADS-B display, warnings and limits; terrain data and planning clearance |
 | Data | Telemetry log recording; Restore defaults |
 | About | This build, **Check for updates**, links to these guides, the source and its issues. The logo opens it too |
