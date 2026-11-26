@@ -13,6 +13,7 @@ import { getMavCmdName, getVehicleCategory } from '../../../mavlink/messages';
 import { paramManager } from '../../../mavlink/paramManager';
 import { formatParamValue, getParamMetadata } from '../../../mavlink/paramMetadata';
 import { useParamMetaStore } from '../../../store/paramMetaStore';
+import { useReplaying } from '../../../store/replayStore';
 import { useTelemetryStore } from '../../../store/telemetryStore';
 import { Button } from '../../ui/button';
 import { BitmaskEditor, DetailsButton, ParamDetails } from '../params/ParamEditors';
@@ -93,6 +94,7 @@ export const TogglePanel: React.FC<PanelProps> = ({ def, feedback, scheme }) => 
   const { ack, send } = useCommandSender();
   const [lastSent, setLastSent] = useState(false);
   const linked = useTelemetryStore((s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED');
+  const replaying = useReplaying();
 
   const fbBinding = feedbackBinding(def);
   const threshold = feedbackThreshold(def);
@@ -166,9 +168,17 @@ export const TogglePanel: React.FC<PanelProps> = ({ def, feedback, scheme }) => 
       {slide && (
         <div className="mt-auto">
           <SlideToConfirm
-            label={!linked ? 'NO LINK — Locked' : switchOn ? 'Slide to DISENGAGE' : 'Slide to ENGAGE'}
+            label={
+              replaying
+                ? 'Replay — read-only'
+                : !linked
+                  ? 'NO LINK — Locked'
+                  : switchOn
+                    ? 'Slide to DISENGAGE'
+                    : 'Slide to ENGAGE'
+            }
             onConfirm={() => execute(!switchOn)}
-            disabled={!linked}
+            disabled={!linked || replaying}
             toneClass={
               switchOn
                 ? 'accent-amber-500 bg-amber-950/40 border-amber-800/60'

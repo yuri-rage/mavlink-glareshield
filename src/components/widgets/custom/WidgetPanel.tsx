@@ -107,10 +107,12 @@ export const WidgetPanel: React.FC<PanelProps> = (props) => {
   // Keyed by type so a panel's own state (confirmations, slider position) never carries over to another type.
   const panel = <Panel key={props.def.displayType} {...props} />;
   if (!replaying || !CONTROL_TYPES.has(props.def.displayType)) return panel;
-  // A disabled fieldset disables every button and input inside it; display: contents keeps the layout as it is.
+  // A disabled fieldset disables every button and input inside it; display: contents keeps the layout as it is (and
+  // shows no tooltip of its own, so the reason is a caption).
   return (
-    <fieldset disabled className="contents" title="Replaying a log: nothing is sent to a vehicle">
+    <fieldset disabled className="contents">
       {panel}
+      <p className="text-center text-[10px] font-semibold text-violet-300">Replay: read-only</p>
     </fieldset>
   );
 };
