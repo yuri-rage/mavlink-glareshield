@@ -6,6 +6,7 @@
 // creator offers as bindable fields.
 
 import { mavlinkConnection } from '../mavlink/connection';
+import { LinkQualityMeter, type LinkSnapshot } from '../mavlink/linkQuality';
 import { MAVLINK_MSG_ID } from '../mavlink/messages';
 import { decodePacket, type MavlinkPacket } from '../mavlink/parser';
 import { pidAxisMessageName } from '../mavlink/pidTuning';
@@ -58,6 +59,8 @@ const latest = new Map<string, CachedMessage>();
 const lastSeen = new Map<string, number>();
 let vehicleSystemId: number | undefined;
 let vehicleType: number | undefined;
+/** Link quality: the active vehicle's autopilot's sequence numbers (linkQuality.ts). */
+const linkMeter = new LinkQualityMeter();
 
 /** Flatten a decoded payload to numeric fields; arrays become `name[0]`, `name[1]`, ... */
 function numericFields(decoded: Record<string, unknown>): Record<string, number> {
@@ -96,6 +99,12 @@ export function recordPacket(packet: MavlinkPacket, now = Date.now()): void {
       vehicleSystemId = packet.systemId;
       vehicleType = type;
     }
+  }
+  // Link quality counts every packet from the vehicle's autopilot (protocol traffic too: one sequence for all).
+  const linkFrom = vehicleSystemId ?? getActiveSystemId() ?? undefined;
+  if (linkFrom !== undefined && packet.systemId === linkFrom && packet.componentId === 1) {
+    linkMeter.record(packet.sequence, now);
+    lastSeen.set('LINK', now);
   }
   if (SKIPPED.has(packet.messageId)) return;
   const name = NAME_BY_ID.get(packet.messageId);
@@ -162,7 +171,28 @@ function getCachedMessage(messageName: string): CachedMessage | undefined {
 }
 
 export function getCachedField(messageName: string, fieldName: string): number | undefined {
+  if (baseMessageName(messageName) === 'LINK') {
+    const v = getLinkStats()[fieldName as keyof LinkStats];
+    return typeof v === 'number' ? v : undefined;
+  }
   return getCachedMessage(messageName)?.fields[fieldName];
+}
+
+export interface LinkStats extends LinkSnapshot {
+  /** The radio's signal at this end and the vehicle's (RADIO_STATUS, device units, often 0-254); null without one. */
+  rssi: number | null;
+  remrssi: number | null;
+}
+
+/**
+ * The link to the active vehicle: % of its packets received (and lost) over the last few seconds, plus a telemetry
+ * radio's signal when one reports it. Bindable as the pseudo-message LINK (quality, loss, received, lost, rssi,
+ * remrssi).
+ */
+export function getLinkStats(now = Date.now()): LinkStats {
+  const radio = latest.get('RADIO_STATUS')?.fields;
+  const sig = (v: number | undefined) => (v === undefined || v === 255 ? null : v);
+  return { ...linkMeter.snapshot(now), rssi: sig(radio?.rssi), remrssi: sig(radio?.remrssi) };
 }
 
 /** When the message last arrived from the vehicle (ms epoch), or undefined if never. */
@@ -176,6 +206,7 @@ export function getObservedCatalog(): Record<string, string[]> {
   for (const [name, entry] of latest) {
     catalog[name] = Object.keys(entry.fields).sort();
   }
+  if (lastSeen.has('LINK')) catalog.LINK = ['loss', 'lost', 'quality', 'received', 'remrssi', 'rssi'];
   return catalog;
 }
 
@@ -184,6 +215,7 @@ export function resetMessageCache(): void {
   lastSeen.clear();
   vehicleSystemId = undefined;
   vehicleType = undefined;
+  linkMeter.reset();
 }
 
 mavlinkConnection.onPacket((packet) => recordPacket(packet));

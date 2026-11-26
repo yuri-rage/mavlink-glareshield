@@ -23,7 +23,9 @@ import {
 } from 'lucide-react';
 
 import { displayAltitudeM } from '../../lib/displayAltitude';
+import { getLinkStats, type LinkStats } from '../../lib/messageCache';
 import { mavlinkConnection } from '../../mavlink/connection';
+import { linkBars, linkLevel } from '../../mavlink/linkQuality';
 import {
   getVehicleCategory,
   getVehicleCategoryLabel,
@@ -78,6 +80,68 @@ const BatteryPill: React.FC<{ active: boolean }> = ({ active }) => {
         className={`font-bold ${!shown ? 'text-zinc-500' : battery.remaining <= 15 ? 'text-red-300' : battery.remaining <= 25 ? 'text-amber-300' : 'text-zinc-100'}`}
       >
         {shown ? `${battery.voltage.toFixed(1)}V · ${battery.remaining}%` : '--'}
+      </span>
+    </div>
+  );
+};
+
+/** Four rising bars, `filled` of them lit (Wi-Fi style), in the colour of the level. */
+const SignalBars: React.FC<{ filled: number; className: string }> = ({ filled, className }) => (
+  <svg viewBox="0 0 16 14" className={`h-3.5 w-3.5 shrink-0 ${className}`} aria-hidden="true">
+    {[0, 1, 2, 3].map((i) => (
+      <rect
+        key={i}
+        x={i * 4 + 0.5}
+        y={11 - i * 3.5}
+        width={3}
+        height={3 + i * 3.5}
+        rx={0.6}
+        fill="currentColor"
+        opacity={i < filled ? 1 : 0.22}
+      />
+    ))}
+  </svg>
+);
+
+/**
+ * The link to the vehicle, as Mission Planner's bars: % of its packets received over the last 5 s (from their
+ * sequence numbers), coloured by level; the radio's signal in the tooltip when a telemetry radio reports it.
+ */
+const LinkPill: React.FC<{ active: boolean }> = ({ active }) => {
+  const [link, setLink] = useState<LinkStats>(() => getLinkStats());
+  useEffect(() => {
+    const t = setInterval(() => setLink(getLinkStats()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const q = active ? link.quality : null;
+  const level = linkLevel(q);
+  const tone =
+    level === 'good'
+      ? 'text-emerald-400'
+      : level === 'fair'
+        ? 'text-amber-400'
+        : level === 'poor'
+          ? 'animate-pulse text-red-400'
+          : 'text-zinc-500';
+  const radio =
+    link.rssi !== null || link.remrssi !== null
+      ? `; radio signal ${link.rssi ?? '--'} here, ${link.remrssi ?? '--'} at the vehicle`
+      : '';
+  return (
+    <div
+      className="flex shrink-0 items-center gap-1.5"
+      title={
+        q === null
+          ? "Link quality: % of the vehicle's packets received (no data yet)"
+          : `Link quality: ${q.toFixed(0)}% of the vehicle's packets received over the last 5 s (${link.received} received, ${link.lost} lost)${radio}`
+      }
+    >
+      <SignalBars filled={linkBars(q)} className={tone} />
+      <span className="font-sans text-[10px] font-bold uppercase text-zinc-400 md:text-[11px]">LINK</span>
+      <span
+        className={`font-bold ${level === 'poor' ? 'text-red-300' : level === 'fair' ? 'text-amber-300' : level ? 'text-zinc-100' : 'text-zinc-500'}`}
+      >
+        {q === null ? '--' : `${q.toFixed(0)}%`}
       </span>
     </div>
   );
@@ -815,6 +879,10 @@ export const Navbar: React.FC = () => {
                 <ChevronDown className="h-3 w-3 opacity-60" />
               </button>
             </div>
+
+            <span className="text-zinc-700">|</span>
+
+            <LinkPill active={isHeartbeatActive} />
 
             <span className="text-zinc-700">|</span>
 
