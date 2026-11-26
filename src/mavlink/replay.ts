@@ -11,6 +11,7 @@
 // a download streamed as MISSION_ITEM_INT reaches the store as it plays).
 
 import { resetMessageCache } from '../lib/messageCache';
+import { askConfirm } from '../store/confirmStore';
 import { useConnectionStore } from '../store/connectionStore';
 import { initialReplayState, useReplayStore } from '../store/replayStore';
 import {
@@ -20,7 +21,7 @@ import {
   useTelemetryStore,
 } from '../store/telemetryStore';
 import { mavlinkConnection } from './connection';
-import { MAVLINK_MSG_ID } from './messages';
+import { getVehicleCategory, MAVLINK_MSG_ID } from './messages';
 import { missionManager } from './missionManager';
 import { setReplayClock } from './replayClock';
 import { scanReplayMissionFiles, type ReplayMissionFile } from './replayMissionFiles';
@@ -161,34 +162,54 @@ export const replayControls = {
 
 /**
  * What leaving the live link means for the vehicle's ground-station failsafe: our heartbeat stops with it. From the
- * downloaded parameters when they're known (FS_GCS_ENABLE, FS_GCS_TIMEOUT), else said as a possibility.
+ * downloaded parameters when they're known, else said as a possibility. Plane names them differently: FS_GCS_ENABL,
+ * with its short and long failsafes after FS_SHORT_TIMEOUT / FS_LONG_TIMEOUT; Copter, Rover and Sub use FS_GCS_ENABLE
+ * and FS_GCS_TIMEOUT.
  */
-export function gcsFailsafeNote(params: Record<string, { value: number } | undefined>): string {
-  const enable = params['FS_GCS_ENABLE']?.value;
-  const timeout = params['FS_GCS_TIMEOUT']?.value;
+export function gcsFailsafeNote(params: Record<string, { value: number } | undefined>, vehicleType?: number): string {
+  const plane = vehicleType !== undefined ? getVehicleCategory(vehicleType) === 'plane' : 'FS_GCS_ENABL' in params;
+  const enableName = plane ? 'FS_GCS_ENABL' : 'FS_GCS_ENABLE';
+  const enable = params[enableName]?.value;
+  const after = plane
+    ? [params['FS_SHORT_TIMEOUT']?.value, params['FS_LONG_TIMEOUT']?.value]
+    : [params['FS_GCS_TIMEOUT']?.value];
   if (enable === undefined)
-    return 'If its ground-station failsafe (FS_GCS_ENABLE) is on, it will take its failsafe action (often RTL) when our heartbeat stops.';
-  if (enable === 0) return 'Its ground-station failsafe is off (FS_GCS_ENABLE = 0).';
-  return `Its ground-station failsafe is ON (FS_GCS_ENABLE = ${enable}): it will take its failsafe action (often RTL) ${
-    timeout ? `about ${timeout} s ` : ''
-  }after our heartbeat stops.`;
+    return `If its ground-station failsafe (${enableName}) is on, it will take its failsafe action (often RTL) when our heartbeat stops.`;
+  if (enable === 0) return `Its ground-station failsafe is off (${enableName} = 0).`;
+  const when =
+    plane && after[0] && after[1]
+      ? `about ${after[0]} s (short failsafe) and ${after[1]} s (long) `
+      : (plane ? after[1] : after[0])
+        ? `about ${plane ? after[1] : after[0]} s `
+        : '';
+  return `Its ground-station failsafe is ON (${enableName} = ${enable}): it will take its failsafe action (often RTL) ${when}after our heartbeat stops.`;
 }
 
 /**
- * Starting a replay closes the live link: ask first when a vehicle is connected, naming the consequences (no
- * telemetry, alerts or commands; the ground-station failsafe), more plainly when it is armed. True to go ahead.
+ * Starting a replay closes the live link: ask first when a vehicle is connected, or a dropped link to one is
+ * reconnecting, naming the consequences (no telemetry, alerts or commands; the ground-station failsafe), more plainly
+ * when it is armed. In the app's own dialog: window.confirm() would block the page, and with it the heartbeat, while
+ * the warning is read. Resolves true to go ahead.
  */
-export function confirmLeavingLiveLink(): boolean {
-  if (mavlinkConnection.isReplaying() || mavlinkConnection.getStatus() !== 'connected') return true;
+export function confirmLeavingLiveLink(): Promise<boolean> {
+  if (mavlinkConnection.isReplaying()) return Promise.resolve(true);
   const st = useTelemetryStore.getState();
   const hb = st.heartbeat;
-  if (hb.lastHeartbeatTime === 0) return true;
-  const failsafe = gcsFailsafeNote(st.parameters);
-  return window.confirm(
-    hb.isArmed
-      ? `Vehicle ${hb.systemId} is ARMED. Replaying a log disconnects from it: no telemetry, alerts or commands from here until you Connect again. ${failsafe} Replay anyway?`
-      : `Replaying a log disconnects from vehicle ${hb.systemId} until you Connect again. ${failsafe} Replay?`
-  );
+  const connected = mavlinkConnection.getStatus() === 'connected';
+  // A dropped link reconnecting by itself still has the vehicle (the roster and its heartbeat are kept).
+  const reconnecting = !connected && !mavlinkConnection.isManualDisconnect && hb.lastHeartbeatTime > 0;
+  if ((!connected && !reconnecting) || hb.lastHeartbeatTime === 0) return Promise.resolve(true);
+  const failsafe = gcsFailsafeNote(st.parameters, hb.type);
+  const link = reconnecting ? ' (its link is reconnecting now; that stops too)' : '';
+  return askConfirm({
+    title: hb.isArmed ? `Vehicle ${hb.systemId} is ARMED` : 'Leave the live vehicle?',
+    message: [
+      `Replaying a log disconnects from vehicle ${hb.systemId}${link}: no telemetry, alerts or commands from here until you connect again.`,
+      failsafe,
+    ],
+    confirmLabel: hb.isArmed ? 'Replay anyway' : 'Replay',
+    danger: hb.isArmed,
+  });
 }
 
 // However the replay ends (Stop, or Disconnect in the navbar), the stores are cleared and the bar goes.

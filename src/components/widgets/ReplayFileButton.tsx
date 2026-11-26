@@ -15,7 +15,7 @@ export const ReplayFileButton: React.FC<{ className?: string; onStarted?: () => 
   const [error, setError] = useState<string | null>(null);
   const open = async (file: File) => {
     setError(null);
-    if (!confirmLeavingLiveLink()) return;
+    if (!(await confirmLeavingLiveLink())) return;
     try {
       await startReplayFromBlob(file, file.name);
       onStarted?.();

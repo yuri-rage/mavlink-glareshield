@@ -35,7 +35,7 @@ const Row: React.FC<{ log: TlogMeta; active: boolean; activeBytes: number }> = (
     minute: '2-digit',
   });
   const replay = async () => {
-    if (!confirmLeavingLiveLink()) return;
+    if (!(await confirmLeavingLiveLink())) return;
     setBusy(true);
     try {
       const blob = await tlogRecorder.file(log.name);
