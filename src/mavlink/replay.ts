@@ -10,7 +10,7 @@
 // fence or rally points downloaded over MAVFTP (rebuilt from the file transfer, shown from the moment it completed;
 // a download streamed as MISSION_ITEM_INT reaches the store as it plays).
 
-import { getLastSeen, resetMessageCache } from '../lib/messageCache';
+import { forgetLinkSequence, getLastSeen, resetMessageCache } from '../lib/messageCache';
 import { askConfirm } from '../store/confirmStore';
 import { useConnectionStore } from '../store/connectionStore';
 import { initialReplayState, useReplayStore } from '../store/replayStore';
@@ -115,6 +115,7 @@ export function startReplay(bytes: Uint8Array, name: string): void {
     ? useReplayStore.getState().leftVehicle
     : (liveVehicle()?.sysId ?? null);
   const transport = new ReplayTransport('mavlink-replay', timeline, {
+    activeSystem: () => useVehicleRosterStore.getState().activeSystemId,
     onRestart: () => {
       // Seeking backwards: the stores start over, then the log plays again up to the new position.
       mavlinkConnection.restartReplayStream();
@@ -125,6 +126,8 @@ export function startReplay(bytes: Uint8Array, name: string): void {
     },
     onState: (s) => {
       if (current !== transport) return;
+      // Playing again after a pause: the log's own numbering takes over from the repeated heartbeat's.
+      if (s.playing && !useReplayStore.getState().playing) forgetLinkSequence();
       useReplayStore.setState(s);
       applyUpTo(s.positionMs);
     },
