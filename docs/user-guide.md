@@ -340,7 +340,7 @@ reconnects by itself. To serve a camera over `https` from your own domain, see [
   saves the vehicle's current values of those; each write is confirmed by the value the vehicle reports back (written,
   kept another value, or no answer), and the summary names anything that needs a reboot.
 
-**Onboard Logs** lists the vehicle's DataFlash logs and downloads them (by MAVFTP where it can, else over MAVLink),
+**Logs** lists the vehicle's DataFlash logs and downloads them (by MAVFTP where it can, else over MAVLink),
 and can erase them. ArduPilot doesn't send logs while armed.
 
 **Telemetry logs (.tlog)**: Glareshield records the link to `.tlog` files in this browser while connected (**Settings →
@@ -363,6 +363,7 @@ fields), **RTK / NTRIP** (corrections to the vehicle), and **Gimbal** controls o
 | Alerts | Chimes, voice callouts (a neural voice, or the device's own), waypoint announcements |
 | Traffic & terrain | ADS-B display, warnings and limits; terrain data and planning clearance |
 | Data | Telemetry log recording; Restore defaults |
+| About | This build, **Check for updates**, links to these guides, the source and its issues. The logo opens it too |
 
 **Updates**: the build you're running is shown at the foot of Settings (e.g. `Glareshield 2026.11.25 · 55b37e4`).
 When a newer version has been deployed, an **Update** button appears in the navbar; it reloads into the new version
