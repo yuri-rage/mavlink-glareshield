@@ -33,7 +33,8 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
   const inPane = useInPane();
   const { sysId, compId } = useVehicleTarget();
   const entries = def.paramSet?.params ?? [];
-  const confirmEveryWrite = Boolean(def.paramSet?.confirmation);
+  // On unless set to false, as the editor and loading treat it (a missing field confirms).
+  const confirmEveryWrite = def.paramSet?.confirmation !== false;
   const parameters = useTelemetryStore((s) => s.parameters);
   const linked = useTelemetryStore((s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED');
   const heartbeatType = useTelemetryStore((s) => s.heartbeat.type);
