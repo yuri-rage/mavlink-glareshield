@@ -24,7 +24,11 @@ import {
   COMPACT_PREVIEWS,
   layoutFits,
   minLayoutSize,
+  packStackedRows,
   panesInOrder,
+  paneWidthShares,
+  stackedColumns,
+  stackedSpan,
   variantFor,
   widgetMinSize,
   type CockpitVariant,
@@ -179,6 +183,18 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
   const stacked = isCockpit && currentFit === 'stacked';
   /** A stacked widget being dragged (Edit mode). */
   const [stackDragging, setStackDragging] = useState<string | null>(null);
+  // The stacked grid's width, for its columns: set by its container (or the preview frame), not by its content.
+  const [stackWidth, setStackWidth] = useState(0);
+  useLayoutEffect(() => {
+    if (!stacked) return;
+    const el = contentRef.current;
+    if (!el) return;
+    const set = () => setStackWidth(Math.round(el.getBoundingClientRect().width));
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [stacked]);
   useLayoutEffect(() => {
     if (!isCockpit || !cockpit) {
       setFit(null);
@@ -379,6 +395,34 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
         return 'col-span-12 md:col-span-6';
     }
   };
+
+  // The stacked grid: its columns and each widget's span (lib/cockpitLayout).
+  const stackCols = stackedColumns(stackWidth || (typeof window !== 'undefined' ? window.innerWidth - 24 : 1024));
+  const stackItems = (() => {
+    if (!stacked || !activeTab) return [];
+    const shares = paneWidthShares(cockpit?.root ?? null);
+    const width = stackWidth || stackCols * 300;
+    const ws = panesInOrder(cockpit)
+      .map((id) => activeTab.widgets.find((x) => x.instanceId === id))
+      .filter((w): w is PlacedWidget => Boolean(w));
+    const spans = packStackedRows(
+      ws.map((w) =>
+        w.instanceId === cockpit?.header
+          ? stackCols
+          : stackedSpan(
+              shares.get(w.instanceId) ?? 1,
+              widgetMinSize(
+                w.widgetId,
+                profile.customWidgets.find((c) => c.id === w.widgetId)
+              ).w,
+              stackCols,
+              width
+            )
+      ),
+      stackCols
+    );
+    return ws.map((w, i) => ({ w, span: spans[i] }));
+  })();
 
   return (
     <div
@@ -709,12 +753,22 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
           />
         </div>
       ) : isCockpit ? (
-        // Too small for the panes: the same widgets, stacked in reading order.
-        <div ref={contentRef} className="flex flex-col gap-3">
+        // Too small for the panes: the same widgets in reading order, as a grid (4 to 1 columns by width, like a Flow
+        // tab). Each spans about its pane's share of the layout's width, at least enough for its minimum width, and
+        // each row ends flush. In a compact preview, at the preview's width.
+        <div
+          ref={contentRef}
+          className={`grid items-stretch gap-3 ${previewActive && previewBox ? 'mx-auto outline-dashed outline-1 outline-offset-4 outline-sky-500/60' : ''}`}
+          style={{
+            gridTemplateColumns: `repeat(${stackCols}, minmax(0, 1fr))`,
+            ...(previewActive && previewBox ? { width: previewBox.w } : {}),
+          }}
+        >
           {isEditing && (
             // Editor chrome: not counted against the room (counted, it kept the tab stacked once it was).
             <p
               data-edit-chrome
+              style={{ gridColumn: '1 / -1' }}
               className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 px-2.5 py-1.5 text-[11px] text-zinc-400"
             >
               <LayoutPanelTop className="h-3.5 w-3.5 shrink-0 text-sky-400" />
@@ -723,15 +777,21 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
               dragging and swapping arrange the panes as they&apos;ll be shown.
             </p>
           )}
-          {panesInOrder(cockpit).map((id) => {
-            const w = activeTab.widgets.find((x) => x.instanceId === id);
-            if (!w) return null;
+          {stackItems.map(({ w, span }) => {
+            const id = w.instanceId;
             const isHeader = id === cockpit?.header;
             return (
               // In Edit mode each gets the same bar as a pane (the pinned bar: Hide), so a layout too big for the
               // window can be made to fit here.
-              <div key={id} className={`relative @container ${isEditing ? 'min-h-[7rem]' : ''}`}>
-                <ErrorBoundary fallbackTitle={getWidgetTitle(w.widgetId)}>{renderWidgetContent(w)}</ErrorBoundary>
+              <div
+                key={id}
+                style={{ gridColumn: `span ${span} / span ${span}` }}
+                className={`relative flex h-full min-w-0 flex-col @container ${isEditing ? 'min-h-[7rem]' : ''}`}
+              >
+                <ErrorBoundary fallbackTitle={getWidgetTitle(w.widgetId)}>
+                  {/* Its width in twelfths, as in a Flow tab (the map lays itself out differently at full width). */}
+                  {renderWidgetContent({ ...w, colSpan: Math.round((12 * span) / stackCols) })}
+                </ErrorBoundary>
                 {isEditing &&
                   (isHeader ? (
                     <div className="ring-dashed absolute inset-0 z-20 flex select-none items-start justify-between gap-2 rounded-xl bg-zinc-950/55 p-1.5 ring-1 ring-sky-500/50">

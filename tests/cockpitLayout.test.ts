@@ -6,11 +6,15 @@ import {
   MAX_DEPTH,
   minLayoutSize,
   normalizeSizes,
+  packStackedRows,
   panesInOrder,
+  paneWidthShares,
   removeFromLayout,
   sanitizeCockpit,
   SEPARATOR_PX,
   setSplitSizes,
+  stackedColumns,
+  stackedSpan,
   widgetMinSize,
 } from '../src/lib/cockpitLayout.ts';
 import type { PlacedWidget } from '../src/types/widget.ts';
@@ -521,6 +525,47 @@ const J = JSON.stringify;
     J(un2.root)
   );
 }
+
+// The stacked grid.
+check(
+  'stacked columns: 4 / 3 / 2 / 1 by width',
+  [1366, 1200, 1024, 900, 800, 600, 390].map(stackedColumns).join() === '4,4,3,3,2,2,1'
+);
+{
+  // HUD and Vitals in a 30 % column, the map 70 % beside them.
+  const shares = paneWidthShares({
+    split: 'row',
+    sizes: [30, 70],
+    children: [{ split: 'column', sizes: [50, 50], children: [{ pane: 'hud' }, { pane: 'vitals' }] }, { pane: 'map' }],
+  });
+  check(
+    'pane width shares: row splits divide, column splits pass on',
+    shares.get('hud') === 0.3 && shares.get('vitals') === 0.3 && shares.get('map') === 0.7,
+    JSON.stringify([...shares])
+  );
+  check('no layout: no shares', paneWidthShares(null).size === 0);
+}
+check('span: a 70 % pane in 3 columns spans 2', stackedSpan(0.7, 320, 3, 1000) === 2);
+check('span: a small pane, one column', stackedSpan(0.2, 220, 4, 1300) === 1);
+check(
+  'span: the minimum width wins (a 320 px widget in 4 columns of ~290 px: 2)',
+  stackedSpan(0.2, 320, 4, 1200) === 2,
+  String(stackedSpan(0.2, 320, 4, 1200))
+);
+check(
+  'span: minimums capped at 320 px (the HUD, 380, fits a 325 px column, as in a Flow tab)',
+  stackedSpan(0.2, 380, 3, 1000) === 1,
+  String(stackedSpan(0.2, 380, 3, 1000))
+);
+check('span: never more than the grid has', stackedSpan(1, 2000, 2, 700) === 2 && stackedSpan(0.9, 100, 1, 390) === 1);
+check(
+  'rows end flush, order kept: a widget that does not fit starts the next row, the one before widens',
+  packStackedRows([1, 2, 2, 2], 3).join() === '1,2,3,3',
+  packStackedRows([1, 2, 2, 2], 3).join()
+);
+check('full rows untouched', packStackedRows([2, 2, 1, 3], 4).join() === '2,2,1,3');
+check('one column: all one', packStackedRows([1, 1, 1], 1).join() === '1,1,1');
+check('the last row fills', packStackedRows([4, 1], 4).join() === '4,4');
 
 console.log(
   failures.length ? `\n${failures.length} cockpit-layout check(s) FAILED` : '\nAll cockpit-layout checks PASSED'

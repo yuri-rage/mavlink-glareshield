@@ -99,8 +99,10 @@ panes rather than squeezing them. In Edit Mode, **Unpin** makes the bar a pane l
 the bottom; move and resize it from there), and the pane's pin button puts it back on top.
 
 Each widget has a minimum size (the HUD 380×250, the map 320×240, a telemetry card 240×110, and so on). When the
-window can't hold the layout at those sizes (a phone, a small window), the same widgets are shown stacked in reading
-order instead, like a Flow tab. On a larger window the panes come back by themselves.
+window can't hold the layout at those sizes (a phone, a tablet, a small window), the same widgets are shown stacked in
+reading order instead, as a grid like a Flow tab's: 4 columns from 1200 px of width, 3 from 900, 2 from 600, one on a
+phone. Each widget spans about its pane's share of the layout's width (a wide map stays wide), and at least enough
+columns for its minimum width; each row ends flush. On a larger window the panes come back by themselves.
 
 Cockpit tabs always fill the window; **Content width** doesn't apply to them.
 
@@ -159,7 +161,7 @@ A Cockpit tab arranged for a large screen may not fit a laptop's window; it's th
 standard layout and starts editing it.
 
 - It's used when the standard (or wide) layout doesn't fit the window and the compact one does, before falling back to
-  the stacked list. There's no fixed size: a tab without a compact layout behaves as before, and one with it switches
+  the stacked grid. There's no fixed size: a tab without a compact layout behaves as before, and one with it switches
   exactly where it would otherwise have stacked.
 - While you edit it on a larger screen, it's shown in a dashed frame the size of a laptop's browser window, so what you
   arrange is what the laptop shows: **Preview** picks 1366×768 (the default), 1440×900 or 1536×864, or **off** to use
