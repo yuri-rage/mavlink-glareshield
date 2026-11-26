@@ -21,7 +21,7 @@ import {
   seriesLabel,
   type MultiBarItem,
 } from './panelModel';
-import { RadialGauge } from './RadialGauge';
+import { RadialGauge, VIEW_HEIGHT } from './RadialGauge';
 import { TimeSeriesChart, type ChartSeries } from './TimeSeriesChart';
 
 /** The primary value in display units, with its range (min / max are configured in base units). */
@@ -110,10 +110,18 @@ export const RadialGaugePanel: React.FC<PanelProps> = (props) => {
   const multi = isMultiGauge(props.def);
   const items = multi ? gaugeItems(props) : [];
   const { numVal, boundText, unit, min, max, pb } = primaryView(props);
+  // One dial's height is its width times the viewBox's proportions: in a narrow tile (a composite panel, a size
+  // container) it asks for no more height than the dial can use, not a flat 190 px with empty space above and below.
+  // Outside a container cqw is the viewport's, so the 190 px applies as before.
+  const sweep = props.def.gauge?.sweep ?? 240;
+  const dialRatio = (VIEW_HEIGHT[sweep] ?? 160) / 232;
   return (
     // The dial is absolutely positioned so it fits the card instead of sizing it: the card's height comes from its
     // row (neighbouring widgets, or the row-height setting), with a modest minimum.
-    <div className={`relative flex-1 ${multi && items.length > 4 ? 'min-h-[240px]' : 'min-h-[190px]'}`}>
+    <div
+      className={`relative flex-1 ${multi && items.length > 4 ? 'min-h-[240px]' : ''}`}
+      style={multi && items.length > 4 ? undefined : { minHeight: `min(190px, ${(dialRatio * 100).toFixed(1)}cqw)` }}
+    >
       {multi ? (
         <GaugeGrid gauges={items} config={props.def.gauge} />
       ) : (
