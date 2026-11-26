@@ -117,6 +117,16 @@ html.daylight-theme .bg-emerald-950\/30 {
   border-color: #34d399 !important;
 }
 
+/* The replay bar's Stop & reconnect (a green button on the violet bar). */
+html.daylight-theme .bg-emerald-900\/50 {
+  background-color: #d1fae5 !important;
+  color: #065f46 !important;
+  border-color: #34d399 !important;
+}
+html.daylight-theme .hover\:bg-emerald-800:hover {
+  background-color: #a7f3d0 !important;
+}
+
 html.daylight-theme .bg-sky-950,
 html.daylight-theme .bg-sky-950\/95,
 html.daylight-theme .bg-sky-950\/90,
