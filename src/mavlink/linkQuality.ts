@@ -68,6 +68,14 @@ export class LinkQualityMeter {
     return this.lastAt;
   }
 
+  /**
+   * The numbering starts over without the packets so far being forgotten: the next packet counts as received, no
+   * gap measured from the last (a replay resuming after a pause, where the log's own numbering takes over again).
+   */
+  forgetSequence(): void {
+    this.last = null;
+  }
+
   /** A new link or another vehicle: start again. */
   reset(): void {
     this.last = null;

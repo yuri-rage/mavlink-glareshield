@@ -61,6 +61,11 @@ let vehicleSystemId: number | undefined;
 let vehicleType: number | undefined;
 /** Link quality: the active vehicle's autopilot's sequence numbers (linkQuality.ts). */
 const linkMeter = new LinkQualityMeter();
+
+/** The vehicle's packet numbering starts over (a replay resumed after a pause): no gap measured across it. */
+export function forgetLinkSequence(): void {
+  linkMeter.forgetSequence();
+}
 /** Link quality once a second for the last two minutes (the Link widget's chart): kept here, so a widget mounted later
  *  (another tab, a new pane) has the history. */
 const LINK_HISTORY_S = 120;
