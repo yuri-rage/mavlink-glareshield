@@ -5,6 +5,7 @@ const {
   decideHeartbeat,
   observePacket,
   resetRoster,
+  onLinkDown,
   switchToVehicle,
   dismissTakeoverOffer,
   onActiveVehicleChange,
@@ -142,6 +143,33 @@ check(
 );
 observePacket(...hb(1, true), (t += 1000));
 check('the armed vehicle is back: the offer is withdrawn', st().takeoverOffer === null && st().activeSystemId === 1);
+
+// A dropped link that reconnects by itself: the roster is kept, so the other vehicle being heard first after the
+// reconnect doesn't make it active.
+resetRoster();
+switches.length = 0;
+t = 300_000;
+observePacket(...hb(1, true), t);
+observePacket(...hb(2), (t += 100));
+onLinkDown(false); // the bridge dropped; reconnecting
+observePacket(...hb(2), (t += 2000)); // vehicle 2 is heard first after the reconnect
+check(
+  'bridge drop and reconnect: the other vehicle heard first is not made active',
+  st().activeSystemId === 1 && switches.length === 0,
+  JSON.stringify({ a: st().activeSystemId, s: switches })
+);
+observePacket(...hb(2), (t += SILENT_MS + 500));
+check(
+  'and once the active one has been silent: offered, not taken',
+  st().activeSystemId === 1 && st().takeoverOffer === 2 && switches.length === 0,
+  JSON.stringify({ a: st().activeSystemId, o: st().takeoverOffer })
+);
+observePacket(...hb(1, true), (t += 500));
+check('the active vehicle back: the offer withdrawn', st().takeoverOffer === null && st().activeSystemId === 1);
+// A deliberate Disconnect starts over: the next connection's first vehicle is active.
+onLinkDown(true);
+observePacket(...hb(2), (t += 100));
+check('manual disconnect: the next first vehicle is active', st().activeSystemId === 2, String(st().activeSystemId));
 
 console.log(
   failures.length ? `\n${failures.length} vehicle-roster check(s) FAILED` : '\nAll vehicle-roster checks PASSED'
