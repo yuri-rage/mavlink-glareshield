@@ -196,17 +196,30 @@ export const useUnitsStore = create<UnitsState>((set, get) => ({
     return `H ${brgStr}/${distStr}`;
   },
 
+  // Cross-track error: small values matter (RTK and precision work), so no rounding to zero. Under a foot, tenths of
+  // an inch; under a metre, whole centimetres; above, feet or metres to a tenth. A value that rounds up to a foot
+  // (12.0 in) or a metre (100 cm) shows in the larger unit.
   formatCrosstrack: (m: number) => {
     const isImp = get().isImperial();
-    let safeM = isNaN(m) ? 0 : m;
-    if (Math.abs(safeM) < 0.05) safeM = 0;
+    const safeM = Number.isFinite(m) ? m : 0;
+    const big = (v: number, unit: string) => {
+      const r = Math.abs(v) >= 100 ? Math.round(v) : Math.round(v * 10) / 10;
+      const val = r === 0 ? '0.0' : Math.abs(v) >= 100 ? r.toString() : r.toFixed(1);
+      return { value: val, unit, full: `${val} ${unit}` };
+    };
     if (isImp) {
-      const ft = safeM * 3.28084;
-      const roundedFt = Math.abs(ft) < 0.05 ? 0 : ft;
-      const val = Math.abs(roundedFt) >= 100 ? Math.round(roundedFt).toString() : roundedFt.toFixed(1);
-      return { value: val, unit: 'ft', full: `${val} ft` };
+      const tenths = Math.round(safeM * 39.3701 * 10) / 10;
+      if (Math.abs(tenths) < 12) {
+        const v = tenths === 0 ? '0.0' : tenths.toFixed(1);
+        return { value: v, unit: 'in', full: `${v} in` };
+      }
+      return big(safeM * 3.28084, 'ft');
     }
-    const val = Math.abs(safeM) >= 100 ? Math.round(safeM).toString() : safeM.toFixed(1);
-    return { value: val, unit: 'm', full: `${val} m` };
+    const cm = Math.round(safeM * 100);
+    if (Math.abs(cm) < 100) {
+      const v = cm === 0 ? '0' : cm.toString();
+      return { value: v, unit: 'cm', full: `${v} cm` };
+    }
+    return big(safeM, 'm');
   },
 }));
