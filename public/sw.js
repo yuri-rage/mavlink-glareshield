@@ -5,6 +5,18 @@ const SHELL_CACHE = SHELL_PREFIX + BUILD_ID;
 const TILE_CACHE = 'glareshield-tiles-v1';
 const MAX_CACHED_TILES = 600;
 
+// The neural voice's runtime, which its library (@diffusionstudio/vits-web) fetches from CDNs at every start: the
+// phonemizer (jsDelivr, ~19 MB with its data) and the ONNX runtime's WebAssembly (cdnjs). Too big to precache for
+// everyone, so kept cache-first in a cache of its own when the voice first loads them online (when its model
+// downloads too), across deploys. The URLs are pinned versions; tests/voiceCache.test.ts checks they match the
+// library's. Entries under other prefixes (an older library version) are dropped when a new worker activates.
+const VOICE_CACHE = 'glareshield-voice-v1';
+const VOICE_PREFIXES = [
+  'https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/',
+  'https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.18.0/',
+];
+const isVoiceRuntime = (url) => VOICE_PREFIXES.some((p) => url.startsWith(p));
+
 const SHELL_ASSETS = [
   '/',
   '/index.html',
@@ -46,6 +58,15 @@ self.addEventListener('activate', (event) => {
             .map((k) => caches.delete(k))
         )
       )
+      .then(() =>
+        caches
+          .open(VOICE_CACHE)
+          .then((cache) =>
+            cache
+              .keys()
+              .then((reqs) => Promise.all(reqs.filter((r) => !isVoiceRuntime(r.url)).map((r) => cache.delete(r))))
+          )
+      )
       .then(() => self.clients.claim())
   );
 });
@@ -72,6 +93,20 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
+
+  // The voice's runtime: cache-first (pinned versions never change), so the voice speaks offline.
+  if (isVoiceRuntime(req.url)) {
+    event.respondWith(
+      caches.open(VOICE_CACHE).then(async (cache) => {
+        const cached = await cache.match(req);
+        if (cached) return cached;
+        const res = await fetch(req);
+        if (res && res.ok && res.type !== 'opaque') cache.put(req, res.clone());
+        return res;
+      })
+    );
+    return;
+  }
 
   // Cache-first with background refresh for map tiles (offline field use)
   if (isMapTileRequest(url)) {
