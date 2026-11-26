@@ -1,12 +1,12 @@
 {
   "version": "1.0.0",
-  "name": "Mission Planner style",
+  "name": "Ground Station",
   "updatedAt": "2026-11-25T00:00:00.000Z",
   "customWidgets": [
     {
-      "id": "custom-mp-vitals",
+      "id": "custom-gs-vitals",
       "name": "Vitals",
-      "description": "What needs attention at a glance: battery, power, GNSS quality, link loss and autopilot load, with vibration and EKF health. Values turn amber or red past their limits.",
+      "description": "What needs attention at a glance: battery, power, GNSS quality, link loss and throttle, with vibration and EKF health. Values turn amber or red past their limits.",
       "category": "telemetry",
       "displayType": "composite",
       "colorScheme": "default",
@@ -14,7 +14,7 @@
         {
           "displayType": "stat-card",
           "title": "Battery",
-          "span": 4,
+          "span": 3,
           "colorScheme": "green",
           "binding": {
             "messageName": "SYS_STATUS",
@@ -31,7 +31,7 @@
         {
           "displayType": "stat-card",
           "title": "Voltage",
-          "span": 4,
+          "span": 3,
           "colorScheme": "amber",
           "binding": {
             "messageName": "SYS_STATUS",
@@ -43,7 +43,7 @@
         {
           "displayType": "stat-card",
           "title": "Current",
-          "span": 4,
+          "span": 3,
           "colorScheme": "amber",
           "binding": {
             "messageName": "SYS_STATUS",
@@ -55,7 +55,7 @@
         {
           "displayType": "stat-card",
           "title": "GNSS HDOP",
-          "span": 4,
+          "span": 3,
           "colorScheme": "blue",
           "binding": {
             "messageName": "GPS_RAW_INT",
@@ -69,7 +69,7 @@
         {
           "displayType": "stat-card",
           "title": "Link Loss",
-          "span": 4,
+          "span": 3,
           "colorScheme": "blue",
           "binding": {
             "messageName": "SYS_STATUS",
@@ -82,23 +82,29 @@
           }
         },
         {
-          "displayType": "stat-card",
-          "title": "CPU Load",
-          "span": 4,
-          "colorScheme": "default",
+          "displayType": "gauge-radial",
+          "title": "Throttle",
+          "span": 3,
+          "colorScheme": "amber",
           "binding": {
-            "messageName": "SYS_STATUS",
-            "fieldName": "load",
+            "messageName": "VFR_HUD",
+            "fieldName": "throttle",
             "unit": "%",
             "decimals": 0,
-            "warnThreshold": 80,
-            "critThreshold": 95
+            "min": 0,
+            "max": 100
+          },
+          "gauge": {
+            "sweep": 240,
+            "style": "arc",
+            "majorTicks": 5,
+            "minorTicks": 4
           }
         },
         {
           "displayType": "multi-bar",
           "title": "Vibration",
-          "span": 6,
+          "span": 3,
           "multiBarConfig": {
             "group": "vibration-xyz"
           }
@@ -106,7 +112,7 @@
         {
           "displayType": "multi-bar",
           "title": "EKF variances",
-          "span": 6,
+          "span": 3,
           "multiBarConfig": {
             "group": "ekf-variances"
           }
@@ -114,7 +120,7 @@
       ]
     },
     {
-      "id": "custom-mp-track",
+      "id": "custom-gs-track",
       "name": "Track Error",
       "description": "How far off its path the vehicle is in Auto and Guided: cross-track error (all vehicles) and altitude error (aircraft). Flat at zero otherwise.",
       "category": "telemetry",
@@ -142,7 +148,7 @@
       ]
     },
     {
-      "id": "custom-mp-attitude",
+      "id": "custom-gs-attitude",
       "name": "Attitude Tuning",
       "description": "The rate and angle controllers' gains: Copter and Rover ATC_*, Plane RLL_ / PTCH_ / YAW_RATE_*. Only the vehicle's own are listed.",
       "category": "control",
@@ -169,7 +175,7 @@
       }
     },
     {
-      "id": "custom-mp-navigation",
+      "id": "custom-gs-navigation",
       "name": "Navigation",
       "description": "How it flies between waypoints: Copter WPNAV_*, LOIT_* and position controller gains; Plane NAVL1_*, TECS speed and height limits, WP_* and airspeeds.",
       "category": "control",
@@ -205,7 +211,7 @@
       }
     },
     {
-      "id": "custom-mp-failsafes",
+      "id": "custom-gs-failsafes",
       "name": "Failsafes & RTL",
       "description": "What it does when something goes wrong: battery, radio and GCS failsafes, and the return home.",
       "category": "control",
@@ -228,61 +234,61 @@
   ],
   "tabs": [
     {
-      "id": "tab-mp-data",
-      "title": "Flight Data",
+      "id": "tab-gs-data",
+      "title": "Flight",
       "mode": "cockpit",
       "widgets": [
         {
-          "instanceId": "mp-actions",
+          "instanceId": "gs-actions",
           "widgetId": "built-in-glareshield",
           "colSpan": 12
         },
         {
-          "instanceId": "mp-hud",
+          "instanceId": "gs-hud",
           "widgetId": "built-in-hud",
           "colSpan": 4
         },
         {
-          "instanceId": "mp-map",
+          "instanceId": "gs-map",
           "widgetId": "built-in-map",
           "colSpan": 8
         },
         {
-          "instanceId": "mp-vitals",
-          "widgetId": "custom-mp-vitals",
+          "instanceId": "gs-vitals",
+          "widgetId": "custom-gs-vitals",
           "colSpan": 4
         },
         {
-          "instanceId": "mp-messages",
+          "instanceId": "gs-messages",
           "widgetId": "built-in-statustext-mini",
           "colSpan": 4
         },
         {
-          "instanceId": "mp-track",
-          "widgetId": "custom-mp-track",
+          "instanceId": "gs-track",
+          "widgetId": "custom-gs-track",
           "colSpan": 6
         },
         {
-          "instanceId": "mp-battery",
+          "instanceId": "gs-battery",
           "widgetId": "built-in-battery-card",
           "colSpan": 6
         }
       ],
       "cockpit": {
-        "header": "mp-actions",
+        "header": "gs-actions",
         "root": {
           "split": "row",
           "sizes": [34, 66],
           "children": [
             {
               "split": "column",
-              "sizes": [36, 64],
+              "sizes": [50, 50],
               "children": [
                 {
-                  "pane": "mp-hud"
+                  "pane": "gs-hud"
                 },
                 {
-                  "pane": "mp-vitals"
+                  "pane": "gs-vitals"
                 }
               ]
             },
@@ -291,17 +297,17 @@
               "sizes": [73, 27],
               "children": [
                 {
-                  "pane": "mp-map"
+                  "pane": "gs-map"
                 },
                 {
                   "split": "row",
                   "sizes": [50, 50],
                   "children": [
                     {
-                      "pane": "mp-track"
+                      "pane": "gs-track"
                     },
                     {
-                      "pane": "mp-messages"
+                      "pane": "gs-messages"
                     }
                   ]
                 }
@@ -311,38 +317,38 @@
         }
       },
       "cockpitWide": {
-        "header": "mp-actions",
+        "header": "gs-actions",
         "root": {
           "split": "row",
           "sizes": [27, 49, 24],
           "children": [
             {
               "split": "column",
-              "sizes": [48, 52],
+              "sizes": [50, 50],
               "children": [
                 {
-                  "pane": "mp-hud"
+                  "pane": "gs-hud"
                 },
                 {
-                  "pane": "mp-vitals"
+                  "pane": "gs-vitals"
                 }
               ]
             },
             {
-              "pane": "mp-map"
+              "pane": "gs-map"
             },
             {
               "split": "column",
               "sizes": [34, 30, 36],
               "children": [
                 {
-                  "pane": "mp-track"
+                  "pane": "gs-track"
                 },
                 {
-                  "pane": "mp-battery"
+                  "pane": "gs-battery"
                 },
                 {
-                  "pane": "mp-messages"
+                  "pane": "gs-messages"
                 }
               ]
             }
@@ -351,12 +357,12 @@
       }
     },
     {
-      "id": "tab-mp-plan",
-      "title": "Flight Plan",
+      "id": "tab-gs-plan",
+      "title": "Map",
       "mode": "cockpit",
       "widgets": [
         {
-          "instanceId": "mp-plan-map",
+          "instanceId": "gs-plan-map",
           "widgetId": "built-in-map",
           "colSpan": 12
         }
@@ -364,42 +370,42 @@
       "cockpit": {
         "header": null,
         "root": {
-          "pane": "mp-plan-map"
+          "pane": "gs-plan-map"
         }
       }
     },
     {
-      "id": "tab-mp-config",
-      "title": "Config/Tuning",
+      "id": "tab-gs-config",
+      "title": "Tuning",
       "mode": "cockpit",
       "widgets": [
         {
-          "instanceId": "mp-pid",
+          "instanceId": "gs-pid",
           "widgetId": "built-in-pid-tuning",
           "colSpan": 12
         },
         {
-          "instanceId": "mp-tune-map",
+          "instanceId": "gs-tune-map",
           "widgetId": "built-in-map",
           "colSpan": 4
         },
         {
-          "instanceId": "mp-attitude",
-          "widgetId": "custom-mp-attitude",
+          "instanceId": "gs-attitude",
+          "widgetId": "custom-gs-attitude",
           "colSpan": 4
         },
         {
-          "instanceId": "mp-navigation",
-          "widgetId": "custom-mp-navigation",
+          "instanceId": "gs-navigation",
+          "widgetId": "custom-gs-navigation",
           "colSpan": 4
         },
         {
-          "instanceId": "mp-failsafes",
-          "widgetId": "custom-mp-failsafes",
+          "instanceId": "gs-failsafes",
+          "widgetId": "custom-gs-failsafes",
           "colSpan": 4
         },
         {
-          "instanceId": "mp-params",
+          "instanceId": "gs-params",
           "widgetId": "built-in-parameters",
           "colSpan": 12
         }
@@ -407,36 +413,42 @@
       "cockpit": {
         "header": null,
         "root": {
-          "split": "column",
-          "sizes": [50, 50],
+          "split": "row",
+          "sizes": [68, 32],
           "children": [
             {
-              "split": "row",
-              "sizes": [66, 34],
+              "split": "column",
+              "sizes": [50, 50],
               "children": [
                 {
-                  "pane": "mp-pid"
+                  "pane": "gs-pid"
                 },
                 {
-                  "pane": "mp-tune-map"
+                  "split": "row",
+                  "sizes": [34, 33, 33],
+                  "children": [
+                    {
+                      "pane": "gs-attitude"
+                    },
+                    {
+                      "pane": "gs-navigation"
+                    },
+                    {
+                      "pane": "gs-failsafes"
+                    }
+                  ]
                 }
               ]
             },
             {
-              "split": "row",
-              "sizes": [23, 23, 22, 32],
+              "split": "column",
+              "sizes": [50, 50],
               "children": [
                 {
-                  "pane": "mp-attitude"
+                  "pane": "gs-tune-map"
                 },
                 {
-                  "pane": "mp-navigation"
-                },
-                {
-                  "pane": "mp-failsafes"
-                },
-                {
-                  "pane": "mp-params"
+                  "pane": "gs-params"
                 }
               ]
             }
