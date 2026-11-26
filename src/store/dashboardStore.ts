@@ -28,7 +28,7 @@ import { CockpitLayout, CustomWidgetDefinition, DashboardProfile, DashboardTab, 
  * The default dashboard, "Ground Station": three Cockpit tabs and a Flow tab. Familiar to Mission Planner users (HUD
  * top left, the map filling the right), built on what Glareshield adds: values that warn, health bars, charts, curated
  * parameter lists, and layouts for ultrawide screens, laptops and phones.
- * - Flight: Arm & Modes pinned on top; the HUD over Vitals (battery, voltage, current; HDOP, link loss, a throttle
+ * - Flight: Arm & Modes pinned on top; the HUD over Vitals (battery, voltage, current; HDOP, a logging light, a throttle
  *   gauge; vibration and EKF bars) on the left; the map with Track Error and messages on the right. A wide layout for
  *   ultrawides, a compact one (HUD, Vitals and the map side by side) for laptops.
  * - Map: the map, full window, to fly from and to plan.
@@ -48,7 +48,7 @@ const DEFAULT_PROFILE: DashboardProfile = {
       id: 'custom-vitals',
       name: 'Vitals',
       description:
-        'What needs attention at a glance: battery, power, GNSS quality, link loss and throttle, with vibration and EKF health. Values turn amber or red past their limits.',
+        'What needs attention at a glance: battery, power, GNSS quality, logging and throttle, with vibration and EKF health. Values turn amber or red past their limits.',
       category: 'telemetry',
       displayType: 'composite',
       colorScheme: 'default',
@@ -108,20 +108,17 @@ const DEFAULT_PROFILE: DashboardProfile = {
             critThreshold: 2.0,
           },
         },
+        // The onboard logger's health (SYS_STATUS sensor health bit 24, MAV_SYS_STATUS_LOGGING): ArduPilot clears it
+        // when logging fails (no, full or failing SD card). A flight without a log is a common field mistake.
         {
-          displayType: 'stat-card',
-          title: 'Link Loss',
+          displayType: 'indicator-led',
+          title: 'Logging',
           span: 4,
-          colorScheme: 'blue',
-          binding: {
-            messageName: 'SYS_STATUS',
-            fieldName: 'drop_rate_comm',
-            unit: '%',
-            decimals: 1,
-            multiplier: 0.01,
-            warnThreshold: 5,
-            critThreshold: 15,
-          },
+          colorScheme: 'green',
+          binding: { messageName: 'SYS_STATUS', fieldName: 'onboard_control_sensors_health', bit: 24 },
+          stateThreshold: 0,
+          stateLabels: { on: 'OK', off: 'FAILED' },
+          offAlert: 'crit',
         },
         {
           displayType: 'gauge-radial',
