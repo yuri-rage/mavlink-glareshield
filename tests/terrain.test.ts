@@ -65,6 +65,30 @@ const near = (a: number, b: number, tol = 1e-6) => Math.abs(a - b) <= tol;
     const flat = (h: number) => () => new Float32Array(256 * 256).fill(h);
     check('sea floor (-18 m off the Netherlands): 0', t.sampleHeight(52.3, 4.3, flat(-18), z) === 0);
     check('sea floor (-16 m off Galveston): 0', t.sampleHeight(29.05, -94.6, flat(-16), z) === 0);
+    {
+      // A coastal bluff (30 m) beside sea floor (-40 m), sampled halfway between the two pixel centers: each pixel is
+      // land (0 for the sea) before blending, so 15 m, not the 0 m a blend-then-clamp gave (-5 m clamped).
+      const z2 = z;
+      const { x } = t.tileCoords(52.3, 4.3, z2);
+      const px = x * 256 - 0.5;
+      const x0 = Math.floor(px);
+      const lonAt = (gx: number) => ((gx + 0.5) / 256 / 2 ** z2) * 360 - 180;
+      const lonMid = lonAt(x0 + 0.5);
+      const tile = (tileX: number) => {
+        const a = new Float32Array(256 * 256);
+        for (let i = 0; i < 256 * 256; i++) {
+          const gx = tileX * 256 + (i % 256);
+          a[i] = gx <= x0 ? 30 : -40;
+        }
+        return a;
+      };
+      const h = t.sampleHeight(52.3, lonMid, (tileX) => tile(tileX), z2)!;
+      check(
+        'coast: a bluff beside the sea floor blends with sea level (15 m), not the sea floor',
+        Math.abs(h - 15) < 0.01,
+        String(h)
+      );
+    }
     check('Jericho (-249 m): kept', t.sampleHeight(31.856, 35.46, flat(-249), z) === -249);
     check('Badwater, Death Valley (-78 m): kept', t.sampleHeight(36.2297, -116.7669, flat(-78), z) === -78);
     check('Caspian surface (-29 m): kept', t.sampleHeight(42, 50, flat(-29), z) === -29);

@@ -95,7 +95,7 @@ export const landHeight = (h: number, lat: number, lon: number) => (h >= 0 ? h :
 
 /**
  * Height (m) at a point, from decoded tiles fetched by `getTile` (null when a tile isn't available). Bilinear between
- * pixel centers; at a tile edge it reads the neighboring tile. Sea floor reads 0 (landHeight).
+ * pixel centers; at a tile edge it reads the neighboring tile. Each pixel's sea floor reads 0 before blending (landHeight).
  */
 export function sampleHeight(
   lat: number,
@@ -127,7 +127,10 @@ export function sampleHeight(
   const c = at(x0, y0 + 1);
   const d = at(x0 + 1, y0 + 1);
   if (a === null || b === null || c === null || d === null) return null;
-  return landHeight(a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy, lat, lon);
+  // Each pixel as land before blending: blended first, a sea-floor pixel beside a coastal bluff pulled the bluff's
+  // height down (30 m beside -40 m water read 0 m halfway across, not 15), the unsafe direction for clearance.
+  const [la, lb, lc, ld] = [a, b, c, d].map((h) => landHeight(h, lat, lon));
+  return la * (1 - fx) * (1 - fy) + lb * fx * (1 - fy) + lc * (1 - fx) * fy + ld * fx * fy;
 }
 
 /** The tiles `sampleHeight` reads for a point (so they can be fetched first). */
