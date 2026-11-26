@@ -5,6 +5,7 @@
 
 import { create } from 'zustand';
 
+import { mavlinkConnection } from '../mavlink/connection';
 import { getVehicleCategory } from '../mavlink/messages';
 import { paramManager } from '../mavlink/paramManager';
 import { onActiveVehicleChange } from '../mavlink/vehicleRoster';
@@ -144,6 +145,12 @@ let askedFor = '';
 // While a vehicle is connected, keep its type and the radius parameters it sends. Only a value arriving now counts:
 // one still in the store from before may be another vehicle's.
 useTelemetryStore.subscribe((s, prev) => {
+  // A replayed log isn't this vehicle: its type and parameters are never remembered (a Plane log would reset a
+  // Rover's planning parameters).
+  if (mavlinkConnection.isReplaying()) {
+    askedFor = '';
+    return;
+  }
   const linked = s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED' && s.heartbeat.type !== 0;
   if (!linked) {
     askedFor = '';
