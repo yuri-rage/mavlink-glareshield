@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { useTlogStore } from '../../store/tlogStore';
+import { ReplayFileButton } from '../widgets/ReplayFileButton';
 
 const CAPS_MB = [512, 1024, 2048, 5120, 10240];
 const fmtMb = (mb: number) => (mb >= 1024 ? `${+(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`);
@@ -27,7 +28,10 @@ export const TlogSettings: React.FC = () => {
 
   return (
     <div className="space-y-2">
-      <label className="text-xs font-medium text-zinc-300">Telemetry Logs (.tlog)</label>
+      <div className="flex items-center justify-between gap-2">
+        <label className="text-xs font-medium text-zinc-300">Telemetry Logs (.tlog)</label>
+        <ReplayFileButton />
+      </div>
       <div
         className="grid grid-cols-2 gap-1 rounded-lg border border-zinc-800 bg-zinc-900 p-0.5"
         role="radiogroup"
