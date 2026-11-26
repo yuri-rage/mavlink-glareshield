@@ -40,9 +40,13 @@ function close(a: number, b: number) {
   return Math.abs(a - b) <= 1e-6 + 1e-6 * Math.abs(b);
 }
 
-/** Compare actual vs expected; null in expected matches undefined/null. Returns a list of mismatch descriptions. */
+/**
+ * Compare actual vs expected; null in expected matches undefined/null, "NaN" a NaN (JSON has no NaN: an unknown
+ * value the app decodes as NaN, shown "--"). Returns a list of mismatch descriptions.
+ */
 function diff(actual: any, expected: any, where = ''): string[] {
   if (expected === null) return actual == null ? [] : [`${where}: expected none, got ${JSON.stringify(actual)}`];
+  if (expected === 'NaN') return Number.isNaN(actual) ? [] : [`${where}: expected NaN, got ${JSON.stringify(actual)}`];
   if (Array.isArray(expected)) {
     if (!Array.isArray(actual)) return [`${where}: expected array, got ${JSON.stringify(actual)}`];
     if (actual.length !== expected.length)

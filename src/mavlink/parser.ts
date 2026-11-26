@@ -342,7 +342,8 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         lat: getInt32(8) / 1e7,
         lon: getInt32(12) / 1e7,
         alt: getInt32(16) / 1000,
-        eph: getUint16(20) === 65535 ? 0 : getUint16(20) / 100, // HDOP
+        // HDOP; 65535 is "unknown" (no fix yet): NaN, shown as "--" (0 would read as a perfect fix).
+        eph: getUint16(20) === 65535 ? NaN : getUint16(20) / 100,
         epv: getUint16(22) === 65535 ? 0 : getUint16(22) / 100, // VDOP
         vel: getUint16(24) === 65535 ? 0 : getUint16(24) / 100, // Groundspeed m/s
         cog: getUint16(26) === 65535 ? 0 : getUint16(26) / 100, // Course over ground deg
@@ -362,7 +363,7 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
         lon: getInt32(12) / 1e7,
         alt: getInt32(16) / 1000,
         dgps_age: getUint32(20),
-        eph: getUint16(24) === 65535 ? 0 : getUint16(24) / 100, // HDOP
+        eph: getUint16(24) === 65535 ? NaN : getUint16(24) / 100, // HDOP; unknown: NaN ("--")
         epv: getUint16(26) === 65535 ? 0 : getUint16(26) / 100, // VDOP
         vel: getUint16(28) === 65535 ? 0 : getUint16(28) / 100, // Groundspeed m/s
         cog: getUint16(30) === 65535 ? 0 : getUint16(30) / 100, // Course over ground deg
