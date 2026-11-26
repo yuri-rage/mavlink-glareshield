@@ -11,6 +11,7 @@ import {
 } from '../mavlink/messages';
 import { decodePacket, MavlinkPacket } from '../mavlink/parser';
 import { messageRateManager } from '../mavlink/rateManager';
+import { flightNow } from '../mavlink/replayClock';
 import { observePacket, onActiveVehicleChange, useVehicleRosterStore } from '../mavlink/vehicleRoster';
 
 export interface VehicleHeartbeat {
@@ -1041,12 +1042,14 @@ export const useTelemetryStore = create<TelemetryState>()(
             }
 
             // Track armed flight time and arm-position fallback for Home
+            // (On the flight's clock: a replay's own time, so flight time keeps pace with the log.)
             let armedStartedAt = state.armedStartedAt;
             let accumulatedArmedMs = state.accumulatedArmedMs;
+            const flightMs = flightNow();
             if (isArmed && !state.heartbeat.isArmed) {
-              armedStartedAt = now;
+              armedStartedAt = flightMs;
             } else if (!isArmed && state.heartbeat.isArmed && state.armedStartedAt !== null) {
-              accumulatedArmedMs += Math.max(0, now - state.armedStartedAt);
+              accumulatedArmedMs += Math.max(0, flightMs - state.armedStartedAt);
               armedStartedAt = null;
             }
 

@@ -3,9 +3,9 @@
 
 import React, { useEffect, useState } from 'react';
 
-import { History, Loader2, Pause, Play, Square } from 'lucide-react';
+import { History, Loader2, Pause, Play, Plug, Square } from 'lucide-react';
 
-import { replayControls, stopReplay } from '../../mavlink/replay';
+import { replayControls, stopReplay, stopReplayAndReconnect } from '../../mavlink/replay';
 import { REPLAY_SPEEDS } from '../../mavlink/tlogReplay';
 import { useReplayStore } from '../../store/replayStore';
 
@@ -111,6 +111,17 @@ export const ReplayBar: React.FC = () => {
           Read-only: nothing is sent to a vehicle
           {r.gapsCompressed > 0 ? ` · ${r.gapsCompressed} long pause${r.gapsCompressed === 1 ? '' : 's'} skipped` : ''}
         </span>
+        {r.leftVehicle !== null && (
+          <button
+            type="button"
+            onClick={stopReplayAndReconnect}
+            className="flex h-6 items-center gap-1 rounded border border-emerald-400/60 bg-emerald-900/50 px-2 text-[11px] font-bold hover:bg-emerald-800"
+            title={`Stop the replay and connect again (back to vehicle ${r.leftVehicle})`}
+          >
+            <Plug className="h-3 w-3" />
+            Stop &amp; reconnect
+          </button>
+        )}
         <button
           type="button"
           onClick={stopReplay}
