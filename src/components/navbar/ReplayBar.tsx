@@ -1,7 +1,7 @@
 // The replay bar: shown under the navbar while a telemetry log is replayed (mavlink/replay.ts). Play / pause, speed,
 // a scrubber, the time, and Stop; and the reminder that nothing is sent.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { History, Loader2, Pause, Play, Plug, Square } from 'lucide-react';
 
@@ -22,8 +22,14 @@ export const ReplayBar: React.FC = () => {
   const r = useReplayStore();
   // While dragging, the thumb follows the pointer; the seek happens on release.
   const [drag, setDrag] = useState<number | null>(null);
+  // The live drag value, cleared the moment a release commits it: a release fires pointerup and then
+  // lostpointercapture before React re-renders, and both used to seek (twice: a seek to 0 restarted twice).
+  const dragRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!r.active) setDrag(null);
+    if (!r.active) {
+      dragRef.current = null;
+      setDrag(null);
+    }
   }, [r.active]);
   if (!r.active) return null;
 
@@ -40,7 +46,9 @@ export const ReplayBar: React.FC = () => {
         })
       : null;
   const commit = () => {
-    if (drag !== null) replayControls.seek(drag);
+    const target = dragRef.current;
+    dragRef.current = null;
+    if (target !== null) replayControls.seek(target);
     setDrag(null);
   };
 
@@ -91,7 +99,10 @@ export const ReplayBar: React.FC = () => {
           max={Math.max(1, r.durationMs)}
           step={100}
           value={Math.min(shown, r.durationMs)}
-          onChange={(e) => setDrag(Number(e.target.value))}
+          onChange={(e) => {
+            dragRef.current = Number(e.target.value);
+            setDrag(dragRef.current);
+          }}
           // Held on to while dragging, so letting go outside the slider still ends the drag (and seeks).
           onPointerDown={(e) => e.currentTarget.setPointerCapture?.(e.pointerId)}
           onPointerUp={commit}
