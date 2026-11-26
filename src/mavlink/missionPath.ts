@@ -17,7 +17,7 @@
 // home (relative items as they are, MSL items less home's MSL altitude). Mixing raw MSL and relative altitudes
 // would add the site elevation to the vertical component and, through the overshoot limit, flatten the curve.
 
-import { cmdHasLocation, type VehicleCategory } from './messages';
+import { cmdUsesPosition, type VehicleCategory } from './messages';
 
 /** A mission item, as much as the path needs. */
 export interface PathItem {
@@ -42,8 +42,9 @@ const isMsl = (frame: number) => frame === 0 || frame === 5;
 const CMD_NAV_TAKEOFF = 22;
 const CMD_NAV_VTOL_TAKEOFF = 84;
 const isTerrain = (frame: number) => frame === 10 || frame === 11;
+// A takeoff's position is ignored by the vehicle (cmdUsesPosition): its leg climbs at home (homeLegStart).
 const drawable = (it: PathItem) =>
-  cmdHasLocation(it.command) && (it.lat !== 0 || it.lon !== 0) && Math.abs(it.lat) <= 90 && Math.abs(it.lon) <= 180;
+  cmdUsesPosition(it.command) && (it.lat !== 0 || it.lon !== 0) && Math.abs(it.lat) <= 90 && Math.abs(it.lon) <= 180;
 
 type V3 = [number, number, number];
 const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];

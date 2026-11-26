@@ -186,6 +186,26 @@ check(
     wpToLoiter.items[3].x === 35.002 && wpToLoiter.items[3].z === 40 && wpToLoiter.items[3].param1 === 0
   );
   check('change to the same command returns the same draft', d.changeCommand(base, 3, 16) === base);
+  // A takeoff's position is ignored by the vehicle: a waypoint made a takeoff drops it (and isn't drawn there).
+  const toTakeoff = d.changeCommand(base, 3, 22);
+  const t = toTakeoff.items[3];
+  check(
+    'waypoint to takeoff: position cleared, altitude kept',
+    t.command === 22 && t.x === 0 && t.y === 0 && t.z === 40,
+    JSON.stringify(t)
+  );
+  const toVtol = d.changeCommand(base, 3, 84);
+  check('waypoint to VTOL takeoff: position cleared too', toVtol.items[3].x === 0 && toVtol.items[3].y === 0);
+  const backToWp = d.changeCommand(toTakeoff, 3, 16, { lat: 35.4, lon: -106.4 });
+  check(
+    'takeoff back to a waypoint: takes the given position, keeps the altitude',
+    backToWp.items[3].x === 35.4 && backToWp.items[3].y === -106.4 && backToWp.items[3].z === 40
+  );
+  const servoToTakeoff = d.changeCommand(toServo, 3, 22);
+  check(
+    'a command without location to takeoff: no position, an altitude',
+    servoToTakeoff.items[3].x === 0 && servoToTakeoff.items[3].z === 30
+  );
 }
 {
   const r1 = d.insertWaypointAfter(base, 2, 35.0012, -106.0012);

@@ -270,13 +270,27 @@ export function changeCommand(
   const hadLocation = cmdHasLocation(old.command);
   const hasLocation = cmdHasLocation(command);
   const item: DraftItem = { ...old, command, param1: 0, param2: 0, param3: 0, param4: 0 };
-  if (hasLocation) {
+  if (command === CMD_NAV_TAKEOFF || command === CMD_NAV_VTOL_TAKEOFF) {
+    // The vehicle takes off where it is (only the altitude counts): drop the position it had, which would otherwise
+    // stay drawn as a point it never goes to.
+    item.x = 0;
+    item.y = 0;
+    if (!hadLocation) {
+      const ref = altitudeReference(draft, index);
+      item.z = ref.alt;
+      item.frame = ref.frame;
+    }
+  } else if (hasLocation) {
     if (!hadLocation) {
       const ref = altitudeReference(draft, index);
       item.x = at?.lat ?? 0;
       item.y = at?.lon ?? 0;
       item.z = ref.alt;
       item.frame = ref.frame;
+    } else if (old.x === 0 && old.y === 0 && at) {
+      // From a takeoff (no position): somewhere to go, at its altitude.
+      item.x = at.lat;
+      item.y = at.lon;
     }
   } else {
     item.x = 0;

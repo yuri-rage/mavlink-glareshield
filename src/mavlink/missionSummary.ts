@@ -302,13 +302,11 @@ export function missionSummary(
       }
       case CMD.TAKEOFF:
       case CMD.VTOL_TAKEOFF: {
+        // A climb where it is: the vehicle ignores a takeoff's position (cmdUsesPosition).
         const h = heightOf(it);
-        if (hasPos) goTo(seq, it.x, it.y, h);
-        else {
-          out.timeS += h > alt ? (h - alt) / speeds.up : 0;
-          alt = Math.max(alt, h);
-          out.maxAltM = Math.max(out.maxAltM, h);
-        }
+        out.timeS += h > alt ? (h - alt) / speeds.up : 0;
+        alt = Math.max(alt, h);
+        out.maxAltM = Math.max(out.maxAltM, h);
         break;
       }
       case CMD.DELAY:

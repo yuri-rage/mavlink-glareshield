@@ -142,8 +142,8 @@ check(
   );
 }
 
-// Takeoffs: one in a terrain frame without a position climbs over home's terrain; one with a position (Plane) is an
-// unchecked climb from the ground.
+// Takeoffs: one in a terrain frame without a position climbs over home's terrain; one with a position has it ignored,
+// as ArduPilot does (Copter, Plane and QuadPlane take off where they are): no leg to it.
 {
   const terrTo = items.map((x, i) => (i === 1 ? { ...x, frame: 10, alt: 40 } : x));
   const p5 = mp.missionProfile(terrTo as any, legs, terrain, { stepM: 10 });
@@ -154,10 +154,13 @@ check(
   const plane = [items[0], it(22, 35.003, 40), it(16, 35.01, 100), it(21, 35.02, 0)];
   const pl = missionPathLegs(plane as any, routeIndices(plane as any, false), false);
   const pp = mp.missionProfile(plane as any, pl, terrain, { stepM: 10 });
-  const climb = pp.points.filter((q) => q.leg === 0);
+  const first = pp.points.filter((q) => q.leg === 0);
   check(
-    'positioned takeoff: the leg to it climbs from the ground (1000) to 1040, unchecked',
-    near(climb[0].alt, 1000) && near(climb[climb.length - 1].alt, 1040) && climb.every((q) => !q.checked)
+    'positioned takeoff: its position ignored, the first leg climbs from home (1000) straight to WP2 (1100)',
+    JSON.stringify(routeIndices(plane as any, false)) === '[0,2,3]' &&
+      near(first[0].alt, 1000) &&
+      near(first[first.length - 1].alt, 1100),
+    `${first[0]?.alt} -> ${first[first.length - 1]?.alt}`
   );
 }
 
