@@ -271,3 +271,8 @@ export function onLinkDown(manual: boolean): void {
 mavlinkConnection.onStatus((status) => {
   if (status === 'disconnected') onLinkDown(mavlinkConnection.isManualDisconnect);
 });
+
+// Another link (bridge, serial port, UDP target): start over, as after a Disconnect. A dropped link keeps the roster
+// to reconnect to the same vehicles; changing the link while it waits must not carry the old vehicle (armed, say) over
+// to whatever the new link reaches.
+mavlinkConnection.onLinkChange(() => resetRoster());
