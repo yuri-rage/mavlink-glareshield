@@ -346,6 +346,33 @@
             }
           ]
         }
+      },
+      "cockpitCompact": {
+        "header": "gs-actions",
+        "root": {
+          "split": "row",
+          "sizes": [30, 36, 34],
+          "children": [
+            {
+              "pane": "gs-hud"
+            },
+            {
+              "pane": "gs-vitals"
+            },
+            {
+              "split": "column",
+              "sizes": [74, 26],
+              "children": [
+                {
+                  "pane": "gs-map"
+                },
+                {
+                  "pane": "gs-messages"
+                }
+              ]
+            }
+          ]
+        }
       }
     },
     {

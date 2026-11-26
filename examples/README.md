@@ -22,6 +22,8 @@ health bars, charts, curated parameter lists and a layout for ultrawide screens.
   - **Track Error** (cross-track and altitude error, charted): how well it holds its path in Auto and Guided, for
     every vehicle type. Mission progress is on the map itself.
   - A **wide layout** for ultrawide screens: HUD and Vitals, the map, then Track Error over Messages.
+  - A **compact layout** for laptops (1366×768 and up): HUD, Vitals and the map side by side, messages under the map;
+    used when the standard layout doesn't fit the window. Track Error is in the standard and wide layouts.
 - **Map**: the map, full window, to fly from (fly here, guided actions, mission control) and to plan (the map's
   **Mission** menu → **Edit mission on map**).
 - **Tuning**: PID tuning, wide so its charts have room, over three curated parameter lists; on the right, a map (to
@@ -41,5 +43,5 @@ Backup** → Export Active Profile) if you want to keep it, or use **Reset to De
 defaults.
 
 Vitals, Track Error and the parameter lists are ordinary custom widgets: change their values and limits in Edit
-Mode with the widget's **Edit** button (set the battery limits for your pack). The Flight tab needs about 1920×970 to
-show as panes; smaller windows show it stacked.
+Mode with the widget's **Edit** button (set the battery limits for your pack). The Flight tab shows as panes from a
+1366×768 laptop up; phones show it stacked.
