@@ -236,6 +236,12 @@ Open the map's **Mission** menu:
 - **Upload from file…** (or drop a file on the map): QGC `.plan`; `.waypoints`, `.fence` and `.rally` text files (as
   Mission Planner saves them); and ArduPilot's own `mission.dat`, `fence.dat` and `rally.dat`.
 - **Save to file**: everything as `.plan`, or the mission, geofence or rally points as `.waypoints`.
+- **Export**, for other tools (not loaded back here):
+  - **Map view (.kml)**: the route, waypoints, geofence (circles as polygons) and rally points, for Google Earth or
+    QGIS. Altitudes are above sea level when home is known; a route with terrain-relative waypoints is drawn above
+    ground instead.
+  - **Polygon (.poly)**: the waypoints' positions as a closed polygon, as Mission Planner saves one, for its survey
+    and fence tools. Needs three waypoints with a position.
 - **Edit mission on map**: the planner.
 
 In the planner, a **Mission / Fence / Rally** switch picks what you're editing:

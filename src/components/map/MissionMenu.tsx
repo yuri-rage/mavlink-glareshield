@@ -3,11 +3,24 @@
 
 import React, { useRef } from 'react';
 
-import { Download, FileJson, Flag, FolderOpen, PencilRuler, RefreshCw, Route, Shield, X } from 'lucide-react';
+import {
+  Download,
+  Earth,
+  FileJson,
+  Flag,
+  FolderOpen,
+  Hexagon,
+  PencilRuler,
+  RefreshCw,
+  Route,
+  Shield,
+  X,
+} from 'lucide-react';
 
 import { downloadFile } from '../../lib/download';
 import { fenceDraftToPoints } from '../../mavlink/fenceDraft';
 import { normalFrame, type MissionDraft } from '../../mavlink/missionDraft';
+import { polyPointCount, toKml, toMpPoly } from '../../mavlink/missionExport';
 import {
   fenceToItems,
   missionFileStem,
@@ -109,6 +122,18 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
   const saveWaypoints = () => saveText(`${stem()}.waypoints`, toQgcWpl(waypointsToItems(waypoints)), 'text/plain');
   const saveFence = () => saveText(`${stem()}-fence.waypoints`, toQgcWpl(fenceToItems(fencePoints)), 'text/plain');
   const saveRally = () => saveText(`${stem()}-rally.waypoints`, toQgcWpl(rallyToItems(rallyPoints)), 'text/plain');
+  const saveKml = () => {
+    const s = useTelemetryStore.getState();
+    const home = s.homePosition.source !== 'none' ? s.homePosition : null;
+    const name = stem();
+    saveText(
+      `${name}.kml`,
+      toKml({ waypoints, fencePoints, rallyPoints, home, name }),
+      'application/vnd.google-earth.kml+xml'
+    );
+  };
+  const savePoly = () => saveText(`${stem()}.poly`, toMpPoly(waypoints), 'text/plain');
+  const polyPoints = polyPointCount(waypoints);
 
   const nothingToSave = waypoints.length === 0 && fencePoints.length === 0 && rallyPoints.length === 0;
 
@@ -216,6 +241,26 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
             <div className="px-2.5 pb-1 pt-1 text-[10px] leading-snug text-zinc-500">
               {planning ? 'Saves the drafts (mission, rally points and fence). ' : 'Saves what the map shows. '}
               Files open in QGroundControl and Mission Planner, and can be dropped back on the map.
+            </div>
+
+            <MenuSection label="Export" />
+            <MenuItem
+              icon={<Earth className="h-3.5 w-3.5 text-sky-400" />}
+              label="Map view (.kml)"
+              detail="Google Earth"
+              disabled={nothingToSave}
+              onClick={run(saveKml)}
+            />
+            <MenuItem
+              icon={<Hexagon className="h-3.5 w-3.5 text-amber-400" />}
+              label="Polygon (.poly)"
+              detail={String(polyPoints)}
+              disabled={polyPoints < 3}
+              onClick={run(savePoly)}
+            />
+            <div className="px-2.5 pb-1 pt-1 text-[10px] leading-snug text-zinc-500">
+              For other tools: KML (route, waypoints, fence and rally points) for Google Earth or QGIS; the polygon for
+              Mission Planner&apos;s survey and fence tools. Not loaded back here.
             </div>
           </>
         );
