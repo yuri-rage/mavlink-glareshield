@@ -19,7 +19,8 @@ const { MAVLINK_MSG_ID } = await import('../src/mavlink/messages.ts');
 const { mavlinkConnection, MavlinkConnection } = await import('../src/mavlink/connection.ts');
 const { ReplayTransport } = await import('../src/mavlink/transport/replayTransport.ts');
 const { useTelemetryStore, sendTrackedCommand } = await import('../src/store/telemetryStore.ts');
-const { startReplay, stopReplay, replayControls, getReplayTransport } = await import('../src/mavlink/replay.ts');
+const { startReplay, stopReplay, replayControls, getReplayTransport, gcsFailsafeNote } =
+  await import('../src/mavlink/replay.ts');
 const { useReplayStore } = await import('../src/store/replayStore.ts');
 const { paramManager } = await import('../src/mavlink/paramManager.ts');
 const { missionManager } = await import('../src/mavlink/missionManager.ts');
@@ -245,6 +246,19 @@ check('an empty or foreign file: no frames', buildReplayTimeline(new Uint8Array(
     `${mavlinkConnection.getStatus()} ${s.position.lat} ${s.heartbeat.lastHeartbeatTime}`
   );
 }
+
+// Leaving a live link for a replay: the confirmation names the ground-station failsafe.
+check(
+  'failsafe unknown: said as a possibility',
+  /If its ground-station failsafe \(FS_GCS_ENABLE\) is on/.test(gcsFailsafeNote({}))
+);
+check('failsafe off: said so', /is off/.test(gcsFailsafeNote({ FS_GCS_ENABLE: { value: 0 } })));
+check(
+  'failsafe on: said plainly, with its timeout',
+  /is ON \(FS_GCS_ENABLE = 1\).*about 5 s/.test(
+    gcsFailsafeNote({ FS_GCS_ENABLE: { value: 1 }, FS_GCS_TIMEOUT: { value: 5 } })
+  )
+);
 
 console.log(failures.length ? `\n${failures.length} replay check(s) FAILED` : '\nAll replay checks PASSED');
 process.exit(failures.length ? 1 : 0);

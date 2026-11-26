@@ -77,17 +77,34 @@ export const replayControls = {
 };
 
 /**
- * Starting a replay closes the live link: ask first when a vehicle is connected (naming the consequence, more
- * plainly when it is armed). True to go ahead.
+ * What leaving the live link means for the vehicle's ground-station failsafe: our heartbeat stops with it. From the
+ * downloaded parameters when they're known (FS_GCS_ENABLE, FS_GCS_TIMEOUT), else said as a possibility.
+ */
+export function gcsFailsafeNote(params: Record<string, { value: number } | undefined>): string {
+  const enable = params['FS_GCS_ENABLE']?.value;
+  const timeout = params['FS_GCS_TIMEOUT']?.value;
+  if (enable === undefined)
+    return 'If its ground-station failsafe (FS_GCS_ENABLE) is on, it will take its failsafe action (often RTL) when our heartbeat stops.';
+  if (enable === 0) return 'Its ground-station failsafe is off (FS_GCS_ENABLE = 0).';
+  return `Its ground-station failsafe is ON (FS_GCS_ENABLE = ${enable}): it will take its failsafe action (often RTL) ${
+    timeout ? `about ${timeout} s ` : ''
+  }after our heartbeat stops.`;
+}
+
+/**
+ * Starting a replay closes the live link: ask first when a vehicle is connected, naming the consequences (no
+ * telemetry, alerts or commands; the ground-station failsafe), more plainly when it is armed. True to go ahead.
  */
 export function confirmLeavingLiveLink(): boolean {
   if (mavlinkConnection.isReplaying() || mavlinkConnection.getStatus() !== 'connected') return true;
-  const hb = useTelemetryStore.getState().heartbeat;
+  const st = useTelemetryStore.getState();
+  const hb = st.heartbeat;
   if (hb.lastHeartbeatTime === 0) return true;
+  const failsafe = gcsFailsafeNote(st.parameters);
   return window.confirm(
     hb.isArmed
-      ? `Vehicle ${hb.systemId} is ARMED. Replaying a log disconnects from it: no telemetry, alerts or commands from here until you Connect again. Replay anyway?`
-      : `Replaying a log disconnects from vehicle ${hb.systemId} until you Connect again. Replay?`
+      ? `Vehicle ${hb.systemId} is ARMED. Replaying a log disconnects from it: no telemetry, alerts or commands from here until you Connect again. ${failsafe} Replay anyway?`
+      : `Replaying a log disconnects from vehicle ${hb.systemId} until you Connect again. ${failsafe} Replay?`
   );
 }
 
