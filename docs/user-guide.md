@@ -8,6 +8,7 @@ How to use Glareshield once it's connected. To connect, see the [README quicksta
   - [Cockpit tabs](#cockpit-tabs)
   - [Arranging a Cockpit tab](#arranging-a-cockpit-tab)
   - [A wide layout for ultrawide screens](#a-wide-layout-for-ultrawide-screens)
+  - [A compact layout for laptops](#a-compact-layout-for-laptops)
   - [Profiles and backup](#profiles-and-backup)
 - [Flying](#flying)
   - [Arming, modes and quick actions](#arming-modes-and-quick-actions)
@@ -100,16 +101,30 @@ room: a layout that fits in flight stays as panes.
 
 ### A wide layout for ultrawide screens
 
-A Cockpit tab can have a second layout for wide screens. In Edit Mode, **+ Wide layout** makes one as a copy of the
+A Cockpit tab can have a second layout for wide screens. In Edit Mode, **+ Wide** makes one as a copy of the
 standard layout and starts editing it; arrange it as you like (the **Ultrawide** preset is a good start).
 
 - The wide layout is used when the window is wider than 2.2:1 (and at least 1200 px wide): an ultrawide monitor. 16:9
   screens, laptops and phones use the standard layout.
 - Edit Mode edits the layout on screen, and the toolbar says which: **(wide layout)** or **(standard layout)**. Its
   **Standard / Wide** switch edits either one from any screen.
-- Both layouts show the tab's widgets. Hiding a widget in one leaves the other alone; deleting a widget from the tab
-  removes it from both (you're asked first if the other layout shows it).
+- The layouts all show the tab's widgets. Hiding a widget in one leaves the others alone; deleting a widget from the
+  tab removes it from every layout (you're asked first if another layout shows it).
 - **Remove wide** drops the wide layout; the standard one is then used everywhere.
+
+### A compact layout for laptops
+
+A Cockpit tab arranged for a large screen may not fit a laptop's window; it's then shown stacked, as on a phone. A
+**compact** layout is the tab arranged for that smaller window: **+ Compact** (Edit Mode) makes one as a copy of the
+standard layout and starts editing it.
+
+- It's used when the standard (or wide) layout doesn't fit the window and the compact one does, before falling back to
+  the stacked list. There's no fixed size: a tab without a compact layout behaves as before, and one with it switches
+  exactly where it would otherwise have stacked.
+- While you edit it on a larger screen, it's shown in a dashed frame the size of a laptop's browser window, so what you
+  arrange is what the laptop shows: **Preview** picks 1366×768 (the default), 1440×900 or 1536×864, or **off** to use
+  the whole window.
+- **Remove compact** drops it.
 
 ### Profiles and backup
 

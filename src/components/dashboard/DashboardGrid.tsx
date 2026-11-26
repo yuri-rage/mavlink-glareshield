@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 
 import {
+  chooseFit,
+  COMPACT_PREVIEWS,
   layoutFits,
   minLayoutSize,
   panesInOrder,
@@ -27,9 +29,9 @@ import {
   widgetMinSize,
   type CockpitVariant,
 } from '../../lib/cockpitLayout';
-import { useDashboardStore } from '../../store/dashboardStore';
+import { editTarget, layoutOf, otherLayouts, useDashboardStore } from '../../store/dashboardStore';
 import { CONTENT_WIDTH_CLASS, useLayoutStore } from '../../store/layoutStore';
-import { CustomWidgetDefinition, PlacedWidget } from '../../types/widget';
+import { CockpitLayout, CustomWidgetDefinition, PlacedWidget } from '../../types/widget';
 import { Button } from '../ui/button';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { Input } from '../ui/input';
@@ -111,19 +113,26 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
     return () => window.removeEventListener('resize', onResize);
   }, []);
   const editVariant = useDashboardStore((st) => st.editVariant);
-  const shownVariant: CockpitVariant = variantFor(Boolean(activeTab?.cockpitWide), windowSize.w, windowSize.h);
+  const compactPreview = useDashboardStore((st) => st.compactPreview);
+  // The layout for the window's shape (standard, or wide on an ultrawide)...
+  const base = variantFor(Boolean(activeTab?.cockpitWide), windowSize.w, windowSize.h);
+  // ...and what's measured to fit (lib/cockpitLayout chooseFit): that one, the compact one, or the stacked list.
+  const [fit, setFit] = useState<CockpitVariant | 'stacked' | null>(null);
+  const shownVariant: CockpitVariant = fit === 'compact' ? 'compact' : base;
   // The layout to edit is chosen in the same click that enters Edit mode or changes tab while editing (not after
   // paint: for a frame the other layout would be shown, tearing down and rebuilding the map, HUD and every widget).
   const variantShownFor = (tabId: string) =>
     variantFor(Boolean(profile.tabs.find((t) => t.id === tabId)?.cockpitWide), windowSize.w, windowSize.h);
-  const variant: CockpitVariant = isEditing
-    ? editVariant === 'wide' && activeTab?.cockpitWide
-      ? 'wide'
-      : 'standard'
-    : shownVariant;
-  const cockpit = isCockpit
-    ? ((variant === 'wide' ? activeTab.cockpitWide : activeTab.cockpit) ?? { header: null, root: null })
-    : undefined;
+  const variant: CockpitVariant = isEditing && activeTab ? editTarget(activeTab, editVariant) : shownVariant;
+  const cockpit = isCockpit ? (layoutOf(activeTab, variant) ?? { header: null, root: null }) : undefined;
+  // Editing the compact layout on a window larger than the chosen laptop: shown in a frame that size, so what's
+  // arranged is what a laptop shows.
+  const preview =
+    isEditing && isCockpit && variant === 'compact'
+      ? (COMPACT_PREVIEWS.find((p) => p.id === compactPreview) ?? null)
+      : null;
+  const previewActive = !!preview && (windowSize.w > preview.w || windowSize.h > preview.h);
+  const [previewBox, setPreviewBox] = useState<{ w: number; h: number } | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const headerRef = useRef<HTMLDivElement | null>(null);
   /**
@@ -133,12 +142,12 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
   const headerHeightRef = useRef<number | null>(null);
   const layoutKey = `${activeTab?.id}|${variant}|${cockpit?.header ?? ''}`;
   const lastLayoutKeyRef = useRef(layoutKey);
-  const [stacked, setStacked] = useState(false);
+  const stacked = isCockpit && fit === 'stacked';
   /** A stacked widget being dragged (Edit mode). */
   const [stackDragging, setStackDragging] = useState<string | null>(null);
   useLayoutEffect(() => {
     if (!isCockpit || !cockpit) {
-      setStacked(false);
+      setFit(null);
       return;
     }
     // Another tab or header: its own resting height (reset here, before measuring, not after).
@@ -147,13 +156,14 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       headerHeightRef.current = null;
     }
     const byId = new Map(activeTab.widgets.map((w) => [w.instanceId, w.widgetId]));
-    const need = minLayoutSize(cockpit.root, (id) => {
-      const widgetId = byId.get(id) ?? '';
-      return widgetMinSize(
-        widgetId,
-        profile.customWidgets.find((c) => c.id === widgetId)
-      );
-    });
+    const needOf = (layout: CockpitLayout | undefined) =>
+      minLayoutSize(layout?.root ?? null, (id) => {
+        const widgetId = byId.get(id) ?? '';
+        return widgetMinSize(
+          widgetId,
+          profile.customWidgets.find((c) => c.id === widgetId)
+        );
+      });
     const measure = () => {
       const el = contentRef.current;
       if (!el) return;
@@ -163,9 +173,10 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       }
       const rect = el.getBoundingClientRect();
       const top = rect.top + window.scrollY;
-      // Before the header is first measured, a generous guess: measuring can only lower it (the least is kept), so
-      // the choice can't flip back and forth.
-      const header = cockpit.header ? (headerHeightRef.current ?? 110) : 0;
+      // Before the header is first measured, a guess a little over the pinned bar's height (one row when the content is
+      // wide enough, two otherwise): measuring can only lower it (the least is kept), so the choice can't flip back
+      // and forth. (Too generous a guess kept a layout that just fits, e.g. a compact one on a laptop, stacked.)
+      const header = cockpit.header ? (headerHeightRef.current ?? (rect.width >= 700 ? 64 : 116)) : 0;
       // While editing, the editor's own bars (toolbar, not-shown list) don't count: the panes may be squeezed a little
       // for a while (their widgets are locked), but they stay panes, so they can be arranged on the screen they're for.
       const chrome = isEditing
@@ -174,9 +185,44 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
             0
           )
         : 0;
-      // Less the container's bottom padding (12 px).
-      const room = { w: rect.width, h: window.innerHeight - top - 12 - header + chrome };
-      setStacked(!layoutFits(need, room));
+      // Less the container's bottom padding (12 px). A layout without a pinned header has its height too.
+      const roomFor = (layout: CockpitLayout | undefined) => ({
+        w: rect.width,
+        h: window.innerHeight - top - 12 + chrome - (layout?.header ? header : 0),
+      });
+      if (isEditing) {
+        const editing = layoutOf(activeTab, variant);
+        if (previewActive && preview) {
+          // The frame: the room a window of the preview's size would give (the editor's bars aside).
+          // The page's side gutter, from where the frame's container starts its content (not from the frame itself,
+          // which once applied is narrower: measuring it would shrink it).
+          const parent = el.parentElement;
+          const gutter = parent
+            ? parent.getBoundingClientRect().left + parseFloat(getComputedStyle(parent).paddingLeft || '0')
+            : 12;
+          const box = {
+            w: Math.min(window.innerWidth - 2 * gutter, preview.w - 2 * gutter),
+            h: Math.min(window.innerHeight - top - 12 + chrome, preview.h - (top - chrome) - 12),
+          };
+          setPreviewBox((b) => (b && b.w === box.w && b.h === box.h ? b : box));
+          const room = { w: box.w, h: box.h - (editing?.header ? header : 0) };
+          setFit(layoutFits(needOf(editing), room) ? variant : 'stacked');
+        } else {
+          setPreviewBox(null);
+          setFit(layoutFits(needOf(editing), roomFor(editing)) ? variant : 'stacked');
+        }
+        return;
+      }
+      setPreviewBox(null);
+      const baseLayout = layoutOf(activeTab, base) ?? activeTab.cockpit;
+      const compact = activeTab.cockpitCompact;
+      setFit(
+        chooseFit(
+          base,
+          layoutFits(needOf(baseLayout), roomFor(baseLayout)),
+          compact ? layoutFits(needOf(compact), roomFor(compact)) : null
+        )
+      );
     };
     measure();
     window.addEventListener('resize', measure);
@@ -190,18 +236,31 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       window.removeEventListener('resize', measure);
       ro.disconnect();
     };
-  }, [isCockpit, cockpit, activeTab, isEditing, layoutKey, profile.customWidgets]);
+  }, [
+    isCockpit,
+    cockpit,
+    activeTab,
+    isEditing,
+    layoutKey,
+    profile.customWidgets,
+    base,
+    variant,
+    previewActive,
+    preview,
+  ]);
   const fill = isCockpit && !stacked;
   useEffect(() => {
     useLayoutStore.setState({ cockpitFill: fill });
     return () => useLayoutStore.setState({ cockpitFill: false });
   }, [fill]);
   const placedIds = new Set(panesInOrder(cockpit));
-  // The tab's other layout (standard or wide), when it has both: deleting a widget it shows removes it there too.
-  const otherLayout =
-    isCockpit && activeTab.cockpitWide ? (variant === 'wide' ? activeTab.cockpit : activeTab.cockpitWide) : undefined;
-  const otherPlaced = new Set(panesInOrder(otherLayout));
-  const otherName = variant === 'wide' ? 'standard' : 'wide';
+  // The tab's other layouts (standard, wide, compact) that exist: deleting a widget they show removes it there too.
+  const others = isCockpit ? otherLayouts(activeTab, variant) : [];
+  const shownElsewhere = (id: string) => others.filter((v) => panesInOrder(layoutOf(activeTab, v)).includes(id));
+  const otherPlaced = new Set(
+    activeTab ? activeTab.widgets.map((w) => w.instanceId).filter((id) => shownElsewhere(id).length) : []
+  );
+  const otherName = (id: string) => shownElsewhere(id).join(' and ');
   const [confirmDeleteHidden, setConfirmDeleteHidden] = useState<string | null>(null);
   // A pending "Remove from both layouts?" doesn't outlive what it was about.
   useEffect(() => setConfirmDeleteHidden(null), [activeTab?.id, variant, isEditing]);
@@ -529,9 +588,9 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
               {otherPlaced.has(w.instanceId) && (
                 <span
                   className="rounded bg-sky-950 px-1 text-[9px] font-bold text-sky-300"
-                  title={`Shown in the ${otherName} layout`}
+                  title={`Shown in the ${otherName(w.instanceId)} layout`}
                 >
-                  in {otherName}
+                  in {otherName(w.instanceId)}
                 </span>
               )}
               <button
@@ -573,7 +632,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                   className="text-zinc-500 hover:text-red-400"
                   title={
                     otherPlaced.has(w.instanceId)
-                      ? `Remove it from the tab (and the ${otherName} layout)`
+                      ? `Remove it from the tab (and the ${otherName(w.instanceId)} layout)`
                       : 'Remove it from the tab'
                   }
                   aria-label={`Remove ${getWidgetTitle(w.widgetId)} from the tab`}
@@ -600,7 +659,11 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
           </div>
         </div>
       ) : isCockpit && fill ? (
-        <div ref={contentRef} className="flex min-h-0 flex-1 flex-col">
+        <div
+          ref={contentRef}
+          className={`flex min-h-0 flex-col ${previewActive && previewBox ? 'mx-auto flex-none outline-dashed outline-1 outline-offset-4 outline-sky-500/60' : 'flex-1'}`}
+          style={previewActive && previewBox ? { width: previewBox.w, height: previewBox.h } : undefined}
+        >
           <CockpitView
             tab={{ ...activeTab, cockpit }}
             isEditing={isEditing}
@@ -614,7 +677,11 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
         // Too small for the panes: the same widgets, stacked in reading order.
         <div ref={contentRef} className="flex flex-col gap-3">
           {isEditing && (
-            <p className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 px-2.5 py-1.5 text-[11px] text-zinc-400">
+            // Editor chrome: not counted against the room (counted, it kept the tab stacked once it was).
+            <p
+              data-edit-chrome
+              className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 px-2.5 py-1.5 text-[11px] text-zinc-400"
+            >
               <LayoutPanelTop className="h-3.5 w-3.5 shrink-0 text-sky-400" />
               Shown stacked: the panes don&apos;t fit this window (with the edit bar). Hide, change or delete some below
               to make them fit, or arrange them on a larger screen; dragging and swapping arrange the panes as

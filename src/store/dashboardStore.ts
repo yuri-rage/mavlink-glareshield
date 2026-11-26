@@ -18,6 +18,7 @@ import {
   unpinHeader,
   type CockpitPresetId,
   type CockpitVariant,
+  type CompactPreviewId,
   type DropZone,
 } from '../lib/cockpitLayout';
 import { sanitizeWidgetDefinition } from '../lib/widgetValidation';
@@ -201,13 +202,15 @@ export function reconcileTab(tab: DashboardTab): DashboardTab {
   const ids = widgets.map((w) => w.instanceId);
   const cockpit = tab.cockpit ? (sanitizeCockpit(tab.cockpit, ids) ?? undefined) : undefined;
   const cockpitWide = tab.cockpitWide ? (sanitizeCockpit(tab.cockpitWide, ids) ?? undefined) : undefined;
-  const { mode: _m, cockpit: _c, cockpitWide: _w, ...rest } = tab;
+  const cockpitCompact = tab.cockpitCompact ? (sanitizeCockpit(tab.cockpitCompact, ids) ?? undefined) : undefined;
+  const { mode: _m, cockpit: _c, cockpitWide: _w, cockpitCompact: _k, ...rest } = tab;
   return {
     ...rest,
     widgets,
     ...(mode ? { mode } : {}),
     ...(cockpit ? { cockpit } : {}),
     ...(cockpitWide ? { cockpitWide } : {}),
+    ...(cockpitCompact ? { cockpitCompact } : {}),
   };
 }
 
@@ -222,9 +225,22 @@ function placeWidget(layout: CockpitLayout | undefined, instanceId: string, widg
 export type PaneSource = { widgetId: string } | { instanceId: string };
 
 /** The field holding a tab's layout of a variant. */
-const LAYOUT_KEY = { standard: 'cockpit', wide: 'cockpitWide' } as const;
+const LAYOUT_KEY = { standard: 'cockpit', wide: 'cockpitWide', compact: 'cockpitCompact' } as const;
 
-/** A tab's layout of a variant (the wide one may be missing). */
+/** Every layout variant, in the order the editor lists them. */
+export const COCKPIT_VARIANTS: CockpitVariant[] = ['standard', 'wide', 'compact'];
+
+/** The layout the editor works on: the one asked for if the tab has it, else the standard one. */
+export function editTarget(tab: DashboardTab, v: CockpitVariant): CockpitVariant {
+  return v !== 'standard' && layoutOf(tab, v) ? v : 'standard';
+}
+
+/** The tab's other layouts (than `v`) that exist: where deleting a widget also takes it from. */
+export function otherLayouts(tab: DashboardTab, v: CockpitVariant): CockpitVariant[] {
+  return COCKPIT_VARIANTS.filter((x) => x !== v && layoutOf(tab, x));
+}
+
+/** A tab's layout of a variant (the wide and compact ones may be missing). */
 export function layoutOf(tab: DashboardTab, variant: CockpitVariant): CockpitLayout | undefined {
   return tab[LAYOUT_KEY[variant]];
 }
@@ -305,7 +321,7 @@ function saveProfileToStorage(profile: DashboardProfile) {
   }
 }
 
-interface DashboardState {
+export interface DashboardState {
   profile: DashboardProfile;
   activeTabId: string;
   isEditing: boolean;
@@ -361,9 +377,16 @@ interface DashboardState {
   /** Which of a tab's Cockpit layouts the editor works on (the wide one only if the tab has it). */
   editVariant: CockpitVariant;
   setEditVariant: (v: CockpitVariant) => void;
-  /** Give a tab a wide layout (a copy of its standard one) and edit it. */
+  /** While editing a compact layout: the laptop window it's previewed in (not saved). */
+  compactPreview: CompactPreviewId;
+  setCompactPreview: (id: CompactPreviewId) => void;
+  /** Give a tab a wide or compact layout (a copy of its standard one) and edit it. */
+  addLayout: (tabId: string, variant: 'wide' | 'compact') => void;
+  /** Drop a tab's wide or compact layout. */
+  removeLayout: (tabId: string, variant: 'wide' | 'compact') => void;
+  /** addLayout(tabId, 'wide'). */
   addWideLayout: (tabId: string) => void;
-  /** Drop a tab's wide layout (the standard one is used everywhere again). */
+  /** removeLayout(tabId, 'wide'). */
   removeWideLayout: (tabId: string) => void;
   /** Change the layout being edited (`create`: make an empty one if the tab has none). */
   updateLayout: (
@@ -459,7 +482,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         const newWidget: PlacedWidget = { instanceId, widgetId, colSpan };
         // A Cockpit tab shows it as a new pane; the quick-actions bar, if the tab has none pinned, as the header.
         // (In the layout being edited; the other one lists it as not shown.)
-        const v = state.editVariant === 'wide' && tab.cockpitWide ? 'wide' : 'standard';
+        const v = editTarget(tab, state.editVariant);
         const withWidget = { ...tab, widgets: [...tab.widgets, newWidget] };
         return reconcileTab(
           tab.mode !== 'cockpit'
@@ -582,7 +605,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     get().updateTab(tabId, (tab) => {
       const { widgets, layout } = buildPreset(preset, tab.widgets, newInstanceId);
       return {
-        ...withLayout({ ...tab, widgets }, v === 'wide' && tab.cockpitWide ? 'wide' : 'standard', layout),
+        ...withLayout({ ...tab, widgets }, editTarget(tab, v), layout),
         mode: 'cockpit',
       };
     });
@@ -614,7 +637,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   splitInCockpit: (tabId, target, side, what) => {
     const v = get().editVariant;
     get().updateTab(tabId, (t) => {
-      const variant = v === 'wide' && t.cockpitWide ? 'wide' : 'standard';
+      const variant = editTarget(t, v);
       const layout = layoutOf(t, variant);
       if (!canPlace(layout, t, target, what)) return t;
       const { tab, instanceId } = sourceInstance(t, what);
@@ -631,7 +654,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   addAtEdgeInCockpit: (tabId, side, what) => {
     const v = get().editVariant;
     get().updateTab(tabId, (t) => {
-      const variant = v === 'wide' && t.cockpitWide ? 'wide' : 'standard';
+      const variant = editTarget(t, v);
       const layout = layoutOf(t, variant) ?? { header: null, root: null };
       // A widget from the tab: its own, and not already shown.
       if (
@@ -687,7 +710,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   replaceInCockpit: (tabId, target, what) => {
     const v = get().editVariant;
     get().updateTab(tabId, (t) => {
-      const variant = v === 'wide' && t.cockpitWide ? 'wide' : 'standard';
+      const variant = editTarget(t, v);
       const layout = layoutOf(t, variant);
       if (!canPlace(layout, t, target, what)) return t;
       const { tab, instanceId } = sourceInstance(t, what);
@@ -710,25 +733,32 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   editVariant: 'standard',
   setEditVariant: (editVariant) => set({ editVariant }),
 
-  addWideLayout: (tabId) => {
+  compactPreview: '1366',
+  setCompactPreview: (compactPreview) => set({ compactPreview }),
+
+  addLayout: (tabId, variant) => {
     get().updateTab(tabId, (tab) =>
-      tab.cockpitWide ? tab : { ...tab, cockpitWide: tab.cockpit ?? { header: null, root: null } }
+      layoutOf(tab, variant) ? tab : withLayout(tab, variant, tab.cockpit ?? { header: null, root: null })
     );
-    set({ editVariant: 'wide' });
+    set({ editVariant: variant });
   },
 
-  removeWideLayout: (tabId) => {
+  removeLayout: (tabId, variant) => {
     get().updateTab(tabId, (tab) => {
-      const { cockpitWide: _w, ...rest } = tab;
-      return rest;
+      const next = { ...tab };
+      delete next[LAYOUT_KEY[variant]];
+      return next;
     });
     set({ editVariant: 'standard' });
   },
 
+  addWideLayout: (tabId) => get().addLayout(tabId, 'wide'),
+  removeWideLayout: (tabId) => get().removeLayout(tabId, 'wide'),
+
   updateLayout: (tabId, fn, create = false) => {
     const v = get().editVariant;
     get().updateTab(tabId, (tab) => {
-      const variant = v === 'wide' && tab.cockpitWide ? 'wide' : 'standard';
+      const variant = editTarget(tab, v);
       const layout = layoutOf(tab, variant) ?? (create ? { header: null, root: null } : undefined);
       return layout ? withLayout(tab, variant, fn(layout, tab)) : tab;
     });

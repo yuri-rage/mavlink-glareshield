@@ -178,5 +178,77 @@ check(
   );
 }
 
+// ------------------------------------------------------------------------------------------------
+// The compact layout (short windows)
+// ------------------------------------------------------------------------------------------------
+{
+  const { chooseFit } = await import('../src/lib/cockpitLayout.ts');
+  const { editTarget, otherLayouts, reconcileTab } = await import('../src/store/dashboardStore.ts');
+  check(
+    "fit: the window's layout when it fits",
+    chooseFit('standard', true, true) === 'standard' && chooseFit('wide', true, null) === 'wide'
+  );
+  check(
+    "fit: the compact one when that doesn't fit and it does",
+    chooseFit('standard', false, true) === 'compact' && chooseFit('wide', false, true) === 'compact'
+  );
+  check(
+    'fit: stacked when neither fits, or there is no compact layout',
+    chooseFit('standard', false, false) === 'stacked' && chooseFit('standard', false, null) === 'stacked'
+  );
+
+  st().resetToDefaults();
+  st().addLayout('tab-flight', 'compact');
+  check(
+    'add compact: a copy of the standard layout, and it is the one edited',
+    JSON.stringify(hud().cockpitCompact) === JSON.stringify(hud().cockpit) && st().editVariant === 'compact'
+  );
+  st().unplaceFromCockpit('tab-flight', 'w-gps');
+  check(
+    'edits go to the compact layout only',
+    !panesInOrder(hud().cockpitCompact).includes('w-gps') &&
+      panesInOrder(hud().cockpit).includes('w-gps') &&
+      panesInOrder(hud().cockpitWide).includes('w-gps')
+  );
+  check(
+    'editTarget: compact when the tab has it, else standard',
+    editTarget(hud(), 'compact') === 'compact' &&
+      editTarget({ ...hud(), cockpitCompact: undefined }, 'compact') === 'standard'
+  );
+  check(
+    'other layouts: the existing others',
+    JSON.stringify(otherLayouts(hud(), 'compact')) === JSON.stringify(['standard', 'wide'])
+  );
+  st().addWidgetToActiveTab('built-in-charts');
+  const charts = hud().widgets[hud().widgets.length - 1].instanceId;
+  check(
+    'a widget added while editing compact goes there only',
+    panesInOrder(hud().cockpitCompact).includes(charts) && !panesInOrder(hud().cockpit).includes(charts)
+  );
+  st().removeWidgetFromActiveTab('w-vfr');
+  check(
+    'deleting a widget takes it from all three layouts',
+    [hud().cockpit, hud().cockpitWide, hud().cockpitCompact].every((l) => !panesInOrder(l).includes('w-vfr'))
+  );
+  const dirty = reconcileTab({
+    ...hud(),
+    cockpitCompact: {
+      header: 'nope',
+      root: { split: 'row', children: [{ pane: 'w-hud' }, { pane: 'ghost' }], sizes: [50, 50] },
+    } as any,
+  });
+  check(
+    'load / import: a compact layout is cleaned like the others (unknown panes dropped)',
+    JSON.stringify(dirty.cockpitCompact) === JSON.stringify({ header: null, root: { pane: 'w-hud' } }),
+    JSON.stringify(dirty.cockpitCompact)
+  );
+  st().removeLayout('tab-flight', 'compact');
+  check(
+    'remove compact: gone, standard edited again, the others kept',
+    !hud().cockpitCompact && st().editVariant === 'standard' && !!hud().cockpitWide
+  );
+  st().resetToDefaults();
+}
+
 console.log(failures.length ? `\n${failures.length} wide-layout check(s) FAILED` : '\nAll wide-layout checks PASSED');
 if (failures.length) process.exit(1);
