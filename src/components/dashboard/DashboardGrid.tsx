@@ -127,13 +127,15 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
   const [fit, setFit] = useState<{ tabId: string; value: CockpitVariant | 'stacked' } | null>(null);
   /** The room for panes last measured (before a pinned header) and the header's height. */
   const roomRef = useRef<{ w: number; h: number; header: number } | null>(null);
-  const needOf = (tab: DashboardTab, layout: CockpitLayout | undefined) => {
+  /** The room a layout's panes need: `capped` lets a tall composite scroll in its pane (CUSTOM_MIN_H_CAP). */
+  const needOf = (tab: DashboardTab, layout: CockpitLayout | undefined, capped = true) => {
     const byId = new Map(tab.widgets.map((w) => [w.instanceId, w.widgetId]));
     return minLayoutSize(layout?.root ?? null, (id) => {
       const widgetId = byId.get(id) ?? '';
       return widgetMinSize(
         widgetId,
-        profile.customWidgets.find((c) => c.id === widgetId)
+        profile.customWidgets.find((c) => c.id === widgetId),
+        { capped }
       );
     });
   };
@@ -141,10 +143,15 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
     const b = variantFor(Boolean(tab?.cockpitWide), windowSize.w, windowSize.h);
     const r = roomRef.current;
     if (!tab || tab.mode !== 'cockpit' || !r) return editing ?? b;
-    const fits = (l: CockpitLayout | undefined) =>
-      layoutFits(needOf(tab, l), { w: r.w, h: r.h - (l?.header ? r.header : 0) });
+    const fits = (l: CockpitLayout | undefined, capped = true) =>
+      layoutFits(needOf(tab, l, capped), { w: r.w, h: r.h - (l?.header ? r.header : 0) });
     if (editing) return fits(layoutOf(tab, editing)) ? editing : 'stacked';
-    return chooseFit(b, fits(layoutOf(tab, b) ?? tab.cockpit), tab.cockpitCompact ? fits(tab.cockpitCompact) : null);
+    const baseLayout = layoutOf(tab, b) ?? tab.cockpit;
+    const compact = tab.cockpitCompact;
+    return chooseFit(b, fits(baseLayout), compact ? fits(compact) : null, {
+      base: fits(baseLayout, false),
+      compact: compact ? fits(compact, false) : null,
+    });
   };
   const currentFit =
     fit && fit.tabId === activeTab?.id
@@ -270,7 +277,12 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
         chooseFit(
           base,
           layoutFits(needOf(activeTab, baseLayout), roomFor(baseLayout)),
-          compact ? layoutFits(needOf(activeTab, compact), roomFor(compact)) : null
+          compact ? layoutFits(needOf(activeTab, compact), roomFor(compact)) : null,
+          // First a layout in which no pane scrolls (every composite at its whole height), then the capped fit.
+          {
+            base: layoutFits(needOf(activeTab, baseLayout, false), roomFor(baseLayout)),
+            compact: compact ? layoutFits(needOf(activeTab, compact, false), roomFor(compact)) : null,
+          }
         )
       );
     };
@@ -740,6 +752,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       ) : isCockpit && fill ? (
         <div
           ref={contentRef}
+          data-cockpit-fit={currentFit}
           className={`flex min-h-0 flex-col ${previewActive && previewBox ? 'mx-auto flex-none outline-dashed outline-1 outline-offset-4 outline-sky-500/60' : 'flex-1'}`}
           style={previewActive && previewBox ? { width: previewBox.w, height: previewBox.h } : undefined}
         >
@@ -758,6 +771,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
         // each row ends flush. In a compact preview, at the preview's width.
         <div
           ref={contentRef}
+          data-cockpit-fit="stacked"
           className={`grid items-stretch gap-3 ${previewActive && previewBox ? 'mx-auto outline-dashed outline-1 outline-offset-4 outline-sky-500/60' : ''}`}
           style={{
             gridTemplateColumns: `repeat(${stackCols}, minmax(0, 1fr))`,

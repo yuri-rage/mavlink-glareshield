@@ -163,6 +163,9 @@ standard layout and starts editing it.
 - It's used when the standard (or wide) layout doesn't fit the window and the compact one does, before falling back to
   the stacked grid. There's no fixed size: a tab without a compact layout behaves as before, and one with it switches
   exactly where it would otherwise have stacked.
+- A layout in which no widget has to scroll wins: when the standard layout would fit only by scrolling a tall custom
+  widget (Vitals, say) and the compact one holds everything, the compact one is shown. Only when neither holds
+  everything does a tall widget scroll in its pane.
 - While you edit it on a larger screen, it's shown in a dashed frame the size of a laptop's browser window, so what you
   arrange is what the laptop shows: **Preview** picks 1366×768 (the default), 1440×900 or 1536×864, or **off** to use
   the whole window.

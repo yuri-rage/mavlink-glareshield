@@ -567,6 +567,49 @@ check('full rows untouched', packStackedRows([2, 2, 1, 3], 4).join() === '2,2,1,
 check('one column: all one', packStackedRows([1, 1, 1], 1).join() === '1,1,1');
 check('the last row fills', packStackedRows([4, 1], 4).join() === '4,4');
 
+// A layout where no pane scrolls first: the default Vitals card, estimated close to (and not under) what it measured in
+// the browser at its smallest (419 px: 37 header, 380 content, 2 border); capped for the fallback tier.
+{
+  const { customWidgetMinSize, chooseFit, CUSTOM_MIN_H_CAP } = await import('../src/lib/cockpitLayout.ts');
+  const p = (displayType: string, span: number, extra: object = {}) => ({ displayType, span, title: 'T', ...extra });
+  const vitals = {
+    id: 'v',
+    name: 'Vitals',
+    category: 'telemetry',
+    displayType: 'composite',
+    panels: [
+      p('stat-card', 4),
+      p('stat-card', 4),
+      p('stat-card', 4),
+      p('stat-card', 4),
+      p('indicator-led', 4),
+      p('gauge-radial', 4, { gauge: { style: 'arc' } }),
+      p('multi-bar', 6, { multiBarConfig: { group: 'vibration-xyz' } }),
+      p('multi-bar', 6, { multiBarConfig: { group: 'ekf-variances' } }),
+    ],
+  } as any;
+  const whole = customWidgetMinSize(vitals, { capped: false });
+  check('Vitals, whole: at least what it measured (419), not far over', whole.h >= 419 && whole.h <= 470, J(whole));
+  check('Vitals, capped: the cap', customWidgetMinSize(vitals).h === CUSTOM_MIN_H_CAP);
+  check(
+    'two tiers: the base layout when nothing scrolls in it',
+    chooseFit('standard', true, true, { base: true, compact: true }) === 'standard'
+  );
+  check(
+    'two tiers: compact when only it holds every pane whole (the base would scroll a pane)',
+    chooseFit('standard', true, true, { base: false, compact: true }) === 'compact'
+  );
+  check(
+    'two tiers: neither whole, the capped fit as before (base first)',
+    chooseFit('standard', true, true, { base: false, compact: false }) === 'standard' &&
+      chooseFit('wide', false, true, { base: false, compact: false }) === 'compact'
+  );
+  check(
+    'two tiers: a whole fit that the capped check rejects never wins (consistent inputs aside)',
+    chooseFit('standard', false, false, { base: true, compact: null }) === 'stacked'
+  );
+}
+
 console.log(
   failures.length ? `\n${failures.length} cockpit-layout check(s) FAILED` : '\nAll cockpit-layout checks PASSED'
 );
