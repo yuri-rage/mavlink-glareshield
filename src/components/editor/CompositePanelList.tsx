@@ -91,8 +91,8 @@ export const CompositePanelList: React.FC<CompositePanelListProps> = ({
         </Button>
       </div>
       <p className="-mt-1 text-[10px] text-zinc-500">
-        Panels fill the card left to right, wrapping when a row is full. On narrow cards each panel takes a full row.
-        Choose a panel to edit it below.
+        Panels fill the card left to right, wrapping when a row is full. On narrow cards (under 360 px) panels a third
+        wide or less pair up two to a row; the rest take a full row. Choose a panel to edit it below.
       </p>
       <ol className="space-y-1">
         {panels.map((p, i) => {
