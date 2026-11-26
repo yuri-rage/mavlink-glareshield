@@ -6,7 +6,7 @@
     {
       "id": "custom-gs-vitals",
       "name": "Vitals",
-      "description": "What needs attention at a glance: battery, power, GNSS quality, link loss and throttle, with vibration and EKF health. Values turn amber or red past their limits.",
+      "description": "Battery, power, GNSS quality, link loss and throttle at a glance. Values turn amber or red past their limits.",
       "category": "telemetry",
       "displayType": "composite",
       "colorScheme": "default",
@@ -14,7 +14,7 @@
         {
           "displayType": "stat-card",
           "title": "Battery",
-          "span": 3,
+          "span": 4,
           "colorScheme": "green",
           "binding": {
             "messageName": "SYS_STATUS",
@@ -31,7 +31,7 @@
         {
           "displayType": "stat-card",
           "title": "Voltage",
-          "span": 3,
+          "span": 4,
           "colorScheme": "amber",
           "binding": {
             "messageName": "SYS_STATUS",
@@ -43,7 +43,7 @@
         {
           "displayType": "stat-card",
           "title": "Current",
-          "span": 3,
+          "span": 4,
           "colorScheme": "amber",
           "binding": {
             "messageName": "SYS_STATUS",
@@ -55,7 +55,7 @@
         {
           "displayType": "stat-card",
           "title": "GNSS HDOP",
-          "span": 3,
+          "span": 4,
           "colorScheme": "blue",
           "binding": {
             "messageName": "GPS_RAW_INT",
@@ -69,7 +69,7 @@
         {
           "displayType": "stat-card",
           "title": "Link Loss",
-          "span": 3,
+          "span": 4,
           "colorScheme": "blue",
           "binding": {
             "messageName": "SYS_STATUS",
@@ -84,7 +84,7 @@
         {
           "displayType": "gauge-radial",
           "title": "Throttle",
-          "span": 3,
+          "span": 4,
           "colorScheme": "amber",
           "binding": {
             "messageName": "VFR_HUD",
@@ -100,11 +100,21 @@
             "majorTicks": 5,
             "minorTicks": 4
           }
-        },
+        }
+      ]
+    },
+    {
+      "id": "custom-gs-health",
+      "name": "Health",
+      "description": "Vibration and EKF variances, each bar turning amber or red past ArduPilot's usual limits.",
+      "category": "telemetry",
+      "displayType": "composite",
+      "colorScheme": "default",
+      "panels": [
         {
           "displayType": "multi-bar",
           "title": "Vibration",
-          "span": 3,
+          "span": 6,
           "multiBarConfig": {
             "group": "vibration-xyz"
           }
@@ -112,7 +122,7 @@
         {
           "displayType": "multi-bar",
           "title": "EKF variances",
-          "span": 3,
+          "span": 6,
           "multiBarConfig": {
             "group": "ekf-variances"
           }
@@ -269,9 +279,9 @@
           "colSpan": 6
         },
         {
-          "instanceId": "gs-battery",
-          "widgetId": "built-in-battery-card",
-          "colSpan": 6
+          "instanceId": "gs-health",
+          "widgetId": "custom-gs-health",
+          "colSpan": 4
         }
       ],
       "cockpit": {
@@ -301,10 +311,13 @@
                 },
                 {
                   "split": "row",
-                  "sizes": [50, 50],
+                  "sizes": [36, 32, 32],
                   "children": [
                     {
                       "pane": "gs-track"
+                    },
+                    {
+                      "pane": "gs-health"
                     },
                     {
                       "pane": "gs-messages"
@@ -345,7 +358,7 @@
                   "pane": "gs-track"
                 },
                 {
-                  "pane": "gs-battery"
+                  "pane": "gs-health"
                 },
                 {
                   "pane": "gs-messages"

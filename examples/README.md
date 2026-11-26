@@ -13,16 +13,16 @@ A full ground-station dashboard in three Cockpit tabs. It starts from an arrange
 (HUD at the top left, the map filling the right) and builds on it with what Glareshield adds: values that warn,
 health bars, charts, curated parameter lists and a layout for ultrawide screens.
 
-- **Flight**: the HUD and Vitals share the left side; the map fills the right, with a chart and messages under it.
+- **Flight**: the HUD over Vitals on the left; the map fills the right, with Track Error, Health and Messages under it.
   Arming and the quick modes are the slim bar pinned on top.
-  - **Vitals**: battery %, voltage, current, GNSS HDOP, link loss and a throttle gauge, with vibration and EKF
-    variance bars. Battery (30 / 15 %), HDOP (1.4, ArduPilot's GPS_HDOP_GOOD default, / 2.0) and link loss
-    (5 / 15 %) turn amber, then red, past their limits, as do the vibration and EKF bars at theirs; the card's border
-    shows the worst.
+  - **Vitals**: battery %, voltage and current; GNSS HDOP, link loss and a throttle gauge. Battery (30 / 15 %), HDOP
+    (1.4, ArduPilot's GPS_HDOP_GOOD default, / 2.0) and link loss (5 / 15 %) turn amber, then red, past their limits;
+    the card's border shows the worst.
   - **Track Error** (cross-track and altitude error, charted): how well it holds its path in Auto and Guided, for
-    every vehicle type. **Messages** beside it. Mission progress is on the map itself.
-  - A **wide layout** for ultrawide screens: HUD and Vitals, the map, then a column with Track Error, the Battery
-    card and Messages.
+    every vehicle type. Mission progress is on the map itself.
+  - **Health**: vibration and EKF variance bars, amber or red at ArduPilot's usual limits.
+  - A **wide layout** for ultrawide screens: HUD and Vitals, the map, then a column with Track Error, Health and
+    Messages.
 - **Map**: the map, full window, to fly from (fly here, guided actions, mission control) and to plan (the map's
   **Mission** menu → **Edit mission on map**).
 - **Tuning**: PID tuning, wide so its charts have room, over three curated parameter lists; on the right, a map (to
@@ -41,6 +41,6 @@ health bars, charts, curated parameter lists and a layout for ultrawide screens.
 Backup** → Export Active Profile) if you want to keep it, or use **Reset to Default Layout** there to go back to the
 defaults.
 
-Vitals, Track Error and the parameter lists are ordinary custom widgets: change their values and limits in Edit
+Vitals, Health, Track Error and the parameter lists are ordinary custom widgets: change their values and limits in Edit
 Mode with the widget's **Edit** button (set the battery limits for your pack). The Flight tab needs about 1920×970 to
 show as panes; smaller windows show it stacked.
