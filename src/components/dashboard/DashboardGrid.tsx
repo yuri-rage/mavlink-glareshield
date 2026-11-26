@@ -319,7 +319,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       'built-in-parameters': 'Parameters',
       'built-in-charts': 'Telemetry Graphs',
       'built-in-pid-tuning': 'PID Tuning',
-      'built-in-logs': 'Onboard Logs',
+      'built-in-logs': 'Logs',
       'built-in-inspector': 'MAVLink Inspector',
       'built-in-ntrip': 'NTRIP RTK Base Stream',
       'built-in-waypoints': 'Waypoint Control',

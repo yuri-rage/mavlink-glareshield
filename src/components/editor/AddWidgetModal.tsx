@@ -122,7 +122,7 @@ const BUILT_IN_CATALOG = [
   },
   {
     id: 'built-in-logs',
-    name: 'Onboard Logs',
+    name: 'Logs',
     category: 'telemetry',
     description:
       "The vehicle's DataFlash (.bin) logs: list, download to this computer (MAVFTP when possible, otherwise MAVLink) and erase. ArduPilot only sends logs while disarmed.",
