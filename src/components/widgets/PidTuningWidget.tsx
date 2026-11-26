@@ -341,16 +341,20 @@ export const PidTuningWidget: React.FC = () => {
 
         {/* Desired vs achieved. */}
         <div className="flex min-h-0 flex-[3] flex-col">
-          <TimeSeriesChart
-            series={mainSeries}
-            config={{ yScale: 'auto' }}
-            fixedMin={0}
-            fixedMax={1}
-            windowSec={windowSec}
-            pausedAt={pausedAt}
-            controls={false}
-            plotMinHeight={140}
-          />
+          {/* The chart fills what's left after the lines below it (it's h-full: on its own it took the whole
+              section and pushed those lines over the next chart). */}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <TimeSeriesChart
+              series={mainSeries}
+              config={{ yScale: 'auto' }}
+              fixedMin={0}
+              fixedMax={1}
+              windowSec={windowSec}
+              pausedAt={pausedAt}
+              controls={false}
+              plotMinHeight={140}
+            />
+          </div>
           <div className="mt-1 flex items-center gap-3 font-mono text-[10px] text-zinc-500">
             <span title="Root-mean-square of achieved − desired over the visible window">
               error RMS <span className="text-zinc-300">{Number.isFinite(err.rms) ? err.rms.toFixed(3) : '--'}</span>
@@ -402,16 +406,18 @@ export const PidTuningWidget: React.FC = () => {
             })}
           </div>
           {termSeries.length > 0 ? (
-            <TimeSeriesChart
-              series={termSeries}
-              config={{ yScale: 'auto' }}
-              fixedMin={0}
-              fixedMax={1}
-              windowSec={windowSec}
-              pausedAt={pausedAt}
-              controls={false}
-              plotMinHeight={90}
-            />
+            <div className="flex min-h-0 flex-1 flex-col">
+              <TimeSeriesChart
+                series={termSeries}
+                config={{ yScale: 'auto' }}
+                fixedMin={0}
+                fixedMax={1}
+                windowSec={windowSec}
+                pausedAt={pausedAt}
+                controls={false}
+                plotMinHeight={90}
+              />
+            </div>
           ) : (
             <p className="py-2 text-[11px] text-zinc-500">Pick terms to plot.</p>
           )}

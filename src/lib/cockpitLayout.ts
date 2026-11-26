@@ -258,8 +258,10 @@ export function widgetMinSize(widgetId: string, custom?: CustomWidgetDefinition)
     case 'built-in-charts':
     case 'built-in-parameters':
     case 'built-in-inspector':
-    case 'built-in-pid-tuning':
       return { w: 360, h: 260 };
+    // Two charts, the controller picker and the terms: below ~500 px its lines overflow onto the charts.
+    case 'built-in-pid-tuning':
+      return { w: 360, h: 500 };
     case 'built-in-logs':
     case 'built-in-ntrip':
       return { w: 320, h: 240 };
