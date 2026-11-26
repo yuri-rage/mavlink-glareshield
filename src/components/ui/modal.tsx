@@ -15,8 +15,19 @@ interface ModalProps {
   size?: 'md' | 'xl';
 }
 
+/**
+ * The modals open, oldest first. Only the topmost one answers Escape and Tab: a confirmation opened over Settings would
+ * otherwise close both on Escape, and the two focus traps would fight over Tab (keyboard users could never reach the
+ * confirmation's buttons). Each one opened draws above the ones below it.
+ */
+const openModals: symbol[] = [];
+const isTopmost = (token: symbol) => openModals[openModals.length - 1] === token;
+
 export function Modal({ isOpen, onClose, title, description, children, size = 'md' }: ModalProps) {
   const dialogRef = React.useRef<HTMLDivElement | null>(null);
+  const tokenRef = React.useRef<symbol>(Symbol('modal'));
+  /** How many modals were already open when this one opened (its stacking level). */
+  const [depth, setDepth] = React.useState(0);
   const previousActiveElementRef = React.useRef<HTMLElement | null>(null);
   const onCloseRef = React.useRef(onClose);
   onCloseRef.current = onClose;
@@ -24,6 +35,13 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
   // Focus trap and keyboard handling (Escape closes, Tab/Shift+Tab cycles within modal)
   React.useEffect(() => {
     if (!isOpen) return;
+    const token = tokenRef.current;
+    setDepth(openModals.length);
+    openModals.push(token);
+    const leave = () => {
+      const i = openModals.indexOf(token);
+      if (i >= 0) openModals.splice(i, 1);
+    };
 
     // Remember element focused before modal opened
     previousActiveElementRef.current = document.activeElement as HTMLElement | null;
@@ -59,6 +77,8 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
       }
 
       const handleKeyDown = (e: KeyboardEvent) => {
+        // A modal opened over this one handles the keyboard.
+        if (!isTopmost(token)) return;
         if (e.key === 'Escape') {
           e.preventDefault();
           onCloseRef.current();
@@ -103,12 +123,14 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
 
       window.addEventListener('keydown', handleKeyDown);
       return () => {
+        leave();
         window.removeEventListener('keydown', handleKeyDown);
         if (previousActiveElementRef.current && typeof previousActiveElementRef.current.focus === 'function') {
           previousActiveElementRef.current.focus();
         }
       };
     }
+    return leave;
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -116,6 +138,7 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
   const content = (
     <div
       className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm duration-200"
+      style={depth > 0 ? { zIndex: 50 + depth * 10 } : undefined}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();

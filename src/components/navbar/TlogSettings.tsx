@@ -14,7 +14,8 @@ export const fmtBytes = (b: number) =>
       ? `${(b / 1024 ** 2).toFixed(1)} MB`
       : `${Math.round(b / 1024)} KB`;
 
-export const TlogSettings: React.FC = () => {
+/** `onReplayStarted`: Settings closes so the dashboard and the replay bar show. */
+export const TlogSettings: React.FC<{ onReplayStarted?: () => void }> = ({ onReplayStarted }) => {
   const { enabled, capMb, phase, active, activeBytes, error, overCap, logs, setEnabled, setCapMb } = useTlogStore();
   const [quota, setQuota] = useState<{ usage: number; quota: number } | null>(null);
   useEffect(() => {
@@ -30,7 +31,7 @@ export const TlogSettings: React.FC = () => {
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <label className="text-xs font-medium text-zinc-300">Telemetry Logs (.tlog)</label>
-        <ReplayFileButton />
+        <ReplayFileButton onStarted={onReplayStarted} />
       </div>
       <div
         className="grid grid-cols-2 gap-1 rounded-lg border border-zinc-800 bg-zinc-900 p-0.5"
