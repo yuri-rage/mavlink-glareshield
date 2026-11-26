@@ -16,7 +16,7 @@ export const BUILTIN_PANELS: Record<string, BuiltinPanelInfo> = {
   'built-in-battery-card': { name: 'Battery & Power' },
   'built-in-vfr-hud': { name: 'VFR Flight Metrics' },
   'built-in-glareshield': {
-    name: 'Flight Controls (Arming & Quick Modes)',
+    name: 'Arm & Modes',
     controls: 'arm / disarm and flight mode changes',
   },
   'built-in-all-modes': { name: 'All Flight Modes', controls: 'flight mode changes' },

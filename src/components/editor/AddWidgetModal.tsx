@@ -48,9 +48,9 @@ interface AddWidgetModalProps {
 const BUILT_IN_CATALOG = [
   {
     id: 'built-in-glareshield',
-    name: 'Flight Controls (Arming & Quick Modes)',
+    name: 'Arm & Modes',
     category: 'control',
-    description: 'Safety master arm/disarm slider and quick mode selector buttons.',
+    description: 'The slide-to-arm interlock and quick mode buttons (Takeoff, Auto, Loiter, RTL, Land).',
     icon: Shield,
     defaultSpan: 12,
   },

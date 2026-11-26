@@ -210,8 +210,8 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
 
   const getWidgetTitle = (widgetId: string): string => {
     const BUILTIN_TITLES: Record<string, string> = {
-      'built-in-glareshield': 'Flight Controls (Arming & Quick Modes)',
-      'built-in-arm-modes': 'Flight Controls (Arming & Quick Modes)',
+      'built-in-glareshield': 'Arm & Modes',
+      'built-in-arm-modes': 'Arm & Modes',
       'built-in-all-modes': 'All Flight Modes',
       'built-in-set-speed': 'Set Speed',
       'built-in-hud': 'Heads-Up Display (HUD)',
@@ -716,7 +716,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                   <div className="mb-1.5 flex items-center justify-between gap-1 rounded-lg border border-zinc-700/80 bg-zinc-900 px-2 py-1 text-xs text-zinc-300 shadow-md">
                     <div
                       className="flex min-w-0 cursor-grab items-center gap-1.5 active:cursor-grabbing"
-                      title="Drag card to reorder in grid — flight controls locked while editing"
+                      title="Drag card to reorder in grid — its controls are locked while editing"
                     >
                       <GripVertical className="h-3.5 w-3.5 shrink-0 text-sky-400" />
                       <span
@@ -844,7 +844,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                   {isEditing && (
                     <div
                       className="pointer-events-auto absolute inset-0 z-20 flex cursor-grab select-none items-center justify-center rounded-xl active:cursor-grabbing"
-                      title="Drag to reorder widget — flight controls locked while editing"
+                      title="Drag to reorder widget — its controls are locked while editing"
                     >
                       {isDropTarget && (
                         <span className="flex items-center gap-1.5 rounded-lg border border-sky-400 bg-sky-950/95 px-3 py-1.5 font-mono text-[11px] font-bold text-sky-200 shadow-lg">

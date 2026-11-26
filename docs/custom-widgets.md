@@ -654,7 +654,7 @@ A panel can also hold one of the dashboard's built-in widgets: set `displayType`
 | `built-in-pid-tuning` | PID Tuning | At least 380 px tall. Controls: GCS_PID_MASK (which controllers report) |
 | `built-in-statustext` | STATUSTEXT Console | At least 280 px tall |
 | `built-in-statustext-mini` | Mini STATUSTEXT | Compact; newest at the top or the bottom (header toggle). Grows with the panels beside it. |
-| `built-in-glareshield` | Flight Controls | Controls: arm / disarm, flight modes |
+| `built-in-glareshield` | Arm & Modes | Controls: arm / disarm, flight modes |
 | `built-in-all-modes` | All Flight Modes | Controls: flight modes |
 | `built-in-set-speed` | Set Speed Controller | Controls: speed |
 | `built-in-waypoints` | Waypoint Navigation | Controls: waypoint changes, mission restart |

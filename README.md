@@ -19,7 +19,7 @@ Designed to remove the "glare" from more fully featured GCS applications and foc
 ## Features
 
 - **Flight display**: a canvas HUD (attitude, speed and altitude tapes, heading, an optional low-latency camera feed behind it) and a moving map with the vehicle, home, its trail, the mission, fences and rally points.
-- **Flight controls**: slide-to-arm, flight modes, quick actions (Takeoff with a checklist, Auto, Loiter, RTL, Land), and guided actions from the map: fly here, orbit, change altitude and speed, pause, set home. Anything consequential asks first, naming what will happen.
+- **Arming and modes**: slide-to-arm, flight modes, quick actions (Takeoff with a checklist, Auto, Loiter, RTL, Land), and guided actions from the map: fly here, orbit, change altitude and speed, pause, set home. Anything consequential asks first, naming what will happen.
 - **Mission planning**: edit missions, geofences and rally points on the map, with checks as you go (route against the fence, altitude over terrain), an altitude profile, undo/redo, and QGC `.plan` / `.waypoints` / ArduPilot `.dat` files.
 - **Dashboard**: tabs of widgets, either a scrolling grid (**Flow**) or panes that fill the window with no scrolling (**Cockpit**), with presets, drag-to-arrange, and a second layout for ultrawide screens. Phones get the same widgets stacked.
 - **Maps offline**: keep the imagery you've browsed, download areas from your own tile server, import MBTiles, and store terrain for use without internet.
