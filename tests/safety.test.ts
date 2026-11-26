@@ -253,6 +253,17 @@ const ack = (command: number, result: number) => {
     ].every((r) => r === null)
   );
   check(
+    'also irreversible: disarm (and force disarm), motor test, a companion-computer reboot',
+    [
+      irreversibleCommand(400, p7(0)),
+      irreversibleCommand(400, p7(0, 21196)),
+      irreversibleCommand(209, p7(1)),
+      irreversibleCommand(246, p7(0, 1)),
+      irreversibleCommand(400, null),
+    ].every((r) => r !== null)
+  );
+  check('arming is not irreversible', irreversibleCommand(400, p7(1)) === null);
+  check(
     'every irreversible preset is caught',
     ['terminate', 'parachute', 'reboot', 'reboot-mass-storage', 'format-sd'].every((k) => {
       const pr = COMMAND_PRESETS.find((c) => c.key === k);
