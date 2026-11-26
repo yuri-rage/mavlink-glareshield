@@ -339,6 +339,10 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     decimals: 0,
   });
   const [stateThreshold, setStateThreshold] = useState<number | undefined>(undefined);
+  // LED: its words when on / off, and whether off is an alert (a health flag).
+  const [ledOnLabel, setLedOnLabel] = useState('');
+  const [ledOffLabel, setLedOffLabel] = useState('');
+  const [offAlert, setOffAlert] = useState<'' | 'warn' | 'crit'>('');
   const [staleAfterSec, setStaleAfterSec] = useState<number | undefined>(undefined);
 
   // Multi-bar config
@@ -474,6 +478,9 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
       w?.feedback ? { ...w.feedback } : { messageName: 'SERVO_OUTPUT_RAW', fieldName: 'servo9_raw', decimals: 0 }
     );
     setStateThreshold(w?.stateThreshold);
+    setLedOnLabel(w?.stateLabels?.on ?? '');
+    setLedOffLabel(w?.stateLabels?.off ?? '');
+    setOffAlert(w?.offAlert ?? '');
     setStaleAfterSec(w?.staleAfterSec);
 
     setMultiBarGroup(w?.multiBarConfig?.group ?? 'rc-8');
@@ -583,7 +590,13 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
     if (displayType === 'gauge-linear')
       def.gauge = { layout: gauge.layout, majorTicks: gauge.majorTicks, showZones: gauge.showZones };
     if (displayType === 'sparkline') def.chart = { ...chart };
-    if (displayType === 'indicator-led' && stateThreshold !== undefined) def.stateThreshold = stateThreshold;
+    if (displayType === 'indicator-led') {
+      if (stateThreshold !== undefined) def.stateThreshold = stateThreshold;
+      const on = ledOnLabel.trim();
+      const off = ledOffLabel.trim();
+      if (on || off) def.stateLabels = { ...(on ? { on } : {}), ...(off ? { off } : {}) };
+      if (offAlert) def.offAlert = offAlert;
+    }
     if (displayType === 'toggle-switch' && feedbackEnabled) {
       def.feedback = cleanBinding(feedback);
       if (stateThreshold !== undefined) def.stateThreshold = stateThreshold;
@@ -1478,7 +1491,44 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                   placeholder="0"
                   onChange={setStateThreshold}
                 />
+                <div className="min-w-0 space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">When off</label>
+                  <select
+                    value={offAlert}
+                    onChange={(e) => setOffAlert(e.target.value as '' | 'warn' | 'crit')}
+                    className={SELECT_CLASS}
+                    title="For a health flag: off turns the light, and the card, amber or red"
+                  >
+                    <option value="">No alert</option>
+                    <option value="warn">Warning (amber)</option>
+                    <option value="crit">Critical (red)</option>
+                  </select>
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Reads when on</label>
+                  <Input
+                    value={ledOnLabel}
+                    maxLength={24}
+                    placeholder="ACTIVE / HIGH"
+                    onChange={(e) => setLedOnLabel(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <label className="text-[11px] font-medium text-zinc-400">Reads when off</label>
+                  <Input
+                    value={ledOffLabel}
+                    maxLength={24}
+                    placeholder="INACTIVE / LOW"
+                    onChange={(e) => setLedOffLabel(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </div>
               </div>
+              <p className="text-[10px] text-zinc-500">
+                For a bitmask flag, set the binding's bit (e.g. SYS_STATUS.onboard_control_sensors_health, bit 24 for
+                logging).
+              </p>
             </Section>
           )}
 

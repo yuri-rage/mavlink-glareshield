@@ -398,6 +398,28 @@ A status light. It is **on** when the value is above `stateThreshold` and the da
 }
 ```
 
+Optional:
+
+- `stateLabels`: what it reads when on and when off, e.g. `{ "on": "OK", "off": "FAILED" }` (up to 24 characters
+  each). Without them it reads ACTIVE / HIGH or INACTIVE / LOW, with the raw value.
+- `offAlert`: `"warn"` or `"crit"` makes **off** an alert, for a health flag: the light and the card turn amber or
+  red, like a value past its threshold. Only a value that has arrived counts: "--" or stale data never alerts.
+
+With a binding's `bit`, a light shows one flag of a bitmask. The default dashboard's Vitals has one for the onboard
+logger, which ArduPilot reports in `SYS_STATUS.onboard_control_sensors_health` (bit 24, `MAV_SYS_STATUS_LOGGING`):
+
+```json
+{
+  "displayType": "indicator-led",
+  "title": "Logging",
+  "binding": { "messageName": "SYS_STATUS", "fieldName": "onboard_control_sensors_health", "bit": 24 },
+  "stateLabels": { "on": "OK", "off": "FAILED" },
+  "offAlert": "crit"
+}
+```
+
+The creator has these under **LED State** (When off, Reads when on, Reads when off).
+
 ---
 
 ## Control widgets

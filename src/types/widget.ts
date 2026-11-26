@@ -118,6 +118,12 @@ export interface WidgetParamSet {
   confirmation?: boolean;
 }
 
+/** An LED's readout when on and when off. */
+export interface WidgetStateLabels {
+  on?: string;
+  off?: string;
+}
+
 export interface WidgetMultiBarConfig {
   group: MultiBarGroupType;
 }
@@ -148,6 +154,10 @@ export interface CustomWidgetDefinition {
   feedback?: WidgetDataBinding;
   /** LED and toggle feedback: on when the value is greater than this (default 0). */
   stateThreshold?: number;
+  /** LED: what it reads when on and when off (e.g. "OK" / "FAILED"); default "ACTIVE / HIGH" / "INACTIVE / LOW". */
+  stateLabels?: WidgetStateLabels;
+  /** LED: off is an alert of this level (a health flag): the light and the card turn amber or red. */
+  offAlert?: 'warn' | 'crit';
   /** Seconds without the bound message before the value is shown as stale (default 3). */
   staleAfterSec?: number;
   colorScheme?: 'default' | 'green' | 'amber' | 'blue' | 'red';
@@ -185,6 +195,8 @@ export interface WidgetPanelDefinition {
   chart?: WidgetChartConfig;
   feedback?: WidgetDataBinding;
   stateThreshold?: number;
+  stateLabels?: WidgetStateLabels;
+  offAlert?: 'warn' | 'crit';
   staleAfterSec?: number;
   colorScheme?: CustomWidgetDefinition['colorScheme'];
 }

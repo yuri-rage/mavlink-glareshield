@@ -13,6 +13,7 @@ import type {
   WidgetGaugeConfig,
   WidgetPanelDefinition,
   WidgetParamControl,
+  WidgetStateLabels,
 } from '../types/widget';
 import { builtinPanelId } from './builtinWidgets';
 
@@ -85,6 +86,15 @@ export function cleanBinding(b: WidgetDataBinding): WidgetDataBinding {
   return out as unknown as WidgetDataBinding;
 }
 const finite = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+
+/** An LED's on / off labels: short text only (24 characters each); nothing usable gives undefined. */
+function sanitizeStateLabels(raw: unknown): WidgetStateLabels | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 24) : undefined);
+  const on = text((raw as WidgetStateLabels).on);
+  const off = text((raw as WidgetStateLabels).off);
+  return on || off ? { ...(on ? { on } : {}), ...(off ? { off } : {}) } : undefined;
+}
 const text = (v: unknown, max = 64): string | undefined => (typeof v === 'string' ? v.slice(0, max) : undefined);
 
 function sanitizeBinding(raw: unknown): WidgetDataBinding | undefined {
@@ -203,6 +213,8 @@ function sanitizePanel(raw: unknown, opts: SanitizeOptions): WidgetPanelDefiniti
     'chart',
     'feedback',
     'stateThreshold',
+    'stateLabels',
+    'offAlert',
     'staleAfterSec',
   ] as const) {
     if (clean[key] !== undefined) (out as unknown as Record<string, unknown>)[key] = clean[key];
@@ -288,6 +300,9 @@ export function sanitizeWidgetDefinition(
   if (raw.gauge !== undefined) w.gauge = sanitizeGauge(raw.gauge);
   if (raw.chart !== undefined) w.chart = sanitizeChart(raw.chart);
   if (raw.stateThreshold !== undefined) w.stateThreshold = finite(raw.stateThreshold);
+  if (raw.stateLabels !== undefined) w.stateLabels = sanitizeStateLabels(raw.stateLabels);
+  if (raw.offAlert !== undefined)
+    w.offAlert = raw.offAlert === 'warn' || raw.offAlert === 'crit' ? raw.offAlert : undefined;
   if (raw.staleAfterSec !== undefined) {
     const s = finite(raw.staleAfterSec);
     w.staleAfterSec = s === undefined ? undefined : Math.max(0.5, Math.min(600, s));

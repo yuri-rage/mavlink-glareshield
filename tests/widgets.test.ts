@@ -1299,5 +1299,64 @@ check(
   check("a copter reporting a VTOL state isn't a VTOL plane", !isVtolPlane(2, undefined, 3));
 }
 
+// ------------------------------------------------------------------------------------------------
+// LEDs as health flags: on / off labels, and off as an alert
+// ------------------------------------------------------------------------------------------------
+{
+  const pm = await import('../src/components/widgets/custom/panelModel.ts');
+  const led: any = {
+    id: 'log',
+    name: 'Logging',
+    category: 'telemetry',
+    displayType: 'indicator-led',
+    binding: { messageName: 'SYS_STATUS', fieldName: 'onboard_control_sensors_health', bit: 24 },
+    stateThreshold: 0,
+    stateLabels: { on: 'OK', off: 'FAILED' },
+    offAlert: 'crit',
+  };
+  const reading = (base: number | null, stale = false) => [{ base, value: base, text: '', unit: '', stale }];
+  check('LED off with offAlert: critical', pm.panelAlert(led, [led.binding], reading(0) as any) === 'crit');
+  check('LED on: no alert', pm.panelAlert(led, [led.binding], reading(1) as any) === 'normal');
+  check(
+    'LED with no value yet, or stale: no alert',
+    pm.panelAlert(led, [led.binding], reading(null) as any) === 'normal' &&
+      pm.panelAlert(led, [led.binding], reading(0, true) as any) === 'normal'
+  );
+  check(
+    'LED off without offAlert: no alert',
+    pm.panelAlert({ ...led, offAlert: undefined }, [led.binding], reading(0) as any) === 'normal'
+  );
+  // The logging bit (MAV_SYS_STATUS_LOGGING, 1 << 24) read from the sensor-health bitmask.
+  const values = await import('../src/lib/widgetValues.ts');
+  check(
+    'bit 24 of the health bitmask: 1 when logging is healthy, 0 when not',
+    values.extractBit((1 << 24) | 5, 24) === 1 && values.extractBit(5, 24) === 0
+  );
+  const clean = sanitizeWidgetDefinition({
+    ...led,
+    stateLabels: { on: '  OK  ', off: 'X'.repeat(40) },
+    offAlert: 'loud',
+  } as any);
+  check(
+    'sanitize: labels trimmed and capped at 24, an unknown alert level dropped',
+    clean.stateLabels?.on === 'OK' && clean.stateLabels?.off?.length === 24 && clean.offAlert === undefined,
+    JSON.stringify(clean.stateLabels) + ' ' + clean.offAlert
+  );
+  const kept = sanitizeWidgetDefinition(led);
+  check('sanitize: valid labels and alert kept', kept.stateLabels?.off === 'FAILED' && kept.offAlert === 'crit');
+  const comp = sanitizeWidgetDefinition({
+    id: 'c',
+    name: 'c',
+    category: 'telemetry',
+    displayType: 'composite',
+    panels: [{ ...led, span: 4 }],
+  } as any);
+  check(
+    "sanitize: a composite panel keeps an LED's labels and alert",
+    comp.panels?.[0]?.stateLabels?.on === 'OK' && comp.panels?.[0]?.offAlert === 'crit',
+    JSON.stringify(comp.panels?.[0])
+  );
+}
+
 console.log(failures.length ? `\n${failures.length} widget check(s) FAILED` : '\nAll widget checks PASSED');
 process.exit(failures.length ? 1 : 0);
