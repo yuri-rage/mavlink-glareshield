@@ -206,11 +206,6 @@
           "colSpan": 4
         },
         {
-          "instanceId": "mp-waypoints",
-          "widgetId": "built-in-waypoints",
-          "colSpan": 4
-        },
-        {
           "instanceId": "mp-messages",
           "widgetId": "built-in-statustext-mini",
           "colSpan": 4
@@ -256,7 +251,7 @@
                   "sizes": [50, 50],
                   "children": [
                     {
-                      "pane": "mp-waypoints"
+                      "pane": "mp-altitude"
                     },
                     {
                       "pane": "mp-messages"
@@ -291,13 +286,10 @@
             },
             {
               "split": "column",
-              "sizes": [28, 22, 28, 22],
+              "sizes": [34, 30, 36],
               "children": [
                 {
                   "pane": "mp-altitude"
-                },
-                {
-                  "pane": "mp-waypoints"
                 },
                 {
                   "pane": "mp-battery"
@@ -364,7 +356,7 @@
         "header": null,
         "root": {
           "split": "column",
-          "sizes": [64, 36],
+          "sizes": [50, 50],
           "children": [
             {
               "pane": "mp-pid"
