@@ -13,15 +13,19 @@ function wordScore(word: string, text: string): number | null {
   let score = 0;
   let ti = 0;
   let prev = -2;
+  let first = -1;
   for (const ch of word) {
     const found = text.indexOf(ch, ti);
     if (found < 0) return null;
     const wordStart = found === 0 || !/[a-z0-9]/.test(text[found - 1]);
     score += found === prev + 1 ? 5 : 1;
     if (wordStart) score += 8;
+    if (first < 0) first = found;
     prev = found;
     ti = found + 1;
   }
+  // Letters strewn across a long text (a widget's bound fields) aren't a match: they must fall within a short span.
+  if (prev - first + 1 > word.length * 2 + 2) return null;
   return score;
 }
 
@@ -47,6 +51,19 @@ export function fuzzyScore(query: string, fields: readonly (string | undefined)[
     total += best;
   }
   return total;
+}
+
+/** The items matching `query` with their scores, best first (ties keep their order). */
+export function fuzzyRank<T>(
+  items: readonly T[],
+  query: string,
+  fields: (item: T) => (string | undefined)[]
+): { item: T; score: number }[] {
+  return items
+    .map((item, i) => ({ item, i, score: fuzzyScore(query, fields(item)) }))
+    .filter((x): x is { item: T; i: number; score: number } => x.score !== null)
+    .sort((a, b) => b.score - a.score || a.i - b.i)
+    .map(({ item, score }) => ({ item, score }));
 }
 
 /** The items matching `query`, best first (ties keep their order); all of them, in order, for an empty query. */

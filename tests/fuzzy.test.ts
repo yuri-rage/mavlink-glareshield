@@ -27,6 +27,13 @@ check(
 check('every word must match: "bat volt"', names('bat volt').join() === 'Battery', names('bat volt').join());
 check('a word from the description', names('dataflash').join() === 'Logs');
 check('nothing matches: empty', names('zzz').length === 0);
+check(
+  'letters strewn across a long text are not a match',
+  fuzzyScore('dataflash', [
+    'Vitals',
+    'SYS_STATUS battery_remaining DATA16 voltage_battery FENCE_STATUS breach_count VFR_HUD throttle',
+  ]) === null
+);
 check('case does not matter', names('MAP')[0] === 'Map');
 check('the name outranks the description', names('map')[0] === 'Map', names('map').join());
 check(

@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 
 import { BUILTIN_PANELS, builtinPanelId } from '../../lib/builtinWidgets';
-import { fuzzyFilter } from '../../lib/fuzzy';
+import { fuzzyRank } from '../../lib/fuzzy';
 import { sanitizeWidgetDefinition, VALID_DISPLAY_TYPES } from '../../lib/widgetValidation';
 import { MAV_CMD } from '../../mavlink/messages';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -435,22 +435,152 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
     e.target.value = '';
   };
 
-  const filteredBuiltIn = fuzzyFilter(
-    filterCategory === 'all' ? BUILT_IN_CATALOG : BUILT_IN_CATALOG.filter((w) => w.category === filterCategory),
-    query,
-    (w) => [w.name, w.description, w.id, w.category]
-  );
-  const filteredCustom =
-    filterCategory === 'all' || filterCategory === 'custom'
-      ? fuzzyFilter(profile.customWidgets, query, customSearchFields)
-      : [];
-  const nothingMatches = query.trim() !== '' && filteredBuiltIn.length === 0 && filteredCustom.length === 0;
-  /** Enter in the search box places the best match (a custom widget first, as listed). */
+  type BuiltIn = (typeof BUILT_IN_CATALOG)[number];
+  type Entry = { kind: 'custom'; cw: CustomWidgetDefinition } | { kind: 'builtin'; item: BuiltIn };
+  const builtInPool =
+    filterCategory === 'all' ? BUILT_IN_CATALOG : BUILT_IN_CATALOG.filter((w) => w.category === filterCategory);
+  const customPool = filterCategory === 'all' || filterCategory === 'custom' ? profile.customWidgets : [];
+  // No search: custom widgets, then the built-ins, as before. Searching: one list, best match first (on a tie a
+  // custom widget first).
+  const entries: Entry[] = !query.trim()
+    ? [
+        ...customPool.map((cw): Entry => ({ kind: 'custom', cw })),
+        ...builtInPool.map((item): Entry => ({ kind: 'builtin', item })),
+      ]
+    : [
+        ...fuzzyRank(customPool, query, customSearchFields).map(({ item, score }) => ({
+          score,
+          e: { kind: 'custom', cw: item } as Entry,
+        })),
+        ...fuzzyRank(builtInPool, query, (w) => [w.name, w.description, w.id, w.category]).map(({ item, score }) => ({
+          score,
+          e: { kind: 'builtin', item } as Entry,
+        })),
+      ]
+        .map((x, i) => ({ ...x, i }))
+        .sort((p, q) => q.score - p.score || p.i - q.i)
+        .map((x) => x.e);
+  const nothingMatches = query.trim() !== '' && entries.length === 0;
+  /** Enter in the search box places the best match. */
   const placeBest = () => {
-    const cw = filteredCustom[0];
-    if (cw) return handleAddBuiltIn(cw.id, cw.displayType === 'composite' ? 12 : 6);
-    const item = filteredBuiltIn[0];
-    if (item) handleAddBuiltIn(item.id, item.defaultSpan);
+    const e = entries[0];
+    if (!e) return;
+    if (e.kind === 'custom') handleAddBuiltIn(e.cw.id, e.cw.displayType === 'composite' ? 12 : 6);
+    else handleAddBuiltIn(e.item.id, e.item.defaultSpan);
+  };
+
+  const renderCustom = (cw: CustomWidgetDefinition) => (
+    <div
+      key={cw.id}
+      className="flex flex-col justify-between gap-2 rounded-xl border border-sky-950/60 bg-sky-950/10 p-3 transition-all hover:border-sky-500/40 sm:flex-row sm:items-start"
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="mt-0.5 rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-sky-400">
+          <Zap className="h-4 w-4" />
+        </div>
+        <div>
+          <h4 className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-zinc-100">
+            {cw.name}
+            <span className="py-0.2 rounded border border-sky-800 bg-sky-950 px-1.5 text-[9px] uppercase text-sky-300">
+              {cw.displayType}
+            </span>
+            {placedWidgetIdsOnTab.has(cw.id) && (
+              <span className="py-0.2 inline-flex items-center gap-0.5 rounded border border-emerald-500/40 bg-emerald-950/80 px-1.5 text-[9px] uppercase text-emerald-400">
+                <Check className="h-2.5 w-2.5" /> On Tab
+              </span>
+            )}
+          </h4>
+          <p className="mt-0.5 text-[11px] text-zinc-400">{cw.description || 'Custom user widget'}</p>
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1.5 self-end sm:self-auto">
+        {onEditCustomWidget && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 border-zinc-700 px-2 text-xs text-zinc-300 hover:text-white"
+            onClick={() => onEditCustomWidget(cw)}
+            title="Edit custom widget definition"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {confirmDeleteId === cw.id ? (
+          <Button
+            size="sm"
+            variant="destructive"
+            className="h-8 gap-1 bg-red-600 px-2 text-xs font-bold text-white hover:bg-red-700"
+            onClick={() => {
+              deleteCustomWidget(cw.id);
+              setConfirmDeleteId(null);
+            }}
+            onBlur={() => setConfirmDeleteId(null)}
+            autoFocus
+            title="Delete this definition and remove it from every tab"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete?
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 border-zinc-700 px-2 text-xs text-red-400 hover:border-red-500/40 hover:text-red-300"
+            onClick={() => setConfirmDeleteId(cw.id)}
+            title="Delete custom widget definition (asks to confirm)"
+            aria-label={`Delete ${cw.name}`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="default"
+          className="h-8 bg-sky-500 px-3 text-xs font-bold text-white hover:bg-sky-600"
+          onClick={() => handleAddBuiltIn(cw.id, cw.displayType === 'composite' ? 12 : 6)}
+        >
+          Place
+        </Button>
+      </div>
+    </div>
+  );
+
+  const renderBuiltIn = (item: BuiltIn) => {
+    const Icon = item.icon;
+    const isAlreadyOnTab = placedWidgetIdsOnTab.has(item.id);
+    return (
+      <div
+        key={item.id}
+        className="flex flex-col justify-between gap-2 rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-3 transition-all hover:border-zinc-700 sm:flex-row sm:items-start"
+      >
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="mt-0.5 rounded-lg bg-zinc-800 p-2 text-zinc-300">
+            <Icon className="h-4 w-4" />
+          </div>
+          <div>
+            <h4 className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-zinc-100">
+              <span>{item.name}</span>
+              {isAlreadyOnTab && (
+                <span className="py-0.2 inline-flex items-center gap-0.5 rounded border border-emerald-500/40 bg-emerald-950/80 px-1.5 font-sans text-[9px] uppercase text-emerald-400">
+                  <Check className="h-2.5 w-2.5" /> On Tab
+                </span>
+              )}
+            </h4>
+            <p className="mt-0.5 text-[11px] text-zinc-400">{item.description}</p>
+          </div>
+        </div>
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 shrink-0 self-end border-zinc-700 px-3 text-xs font-bold hover:bg-zinc-800 sm:self-auto"
+          onClick={() => handleAddBuiltIn(item.id, item.defaultSpan)}
+        >
+          {isAlreadyOnTab ? 'Place Copy' : 'Place'}
+        </Button>
+      </div>
+    );
   };
 
   return (
@@ -590,126 +720,12 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
 
             {/* Widget Catalog List */}
             <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
-              {/* Custom User Widgets */}
               {nothingMatches && (
                 <p className="py-6 text-center text-xs text-zinc-500">
                   No widgets match “{query.trim()}”{filterCategory !== 'all' ? ` in ${filterCategory}` : ''}.
                 </p>
               )}
-              {filteredCustom.map((cw) => (
-                <div
-                  key={cw.id}
-                  className="flex flex-col justify-between gap-2 rounded-xl border border-sky-950/60 bg-sky-950/10 p-3 transition-all hover:border-sky-500/40 sm:flex-row sm:items-start"
-                >
-                  <div className="flex min-w-0 items-start gap-3">
-                    <div className="mt-0.5 rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-sky-400">
-                      <Zap className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <h4 className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-zinc-100">
-                        {cw.name}
-                        <span className="py-0.2 rounded border border-sky-800 bg-sky-950 px-1.5 text-[9px] uppercase text-sky-300">
-                          {cw.displayType}
-                        </span>
-                        {placedWidgetIdsOnTab.has(cw.id) && (
-                          <span className="py-0.2 inline-flex items-center gap-0.5 rounded border border-emerald-500/40 bg-emerald-950/80 px-1.5 text-[9px] uppercase text-emerald-400">
-                            <Check className="h-2.5 w-2.5" /> On Tab
-                          </span>
-                        )}
-                      </h4>
-                      <p className="mt-0.5 text-[11px] text-zinc-400">{cw.description || 'Custom user widget'}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex shrink-0 items-center gap-1.5 self-end sm:self-auto">
-                    {onEditCustomWidget && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 border-zinc-700 px-2 text-xs text-zinc-300 hover:text-white"
-                        onClick={() => onEditCustomWidget(cw)}
-                        title="Edit custom widget definition"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                    {confirmDeleteId === cw.id ? (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="h-8 gap-1 bg-red-600 px-2 text-xs font-bold text-white hover:bg-red-700"
-                        onClick={() => {
-                          deleteCustomWidget(cw.id);
-                          setConfirmDeleteId(null);
-                        }}
-                        onBlur={() => setConfirmDeleteId(null)}
-                        autoFocus
-                        title="Delete this definition and remove it from every tab"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Delete?
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 border-zinc-700 px-2 text-xs text-red-400 hover:border-red-500/40 hover:text-red-300"
-                        onClick={() => setConfirmDeleteId(cw.id)}
-                        title="Delete custom widget definition (asks to confirm)"
-                        aria-label={`Delete ${cw.name}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="h-8 bg-sky-500 px-3 text-xs font-bold text-white hover:bg-sky-600"
-                      onClick={() => handleAddBuiltIn(cw.id, cw.displayType === 'composite' ? 12 : 6)}
-                    >
-                      Place
-                    </Button>
-                  </div>
-                </div>
-              ))}
-
-              {/* Built-in Widgets */}
-              {filteredBuiltIn.map((item) => {
-                const Icon = item.icon;
-                const isAlreadyOnTab = placedWidgetIdsOnTab.has(item.id);
-                return (
-                  <div
-                    key={item.id}
-                    className="flex flex-col justify-between gap-2 rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-3 transition-all hover:border-zinc-700 sm:flex-row sm:items-start"
-                  >
-                    <div className="flex min-w-0 items-start gap-3">
-                      <div className="mt-0.5 rounded-lg bg-zinc-800 p-2 text-zinc-300">
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <h4 className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-zinc-100">
-                          <span>{item.name}</span>
-                          {isAlreadyOnTab && (
-                            <span className="py-0.2 inline-flex items-center gap-0.5 rounded border border-emerald-500/40 bg-emerald-950/80 px-1.5 font-sans text-[9px] uppercase text-emerald-400">
-                              <Check className="h-2.5 w-2.5" /> On Tab
-                            </span>
-                          )}
-                        </h4>
-                        <p className="mt-0.5 text-[11px] text-zinc-400">{item.description}</p>
-                      </div>
-                    </div>
-
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 shrink-0 self-end border-zinc-700 px-3 text-xs font-bold hover:bg-zinc-800 sm:self-auto"
-                      onClick={() => handleAddBuiltIn(item.id, item.defaultSpan)}
-                    >
-                      {isAlreadyOnTab ? 'Place Copy' : 'Place'}
-                    </Button>
-                  </div>
-                );
-              })}
+              {entries.map((e) => (e.kind === 'custom' ? renderCustom(e.cw) : renderBuiltIn(e.item)))}
             </div>
           </>
         )}
