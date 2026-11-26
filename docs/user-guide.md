@@ -118,7 +118,7 @@ imports one. An imported profile is checked first: anything in it that can act o
 commands or write parameters, built-in controls) is listed before you accept it, and imported custom widgets always ask
 for confirmation before sending anything.
 
-[`examples/`](../examples/) has profiles and widgets to import, such as a dashboard laid out like Mission Planner.
+[`examples/`](../examples/) has profiles and widgets to import, such as a full ground-station dashboard.
 
 ---
 
