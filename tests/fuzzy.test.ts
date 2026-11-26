@@ -1,6 +1,6 @@
 // Fuzzy search (src/lib/fuzzy.ts), as the Add Widget catalog uses it.
 export {};
-const { fuzzyScore, fuzzyFilter } = await import('../src/lib/fuzzy.ts');
+const { fuzzyScore, fuzzyFilter, fuzzyRank } = await import('../src/lib/fuzzy.ts');
 
 const failures: string[] = [];
 function check(name: string, ok: boolean, detail = '') {
@@ -39,6 +39,30 @@ check('the name outranks the description', names('map')[0] === 'Map', names('map
 check(
   'a word start beats letters scattered inside a word',
   (fuzzyScore('pa', ['Parameters']) ?? 0) > (fuzzyScore('pa', ['Map table']) ?? 0)
+);
+
+// A stray early letter mustn't hide a real match further on (the catalog's own descriptions).
+const logs = [
+  'Logs',
+  "The vehicle's DataFlash (.bin) logs: list, download to this computer (MAVFTP when possible, otherwise MAVLink) and erase. ArduPilot only sends logs while disarmed.",
+];
+const map = [
+  'Tactical Navigation Map',
+  'Leaflet GPS map with vehicle heading vector, breadcrumb trail, and mission waypoints.',
+];
+const battery = [
+  'Battery & Power Card',
+  'Bus voltage, current draw, remaining capacity %, and individual cell voltages.',
+];
+check('"mftp" finds MAVFTP past "computer"', fuzzyScore('mftp', logs) !== null);
+check('"wpt" finds waypoints past "with"', fuzzyScore('wpt', map) !== null);
+check('"cvolt" finds cell voltages past "current"', fuzzyScore('cvolt', battery) !== null);
+check(
+  'fuzzyFilter matches fuzzyRank',
+  names('bat').join() ===
+    fuzzyRank(items, 'bat', (i) => [i.name, i.description])
+      .map((x) => x.item.name)
+      .join()
 );
 
 console.log(failures.length ? `\n${failures.length} fuzzy check(s) FAILED` : '\nAll fuzzy checks PASSED');

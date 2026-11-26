@@ -10,22 +10,32 @@ function wordScore(word: string, text: string): number | null {
     const wordStart = at === 0 || !/[a-z0-9]/.test(text[at - 1]);
     return 100 + word.length * 4 + (wordStart ? 30 : 0) + (at === 0 ? 20 : 0);
   }
+  // Letters in order from each place the first one appears (a stray early letter mustn't hide a real match further
+  // on: "wpt" in "map with ... waypoints"), keeping the best window. Letters strewn across a long text (a widget's
+  // bound fields) aren't a match: they must fall within a short span.
+  const maxSpan = word.length * 2 + 2;
+  let best: number | null = null;
+  for (let start = text.indexOf(word[0]); start >= 0; start = text.indexOf(word[0], start + 1)) {
+    const s = scanFrom(word, text, start, maxSpan);
+    if (s !== null && (best === null || s > best)) best = s;
+  }
+  return best;
+}
+
+/** The greedy in-order scan of `word` from `start` (where its first letter is), or null past `maxSpan` letters. */
+function scanFrom(word: string, text: string, start: number, maxSpan: number): number | null {
   let score = 0;
-  let ti = 0;
   let prev = -2;
-  let first = -1;
+  let ti = start;
   for (const ch of word) {
     const found = text.indexOf(ch, ti);
-    if (found < 0) return null;
+    if (found < 0 || found - start + 1 > maxSpan) return null;
     const wordStart = found === 0 || !/[a-z0-9]/.test(text[found - 1]);
     score += found === prev + 1 ? 5 : 1;
     if (wordStart) score += 8;
-    if (first < 0) first = found;
     prev = found;
     ti = found + 1;
   }
-  // Letters strewn across a long text (a widget's bound fields) aren't a match: they must fall within a short span.
-  if (prev - first + 1 > word.length * 2 + 2) return null;
   return score;
 }
 
@@ -69,9 +79,5 @@ export function fuzzyRank<T>(
 /** The items matching `query`, best first (ties keep their order); all of them, in order, for an empty query. */
 export function fuzzyFilter<T>(items: readonly T[], query: string, fields: (item: T) => (string | undefined)[]): T[] {
   if (!query.trim()) return [...items];
-  return items
-    .map((item, i) => ({ item, i, s: fuzzyScore(query, fields(item)) }))
-    .filter((x): x is { item: T; i: number; s: number } => x.s !== null)
-    .sort((a, b) => b.s - a.s || a.i - b.i)
-    .map((x) => x.item);
+  return fuzzyRank(items, query, fields).map((x) => x.item);
 }
