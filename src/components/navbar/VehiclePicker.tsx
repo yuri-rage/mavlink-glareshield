@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 
 import { ArrowLeftRight, ChevronDown, Radio } from 'lucide-react';
 
+import { speakCallout } from '../../lib/audioAlerts';
 import { logManager } from '../../mavlink/logManager';
 import { getVehicleCategoryLabel } from '../../mavlink/messages';
 import { missionManager } from '../../mavlink/missionManager';
@@ -131,6 +132,14 @@ export const TakeoverBanner: React.FC = () => {
   const active = useVehicleRosterStore((s) => s.activeSystemId);
   const vehicles = useVehicleRosterStore((s) => s.vehicles);
   useTick(offer !== null);
+  // Said once per offer: the banner alone is easy to miss with eyes on the vehicle.
+  useEffect(() => {
+    if (offer !== null && active !== null)
+      speakCallout(
+        `Vehicle ${active} silent. Vehicle ${offer} is on the link. Controls still command vehicle ${active}.`,
+        true
+      );
+  }, [offer, active]);
   if (offer === null || active === null) return null;
   const old = vehicles[active];
   const other = vehicles[offer];

@@ -9,9 +9,10 @@
 // - The user's choice (switchToVehicle): everything learned about the old vehicle is dropped (onActiveVehicleChange)
 //   and fetched again from the new one, as on a fresh connection.
 // - When the active vehicle falls silent and another is heard: taken over at once if only one vehicle has been heard
-//   at a time on this connection (a vehicle rebooted with another system ID, a radio swapped to another aircraft);
-//   but once two have been heard together, the switch is only offered (takeoverOffer). Silently commanding another
-//   aircraft because the one being flown lost its link is the thing to avoid.
+//   at a time on this connection and the silent one was last heard disarmed (a vehicle rebooted with another system
+//   ID, a radio swapped to another aircraft). If it was armed (it may be flying through a radio fade), or once two
+//   have been heard together, the switch is only offered (takeoverOffer). Silently commanding another aircraft
+//   because the one being flown lost its link is the thing to avoid.
 
 import { create } from 'zustand';
 
@@ -51,14 +52,16 @@ export interface RosterDecisionState {
   activeLastHeard: number;
   /** Two vehicles have been heard together on this connection. */
   multiSeen: boolean;
+  /** The active vehicle was armed when last heard. */
+  activeArmed: boolean;
 }
 
 export type RosterDecision =
   /** Nothing to do (the active vehicle, or another while the active one is heard: `multi` notes they were together). */
   | { kind: 'none'; multi: boolean }
-  /** Make it active: the first vehicle, or a takeover after the only vehicle heard went silent. */
+  /** Make it active: the first vehicle, or a takeover after the only vehicle heard went silent while disarmed. */
   | { kind: 'activate'; first: boolean }
-  /** The active one is silent and another is heard, after two were heard together: offer, don't take over. */
+  /** The active one is silent and another is heard, after two were heard together or with the silent one armed. */
   | { kind: 'offer' };
 
 /** What an autopilot heartbeat from `sysId` means for the active vehicle (pure; see the module comment). */
@@ -67,7 +70,7 @@ export function decideHeartbeat(st: RosterDecisionState, sysId: number, now: num
   if (sysId === st.activeSystemId) return { kind: 'none', multi: false };
   const activeHeard = st.activeLastHeard > 0 && now - st.activeLastHeard < SILENT_MS;
   if (activeHeard) return { kind: 'none', multi: true };
-  return st.multiSeen ? { kind: 'offer' } : { kind: 'activate', first: false };
+  return st.multiSeen || st.activeArmed ? { kind: 'offer' } : { kind: 'activate', first: false };
 }
 
 interface RosterState {
@@ -183,9 +186,15 @@ export function observePacket(packet: MavlinkPacket, data: any, now = Date.now()
     const armed = (data.base_mode & 0x80) !== 0;
     const modeName = getVehicleModeName(data.type, data.custom_mode);
     const changed = !prev || prev.armed !== armed || prev.modeName !== modeName || prev.type !== data.type;
-    const activeLastHeard = st.activeSystemId !== null ? (live.get(st.activeSystemId)?.lastHeard ?? 0) : 0;
+    const activeLive = st.activeSystemId !== null ? live.get(st.activeSystemId) : undefined;
+    const activeLastHeard = activeLive?.lastHeard ?? 0;
     const decision = decideHeartbeat(
-      { activeSystemId: st.activeSystemId, activeLastHeard, multiSeen: st.multiSeen },
+      {
+        activeSystemId: st.activeSystemId,
+        activeLastHeard,
+        multiSeen: st.multiSeen,
+        activeArmed: activeLive?.armed ?? false,
+      },
       packet.systemId,
       now
     );

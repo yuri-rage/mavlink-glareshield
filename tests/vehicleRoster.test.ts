@@ -21,22 +21,38 @@ function check(name: string, ok: boolean, detail = '') {
 // Pure rules.
 check(
   'first vehicle: active',
-  decideHeartbeat({ activeSystemId: null, activeLastHeard: 0, multiSeen: false }, 3, 1000).kind === 'activate'
-);
-check(
-  'active heard, another: noted together',
-  JSON.stringify(decideHeartbeat({ activeSystemId: 1, activeLastHeard: 1000, multiSeen: false }, 2, 2000)) ===
-    '{"kind":"none","multi":true}'
-);
-check(
-  'only vehicle went silent, another: taken over',
-  decideHeartbeat({ activeSystemId: 1, activeLastHeard: 1000, multiSeen: false }, 2, 1000 + SILENT_MS + 1).kind ===
+  decideHeartbeat({ activeSystemId: null, activeLastHeard: 0, multiSeen: false, activeArmed: false }, 3, 1000).kind ===
     'activate'
 );
 check(
+  'active heard, another: noted together',
+  JSON.stringify(
+    decideHeartbeat({ activeSystemId: 1, activeLastHeard: 1000, multiSeen: false, activeArmed: false }, 2, 2000)
+  ) === '{"kind":"none","multi":true}'
+);
+check(
+  'only vehicle went silent, another: taken over',
+  decideHeartbeat(
+    { activeSystemId: 1, activeLastHeard: 1000, multiSeen: false, activeArmed: false },
+    2,
+    1000 + SILENT_MS + 1
+  ).kind === 'activate'
+);
+check(
+  'only vehicle went silent while ARMED, another: offered, not taken (a radio fade in flight)',
+  decideHeartbeat(
+    { activeSystemId: 1, activeLastHeard: 1000, multiSeen: false, activeArmed: true },
+    2,
+    1000 + SILENT_MS + 1
+  ).kind === 'offer'
+);
+check(
   'after two together, active silent: offered, not taken',
-  decideHeartbeat({ activeSystemId: 1, activeLastHeard: 1000, multiSeen: true }, 2, 1000 + SILENT_MS + 1).kind ===
-    'offer'
+  decideHeartbeat(
+    { activeSystemId: 1, activeLastHeard: 1000, multiSeen: true, activeArmed: false },
+    2,
+    1000 + SILENT_MS + 1
+  ).kind === 'offer'
 );
 
 // Packets in sequence.
@@ -112,6 +128,20 @@ check(
   st().activeSystemId === 7 && switches.join() === '1->7',
   switches.join()
 );
+
+// One vehicle at a time, but the silent one was ARMED (a radio fade in flight): offered, never taken.
+resetRoster();
+switches.length = 0;
+t = 200_000;
+observePacket(...hb(1, true), t);
+observePacket(...hb(7), (t += SILENT_MS + 500));
+check(
+  'armed vehicle silent, another appears: offered, the controls stay on the armed one',
+  st().activeSystemId === 1 && st().takeoverOffer === 7 && switches.length === 0,
+  JSON.stringify({ a: st().activeSystemId, o: st().takeoverOffer, s: switches })
+);
+observePacket(...hb(1, true), (t += 1000));
+check('the armed vehicle is back: the offer is withdrawn', st().takeoverOffer === null && st().activeSystemId === 1);
 
 console.log(
   failures.length ? `\n${failures.length} vehicle-roster check(s) FAILED` : '\nAll vehicle-roster checks PASSED'
