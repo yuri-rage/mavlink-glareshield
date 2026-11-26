@@ -1,6 +1,7 @@
 import { MavlinkEncoder } from './encoder';
 import { MavlinkPacket, MavlinkParser } from './parser';
 import { messageRateManager } from './rateManager';
+import { replaySpeed } from './replayClock';
 import {
   getSerialApi,
   hasTextChannel,
@@ -546,7 +547,8 @@ export class MavlinkConnection {
     this.statsInterval = setInterval(() => {
       const diff = this.stats.packetsReceived - this.lastPacketCount;
       this.lastPacketCount = this.stats.packetsReceived;
-      this.stats.packetsPerSecond = diff;
+      // Per second of the flight: during a replay at 10x, a tenth of what arrives each real second.
+      this.stats.packetsPerSecond = Math.round(diff / replaySpeed());
       this.checkLinkSilence();
     }, 1000);
   }

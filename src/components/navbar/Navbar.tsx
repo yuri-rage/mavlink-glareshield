@@ -36,6 +36,7 @@ import {
   VTOL_STATE_NAMES,
 } from '../../mavlink/messages';
 import { messageRateManager } from '../../mavlink/rateManager';
+import { flightNow } from '../../mavlink/replayClock';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useReplayStore } from '../../store/replayStore';
 import { evaluatePreArmReadiness, sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
@@ -482,7 +483,10 @@ export const Navbar: React.FC = () => {
     heartbeat.lastHeartbeatTime > 0 ? Math.max(4, Math.floor((nowMs - heartbeat.lastHeartbeatTime) / 1000)) : null;
 
   const totalArmedMs =
-    accumulatedArmedMs + (heartbeat.isArmed && armedStartedAt !== null ? Math.max(0, nowMs - armedStartedAt) : 0);
+    accumulatedArmedMs +
+    (heartbeat.isArmed && armedStartedAt !== null
+      ? Math.max(0, (replaying ? flightNow() : nowMs) - armedStartedAt)
+      : 0);
 
   const preArm = evaluatePreArmReadiness(sysStatus, statusMessages, heartbeat.isArmed);
 

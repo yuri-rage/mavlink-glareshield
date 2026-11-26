@@ -120,6 +120,13 @@ export class TlogPlayer {
   speed = 1;
   /** The last vehicle heartbeat handed out (repeated while paused, so the vehicle doesn't look lost). */
   lastHeartbeat: Uint8Array | null = null;
+  /** The time of the frame being handed out, while one is (null between frames). */
+  private emittingMs: number | null = null;
+
+  /** The log's time now: the frame being handed out (a seek hands out many at once), else the position. */
+  get clockMs(): number {
+    return this.emittingMs ?? this.positionMs;
+  }
 
   constructor(
     readonly timeline: ReplayTimeline,
@@ -163,7 +170,12 @@ export class TlogPlayer {
       const frame = frames[this.index++];
       const h = frameHeader(frame);
       if (h && h.messageId === 0) this.lastHeartbeat = frame;
-      this.emit(frame);
+      this.emittingMs = timesMs[this.index - 1];
+      try {
+        this.emit(frame);
+      } finally {
+        this.emittingMs = null;
+      }
       n++;
     }
     this.positionMs = Math.max(this.positionMs, Math.min(targetMs, this.timeline.durationMs));

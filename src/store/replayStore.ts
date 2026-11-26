@@ -16,6 +16,8 @@ export interface ReplayStoreState {
   startEpochMs: number;
   /** Long pauses in the log played as a second each. */
   gapsCompressed: number;
+  /** The live vehicle the replay disconnected from (its system ID), so Stop can offer to reconnect; null if none. */
+  leftVehicle: number | null;
 }
 
 export const initialReplayState: ReplayStoreState = {
@@ -29,6 +31,7 @@ export const initialReplayState: ReplayStoreState = {
   ended: false,
   startEpochMs: 0,
   gapsCompressed: 0,
+  leftVehicle: null,
 };
 
 export const useReplayStore = create<ReplayStoreState>(() => ({ ...initialReplayState }));
