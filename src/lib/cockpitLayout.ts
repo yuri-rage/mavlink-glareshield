@@ -330,7 +330,7 @@ const LARGE = new Set([
   'built-in-pid-tuning',
   'built-in-ntrip',
 ]);
-/** The quick-actions bar (Flight Controls), by either of its names: the one widget that can be pinned above the panes. */
+/** The quick-actions bar (Arm & Modes), by either of its names: the one widget that can be pinned above the panes. */
 export const QUICK_ACTIONS = new Set(['built-in-glareshield', 'built-in-arm-modes']);
 
 /**

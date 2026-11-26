@@ -24,10 +24,10 @@ How to use Glareshield once it's connected. To connect, see the [README quicksta
 
 ## Dashboard and layouts
 
-The dashboard is a set of tabs, each holding widgets: the HUD, the map, telemetry cards, the flight controls, the
-message console, the parameter manager, charts, and your own custom widgets. **Edit Mode** (top right of the tab bar)
-adds, removes and arranges them; while editing, the widgets' own controls are locked so nothing is sent to the
-vehicle by accident. **Finish Edit** returns to flying.
+The dashboard is a set of tabs, each holding widgets: the HUD, the map, telemetry cards, Arm & Modes (arming and
+quick modes), the message console, the parameter manager, charts, and your own custom widgets. **Edit Mode** (top
+right of the tab bar) adds, removes and arranges them; while editing, the widgets' own controls are locked so nothing
+is sent to the vehicle by accident. **Finish Edit** returns to flying.
 
 In Edit Mode the toolbar has **Add Widget**, **Profiles & Backup**, and a switch for the tab's layout: **Flow** or
 **Cockpit**. Tabs can be added, renamed, deleted and dragged into another order.
@@ -52,9 +52,9 @@ height either way.
 ### Cockpit tabs
 
 A Cockpit tab fills the window below the navbar, with no page scroll: a glass cockpit. Its widgets sit in panes
-side by side and stacked, sized in proportion, so one layout scales from an HD laptop to a 4K screen. The flight
-controls (arming and quick modes) are pinned above the panes as a single slim bar; their Takeoff checklist opens over
-the panes rather than squeezing them. In Edit Mode, **Unpin** makes the bar a pane like any other (it starts across
+side by side and stacked, sized in proportion, so one layout scales from an HD laptop to a 4K screen. **Arm &
+Modes** (arming and quick modes) is pinned above the panes as a single slim bar; its Takeoff checklist opens over the
+panes rather than squeezing them. In Edit Mode, **Unpin** makes the bar a pane like any other (it starts across
 the bottom; move and resize it from there), and the pane's pin button puts it back on top.
 
 Each widget has a minimum size (the HUD 380×250, the map 320×240, a telemetry card 240×110, and so on). When the
@@ -124,7 +124,7 @@ for confirmation before sending anything.
 
 ### Arming, modes and quick actions
 
-- **Arm / disarm**: slide the **Slide to arm** control in the flight controls, or use the arm menu in the navbar. Force
+- **Arm / disarm**: slide the **Slide to arm** control in **Arm & Modes**, or use the arm menu in the navbar. Force
   arm and force disarm are in that menu, each with its own confirmation.
 - **Flight mode**: the mode badge in the navbar lists the vehicle's modes.
 - **Quick actions**: Takeoff, Auto, Loiter, RTL and Land (Rover and boats get their own set). **Takeoff** opens a
