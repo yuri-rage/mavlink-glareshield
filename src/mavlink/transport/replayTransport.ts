@@ -43,6 +43,8 @@ export class ReplayTransport implements Transport {
   private lastKeepAlive = 0;
   private seekGeneration = 0;
   private seeking = false;
+  /** Whether to play once the seek in progress is done (kept across a seek that starts before the last finished). */
+  private resumeAfterSeek = false;
   private readonly tickMs: number;
   private readonly now: () => number;
 
@@ -94,13 +96,17 @@ export class ReplayTransport implements Transport {
   }
 
   play() {
-    if (this.seeking) return;
+    if (this.seeking) {
+      this.resumeAfterSeek = true;
+      return;
+    }
     this.player.play();
     this.lastTick = this.now();
     this.publish(true);
   }
 
   pause() {
+    if (this.seeking) this.resumeAfterSeek = false;
     this.player.pause();
     this.publish(true);
   }
@@ -113,7 +119,9 @@ export class ReplayTransport implements Transport {
   /** Move to `ms` (from the start of the log). Backwards starts over (onRestart) and plays forward to it quickly. */
   seek(ms: number) {
     const generation = ++this.seekGeneration;
-    const resume = this.player.playing;
+    // A seek started while another is still stepping: the first one's paused the player, so its play state is the
+    // one to restore.
+    if (!this.seeking) this.resumeAfterSeek = this.player.playing;
     this.player.pause();
     const target = this.player.beginSeek(ms);
     this.seeking = true;
@@ -126,7 +134,7 @@ export class ReplayTransport implements Transport {
       }
       this.seeking = false;
       this.lastTick = this.now();
-      if (resume && !this.player.ended) this.player.playing = true;
+      if (this.resumeAfterSeek && !this.player.ended) this.player.playing = true;
       this.publish(true);
     };
     step();

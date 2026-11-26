@@ -27,7 +27,7 @@ import { setReplayClock } from './replayClock';
 import { scanReplayMissionFiles, type ReplayMissionFile } from './replayMissionFiles';
 import { buildReplayTimeline, frameHeader, type ReplayTimeline } from './tlogReplay';
 import { ReplayTransport } from './transport/replayTransport';
-import { useVehicleRosterStore } from './vehicleRoster';
+import { resetRoster, useVehicleRosterStore } from './vehicleRoster';
 
 let current: ReplayTransport | null = null;
 
@@ -104,6 +104,8 @@ export function startReplay(bytes: Uint8Array, name: string): void {
     onRestart: () => {
       // Seeking backwards: the stores start over, then the log plays again up to the new position.
       mavlinkConnection.restartReplayStream();
+      // The vehicles heard so far too (later ones, which is active, armed, heard together): the log decides again.
+      resetRoster();
       clearShown();
       applied = 0;
     },
