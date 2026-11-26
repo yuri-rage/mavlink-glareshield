@@ -206,7 +206,7 @@ const ack = (command: number, result: number) => {
   );
   check(
     'import warning: built-ins with controls placed on tabs',
-    byName['Onboard Logs']?.builtin === true && !byName['Heads-Up Display (HUD)']
+    byName['Logs']?.builtin === true && !byName['Heads-Up Display (HUD)']
   );
   check('widget import uses the same detection', widgetVehicleControls(profile.customWidgets[1]).length === 1);
 

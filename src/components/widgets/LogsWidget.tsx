@@ -171,7 +171,7 @@ export const LogsWidget: React.FC = () => {
         <CardTitle className="flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wider text-zinc-300">
           <span className="flex items-center gap-1.5">
             <FileText className="h-4 w-4 text-sky-400" />
-            Onboard Logs
+            Logs
           </span>
           <div className="flex items-center gap-1.5 font-normal normal-case tracking-normal">
             <button
