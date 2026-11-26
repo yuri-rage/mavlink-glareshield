@@ -9,7 +9,7 @@
 // matches the listed size; a mismatch (a gap in the numbering, or the active log still growing) falls back to the
 // LOG_DATA stream, which always works.
 
-import { mavlinkConnection } from './connection';
+import { mavlinkConnection, REPLAY_READ_ONLY } from './connection';
 import { mavFtpClient } from './ftp';
 import { MAVLINK_MSG_ID } from './messages';
 import { decodePayload, type MavlinkPacket } from './parser';
@@ -123,6 +123,7 @@ class LogManager {
 
   /** Asks for the list of logs. Rejects when the vehicle doesn't answer (armed, or no logging). */
   listLogs(sysId: number, compId: number): Promise<LogList> {
+    if (mavlinkConnection.isReplaying()) return Promise.reject(new LogTransferError(REPLAY_READ_ONLY));
     const enc = mavlinkConnection.getEncoder();
     return new Promise((resolve, reject) => {
       const entries = new Map<number, LogEntry>();
@@ -187,6 +188,7 @@ class LogManager {
     onProgress: (p: LogProgress) => void,
     maxLogFiles = DEFAULT_MAX_LOG_FILES
   ): Promise<{ data: Uint8Array; method: LogTransferMethod }> {
+    if (mavlinkConnection.isReplaying()) throw new LogTransferError(REPLAY_READ_ONLY);
     if (this.busy) throw new LogTransferError('Another log transfer is in progress.');
     if (entry.size === 0) return { data: new Uint8Array(0), method: 'mavlink' };
     let cancelled = false;
@@ -216,6 +218,7 @@ class LogManager {
 
   /** Deletes every onboard log. */
   erase(sysId: number, compId: number): void {
+    if (mavlinkConnection.isReplaying()) return;
     mavlinkConnection.send(mavlinkConnection.getEncoder().createLogErase(sysId, compId));
   }
 

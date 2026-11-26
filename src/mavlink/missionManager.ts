@@ -5,7 +5,7 @@ import {
   RallyPoint,
   useTelemetryStore,
 } from '../store/telemetryStore';
-import { mavlinkConnection } from './connection';
+import { mavlinkConnection, REPLAY_READ_ONLY } from './connection';
 import { MissionItemIntData } from './encoder';
 import { mavFtpClient } from './ftp';
 import { cmdHasLocation, MAVLINK_MSG_ID } from './messages';
@@ -582,6 +582,10 @@ export class MissionManager {
     targetComp?: number
   ): Promise<{ success: boolean; method: 'ftp' | 'legacy'; readBack: T[]; readOk: boolean; error?: string }> {
     const name = type === 'mission' ? 'Mission' : type === 'fence' ? 'Geofence' : 'Rally points';
+    if (mavlinkConnection.isReplaying()) {
+      this.report(REPLAY_READ_ONLY);
+      return { success: false, method: 'legacy', readBack: [], readOk: false, error: REPLAY_READ_ONLY };
+    }
     if (this.status.isFetching || this.status.isUploading) {
       return {
         success: false,
@@ -1177,6 +1181,10 @@ export class MissionManager {
   public async fetchMission(targetSys?: number, targetComp?: number) {
     if (mavlinkConnection.getStatus() !== 'connected') {
       console.warn('Cannot fetch mission: not connected.');
+      return;
+    }
+    if (mavlinkConnection.isReplaying()) {
+      this.report(REPLAY_READ_ONLY);
       return;
     }
 

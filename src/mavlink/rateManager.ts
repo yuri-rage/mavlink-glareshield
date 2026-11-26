@@ -175,7 +175,8 @@ export class MessageRateManager {
   }
 
   public recalculateAndApply() {
-    if (mavlinkConnection.getStatus() !== 'connected' || !this.vehicleHeard) return;
+    // A replay's rates are what was recorded: nothing to ask.
+    if (mavlinkConnection.getStatus() !== 'connected' || !this.vehicleHeard || mavlinkConnection.isReplaying()) return;
 
     const limits = BANDWIDTH_PROFILES[this.profile];
     const encoder = mavlinkConnection.getEncoder();

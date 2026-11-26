@@ -1,6 +1,6 @@
 import { create, type StateCreator } from 'zustand';
 
-import { mavlinkConnection } from '../mavlink/connection';
+import { mavlinkConnection, REPLAY_READ_ONLY } from '../mavlink/connection';
 import {
   extractFirmwareVersion,
   getMavCmdName,
@@ -1001,7 +1001,10 @@ export const useTelemetryStore = create<TelemetryState>()(
 
             // The vehicle is back after a silence (reboot, radio dropout) while our link stayed up. A rebooted
             // autopilot has forgotten the stream rates we asked for, so ask again, and re-request home.
+            // (Not during a replay: there is no vehicle to ask, and the log has what was sent.)
+            const replaying = mavlinkConnection.isReplaying();
             if (
+              !replaying &&
               isVehicleReacquired(state.heartbeat.lastHeartbeatTime, now) &&
               state.heartbeat.systemId === packet.systemId
             ) {
@@ -1014,7 +1017,7 @@ export const useTelemetryStore = create<TelemetryState>()(
 
             // Poll for firmware version / version banner if not yet resolved
             if (!state.firmwareVersion) {
-              if (versionPollAttempts < 5) {
+              if (versionPollAttempts < 5 && !replaying) {
                 if (now - lastVersionPollTime >= 2500) {
                   lastVersionPollTime = now;
                   versionPollAttempts++;
@@ -1898,6 +1901,31 @@ const initialVehicleState = (() => {
   >;
 })();
 
+/**
+ * Everything learned about a vehicle dropped, as before the first connection: values, mission, trace, messages and
+ * pending commands. A replay starts (or starts over, or stops) with this, so nothing from a live vehicle or another
+ * point in the log is mixed in.
+ */
+export function resetVehicleState(): void {
+  lastVersionPollTime = 0;
+  versionPollAttempts = 0;
+  lastRecentExplanatoryStatus = null;
+  settlePendingCommands(Date.now());
+  useTelemetryStore.setState((state) => ({
+    ...initialVehicleState,
+    missionWaypoints: [],
+    fencePoints: [],
+    rallyPoints: [],
+    flightTrace: [],
+    traceVersion: state.traceVersion + 1,
+    traceResets: state.traceResets + 1,
+    statusMessages: [],
+    commandFeedback: undefined,
+    armedStartedAt: null,
+    accumulatedArmedMs: 0,
+  }));
+}
+
 onActiveVehicleChange((to, from) => {
   const now = Date.now();
   lastVersionPollTime = 0;
@@ -2049,7 +2077,7 @@ export function sendTrackedCommand(
             status: 'failed',
             result: -2,
             resultText: 'NOT_SENT',
-            reason: 'Link disconnected (packet not sent)',
+            reason: mavlinkConnection.isReplaying() ? REPLAY_READ_ONLY : 'Link disconnected (packet not sent)',
             time: now,
           },
         });

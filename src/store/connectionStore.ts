@@ -151,6 +151,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     packetsReceived: 0,
     packetsSent: 0,
     packetsPerSecond: 0,
+    sendsBlocked: 0,
   },
 
   setGcsSystemId: (sysId: number) => {
