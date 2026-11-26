@@ -2,7 +2,8 @@
 // block the page (an in-app dialog, answered asynchronously), and a link change starts the vehicle roster over.
 export {};
 (globalThis as any).localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
-const { gcsFailsafeNote } = await import('../src/mavlink/replay.ts');
+const { gcsFailsafeNote, confirmLeavingLiveLink, liveVehicle } = await import('../src/mavlink/replay.ts');
+const { useTelemetryStore } = await import('../src/store/telemetryStore.ts');
 const { askConfirm, answerConfirm, useConfirmStore } = await import('../src/store/confirmStore.ts');
 const { observePacket, useVehicleRosterStore, onLinkDown, resetRoster } =
   await import('../src/mavlink/vehicleRoster.ts');
@@ -60,6 +61,30 @@ check(
 );
 observePacket(...hb(7), 2000);
 check("the new link's first vehicle is active", useVehicleRosterStore.getState().activeSystemId === 7);
+
+// A dropped link reconnecting by itself: the store's heartbeat is cleared, but the roster keeps the vehicle, so
+// leaving it for a replay still asks (an armed vehicle named as such) and Stop & reconnect can be offered.
+resetRoster();
+observePacket(...hb(3, true), 5000);
+onLinkDown(false);
+useTelemetryStore.setState((st) => ({ heartbeat: { ...st.heartbeat, lastHeartbeatTime: 0, isArmed: false, type: 0 } }));
+const lv = liveVehicle();
+check(
+  'after a drop: the live vehicle comes from the roster, armed, reconnecting',
+  lv?.sysId === 3 && lv.armed && lv.reconnecting,
+  JSON.stringify(lv)
+);
+const asked = confirmLeavingLiveLink();
+check(
+  'after a drop: leaving it for a replay asks, naming it armed and reconnecting',
+  /Vehicle 3 is ARMED/.test(useConfirmStore.getState().open?.title ?? '') &&
+    /reconnecting/.test(useConfirmStore.getState().open?.message.join(' ') ?? ''),
+  JSON.stringify(useConfirmStore.getState().open)
+);
+answerConfirm(false);
+check('cancel: no replay', (await asked) === false);
+resetRoster();
+check('after a deliberate disconnect (roster reset): nothing to leave, no question', liveVehicle() === null);
 
 console.log(failures.length ? `\n${failures.length} live-link check(s) FAILED` : '\nAll live-link checks PASSED');
 process.exit(failures.length ? 1 : 0);
