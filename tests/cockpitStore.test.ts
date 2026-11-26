@@ -53,8 +53,11 @@ st().setActiveTab('tab-flight');
     p.tabs.map((t) => `${t.title}:${t.mode}`).join()
   );
   check(
-    'default: Flight has wide and compact layouts, Tuning a compact one',
-    !!tab('tab-flight').cockpitWide && !!tab('tab-flight').cockpitCompact && !!tab('tab-tuning').cockpitCompact
+    'default: Flight and Tuning have wide and compact layouts',
+    !!tab('tab-flight').cockpitWide &&
+      !!tab('tab-flight').cockpitCompact &&
+      !!tab('tab-tuning').cockpitCompact &&
+      !!tab('tab-tuning').cockpitWide
   );
   check(
     'default: every layout is valid as written',
