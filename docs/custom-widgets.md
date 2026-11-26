@@ -438,7 +438,7 @@ The `action` object, used by `action-button`, `toggle-switch` and `slider-contro
 | `label` | Button text and the name used in status messages. |
 | `commandId` | The `MAV_CMD` number, for example `20` for `MAV_CMD_NAV_RETURN_TO_LAUNCH`. |
 | `params` | Seven numbers, `param1` … `param7`. |
-| `confirmation` | Ask for a second click before sending (toggles: slide to switch instead). Always `true` after an import, and always for a command that can't be taken back: terminate (185), parachute release (208, P1 = 2), disarm (400, P1 = 0), a motor test (209), reboot or shutdown of any component (246) and format the SD card (526). |
+| `confirmation` | Ask for a second click before sending (toggles: slide to switch instead). Always `true` after an import, and always for a command that can't be taken back: terminate (185), parachute release (208, P1 = 2), disarm (400, P1 = 0), a motor test (209), engine stop (223, P1 = 0), reboot or shutdown of any component (246), a parameter reset to defaults (245, P1 = 2) and format the SD card (526). |
 
 ### `action-button`
 
