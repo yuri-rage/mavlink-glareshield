@@ -8,6 +8,7 @@
 // - The first autopilot heard on a connection.
 // - The user's choice (switchToVehicle): everything learned about the old vehicle is dropped (onActiveVehicleChange)
 //   and fetched again from the new one, as on a fresh connection.
+// - A dropped link that reconnects by itself keeps all of this (onLinkDown); a deliberate Disconnect starts over.
 // - When the active vehicle falls silent and another is heard: taken over at once if only one vehicle has been heard
 //   at a time on this connection and the silent one was last heard disarmed (a vehicle rebooted with another system
 //   ID, a radio swapped to another aircraft). If it was armed (it may be flying through a radio fade), or once two
@@ -255,6 +256,18 @@ export function resetRoster(): void {
   });
 }
 
+/**
+ * The link went down. A deliberate Disconnect (or a replay starting or ending) starts over: the next connection's first
+ * vehicle is active. A dropped link that reconnects by itself keeps the roster: which vehicle is active, whether it was
+ * armed, when it was last heard, and whether two were heard together. Otherwise the first autopilot heard after a
+ * short bridge drop became active, armed or not: with two vehicles on the link, the controls could move to the other
+ * one silently. Kept, the usual rules apply after the reconnect: the active vehicle is back, or after its silence
+ * another is only offered (if it was armed, or two were heard together).
+ */
+export function onLinkDown(manual: boolean): void {
+  if (manual) resetRoster();
+}
+
 mavlinkConnection.onStatus((status) => {
-  if (status === 'disconnected') resetRoster();
+  if (status === 'disconnected') onLinkDown(mavlinkConnection.isManualDisconnect);
 });
