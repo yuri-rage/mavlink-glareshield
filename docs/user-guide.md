@@ -197,6 +197,12 @@ close to it. Pointing at the profile marks the spot on the map, and pointing at 
 you can save the draft to a file at any time. If the vehicle's mission changes while you have unsaved edits, you're told
 rather than having your draft replaced.
 
+**Clear** (beside the "Vehicle's …" button) empties the mission, rally points or fence being edited, after asking
+("Clear?"). It changes only the draft: **Undo** brings it back, and the vehicle keeps its own until you upload.
+
+A takeoff happens where the vehicle is (only its altitude counts), so a waypoint changed to a takeoff loses its
+position and is no longer drawn on the map.
+
 ---
 
 ## Maps and offline use

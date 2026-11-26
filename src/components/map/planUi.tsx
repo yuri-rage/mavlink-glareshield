@@ -2,6 +2,9 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
+import { Trash2 } from 'lucide-react';
+
+import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { MAV_FRAME } from '../../mavlink/missionDraft';
 
 export { FT_PER_M } from '../../lib/inputUnits';
@@ -85,3 +88,38 @@ export function frameTag(frame: number): string {
   if (frame === MAV_FRAME.GLOBAL_TERRAIN_ALT || frame === MAV_FRAME.GLOBAL_TERRAIN_ALT_INT) return 'TER';
   return 'REL';
 }
+
+/**
+ * Clear a draft (the mission, rally points or fence) in the planner: asks first ("Clear?", which lapses after a few
+ * seconds), changes only the draft (Undo brings it back), and the vehicle keeps its own until an upload.
+ */
+export const ClearDraftButton: React.FC<{ what: string; empty: boolean; onClear: () => void }> = ({
+  what,
+  empty,
+  onClear,
+}) => {
+  const confirm = useConfirmStep();
+  return (
+    <button
+      type="button"
+      disabled={empty && !confirm.armed}
+      title={
+        confirm.armed
+          ? `Confirm: clear the ${what} in this draft (Undo brings it back)`
+          : `Clear the ${what} (asks first; the vehicle keeps its own until you upload)`
+      }
+      aria-label={`Clear ${what}`}
+      onClick={() => {
+        if (!confirm.armed) return confirm.arm();
+        confirm.cancel();
+        onClear();
+      }}
+      className={`inline-flex h-7 items-center gap-1 rounded-md border px-1.5 text-[10px] font-bold disabled:opacity-35 ${
+        confirm.armed ? 'border-red-500 bg-red-600 text-white' : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
+      }`}
+    >
+      <Trash2 className="h-3 w-3" />
+      {confirm.armed ? 'Clear?' : 'Clear'}
+    </button>
+  );
+};

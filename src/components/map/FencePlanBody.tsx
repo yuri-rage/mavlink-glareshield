@@ -41,7 +41,7 @@ import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { FenceControlBody } from './FenceControl';
 import { OPEN_ACCEPT } from './MissionMenu';
-import { ICON_BTN, NumField } from './planUi';
+import { ClearDraftButton, ICON_BTN, NumField } from './planUi';
 
 interface FencePlanBodyProps {
   issues: FenceIssue[];
@@ -445,6 +445,13 @@ export const FencePlanBody: React.FC<FencePlanBodyProps> = ({
             <RotateCcw className="h-3 w-3" />
             {resetConfirm.armed ? 'Discard changes?' : "Vehicle's fence"}
           </button>
+          <ClearDraftButton
+            what="fence"
+            empty={draft.shapes.length === 0 && !draft.returnPoint}
+            onClear={() =>
+              useMissionPlanStore.getState().fenceEdit((d) => ({ ...d, shapes: [], returnPoint: null }), null)
+            }
+          />
         </div>
       </div>
     </>

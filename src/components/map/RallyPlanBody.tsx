@@ -22,7 +22,7 @@ import { isRallyDirty, useMissionPlanStore } from '../../store/missionPlanStore'
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { OPEN_ACCEPT } from './MissionMenu';
-import { frameTag, ICON_BTN, INPUT, NumField } from './planUi';
+import { ClearDraftButton, frameTag, ICON_BTN, INPUT, NumField } from './planUi';
 
 interface RallyPlanBodyProps {
   issues: RallyIssue[];
@@ -306,6 +306,11 @@ export const RallyPlanBody: React.FC<RallyPlanBodyProps> = ({
             <RotateCcw className="h-3 w-3" />
             {resetConfirm.armed ? 'Discard changes?' : "Vehicle's rally points"}
           </button>
+          <ClearDraftButton
+            what="rally points"
+            empty={draft.points.length === 0}
+            onClear={() => useMissionPlanStore.getState().rallyEdit((d) => ({ ...d, points: [] }), null)}
+          />
         </div>
       </div>
     </>
