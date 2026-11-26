@@ -202,7 +202,8 @@ Every command shows its result (accepted, refused and why, or no answer).
 - **Fly here**: right-click the map (long-press on a touch screen), or use the map header's fly-to button (the arrow)
   then click the map. Choose the altitude above home, then **Switch to GUIDED & fly here**. The target is marked on the map
   until the vehicle arrives or leaves GUIDED.
-- **Orbit here** (Plane): from the same card, with a radius.
+- **Orbit here** (Plane): from the same card, with a radius. Outside GUIDED it reads **Switch to GUIDED & orbit**
+  and asks again: it leaves the current mode (from AUTO, the mission).
 - **Set home here**: from the same card; it asks again, since it moves home.
 - **Fly to me**: after the fly-to button, the **Pick a point to fly to** bar has a button that sends the vehicle to
   where this device is (the browser asks for your location).
