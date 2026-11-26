@@ -351,6 +351,13 @@ export const PointGuidedActions: React.FC<{ lat: number; lon: number; altRelM: n
   const orbitConfirm = useConfirmStep(6000);
   const homeSend = useSender();
   const homeConfirm = useConfirmStep(8000);
+  // A confirmation is for the point (and orbit) it was asked about: another point, radius, direction or altitude
+  // asks again (the card stays mounted when another point is clicked within the confirm window).
+  useEffect(() => {
+    orbitConfirm.cancel();
+    homeConfirm.cancel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lon, radius, ccw, altRelM]);
   // The ground's height at the point, looked up when home is about to be set there.
   const [ground, setGround] = useState<number | null | 'loading'>(null);
   useEffect(() => {
