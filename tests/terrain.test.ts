@@ -60,6 +60,39 @@ const near = (a: number, b: number, tol = 1e-6) => Math.abs(a - b) <= tol;
   t.sampleHeight(35, edgeLon, (tx, ty) => (reads.add(`${tx}/${ty}`), tile(tx, ty)), z);
   check('a point on a tile edge reads both tiles', reads.size >= 2, [...reads].join(' '));
   check('a missing tile: no height', t.sampleHeight(35, -106, () => null, z) === null);
+  {
+    // Sea floor reads 0; land below sea level in a known basin keeps its height.
+    const flat = (h: number) => () => new Float32Array(256 * 256).fill(h);
+    check('sea floor (-18 m off the Netherlands): 0', t.sampleHeight(52.3, 4.3, flat(-18), z) === 0);
+    check('sea floor (-16 m off Galveston): 0', t.sampleHeight(29.05, -94.6, flat(-16), z) === 0);
+    check('Jericho (-249 m): kept', t.sampleHeight(31.856, 35.46, flat(-249), z) === -249);
+    check('Badwater, Death Valley (-78 m): kept', t.sampleHeight(36.2297, -116.7669, flat(-78), z) === -78);
+    check('Caspian surface (-29 m): kept', t.sampleHeight(42, 50, flat(-29), z) === -29);
+    check('land above sea level: unchanged', t.sampleHeight(35, -106, flat(1600), z) === 1600);
+    check(
+      'Caspian lake bed (-832 m in coarse tiles): its surface floor',
+      t.sampleHeight(38, 50.2, flat(-832), z) === -30
+    );
+    check('Karagiye (-134 m) inside the Caspian box: kept', t.sampleHeight(43.33, 51.84, flat(-134), z) === -134);
+    check('below a basin floor (Dead Sea bed): the floor', t.sampleHeight(31.5, 35.48, flat(-700), z) === -445);
+    // The boxes stay off the open sea near them.
+    const sea: [string, number, number][] = [
+      ['Mediterranean off Haifa', 32.85, 34.95],
+      ['Gulf of Aqaba', 29.4, 34.95],
+      ['Gulf of California head', 31.6, -114.8],
+      ['Mediterranean off El Alamein', 30.95, 28.9],
+      ['Ghoubbet al-Kharab', 11.53, 42.6],
+      ['Red Sea off Danakil', 14.6, 41.0],
+      ['Black Sea', 43.0, 40.0],
+      ['Persian Gulf', 29.0, 50.0],
+      ['Gulf of Gabes', 34.0, 10.3],
+      ['Spencer Gulf', -33.0, 137.8],
+      ['Atlantic off San Julian', -49.3, -67.6],
+      ['Bahia de Neiba', 18.3, -71.05],
+    ];
+    const wrong = sea.filter(([, la, lo]) => t.inBelowSeaBasin(la, lo)).map(([n]) => n);
+    check('no basin box covers nearby sea', wrong.length === 0, wrong.join(', '));
+  }
   check('tilesFor names what sampleHeight reads', t.tilesFor(35, edgeLon, z).length >= 2);
 }
 
