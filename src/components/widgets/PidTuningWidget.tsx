@@ -103,6 +103,9 @@ function trackingError(
   return { rms: n ? Math.sqrt(sum / n) : NaN, peak, n };
 }
 
+/** Below this content height the two charts take turns (a Response / Terms switch). */
+const SHORT_BELOW_PX = 470;
+
 export const PidTuningWidget: React.FC = () => {
   const { sysId, compId } = useVehicleTarget();
   const linked = useTelemetryStore((s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED');
@@ -143,6 +146,16 @@ export const PidTuningWidget: React.FC = () => {
 
   const [terms, setTerms] = useState<PidTuningField[]>(DEFAULT_TERMS);
   const [windowSec, setWindowSec] = useState(30);
+  // Short (a Cockpit pane on a laptop): one chart at a time, Response or Terms, so it needs ~360 px, not ~500.
+  const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
+  const [short, setShort] = useState(false);
+  const [view, setView] = useState<'response' | 'terms'>('response');
+  useEffect(() => {
+    if (!contentEl || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => setShort(e.contentRect.height < SHORT_BELOW_PX));
+    ro.observe(contentEl);
+    return () => ro.disconnect();
+  }, [contentEl]);
   const [pausedAt, setPausedAt] = useState<number | null>(null);
 
   // Ask for PID_TUNING while the widget is open; the vehicle sends it only for axes GCS_PID_MASK selects.
@@ -252,7 +265,7 @@ export const PidTuningWidget: React.FC = () => {
   return (
     <Card className="flex h-full flex-col border-zinc-800 bg-zinc-950/90 shadow-md">
       {header}
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 p-2.5 sm:p-3">
+      <CardContent ref={setContentEl} className="flex min-h-0 flex-1 flex-col gap-2 p-2.5 sm:p-3">
         {/* Controller picker: one button per controller this vehicle can report. */}
         <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Controller">
           {axes.map((a) => {
@@ -339,89 +352,125 @@ export const PidTuningWidget: React.FC = () => {
         </div>
         {writeError && <p className="text-[11px] text-amber-400">{writeError}</p>}
 
-        {/* Desired vs achieved. */}
-        <div className="flex min-h-0 flex-[3] flex-col">
-          {/* The chart fills what's left after the lines below it (it's h-full: on its own it took the whole
-              section and pushed those lines over the next chart). */}
-          <div className="flex min-h-0 flex-1 flex-col">
-            <TimeSeriesChart
-              series={mainSeries}
-              config={{ yScale: 'auto' }}
-              fixedMin={0}
-              fixedMax={1}
-              windowSec={windowSec}
-              pausedAt={pausedAt}
-              controls={false}
-              plotMinHeight={140}
-            />
+        {short && (
+          <div
+            className="flex gap-0.5 self-start rounded-md border border-zinc-800 p-0.5"
+            role="tablist"
+            aria-label="Chart"
+          >
+            {(
+              [
+                ['response', 'Response'],
+                ['terms', 'Terms'],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={view === v}
+                onClick={() => setView(v)}
+                className={cn(
+                  'rounded px-2 py-0.5 text-[10px] font-semibold',
+                  view === v ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+                )}
+                title={v === 'response' ? 'Desired vs achieved' : 'The controller terms (P, I, D, FF ...)'}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <div className="mt-1 flex items-center gap-3 font-mono text-[10px] text-zinc-500">
-            <span title="Root-mean-square of achieved − desired over the visible window">
-              error RMS <span className="text-zinc-300">{Number.isFinite(err.rms) ? err.rms.toFixed(3) : '--'}</span>
-            </span>
-            <span title="Largest |achieved − desired| over the visible window">
-              peak <span className="text-zinc-300">{err.n ? err.peak.toFixed(3) : '--'}</span>
-            </span>
-            <span>{err.n} samples</span>
-          </div>
-          {err.n === 0 && !pausedAt && (
-            <p className="mt-1 text-[11px] text-zinc-500">
-              {reporting === false
-                ? `No data: ${current?.label} isn't selected in GCS_PID_MASK. Report it above to start the stream.`
-                : reporting
-                  ? 'Waiting for PID_TUNING from the vehicle…'
-                  : 'No PID_TUNING for this controller yet.'}
-            </p>
-          )}
-        </div>
+        )}
 
-        {/* Controller terms. */}
-        <div className="flex min-h-0 flex-[2] flex-col gap-1 border-t border-zinc-900 pt-1.5">
-          <div className="flex flex-wrap items-center gap-1">
-            {TERMS.map((f) => {
-              const on = terms.includes(f);
-              return (
-                <button
-                  key={f}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() =>
-                    setTerms((t) => (on ? t.filter((x) => x !== f) : TERMS.filter((x) => x === f || t.includes(x))))
-                  }
-                  title={TERM_STYLE[f].title}
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold',
-                    on
-                      ? 'border-zinc-600 bg-zinc-800/60 text-zinc-200'
-                      : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'
-                  )}
-                >
-                  <span
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ background: on ? TERM_STYLE[f].color : '#3f3f46' }}
-                  />
-                  {TERM_STYLE[f].label}
-                </button>
-              );
-            })}
-          </div>
-          {termSeries.length > 0 ? (
+        {/* Desired vs achieved. */}
+        {(!short || view === 'response') && (
+          <div className={`flex min-h-0 flex-col ${short ? 'flex-1' : 'flex-[3]'}`}>
+            {/* The chart fills what's left after the lines below it (it's h-full: on its own it took the whole
+              section and pushed those lines over the next chart). */}
             <div className="flex min-h-0 flex-1 flex-col">
               <TimeSeriesChart
-                series={termSeries}
+                series={mainSeries}
                 config={{ yScale: 'auto' }}
                 fixedMin={0}
                 fixedMax={1}
                 windowSec={windowSec}
                 pausedAt={pausedAt}
                 controls={false}
-                plotMinHeight={90}
+                plotMinHeight={140}
               />
             </div>
-          ) : (
-            <p className="py-2 text-[11px] text-zinc-500">Pick terms to plot.</p>
-          )}
-        </div>
+            <div className="mt-1 flex items-center gap-3 font-mono text-[10px] text-zinc-500">
+              <span title="Root-mean-square of achieved − desired over the visible window">
+                error RMS <span className="text-zinc-300">{Number.isFinite(err.rms) ? err.rms.toFixed(3) : '--'}</span>
+              </span>
+              <span title="Largest |achieved − desired| over the visible window">
+                peak <span className="text-zinc-300">{err.n ? err.peak.toFixed(3) : '--'}</span>
+              </span>
+              <span>{err.n} samples</span>
+            </div>
+            {err.n === 0 && !pausedAt && (
+              <p className="mt-1 text-[11px] text-zinc-500">
+                {reporting === false
+                  ? `No data: ${current?.label} isn't selected in GCS_PID_MASK. Report it above to start the stream.`
+                  : reporting
+                    ? 'Waiting for PID_TUNING from the vehicle…'
+                    : 'No PID_TUNING for this controller yet.'}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Controller terms. */}
+        {(!short || view === 'terms') && (
+          <div
+            className={`flex min-h-0 flex-col gap-1 ${short ? 'flex-1' : 'flex-[2] border-t border-zinc-900 pt-1.5'}`}
+          >
+            <div className="flex flex-wrap items-center gap-1">
+              {TERMS.map((f) => {
+                const on = terms.includes(f);
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
+                      setTerms((t) => (on ? t.filter((x) => x !== f) : TERMS.filter((x) => x === f || t.includes(x))))
+                    }
+                    title={TERM_STYLE[f].title}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold',
+                      on
+                        ? 'border-zinc-600 bg-zinc-800/60 text-zinc-200'
+                        : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'
+                    )}
+                  >
+                    <span
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ background: on ? TERM_STYLE[f].color : '#3f3f46' }}
+                    />
+                    {TERM_STYLE[f].label}
+                  </button>
+                );
+              })}
+            </div>
+            {termSeries.length > 0 ? (
+              <div className="flex min-h-0 flex-1 flex-col">
+                <TimeSeriesChart
+                  series={termSeries}
+                  config={{ yScale: 'auto' }}
+                  fixedMin={0}
+                  fixedMax={1}
+                  windowSec={windowSec}
+                  pausedAt={pausedAt}
+                  controls={false}
+                  plotMinHeight={90}
+                />
+              </div>
+            ) : (
+              <p className="py-2 text-[11px] text-zinc-500">Pick terms to plot.</p>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
