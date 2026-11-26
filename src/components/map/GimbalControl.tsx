@@ -250,6 +250,12 @@ export const PointCameraButton: React.FC<{ lat: number; lon: number; onDone: () 
   const vehicleType = useTelemetryStore((s) => s.heartbeat.type);
   const confirm = useConfirmStep(6000);
   const { ack, send } = useSender();
+  // A confirmation is for the point it was asked about: another point (the card stays mounted) asks again, so one
+  // click can't turn the vehicle toward a point it wasn't confirmed for.
+  useEffect(() => {
+    confirm.cancel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lon]);
   if (!enabled) return null;
   const turns = roiTurnsVehicle(getVehicleCategory(vehicleType), info?.capFlags ?? null);
   const go = () => {
