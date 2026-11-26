@@ -769,8 +769,30 @@ ftp.append(
 )
 
 # --- CRC extras for every message in the dialect ----------------------------
-crc = {str(mid): cls.crc_extra for mid, cls in mav.mavlink_map.items()}
-names = {str(mid): cls.msgname for mid, cls in mav.mavlink_map.items()}
+# From the installed pymavlink's dialect, or (MAVLINK_XML set, e.g. ArduPilot's
+# modules/mavlink/message_definitions/v1.0/ardupilotmega.xml) from that XML and its includes, parsed by pymavlink's
+# own mavparse: the app's dialect is generated from the same XML (scripts/gen-mavlink-dialect.py), and a pymavlink
+# release can lag ArduPilot's definitions by new messages.
+crc_source = "pymavlink dialect"
+xml = os.environ.get("MAVLINK_XML")
+if xml:
+    from pymavlink.generator import mavparse
+
+    crc, names, todo, seen = {}, {}, [os.path.abspath(xml)], set()
+    while todo:
+        path = todo.pop()
+        if path in seen:
+            continue
+        seen.add(path)
+        parsed = mavparse.MAVXML(path, mavparse.PROTOCOL_2_0)
+        todo += [os.path.join(os.path.dirname(path), inc) for inc in parsed.include]
+        for m in parsed.message:
+            crc[str(m.id)] = m.crc_extra
+            names[str(m.id)] = m.name
+    crc_source = "mavparse " + os.path.basename(xml)
+else:
+    crc = {str(mid): cls.crc_extra for mid, cls in mav.mavlink_map.items()}
+    names = {str(mid): cls.msgname for mid, cls in mav.mavlink_map.items()}
 
 with open(OUT, "w") as f:
     json.dump(
@@ -780,6 +802,7 @@ with open(OUT, "w") as f:
             "decode": decode,
             "encode": encode,
             "ftp": ftp,
+            "crc_source": crc_source,
             "crc_extra": crc,
             "msg_names": names,
         },

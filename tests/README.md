@@ -64,6 +64,15 @@ when adding decoders or moving to a newer dialect:
 npm run test:vectors         # python3 tests/gen_vectors.py
 ```
 
+The CRC table normally comes from the installed pymavlink's dialect. A pymavlink release can lag ArduPilot's message
+definitions, so after regenerating the app's dialect (`scripts/gen-mavlink-dialect.py`) from a newer ArduPilot,
+regenerate the vectors from the same XML: pymavlink's own parser then computes the table independently of our
+generator.
+
+```bash
+MAVLINK_XML=../ardupilot/modules/mavlink/message_definitions/v1.0/ardupilotmega.xml npm run test:vectors
+```
+
 They cover the `crc_extra` table, the decoders (`HEARTBEAT`, `SYS_STATUS`, `ATTITUDE`, IMUs, `GLOBAL_POSITION_INT`,
 `GPS_RAW_INT`, `VFR_HUD`, `BATTERY_STATUS`, `AUTOPILOT_VERSION`, `STATUSTEXT`, `PARAM_VALUE`, `COMMAND_ACK`, the
 mission messages), sentinels (unknown heading, unmeasured battery), zero-truncated MAVLink 2 frames, every encoder
