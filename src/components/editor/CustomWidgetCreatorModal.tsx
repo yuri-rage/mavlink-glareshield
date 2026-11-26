@@ -48,6 +48,9 @@ interface CustomWidgetCreatorModalProps {
 }
 
 const COMMON_FIELDS: Record<string, string[]> = {
+  // Not a MAVLink message: the link to the vehicle, measured here (% of its packets received over the last 5 s), with
+  // a telemetry radio's signal when one reports it.
+  LINK: ['quality', 'loss', 'received', 'lost', 'rssi', 'remrssi'],
   SYS_STATUS: ['voltage_battery', 'current_battery', 'battery_remaining', 'load', 'drop_rate_comm', 'errors_comm'],
   ATTITUDE: ['rollDeg', 'pitchDeg', 'yawDeg', 'roll', 'pitch', 'yaw', 'rollSpeed', 'pitchSpeed', 'yawSpeed'],
   VFR_HUD: ['groundspeed', 'airspeed', 'climb', 'throttle', 'alt', 'heading'],

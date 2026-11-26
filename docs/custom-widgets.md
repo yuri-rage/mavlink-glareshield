@@ -160,6 +160,11 @@ Trim maps to 0. When the parameters haven't been downloaded yet, the scaling ass
 
 **PID tuning, one controller at a time.** `PID_TUNING` carries a different controller in each message, so it is bound per axis instead: `PID_TUNING_ROLL`, `PID_TUNING_PITCH`, `PID_TUNING_YAW`, `PID_TUNING_ACCZ`, `PID_TUNING_STEER`, `PID_TUNING_LANDING`, `PID_TUNING_WHEEL_LEFT`, `PID_TUNING_WHEEL_RIGHT` and so on, after MAVLink's `PID_TUNING_AXIS` names. Each one has the fields `desired`, `achieved`, `FF`, `P`, `I`, `D`, `SRate` and `PDmod`, in the units the firmware reports. The vehicle sends an axis only while `GCS_PID_MASK` selects it, and which bit selects which axis depends on the vehicle type. On Rover, for example, the throttle controller arrives as `PID_TUNING_ACCZ`. The built-in **PID Tuning** widget shows the controllers your vehicle has and switches them on and off for you.
 
+**The link to the vehicle.** `LINK` is not a MAVLink message: it is measured by Glareshield. `quality` and `loss` are
+the % of the vehicle's packets received and lost over the last 5 seconds (from their sequence numbers), `received` and
+`lost` the counts. `rssi` and `remrssi` are a telemetry radio's signal at this end and at the vehicle (`RADIO_STATUS`,
+in the radio's units, often 0–254), when one reports it. The status bar's **LINK** shows `quality`.
+
 **Flight state, more ESCs, payloads and engines.** These are decoded for bindings too:
 
 | Message | Useful fields | Notes |
