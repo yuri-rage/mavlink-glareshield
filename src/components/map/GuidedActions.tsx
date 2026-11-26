@@ -344,6 +344,11 @@ export const PointGuidedActions: React.FC<{ lat: number; lon: number; altRelM: n
   const [radius, setRadius] = useState(() => String(Math.round(len.fromSi(Math.abs(loiterRad ?? 60) || 60))));
   const [ccw, setCcw] = useState(false);
   const orbitSend = useSender();
+  // Orbit is DO_REPOSITION with "change mode": from any mode but GUIDED it leaves that mode (from AUTO, the mission),
+  // so it says so and asks a second time, as changing altitude does.
+  const modeName = useTelemetryStore((s) => s.heartbeat.modeName);
+  const orbitSwitches = modeName !== 'GUIDED';
+  const orbitConfirm = useConfirmStep(6000);
   const homeSend = useSender();
   const homeConfirm = useConfirmStep(8000);
   // The ground's height at the point, looked up when home is about to be set there.
@@ -392,14 +397,29 @@ export const PointGuidedActions: React.FC<{ lat: number; lon: number; altRelM: n
               {ccw ? <RotateCcw className="h-3.5 w-3.5" /> : <RotateCw className="h-3.5 w-3.5" />}
             </button>
           </div>
+          {orbitSwitches && (
+            <p className="text-[10px] leading-snug text-amber-300">
+              Switches to GUIDED{modeName ? `, leaving ${modeName}` : ''}
+              {modeName === 'AUTO' ? ' and the mission' : ''}.
+            </p>
+          )}
           <button
             type="button"
             disabled={!orbitSpec}
-            onClick={() => orbitSpec && orbitSend.send(orbitSpec, () => setTimeout(onDone, 600))}
-            className={`${BTN} ${PLAIN} disabled:opacity-40`}
+            onClick={() => {
+              if (!orbitSpec) return;
+              if (orbitSwitches && !orbitConfirm.armed) return orbitConfirm.arm();
+              orbitConfirm.cancel();
+              orbitSend.send(orbitSpec, () => setTimeout(onDone, 600));
+            }}
+            className={`${BTN} ${orbitConfirm.armed ? CONFIRM : PLAIN} disabled:opacity-40`}
           >
             <Orbit className="h-3.5 w-3.5" />
-            Orbit here ({ccw ? 'CCW' : 'CW'})
+            {orbitConfirm.armed
+              ? 'Confirm: switch to GUIDED & orbit'
+              : orbitSwitches
+                ? `Switch to GUIDED & orbit (${ccw ? 'CCW' : 'CW'})`
+                : `Orbit here (${ccw ? 'CCW' : 'CW'})`}
           </button>
           <AckChip ack={orbitSend.ack} />
         </div>
