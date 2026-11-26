@@ -28,6 +28,38 @@ export interface CommandPreset {
   special?: 'system-time';
 }
 
+/**
+ * Why a command can't be taken back, or null: terminate the flight, release the parachute, reboot or shut down the
+ * autopilot, format the SD card. A widget sending one always confirms first, whatever its setting. `params` as sent;
+ * null for toggles and sliders, which put their own value in the params (only the command counts then).
+ */
+export function irreversibleCommand(commandId: number, params: readonly number[] | null): string | null {
+  const p1 = params ? Math.round(params[0] ?? 0) : null;
+  switch (commandId) {
+    case 185: // MAV_CMD_DO_FLIGHTTERMINATION
+      return p1 === null || p1 >= 1 ? 'terminates the flight' : null;
+    case 208: // MAV_CMD_DO_PARACHUTE
+      return p1 === null || p1 === 2 ? 'releases the parachute' : null;
+    case 246: // MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN
+      return p1 === null || p1 !== 0 ? 'reboots or shuts down the autopilot' : null;
+    case 526: // MAV_CMD_STORAGE_FORMAT
+      return 'erases the SD card';
+    default:
+      return null;
+  }
+}
+
+/** Whether a widget's command must confirm: its own setting, or always for an irreversible command. */
+export function actionNeedsConfirmation(
+  action: { commandId: number; params: readonly number[]; confirmation?: boolean; special?: string } | undefined,
+  displayType: string | undefined
+): boolean {
+  if (!action) return false;
+  if (action.confirmation) return true;
+  if (action.special) return false;
+  return irreversibleCommand(action.commandId, presetKindFor(displayType) === 'button' ? action.params : null) !== null;
+}
+
 export type PresetWidgetKind = 'button' | 'toggle' | 'slider';
 
 /** The preset kind for a widget display type: toggles and sliders have their own; everything else is a button. */

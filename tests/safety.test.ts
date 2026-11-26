@@ -226,5 +226,56 @@ const ack = (command: number, result: number) => {
   check('a malformed saved parameter control is dropped, not loaded as is', broken.paramControl === undefined);
 }
 
+// Irreversible commands always confirm, whatever the widget says, and however it was saved.
+{
+  const { irreversibleCommand, actionNeedsConfirmation, COMMAND_PRESETS } =
+    await import('../src/mavlink/commandPresets.ts');
+  const p7 = (p1: number, p2 = 0) =>
+    [p1, p2, 0, 0, 0, 0, 0] as [number, number, number, number, number, number, number];
+  check(
+    'irreversible: terminate, parachute release, reboot / shutdown, format',
+    [
+      irreversibleCommand(185, p7(1)),
+      irreversibleCommand(208, p7(2)),
+      irreversibleCommand(246, p7(1)),
+      irreversibleCommand(246, p7(5)),
+      irreversibleCommand(526, p7(1, 1)),
+    ].every((r) => r !== null)
+  );
+  check(
+    'not irreversible: terminate off, parachute enable / disable, no reboot, RTL',
+    [
+      irreversibleCommand(185, p7(0)),
+      irreversibleCommand(208, p7(1)),
+      irreversibleCommand(208, p7(0)),
+      irreversibleCommand(246, p7(0)),
+      irreversibleCommand(20, p7(0)),
+    ].every((r) => r === null)
+  );
+  check(
+    'every irreversible preset is caught',
+    ['terminate', 'parachute', 'reboot', 'reboot-mass-storage', 'format-sd'].every((k) => {
+      const pr = COMMAND_PRESETS.find((c) => c.key === k);
+      return pr && irreversibleCommand(pr.commandId, pr.params) !== null;
+    })
+  );
+  const action = (commandId: number, params: number[]) => ({ label: 'x', commandId, params, confirmation: false });
+  check('a button: its params decide', !actionNeedsConfirmation(action(208, p7(1)), 'action-button'));
+  check(
+    'a toggle: the command decides (it sends its own param 1)',
+    actionNeedsConfirmation(action(185, p7(0)), 'toggle-switch')
+  );
+  const saved = sanitizeWidgetDefinition(
+    { id: 'w', name: 'T', displayType: 'action-button', action: action(185, p7(1)) } as any,
+    { forceConfirmation: false }
+  );
+  check('a saved Terminate button with confirmation off loads with it on', saved.action?.confirmation === true);
+  const rtl = sanitizeWidgetDefinition(
+    { id: 'w', name: 'R', displayType: 'action-button', action: action(20, p7(0)) } as any,
+    { forceConfirmation: false }
+  );
+  check('an ordinary saved button keeps its own setting', rtl.action?.confirmation === false);
+}
+
 console.log(failures.length ? `\n${failures.length} FAILED: ${failures.join('; ')}` : '\nAll safety checks passed');
 process.exit(failures.length ? 1 : 0);

@@ -7,6 +7,7 @@ import { AlertTriangle, Check, ListChecks, Play, RefreshCw, ToggleLeft, ToggleRi
 
 import { getCachedField } from '../../../lib/messageCache';
 import { extractBit } from '../../../lib/widgetValues';
+import { actionNeedsConfirmation } from '../../../mavlink/commandPresets';
 import { mavlinkConnection } from '../../../mavlink/connection';
 import { getMavCmdName, getVehicleCategory } from '../../../mavlink/messages';
 import { paramManager } from '../../../mavlink/paramManager';
@@ -35,7 +36,7 @@ export const ActionButtonPanel: React.FC<PanelProps> = ({ def, scheme }) => {
 
   const trigger = () => {
     if (!def.action) return;
-    if (def.action.confirmation && !isConfirming) {
+    if (actionNeedsConfirmation(def.action, def.displayType) && !isConfirming) {
       setIsConfirming(true);
       return;
     }
@@ -111,7 +112,7 @@ export const TogglePanel: React.FC<PanelProps> = ({ def, feedback, scheme }) => 
       : `${fbBinding?.fieldName} ${feedback?.text}`;
   // With confirmation on, the switch is a slide-to-confirm control (like the arming slider): the slide itself is
   // the deliberate action, so there is no separate confirm step.
-  const slide = Boolean(def.action?.confirmation);
+  const slide = Boolean(actionNeedsConfirmation(def.action, def.displayType));
 
   const execute = (next: boolean) => {
     const previous = switchOn;
@@ -215,10 +216,10 @@ export const SliderPanel: React.FC<PanelProps> = ({ def, scheme }) => {
         value={value}
         onChange={(e) => {
           setValue(Number(e.target.value));
-          if (def.action?.confirmation) setIsConfirming(true);
+          if (actionNeedsConfirmation(def.action, def.displayType)) setIsConfirming(true);
         }}
         onPointerUp={() => {
-          if (!def.action?.confirmation) execute(value);
+          if (!actionNeedsConfirmation(def.action, def.displayType)) execute(value);
         }}
         className={`h-2 w-full cursor-pointer appearance-none rounded-lg bg-zinc-800 ${scheme.accent}`}
       />
@@ -230,7 +231,7 @@ export const SliderPanel: React.FC<PanelProps> = ({ def, scheme }) => {
           {sMax} {sUnit}
         </span>
       </div>
-      {def.action?.confirmation && isConfirming && (
+      {actionNeedsConfirmation(def.action, def.displayType) && isConfirming && (
         <div className="flex items-center gap-2 pt-1">
           <Button
             size="sm"
