@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import {
   Activity,
@@ -15,6 +15,7 @@ import {
   Plus,
   Radio,
   Satellite,
+  Search,
   Shield,
   Sliders,
   Terminal,
@@ -25,6 +26,7 @@ import {
 } from 'lucide-react';
 
 import { BUILTIN_PANELS, builtinPanelId } from '../../lib/builtinWidgets';
+import { fuzzyFilter } from '../../lib/fuzzy';
 import { sanitizeWidgetDefinition, VALID_DISPLAY_TYPES } from '../../lib/widgetValidation';
 import { MAV_CMD } from '../../mavlink/messages';
 import { useDashboardStore } from '../../store/dashboardStore';
@@ -44,6 +46,24 @@ interface AddWidgetModalProps {
   onClose: () => void;
   onOpenWidgetCreator: () => void;
   onEditCustomWidget?: (widget: CustomWidgetDefinition) => void;
+}
+
+/** What a custom widget is searched by: its name and description, type, and its panels' titles and bound fields. */
+function customSearchFields(cw: CustomWidgetDefinition): string[] {
+  const bindings = [
+    cw.binding,
+    ...(cw.bindings ?? []),
+    ...(cw.panels ?? []).flatMap((p) => [p.binding, ...(p.bindings ?? [])]),
+  ];
+  return [
+    cw.name,
+    cw.description ?? '',
+    cw.displayType,
+    ...(cw.panels ?? []).map((p) => p.title ?? ''),
+    ...bindings.filter(Boolean).map((b) => `${b!.messageName} ${b!.fieldName} ${b!.label ?? ''}`),
+    cw.action?.label ?? '',
+    cw.paramControl?.paramId ?? '',
+  ];
 }
 
 const BUILT_IN_CATALOG = [
@@ -344,6 +364,16 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
 }) => {
   const { profile, activeTabId, addWidgetToActiveTab, saveCustomWidget, deleteCustomWidget } = useDashboardStore();
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  // Fuzzy search over the catalog (names, descriptions, ids; a custom widget's panels and bound fields too).
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  // Each time it opens: an empty search, focused (type straight away; Enter places the best match).
+  useEffect(() => {
+    if (!isOpen) return;
+    setQuery('');
+    const t = setTimeout(() => searchRef.current?.focus(), 0);
+    return () => clearTimeout(t);
+  }, [isOpen]);
   const uploadRef = useRef<HTMLInputElement>(null);
   /** Deleting a definition also removes it from every tab, so it takes a second click. */
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -405,8 +435,23 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
     e.target.value = '';
   };
 
-  const filteredBuiltIn =
-    filterCategory === 'all' ? BUILT_IN_CATALOG : BUILT_IN_CATALOG.filter((w) => w.category === filterCategory);
+  const filteredBuiltIn = fuzzyFilter(
+    filterCategory === 'all' ? BUILT_IN_CATALOG : BUILT_IN_CATALOG.filter((w) => w.category === filterCategory),
+    query,
+    (w) => [w.name, w.description, w.id, w.category]
+  );
+  const filteredCustom =
+    filterCategory === 'all' || filterCategory === 'custom'
+      ? fuzzyFilter(profile.customWidgets, query, customSearchFields)
+      : [];
+  const nothingMatches = query.trim() !== '' && filteredBuiltIn.length === 0 && filteredCustom.length === 0;
+  /** Enter in the search box places the best match (a custom widget first, as listed). */
+  const placeBest = () => {
+    const cw = filteredCustom[0];
+    if (cw) return handleAddBuiltIn(cw.id, cw.displayType === 'composite' ? 12 : 6);
+    const item = filteredBuiltIn[0];
+    if (item) handleAddBuiltIn(item.id, item.defaultSpan);
+  };
 
   return (
     <Modal
@@ -506,6 +551,26 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
               </Button>
             </div>
 
+            {/* Search */}
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+              <input
+                ref={searchRef}
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    placeBest();
+                  }
+                }}
+                placeholder="Search widgets (e.g. bat, hud, rc chan)…"
+                aria-label="Search widgets"
+                className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-950 pl-8 pr-2 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-sky-500 focus:outline-none"
+              />
+            </div>
+
             {/* Category Filters */}
             <div className="flex flex-wrap items-center gap-1.5 pb-1 text-xs">
               {['all', 'control', 'avionics', 'telemetry', 'custom'].map((cat) => (
@@ -526,83 +591,87 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
             {/* Widget Catalog List */}
             <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
               {/* Custom User Widgets */}
-              {(filterCategory === 'all' || filterCategory === 'custom') &&
-                profile.customWidgets.map((cw) => (
-                  <div
-                    key={cw.id}
-                    className="flex flex-col justify-between gap-2 rounded-xl border border-sky-950/60 bg-sky-950/10 p-3 transition-all hover:border-sky-500/40 sm:flex-row sm:items-start"
-                  >
-                    <div className="flex min-w-0 items-start gap-3">
-                      <div className="mt-0.5 rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-sky-400">
-                        <Zap className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <h4 className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-zinc-100">
-                          {cw.name}
-                          <span className="py-0.2 rounded border border-sky-800 bg-sky-950 px-1.5 text-[9px] uppercase text-sky-300">
-                            {cw.displayType}
-                          </span>
-                          {placedWidgetIdsOnTab.has(cw.id) && (
-                            <span className="py-0.2 inline-flex items-center gap-0.5 rounded border border-emerald-500/40 bg-emerald-950/80 px-1.5 text-[9px] uppercase text-emerald-400">
-                              <Check className="h-2.5 w-2.5" /> On Tab
-                            </span>
-                          )}
-                        </h4>
-                        <p className="mt-0.5 text-[11px] text-zinc-400">{cw.description || 'Custom user widget'}</p>
-                      </div>
+              {nothingMatches && (
+                <p className="py-6 text-center text-xs text-zinc-500">
+                  No widgets match “{query.trim()}”{filterCategory !== 'all' ? ` in ${filterCategory}` : ''}.
+                </p>
+              )}
+              {filteredCustom.map((cw) => (
+                <div
+                  key={cw.id}
+                  className="flex flex-col justify-between gap-2 rounded-xl border border-sky-950/60 bg-sky-950/10 p-3 transition-all hover:border-sky-500/40 sm:flex-row sm:items-start"
+                >
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="mt-0.5 rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-sky-400">
+                      <Zap className="h-4 w-4" />
                     </div>
-
-                    <div className="flex shrink-0 items-center gap-1.5 self-end sm:self-auto">
-                      {onEditCustomWidget && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 border-zinc-700 px-2 text-xs text-zinc-300 hover:text-white"
-                          onClick={() => onEditCustomWidget(cw)}
-                          title="Edit custom widget definition"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      {confirmDeleteId === cw.id ? (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className="h-8 gap-1 bg-red-600 px-2 text-xs font-bold text-white hover:bg-red-700"
-                          onClick={() => {
-                            deleteCustomWidget(cw.id);
-                            setConfirmDeleteId(null);
-                          }}
-                          onBlur={() => setConfirmDeleteId(null)}
-                          autoFocus
-                          title="Delete this definition and remove it from every tab"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Delete?
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 border-zinc-700 px-2 text-xs text-red-400 hover:border-red-500/40 hover:text-red-300"
-                          onClick={() => setConfirmDeleteId(cw.id)}
-                          title="Delete custom widget definition (asks to confirm)"
-                          aria-label={`Delete ${cw.name}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="h-8 bg-sky-500 px-3 text-xs font-bold text-white hover:bg-sky-600"
-                        onClick={() => handleAddBuiltIn(cw.id, cw.displayType === 'composite' ? 12 : 6)}
-                      >
-                        Place
-                      </Button>
+                    <div>
+                      <h4 className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-zinc-100">
+                        {cw.name}
+                        <span className="py-0.2 rounded border border-sky-800 bg-sky-950 px-1.5 text-[9px] uppercase text-sky-300">
+                          {cw.displayType}
+                        </span>
+                        {placedWidgetIdsOnTab.has(cw.id) && (
+                          <span className="py-0.2 inline-flex items-center gap-0.5 rounded border border-emerald-500/40 bg-emerald-950/80 px-1.5 text-[9px] uppercase text-emerald-400">
+                            <Check className="h-2.5 w-2.5" /> On Tab
+                          </span>
+                        )}
+                      </h4>
+                      <p className="mt-0.5 text-[11px] text-zinc-400">{cw.description || 'Custom user widget'}</p>
                     </div>
                   </div>
-                ))}
+
+                  <div className="flex shrink-0 items-center gap-1.5 self-end sm:self-auto">
+                    {onEditCustomWidget && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-zinc-700 px-2 text-xs text-zinc-300 hover:text-white"
+                        onClick={() => onEditCustomWidget(cw)}
+                        title="Edit custom widget definition"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    {confirmDeleteId === cw.id ? (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-8 gap-1 bg-red-600 px-2 text-xs font-bold text-white hover:bg-red-700"
+                        onClick={() => {
+                          deleteCustomWidget(cw.id);
+                          setConfirmDeleteId(null);
+                        }}
+                        onBlur={() => setConfirmDeleteId(null)}
+                        autoFocus
+                        title="Delete this definition and remove it from every tab"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete?
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 border-zinc-700 px-2 text-xs text-red-400 hover:border-red-500/40 hover:text-red-300"
+                        onClick={() => setConfirmDeleteId(cw.id)}
+                        title="Delete custom widget definition (asks to confirm)"
+                        aria-label={`Delete ${cw.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="h-8 bg-sky-500 px-3 text-xs font-bold text-white hover:bg-sky-600"
+                      onClick={() => handleAddBuiltIn(cw.id, cw.displayType === 'composite' ? 12 : 6)}
+                    >
+                      Place
+                    </Button>
+                  </div>
+                </div>
+              ))}
 
               {/* Built-in Widgets */}
               {filteredBuiltIn.map((item) => {

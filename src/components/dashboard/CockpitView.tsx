@@ -244,6 +244,8 @@ interface OverlayProps {
   setDragging: (id: string | null) => void;
   /** Open the custom widget editor, for a custom widget. */
   onEditCustomWidget?: (def: CustomWidgetDefinition) => void;
+  /** In the stacked grid (the layout didn't fit): there are no dividers to resize with. */
+  stacked?: boolean;
 }
 
 /**
@@ -273,6 +275,7 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({
   dragging,
   setDragging,
   onEditCustomWidget,
+  stacked = false,
 }) => {
   const id = placed.instanceId;
   const customWidgets = useDashboardStore((s) => s.profile.customWidgets);
@@ -494,7 +497,7 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({
       >
         {dragging && dragging !== id
           ? 'Drop on an edge to put it there, in the middle to swap'
-          : `Drag to move · dividers resize · min ${min.w}×${min.h}`}
+          : `Drag to move${stacked ? '' : ' · dividers resize'} · min ${min.w}×${min.h}`}
       </div>
       {/* Where it would go, over the whole pane (what's highlighted is what the drop hits). */}
       {dropping && (
