@@ -129,7 +129,12 @@ export function sampleHeight(
   if (a === null || b === null || c === null || d === null) return null;
   // Each pixel as land before blending: blended first, a sea-floor pixel beside a coastal bluff pulled the bluff's
   // height down (30 m beside -40 m water read 0 m halfway across, not 15), the unsafe direction for clearance.
-  const [la, lb, lc, ld] = [a, b, c, d].map((h) => landHeight(h, lat, lon));
+  // (As landHeight, with the basin floor looked up once, and only when some pixel is below sea level.)
+  const floor = a < 0 || b < 0 || c < 0 || d < 0 ? terrainFloor(lat, lon) : 0;
+  const la = a >= 0 ? a : Math.max(a, floor);
+  const lb = b >= 0 ? b : Math.max(b, floor);
+  const lc = c >= 0 ? c : Math.max(c, floor);
+  const ld = d >= 0 ? d : Math.max(d, floor);
   return la * (1 - fx) * (1 - fy) + lb * fx * (1 - fy) + lc * (1 - fx) * fy + ld * fx * fy;
 }
 
