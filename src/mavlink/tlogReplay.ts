@@ -166,7 +166,12 @@ export class TlogPlayer {
     const { frames, timesMs } = this.timeline;
     let n = 0;
     while (this.index < frames.length && timesMs[this.index] <= targetMs) {
-      if (n >= budget) return false;
+      if (n >= budget) {
+        // Out of budget: the position is where the frames handed out reached, so a seek that starts now compares
+        // against what was really shown (a seek back from here must start over).
+        if (this.index > 0) this.positionMs = Math.max(this.positionMs, timesMs[this.index - 1]);
+        return false;
+      }
       const frame = frames[this.index++];
       const h = frameHeader(frame);
       if (h && h.messageId === 0) this.lastHeartbeat = frame;

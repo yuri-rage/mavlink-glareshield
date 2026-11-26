@@ -184,6 +184,8 @@ useTelemetryStore.subscribe((s, prev) => {
 // type. They start over and fill from the new vehicle's answers (asked for again: its sysid:type key differs).
 onActiveVehicleChange(() => {
   askedFor = '';
+  // A vehicle switch inside a replayed log isn't this one changing: what's remembered stays.
+  if (mavlinkConnection.isReplaying()) return;
   const last = useLastVehicleStore.getState();
   if (Object.keys(last.params).length > 0) save({ type: last.type, params: {} });
 });
