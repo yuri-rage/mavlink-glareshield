@@ -2,6 +2,8 @@
 // arriving, with play / pause, speed and seek. Read-only: send() never goes anywhere (and the connection doesn't call
 // it while replaying).
 
+import { MAVLINK_MESSAGE_CRC_EXTRA, MAVLINK_MSG_ID } from '../messages';
+import { calculateCrc } from '../parser';
 import { TlogPlayer, type ReplayTimeline } from '../tlogReplay';
 import type { FrameListener, StatusListener, Transport, TransportStatus, Unsubscribe } from './types';
 
@@ -9,6 +11,25 @@ import type { FrameListener, StatusListener, Transport, TransportStatus, Unsubsc
 const SEEK_BATCH = 4000;
 /** While paused, the last heartbeat is repeated this often, so the vehicle doesn't read as lost. */
 const PAUSED_HEARTBEAT_MS = 1000;
+
+/**
+ * `frame` (an unsigned MAVLink 1 or 2 heartbeat) with sequence number `seq` and its checksum redone. The same frame
+ * repeated is a duplicate to the link-quality count, which then reads the pause as silence (0 %); renumbered, it's a
+ * link that's there. A signed frame (its signature covers the sequence) is returned as it is.
+ */
+export function renumberFrame(frame: Uint8Array, seq: number): Uint8Array {
+  const v2 = frame[0] === 0xfd;
+  if (v2 && (frame[2] & 0x01) !== 0) return frame;
+  const header = v2 ? 10 : 6;
+  const len = frame[1];
+  if (frame.length < header + len + 2) return frame;
+  const out = frame.slice(0, header + len + 2);
+  out[v2 ? 4 : 2] = seq & 0xff;
+  const crc = calculateCrc(out, 1, header + len - 1, MAVLINK_MESSAGE_CRC_EXTRA[MAVLINK_MSG_ID.HEARTBEAT]);
+  out[header + len] = crc & 0xff;
+  out[header + len + 1] = crc >> 8;
+  return out;
+}
 
 export interface ReplayState {
   positionMs: number;
@@ -41,6 +62,9 @@ export class ReplayTransport implements Transport {
   private lastTick = 0;
   private lastStateAt = 0;
   private lastKeepAlive = 0;
+  /** Paused heartbeats sent since the last real one (each numbered on from it). */
+  private keepAlives = 0;
+  private keepAliveFor: Uint8Array | null = null;
   private seekGeneration = 0;
   private seeking = false;
   /** Whether to play once the seek in progress is done (kept across a seek that starts before the last finished). */
@@ -163,7 +187,13 @@ export class ReplayTransport implements Transport {
     } else if (this.player.lastHeartbeat && now - this.lastKeepAlive >= PAUSED_HEARTBEAT_MS) {
       // Paused (or at the end): the vehicle as it was at this moment, still there.
       this.lastKeepAlive = now;
-      const hb = this.player.lastHeartbeat;
+      const last = this.player.lastHeartbeat;
+      if (this.keepAliveFor !== last) {
+        this.keepAliveFor = last;
+        this.keepAlives = 0;
+      }
+      const seq = last[0] === 0xfd ? last[4] : last[2];
+      const hb = renumberFrame(last, seq + ++this.keepAlives);
       this.frameListeners.forEach((l) => l(hb));
     }
   }

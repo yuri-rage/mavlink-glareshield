@@ -10,7 +10,7 @@
 // fence or rally points downloaded over MAVFTP (rebuilt from the file transfer, shown from the moment it completed;
 // a download streamed as MISSION_ITEM_INT reaches the store as it plays).
 
-import { resetMessageCache } from '../lib/messageCache';
+import { getLastSeen, resetMessageCache } from '../lib/messageCache';
 import { askConfirm } from '../store/confirmStore';
 import { useConnectionStore } from '../store/connectionStore';
 import { initialReplayState, useReplayStore } from '../store/replayStore';
@@ -21,11 +21,11 @@ import {
   useTelemetryStore,
 } from '../store/telemetryStore';
 import { mavlinkConnection } from './connection';
-import { getVehicleCategory, MAVLINK_MSG_ID } from './messages';
+import { getVehicleCategory, isVehicleAutopilotHeartbeat, MAVLINK_MSG_ID } from './messages';
 import { missionManager } from './missionManager';
 import { setReplayClock } from './replayClock';
 import { scanReplayMissionFiles, type ReplayMissionFile } from './replayMissionFiles';
-import { buildReplayTimeline, frameHeader, type ReplayTimeline } from './tlogReplay';
+import { buildReplayTimeline, epochAt, frameHeader, type ReplayTimeline } from './tlogReplay';
 import { ReplayTransport } from './transport/replayTransport';
 import { resetRoster, useVehicleRosterStore } from './vehicleRoster';
 
@@ -37,29 +37,43 @@ function clearShown() {
 }
 
 /**
- * Home from the log's first HOME_POSITION, also played right after the vehicle's first heartbeat (before it, the
- * vehicle isn't active yet and the packet would be ignored). A live link asks for home on connect; a log recorded
- * mid-session holds it only where something asked. Changes `timeline` in place; later HOME_POSITIONs play as recorded.
+ * Home from the log, also played right after the first autopilot heartbeat (before it, the vehicle isn't active yet
+ * and the packet would be ignored): the HOME_POSITION of that vehicle, the one that becomes active (not a gimbal's or
+ * a companion computer's heartbeat, nor another vehicle's home in a log of several). A live link asks for home on
+ * connect; a log recorded mid-session holds it only where something asked. Changes `timeline` in place; later
+ * HOME_POSITIONs play as recorded.
  */
 export function hoistHomePosition(timeline: ReplayTimeline): boolean {
-  const homeAt = timeline.frames.findIndex((f) => frameHeader(f)?.messageId === MAVLINK_MSG_ID.HOME_POSITION);
-  if (homeAt < 0) return false;
-  const sys = frameHeader(timeline.frames[homeAt])!.systemId;
   const hbAt = timeline.frames.findIndex((f) => {
     const h = frameHeader(f);
-    return h?.messageId === MAVLINK_MSG_ID.HEARTBEAT && h.systemId === sys;
+    if (h?.messageId !== MAVLINK_MSG_ID.HEARTBEAT) return false;
+    // HEARTBEAT payload: custom_mode (4 bytes), type, autopilot, ...
+    const p = f[0] === 0xfd ? 10 : 6;
+    return isVehicleAutopilotHeartbeat(f[p + 4] ?? 0, f[p + 5] ?? 0, h.componentId);
   });
-  if (hbAt < 0 || homeAt <= hbAt + 1) return false;
+  if (hbAt < 0) return false;
+  const sys = frameHeader(timeline.frames[hbAt])!.systemId;
+  const homeAt = timeline.frames.findIndex((f) => {
+    const h = frameHeader(f);
+    return h?.messageId === MAVLINK_MSG_ID.HOME_POSITION && h.systemId === sys;
+  });
+  if (homeAt < 0 || homeAt <= hbAt + 1) return false;
   timeline.frames.splice(hbAt + 1, 0, timeline.frames[homeAt]);
   timeline.timesMs.splice(hbAt + 1, 0, timeline.timesMs[hbAt]);
+  timeline.epochMs.splice(hbAt + 1, 0, timeline.epochMs[hbAt]);
   return true;
 }
 
 /** A mission file rebuilt from the log, into the store as a download would put it. */
 export function applyReplayMissionFile(file: ReplayMissionFile): void {
   if (file.kind === 'mission') {
-    const wps = missionManager.unpackMissionDat(file.data);
-    if (!wps) return;
+    const unpacked = missionManager.unpackMissionDat(file.data);
+    if (!unpacked) return;
+    // The current waypoint as the log has it by now (a MISSION_CURRENT played before the file was applied, e.g.
+    // during a seek), not the file's flags.
+    const cur = useTelemetryStore.getState().currentWaypointSeq;
+    const wps =
+      getLastSeen('MISSION_CURRENT') !== undefined ? unpacked.map((w) => ({ ...w, current: w.seq === cur })) : unpacked;
     useTelemetryStore.setState({ missionWaypoints: wps });
     applyHomeFromMissionItem0(wps);
   } else if (file.kind === 'fence') {
@@ -119,7 +133,7 @@ export function startReplay(bytes: Uint8Array, name: string): void {
   mavlinkConnection.startReplay(transport);
   current = transport;
   setReplayClock({
-    now: () => timeline.startEpochMs + transport.player.clockMs,
+    now: () => epochAt(timeline, transport.player.clockMs),
     speed: () => (transport.player.playing ? transport.player.speed : 1),
   });
   clearShown();
@@ -149,6 +163,9 @@ export function stopReplayAndReconnect(): void {
   mavlinkConnection.stopReplay();
   useConnectionStore.getState().connect();
 }
+
+/** The log's wall-clock time at playback position `ms` (0 when no replay). */
+export const replayEpochAt = (ms: number): number => (current ? epochAt(current.player.timeline, ms) : 0);
 
 /** The replay's transport (tests). */
 export const getReplayTransport = () => current;

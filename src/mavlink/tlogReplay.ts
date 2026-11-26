@@ -18,6 +18,11 @@ export interface ReplayTimeline {
   frames: Uint8Array[];
   /** Each frame's playback time, ms from the first frame (gaps compressed, never decreasing). */
   timesMs: number[];
+  /**
+   * Each frame's wall-clock time as the log has it (ms since 1970): the real time of day, which playback time leaves
+   * behind after a compressed pause.
+   */
+  epochMs: number[];
   durationMs: number;
   /** Wall-clock time of the first frame (ms since 1970), from the log. */
   startEpochMs: number;
@@ -53,6 +58,7 @@ export function buildReplayTimeline(
   const consumed = records.reduce((n, r) => n + 8 + r.frame.length, 0);
   const frames: Uint8Array[] = [];
   const timesMs: number[] = [];
+  const epochMs: number[] = [];
   let gapsCompressed = 0;
   let gcsFrames = 0;
   let startEpochMs = 0;
@@ -81,16 +87,28 @@ export function buildReplayTimeline(
     lastLogMs = logMs;
     frames.push(r.frame);
     timesMs.push(t);
+    epochMs.push(logMs);
   }
   return {
     frames,
     timesMs,
+    epochMs,
     durationMs: t,
     startEpochMs,
     gapsCompressed,
     gcsFrames,
     trailingBytes: bytes.length - consumed,
   };
+}
+
+/**
+ * The log's wall-clock time (ms since 1970) at playback time `ms`: the last frame at or before it, plus the time since.
+ * Not the start plus `ms`, which falls behind after every compressed pause.
+ */
+export function epochAt(timeline: Pick<ReplayTimeline, 'timesMs' | 'epochMs' | 'startEpochMs'>, ms: number): number {
+  const i = frameIndexAfter(timeline.timesMs, ms) - 1;
+  if (i < 0 || timeline.epochMs[i] === undefined) return timeline.startEpochMs + ms;
+  return timeline.epochMs[i] + (ms - timeline.timesMs[i]);
 }
 
 /** Index of the first frame after `ms` (binary search over the never-decreasing times). */

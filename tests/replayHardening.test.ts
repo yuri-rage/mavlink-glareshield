@@ -146,6 +146,119 @@ stopReplay();
   await transport.disconnect();
 }
 
+// 8a. Paused: the repeated heartbeat is renumbered (a valid frame), so link quality doesn't read the pause as silence.
+{
+  const { renumberFrame } = await import('../src/mavlink/transport/replayTransport.ts');
+  const { MavlinkParser } = await import('../src/mavlink/parser.ts');
+  const { LinkQualityMeter } = await import('../src/mavlink/linkQuality.ts');
+  const orig = hb(1);
+  const parser = new MavlinkParser();
+  const meter = new LinkQualityMeter();
+  const seq0 = orig[4];
+  meter.record(seq0, 0);
+  let parsed = 0;
+  for (let k = 1; k <= 8; k++) {
+    const f = renumberFrame(orig, seq0 + k);
+    const pk = parser.parse(f);
+    if (pk.length === 1 && pk[0].sequence === ((seq0 + k) & 0xff)) parsed++;
+    meter.record(f[4], k * 1000);
+  }
+  check('renumbered heartbeats parse with valid checksums', parsed === 8, String(parsed));
+  const q = meter.snapshot(8000).quality;
+  check('paused 8 s: link quality stays 100 %, not 0', q === 100, String(q));
+}
+
+// 8b. Heartbeat age limit stretches when a replay plays slower than real time.
+{
+  const { setReplayClock, heartbeatLiveMs, HEARTBEAT_LIVE_MS } = await import('../src/mavlink/replayClock.ts');
+  check('live: 3.5 s', heartbeatLiveMs() === HEARTBEAT_LIVE_MS);
+  setReplayClock({ now: () => 0, speed: () => 0.5 });
+  check('replay at 0.5x: twice as long', heartbeatLiveMs() === HEARTBEAT_LIVE_MS * 2);
+  setReplayClock({ now: () => 0, speed: () => 10 });
+  check('replay at 10x: unchanged', heartbeatLiveMs() === HEARTBEAT_LIVE_MS);
+  setReplayClock(null);
+}
+
+// 8c. The log's clock after a compressed pause: the real time of day, not start + position.
+{
+  const { epochAt } = await import('../src/mavlink/tlogReplay.ts');
+  const t = buildReplayTimeline(
+    tlog([
+      [0, hb(1)],
+      [1000, hb(1)],
+      [301_000, hb(1)], // a 5-minute pause, played as 1 s
+      [302_000, hb(1)],
+    ])
+  );
+  const start = 1_700_000_000_000;
+  check('compressed: playback is 3 s long', t.durationMs === 3000, String(t.durationMs));
+  check(
+    'clock after the pause: the log time (301.5 s in), not 2.5 s in',
+    epochAt(t, 2500) === start + 301_500,
+    String(epochAt(t, 2500) - start)
+  );
+  check('clock before the pause', epochAt(t, 500) === start + 500);
+}
+
+// 8d. Home hoisted after the autopilot's first heartbeat (not a gimbal's), and that vehicle's home.
+{
+  const { hoistHomePosition } = await import('../src/mavlink/replay.ts');
+  const gimbalHb = (() => {
+    const p = new Uint8Array(9);
+    p[4] = 26; // MAV_TYPE_GIMBAL
+    p[5] = 8; // MAV_AUTOPILOT_INVALID
+    return new MavlinkEncoder(1, 154).packV2(MAVLINK_MSG_ID.HEARTBEAT, p);
+  })();
+  const home = (sys: number) => new MavlinkEncoder(sys, 1).packV2(MAVLINK_MSG_ID.HOME_POSITION, new Uint8Array(52));
+  const t = buildReplayTimeline(
+    tlog([
+      [0, gimbalHb],
+      [100, hb(1)],
+      [200, hb(2)],
+      [5000, home(2)],
+      [6000, home(1)],
+    ])
+  );
+  check('hoisted', hoistHomePosition(t));
+  const { frameHeader } = await import('../src/mavlink/tlogReplay.ts');
+  const at2 = frameHeader(t.frames[2]);
+  check(
+    "right after the autopilot's heartbeat (not the gimbal's), and the active vehicle's home (sys 1)",
+    at2?.messageId === MAVLINK_MSG_ID.HOME_POSITION && at2.systemId === 1 && t.timesMs[2] === 100,
+    JSON.stringify(at2)
+  );
+}
+
+// 8e. A mission rebuilt from MAVFTP takes the current waypoint the log already gave (MISSION_CURRENT), not the file's.
+{
+  const { applyReplayMissionFile } = await import('../src/mavlink/replay.ts');
+  const { recordPacket } = await import('../src/lib/messageCache.ts');
+  const { MavlinkParser } = await import('../src/mavlink/parser.ts');
+  const { packDatFile } = await import('../src/mavlink/missionFileParser.ts');
+  const parser = new MavlinkParser();
+  const mc = new Uint8Array(18);
+  new DataView(mc.buffer).setUint16(0, 2, true); // seq 2
+  for (const f of [hb(1), new MavlinkEncoder(1, 1).packV2(MAVLINK_MSG_ID.MISSION_CURRENT, mc)])
+    for (const p of parser.parse(f)) recordPacket(p);
+  useTelemetryStore.setState({ currentWaypointSeq: 2 });
+  const items = [0, 1, 2, 3].map((i) => ({
+    seq: i,
+    command: 16,
+    frame: 3,
+    current: i === 0,
+    x: 35 + i / 1000,
+    y: -106,
+    z: 50,
+  }));
+  applyReplayMissionFile({ kind: 'mission', atMs: 0, data: packDatFile(items, 0) });
+  const wps = useTelemetryStore.getState().missionWaypoints;
+  check(
+    'rebuilt mission: the current waypoint is the one MISSION_CURRENT gave (2)',
+    wps.length === 4 && wps.find((w) => w.current)?.seq === 2 && wps.filter((w) => w.current).length === 1,
+    JSON.stringify(wps.map((w) => [w.seq, w.current]))
+  );
+}
+
 console.log(
   failures.length ? `\n${failures.length} replay hardening check(s) FAILED` : '\nAll replay hardening checks PASSED'
 );
