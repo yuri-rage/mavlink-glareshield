@@ -837,6 +837,27 @@ export function useAudioAlertListener() {
     []
   );
 
+  // A replay seek jumped to another moment: take up what's shown there silently (its mode, armed state, newest message,
+  // waypoint, battery level), as after a vehicle switch. The seek's frames reach the effects below only after it has
+  // finished (notifications are batched), so a 'seeking' flag alone let the jump's changes chime and speak.
+  useEffect(
+    () =>
+      useReplayStore.subscribe((s, prev) => {
+        if (s.seeksDone === prev.seeksDone) return;
+        const st = useTelemetryStore.getState();
+        prevModeRef.current = st.heartbeat.modeName;
+        prevArmedRef.current = st.heartbeat.isArmed;
+        lastSeenIdRef.current = st.statusMessages[0]?.id ?? null;
+        prevWpSeqRef.current = st.currentWaypointSeq;
+        lastAnnouncedReachedAtRef.current = st.lastReachedAt;
+        lastSpokenWpRef.current = null;
+        const r = st.battery.remaining;
+        batteryWarnedRef.current = r > 0 && r <= 15 ? 'critical' : r > 0 && r <= 25 ? 'low' : 'none';
+        prevLinkLostRef.current = false;
+      }),
+    []
+  );
+
   // Initialize Piper Neural TTS Worker in the background when voice callouts are enabled (and it is the voice)
   const voiceEngine = useAudioAlertsStore((s) => s.voiceEngine);
   useEffect(() => {
