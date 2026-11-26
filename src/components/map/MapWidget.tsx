@@ -34,7 +34,7 @@ import {
   type FenceDraft,
   type FenceShape,
 } from '../../mavlink/fenceDraft';
-import { cmdHasLocation, getGuidedModeNum, getVehicleCategory, MAVLINK_MSG_ID } from '../../mavlink/messages';
+import { cmdUsesPosition, getGuidedModeNum, getVehicleCategory, MAVLINK_MSG_ID } from '../../mavlink/messages';
 import {
   checkReadBack,
   draftFromItems,
@@ -887,7 +887,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     }
     missionWaypoints.forEach((w) => {
       // Commands without a location carry plain parameters in lat/lon (gimbal flags, shot numbers): skip them.
-      if (cmdHasLocation(w.command) && (w.lat !== 0 || w.lon !== 0)) points.push([w.lat, w.lon]);
+      if (cmdUsesPosition(w.command) && (w.lat !== 0 || w.lon !== 0)) points.push([w.lat, w.lon]);
     });
     if (planningRef.current) {
       const st = useMissionPlanStore.getState();
@@ -2248,7 +2248,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     // Filter valid waypoints
     const validWps = missionWaypoints.filter(
       (w) =>
-        cmdHasLocation(w.command) && (w.lat !== 0 || w.lon !== 0) && Math.abs(w.lat) <= 90 && Math.abs(w.lon) <= 180
+        cmdUsesPosition(w.command) && (w.lat !== 0 || w.lon !== 0) && Math.abs(w.lat) <= 90 && Math.abs(w.lon) <= 180
     );
     // The line follows the path the vehicle flies (missionPath): navigation items only (an ROI gets a pin, not a
     // leg), spline legs curved for a vehicle that flies them, skipped for one that doesn't.

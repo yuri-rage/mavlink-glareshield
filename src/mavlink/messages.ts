@@ -686,6 +686,15 @@ export function getMavCmdName(commandId: number): string {
 }
 
 /**
+ * Whether the vehicle uses the command's latitude and longitude: a location command (cmdHasLocation) except the
+ * takeoffs, whose position ArduPilot ignores (Copter, Plane and QuadPlane all take off where they are and use only
+ * the altitude). For drawing, the route and the mission's length; the encoding still follows cmdHasLocation.
+ */
+export function cmdUsesPosition(command: number): boolean {
+  return cmdHasLocation(command) && command !== 22 && command !== 84;
+}
+
+/**
  * Determines whether a MAVLink mission command has geographic location (lat/lon in param 5 & 6).
  * Matches ArduPilot AP_Mission::cmd_has_location() / stored_in_location().
  * Non-location commands (e.g. DO_DIGICAM_CONTROL, DO_SET_SERVO, NAV_DELAY, etc.)

@@ -12,7 +12,7 @@ import { useEffect, useRef } from 'react';
 
 import L from 'leaflet';
 
-import { cmdHasLocation, getVehicleCategory } from '../../mavlink/messages';
+import { cmdUsesPosition, getVehicleCategory } from '../../mavlink/messages';
 import {
   insertWaypointAfter,
   insertWaypointBefore,
@@ -98,9 +98,9 @@ function commitRally(make: (d: RallyDraft) => { draft: RallyDraft; index: number
   }
 }
 
-/** True for a position worth drawing: a location command with a real position. */
+/** True for a position worth drawing: a command whose position the vehicle uses (not a takeoff's), a real one. */
 export function drawablePosition(command: number, lat: number, lon: number): boolean {
-  return cmdHasLocation(command) && (lat !== 0 || lon !== 0) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+  return cmdUsesPosition(command) && (lat !== 0 || lon !== 0) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
 }
 
 /** Apply an edit that also picks the item to select; a refused edit leaves the draft alone. */
