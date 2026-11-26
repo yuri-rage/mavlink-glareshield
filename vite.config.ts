@@ -12,8 +12,10 @@ const BUILD = readBuildInfo();
 
 /**
  * Stamps the build ID into dist/sw.js, so each deploy gets its own app-shell cache and the worker can delete the
- * previous deploy's cached bundles when it activates; and writes dist/version.json, which a running app fetches to
- * learn that a newer deploy is live (lib/updateCheck.ts).
+ * previous deploy's cached bundles when it activates, and the build's file list (dist/assets and the vehicle icons),
+ * which the worker caches when it installs: the lazily loaded parts (Logs, the Inspector, PID tuning, NTRIP, the
+ * widget editor, the neural voice) then work offline without having been opened since the deploy. Also writes
+ * dist/version.json, which a running app fetches to learn that a newer deploy is live (lib/updateCheck.ts).
  */
 function serviceWorkerVersionPlugin() {
   let outDir = 'dist';
@@ -27,7 +29,18 @@ function serviceWorkerVersionPlugin() {
       fs.writeFileSync(path.join(outDir, 'version.json'), JSON.stringify(BUILD) + '\n');
       const file = path.join(outDir, 'sw.js');
       if (!fs.existsSync(file)) return;
-      fs.writeFileSync(file, fs.readFileSync(file, 'utf8').split('__BUILD_ID__').join(BUILD.id));
+      const list = (dir: string) =>
+        fs.existsSync(path.join(outDir, dir)) ? fs.readdirSync(path.join(outDir, dir)).map((f) => `/${dir}/${f}`) : [];
+      const precache = [...list('assets'), ...list('vehicles')].sort();
+      fs.writeFileSync(
+        file,
+        fs
+          .readFileSync(file, 'utf8')
+          .split('__BUILD_ID__')
+          .join(BUILD.id)
+          .split('/*__PRECACHE__*/ []')
+          .join(JSON.stringify(precache))
+      );
     },
   };
 }

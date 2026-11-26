@@ -14,11 +14,21 @@ const SHELL_ASSETS = [
   '/favicon.ico',
 ];
 
+// This build's bundles and icons, filled in at build time (vite.config.ts); empty on the dev server. Cached at install
+// so the lazily loaded parts of the app work offline without having been opened since this deploy.
+const BUILD_ASSETS = /*__PRECACHE__*/ [];
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(SHELL_CACHE)
-      .then((cache) => cache.addAll(SHELL_ASSETS).catch(() => {}))
+      .then((cache) =>
+        Promise.all([
+          cache.addAll(SHELL_ASSETS).catch(() => {}),
+          // One by one: a file that fails (a flaky connection) doesn't stop the rest; it is cached when first fetched.
+          ...BUILD_ASSETS.map((url) => cache.add(url).catch(() => {})),
+        ])
+      )
       .then(() => self.skipWaiting())
   );
 });
