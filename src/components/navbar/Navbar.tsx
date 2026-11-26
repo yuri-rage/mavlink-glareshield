@@ -476,17 +476,29 @@ export const Navbar: React.FC = () => {
           {/* Left: Brand & Flight Status */}
           <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
             <div className="flex flex-shrink-0 items-center gap-1.5 sm:gap-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-sky-500/25 bg-zinc-900/90 p-0.5 shadow-sm">
+              {/* The logo and name open Settings → About: this build, the documentation and the source. */}
+              <button
+                type="button"
+                onClick={() => openConnectModal('about')}
+                title="About Glareshield: this build, documentation and source"
+                aria-label="About Glareshield"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-sky-500/25 bg-zinc-900/90 p-0.5 shadow-sm hover:border-sky-400/60"
+              >
                 <img
                   src="/logo-64.png"
                   alt="Glareshield Logo"
                   className="drop-shadow(0 1px 2px rgba(0,0,0,0.5)) h-full w-full object-contain filter"
                 />
-              </div>
+              </button>
               <div>
-                <span className="hidden text-sm font-bold tracking-tight text-zinc-100 sm:text-base md:inline">
+                <button
+                  type="button"
+                  onClick={() => openConnectModal('about')}
+                  title="About Glareshield: this build, documentation and source"
+                  className="hidden text-sm font-bold tracking-tight text-zinc-100 hover:text-sky-200 sm:text-base md:inline"
+                >
                   GLARESHIELD
-                </span>
+                </button>
                 <div className="mt-0.5 flex items-center gap-1 leading-none sm:gap-1.5">
                   {status === 'connected' ? (
                     heartbeat.lastHeartbeatTime > 0 ? (

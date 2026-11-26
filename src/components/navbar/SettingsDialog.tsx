@@ -1,5 +1,6 @@
 // Settings, in tabs: Link (how to reach the vehicle), Display (units, altitude, theme), Alerts (chimes and voice),
-// Traffic & terrain (ADS-B, terrain data), Data (telemetry logs, restore defaults). One control style throughout: a
+// Traffic & terrain (ADS-B, terrain data), Data (telemetry logs, restore defaults), About (this build, updates, the
+// documentation and the source). One control style throughout: a
 // segmented choice with the chosen option's meaning beneath it.
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -7,7 +8,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ExternalLink, Shield } from 'lucide-react';
 
 import { useAudioAlertsStore, type VoiceEngine } from '../../lib/audioAlerts';
-import { BUILD, buildLabel } from '../../lib/updateCheck';
+import { DOC_LINKS, REPO_URL, repoFile } from '../../lib/links';
+import { BUILD, buildLabel, checkForUpdate, useUpdateStore } from '../../lib/updateCheck';
 import { getWssHost, isLoopbackWs, SERIAL_BAUD_RATES } from '../../mavlink/connection';
 import type { BandwidthProfile } from '../../mavlink/rateManager';
 import { getSerialApi, requestSerialDevice } from '../../mavlink/transport';
@@ -22,14 +24,108 @@ import { RestoreDefaults } from './RestoreDefaults';
 import { TerrainSettings } from './TerrainSettings';
 import { TlogSettings } from './TlogSettings';
 
-export type SettingsTab = 'link' | 'display' | 'alerts' | 'traffic' | 'data';
+export type SettingsTab = 'link' | 'display' | 'alerts' | 'traffic' | 'data' | 'about';
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'link', label: 'Link' },
   { id: 'display', label: 'Display' },
   { id: 'alerts', label: 'Alerts' },
   { id: 'traffic', label: 'Traffic & terrain' },
   { id: 'data', label: 'Data' },
+  { id: 'about', label: 'About' },
 ];
+
+/** This build (with its commit), an update check, the documentation and the source. */
+const AboutPanel: React.FC = () => {
+  const available = useUpdateStore((s) => s.available);
+  const [checking, setChecking] = useState(false);
+  const [checked, setChecked] = useState(false);
+  const check = async () => {
+    setChecking(true);
+    await checkForUpdate();
+    setChecking(false);
+    setChecked(true);
+  };
+  const link = 'inline-flex items-center gap-1 text-sky-300 hover:text-sky-200 hover:underline';
+  return (
+    <div className="space-y-4" role="tabpanel" aria-label="About">
+      <div className="flex items-center gap-3">
+        <img src="/logo-64.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
+        <div className="min-w-0">
+          <div className="text-sm font-bold tracking-tight text-zinc-100">Glareshield</div>
+          <div className="text-[11px] text-zinc-400">A web ground control station for ArduPilot</div>
+        </div>
+      </div>
+      <div className="space-y-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-zinc-400">
+            Build <span className="font-mono text-zinc-200">{buildLabel()}</span>
+            {BUILD.sha && (
+              <>
+                {' · '}
+                <a href={`${REPO_URL}/commit/${BUILD.sha}`} target="_blank" rel="noreferrer" className={link}>
+                  {BUILD.sha.slice(0, 7)}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </>
+            )}
+          </span>
+          {BUILD.id === 'dev' ? (
+            <span className="text-[11px] text-zinc-500">Development server: no update checks</span>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-[11px]"
+              onClick={check}
+              disabled={checking}
+            >
+              {checking ? 'Checking…' : 'Check for updates'}
+            </Button>
+          )}
+        </div>
+        {available ? (
+          <p className="text-[11px] text-amber-300">
+            A newer build ({available}) is available: use <strong>Update</strong> in the navbar to reload into it.
+          </p>
+        ) : (
+          checked && <p className="text-[11px] text-emerald-300">This is the latest build.</p>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Documentation</div>
+        <ul className="space-y-1 text-xs">
+          {DOC_LINKS.map((d) => (
+            <li key={d.href} className="flex flex-wrap items-baseline gap-x-2">
+              <a href={d.href} target="_blank" rel="noreferrer" className={link}>
+                {d.label}
+                <ExternalLink className="h-3 w-3" />
+              </a>
+              <span className="text-[11px] text-zinc-500">{d.hint}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="space-y-1 text-xs">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Source</div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          <a href={REPO_URL} target="_blank" rel="noreferrer" className={link}>
+            Repository
+            <ExternalLink className="h-3 w-3" />
+          </a>
+          <a href={`${REPO_URL}/issues`} target="_blank" rel="noreferrer" className={link}>
+            Report an issue
+            <ExternalLink className="h-3 w-3" />
+          </a>
+          <a href={repoFile('LICENSE')} target="_blank" rel="noreferrer" className={link}>
+            Licence: GPL-3.0
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface Option<T> {
   value: T;
@@ -528,6 +624,8 @@ export const SettingsDialog: React.FC<Props> = ({
             <TerrainSettings />
           </div>
         )}
+
+        {tab === 'about' && <AboutPanel />}
 
         {tab === 'data' && (
           <div className="space-y-5" role="tabpanel" aria-label="Data">
