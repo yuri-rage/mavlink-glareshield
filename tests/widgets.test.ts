@@ -176,6 +176,23 @@ cache.recordPacket(hb(1, 154, 26, 3), T0); // gimbal on the vehicle
 cache.recordPacket(vfr(1, 12, 10, 45), T0);
 cache.recordPacket(vfr(2, 99, 99, 99), T0); // a different vehicle on the link
 cache.recordPacket(radio(51, 180), T0); // SiK radio reports as its own system
+// RC and servo outputs received (their values come from the telemetry state the tests pass in): a binding to a
+// message not yet received reads "--".
+for (const messageId of [MAVLINK_MSG_ID.RC_CHANNELS, MAVLINK_MSG_ID.SERVO_OUTPUT_RAW, MAVLINK_MSG_ID.ATTITUDE]) {
+  cache.recordPacket(
+    {
+      version: 2,
+      sequence: 0,
+      systemId: 1,
+      componentId: 1,
+      messageId,
+      payload: new Uint8Array(42),
+      crc: 0,
+      raw: new Uint8Array(),
+    },
+    T0
+  );
+}
 check(
   'messageCache: vehicle fields are cached',
   cache.getCachedField('VFR_HUD', 'groundspeed') === 10 && cache.getCachedField('VFR_HUD', 'alt') === 45
@@ -264,6 +281,24 @@ check(
   const fresh = values.readBinding({ messageName: 'VFR_HUD', fieldName: 'groundspeed' }, state, 'ms', 5, T0 + 3500);
   check('readBinding: the stale timeout is configurable', !fresh.stale);
   const unknown = values.readBinding({ messageName: 'WIND', fieldName: 'speed' }, state, 'ms', 3, T0);
+  const placeholder = values.readBinding(
+    {
+      messageName: 'SYS_STATUS',
+      fieldName: 'battery_remaining',
+      warnThreshold: 30,
+      critThreshold: 15,
+      thresholdInvert: true,
+    },
+    { battery: { remaining: 0 }, parameters: {} },
+    'ms',
+    3,
+    T0
+  );
+  check(
+    'readBinding: a store placeholder for a message not yet received (battery 0 %) reads --, no value to alert on',
+    placeholder.value === null && placeholder.text === '--',
+    JSON.stringify(placeholder)
+  );
   check(
     'readBinding: a never-received message is unknown, not stale',
     unknown.value === null && unknown.text === '--' && !unknown.stale

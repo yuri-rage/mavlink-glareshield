@@ -1162,7 +1162,29 @@ if (Math.abs(decodedHighres.nz - 2.0) > 0.01) {
 }
 console.log('IMU and Nz load factor decoding verified successfully!');
 
-const extractBoundValueFromState = (b: any, st: any) => readBinding(b, st, 'ms', 5).text;
+// These checks feed packets to the telemetry store only; in the app each also reaches the message cache, and a
+// binding reads "--" until its message has been received. Mark it received (the value still comes from the store).
+const markReceived = async (messageName: string) => {
+  const cache = await import('../src/lib/messageCache.ts');
+  const name = cache.baseMessageName(messageName) as keyof typeof MAVLINK_MSG_ID;
+  const messageId = MAVLINK_MSG_ID[name];
+  if (cache.getLastSeen(name) === undefined && messageId !== undefined) {
+    cache.recordPacket({
+      version: 2,
+      sequence: 0,
+      systemId: 1,
+      componentId: 1,
+      messageId,
+      payload: new Uint8Array(64),
+      crc: 0,
+      raw: new Uint8Array(),
+    });
+  }
+};
+const extractBoundValueFromState = async (b: any, st: any) => {
+  await markReceived(b.messageName);
+  return readBinding(b, st, 'ms', 5).text;
+};
 
 // Test WIND (msg 168) -> store & custom widget binding
 const windPayload = new Uint8Array(12);
@@ -1184,7 +1206,7 @@ if (useTelemetryStore.getState().wind.direction !== 275 || useTelemetryStore.get
   console.error('WIND telemetryStore update failed!', useTelemetryStore.getState().wind);
   process.exit(1);
 }
-const boundWindDir = extractBoundValueFromState(
+const boundWindDir = await extractBoundValueFromState(
   { messageName: 'WIND', fieldName: 'direction', decimals: 0 },
   useTelemetryStore.getState()
 );
@@ -1211,7 +1233,7 @@ useTelemetryStore.getState().processPacket({
   crc: 0,
   raw: new Uint8Array(0),
 });
-const boundRc3 = extractBoundValueFromState(
+const boundRc3 = await extractBoundValueFromState(
   { messageName: 'RC_CHANNELS', fieldName: 'chan3_raw', decimals: 0 },
   useTelemetryStore.getState()
 );
@@ -1262,7 +1284,7 @@ useTelemetryStore.setState((s) => ({
   },
 }));
 // rcPayload has chan3 = 1850. With 1000/1500/2000, (1850-1500)/(2000-1500) = 350/500 = 0.70
-const boundRc3Scaled = extractBoundValueFromState(
+const boundRc3Scaled = await extractBoundValueFromState(
   { messageName: 'RC_CHANNELS (scaled)', fieldName: 'chan3_scaled', decimals: 2 },
   useTelemetryStore.getState()
 );
@@ -1285,7 +1307,7 @@ useTelemetryStore.setState((s) => ({
     SERVO2_TRIM: { value: 1500, type: 9, index: 6 },
   },
 }));
-const boundServo2Scaled = extractBoundValueFromState(
+const boundServo2Scaled = await extractBoundValueFromState(
   { messageName: 'SERVO_OUTPUT_RAW (scaled)', fieldName: 'servo2_scaled', decimals: 2 },
   useTelemetryStore.getState()
 );

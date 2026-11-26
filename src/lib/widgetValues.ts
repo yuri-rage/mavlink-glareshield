@@ -308,6 +308,10 @@ export function readBinding(
 ): BindingReading {
   if (!binding) return { base: null, value: null, text: '--', unit: '', stale: false };
   const unit = bindingUnit(binding, system);
+  // Its message not received on this link yet (or no link): no value, so no alert. The telemetry store starts with
+  // placeholders (battery 0 %, HDOP 99.9) that read as real values and flagged CRIT before any data.
+  if (getLastSeen(binding.messageName) === undefined)
+    return { base: null, value: null, text: '--', unit, stale: false };
   const raw = resolveRawValue(binding, state);
   const { stale, ageMs } = isStale(binding, staleAfterSec, now);
   if (typeof raw === 'string') {
