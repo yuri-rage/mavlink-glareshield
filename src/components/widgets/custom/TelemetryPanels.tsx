@@ -83,7 +83,7 @@ export const StatPanel: React.FC<PanelProps> = (props) => {
   // glance. Elsewhere, the usual size.
   const inPane = useInPane();
   return (
-    <div className={`py-2 text-center transition-opacity ${props.staleAll ? 'opacity-40' : ''}`}>
+    <div className={`${inPane ? 'py-1' : 'py-2'} text-center transition-opacity ${props.staleAll ? 'opacity-40' : ''}`}>
       <div
         className={`${inPane ? '' : 'text-3xl'} font-mono font-bold leading-tight ${props.scheme.valueText}`}
         style={inPane ? { fontSize: 'clamp(1.5rem, 13cqw, 4.5rem)' } : undefined}
@@ -125,7 +125,7 @@ export const RadialGaugePanel: React.FC<PanelProps> = (props) => {
       style={
         multi && items.length > 4
           ? undefined
-          : { minHeight: `min(${inPane ? 100 : 190}px, ${(dialRatio * 100).toFixed(1)}cqw)` }
+          : { minHeight: `min(${inPane ? 80 : 190}px, ${(dialRatio * 100).toFixed(1)}cqw)` }
       }
     >
       {multi ? (
@@ -217,6 +217,7 @@ export const ValueListPanel: React.FC<PanelProps> = ({ bindings, readings }) => 
 );
 
 export const MultiBarPanel: React.FC<PanelProps> = ({ def, scheme }) => {
+  const inPane = useInPane();
   const group = multiBarGroup(def);
   // The bars are built fresh from the store each time; handing back the previous list while it draws the same
   // keeps this panel from re-rendering on every telemetry packet (attitude alone arrives many times a second).
@@ -228,7 +229,8 @@ export const MultiBarPanel: React.FC<PanelProps> = ({ def, scheme }) => {
     return next;
   });
   return (
-    <div className="space-y-1.5 py-0.5">
+    // A little tighter in a Cockpit pane (fixed height).
+    <div className={`${inPane ? 'space-y-1' : 'space-y-1.5'} py-0.5`}>
       {items.map((item) => {
         const isUnused = item.displayValue === '--';
         const barPct =

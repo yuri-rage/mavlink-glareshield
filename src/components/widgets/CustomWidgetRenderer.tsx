@@ -174,7 +174,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
       {isComposite ? (
         // In a pane, a composite taller than the pane scrolls inside the card (its header and border stay put).
         // In a pane, a little tighter (padding, gaps, tiles): a pane's height is fixed, a Flow card's grows.
-        <CardContent className={`min-h-0 flex-1 ${inPane ? 'overflow-y-auto p-2' : 'p-2.5 sm:p-3'}`}>
+        <CardContent className={`min-h-0 flex-1 ${inPane ? 'overflow-y-auto p-2 sm:p-2' : 'p-2.5 sm:p-3'}`}>
           {/* In a Cockpit pane the rows share its height (each at least its content), so the card fills the pane rather
               than leaving a gap below or scrolling; elsewhere they keep their natural heights. */}
           <div
@@ -201,7 +201,9 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                 >
                   {/* A built-in widget brings its own title row. */}
                   {title && p.def.displayType !== 'builtin' && (
-                    <h4 className="mb-1.5 flex items-center gap-1 truncate text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                    <h4
+                      className={`${inPane ? 'mb-1' : 'mb-1.5'} flex items-center gap-1 truncate text-[11px] font-semibold uppercase tracking-wider text-zinc-400`}
+                    >
                       <Icon className={`h-3 w-3 shrink-0 ${p.scheme.icon}`} />
                       <span className="truncate">{title}</span>
                     </h4>

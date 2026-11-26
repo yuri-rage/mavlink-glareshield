@@ -14,6 +14,7 @@ import { expandParamPatterns, isParamPattern } from '../../../mavlink/paramMatch
 import { formatParamValue, getParamMetadata } from '../../../mavlink/paramMetadata';
 import { useParamMetaStore } from '../../../store/paramMetaStore';
 import { useTelemetryStore } from '../../../store/telemetryStore';
+import { useInPane } from '../../dashboard/paneContext';
 import { BitmaskEditor, DetailsButton, EnumSelect, ParamDetails } from '../params/ParamEditors';
 import { usePanelWidth, useVehicleTarget, type PanelProps } from './panelKit';
 
@@ -29,6 +30,7 @@ const READ_TIMEOUT_MS = 2500;
 type RowStatus = { kind: 'pending' | 'saved' | 'failed'; text?: string };
 
 export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
+  const inPane = useInPane();
   const { sysId, compId } = useVehicleTarget();
   const entries = def.paramSet?.params ?? [];
   const confirmEveryWrite = Boolean(def.paramSet?.confirmation);
@@ -223,8 +225,10 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
         </div>
       )}
       {/* Sized by its rows, scrolling past about thirteen of them. */}
+      {/* In a Cockpit pane the list fills the pane (and scrolls in it); a Flow card, which grows with its content, caps
+          it at 420 px. */}
       <div className="min-h-0 flex-1">
-        <div className="max-h-[420px] overflow-y-auto overflow-x-hidden pr-0.5">
+        <div className={`${inPane ? 'h-full' : 'max-h-[420px]'} overflow-y-auto overflow-x-hidden pr-0.5`}>
           {shown.length > 0 && (
             <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-zinc-800/80 bg-zinc-950/95 pb-1 font-mono text-[10px] uppercase tracking-wider text-zinc-500 backdrop-blur-sm">
               <span className="min-w-[38%] flex-1 basis-0">Parameter</span>
