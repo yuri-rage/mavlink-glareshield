@@ -169,7 +169,8 @@ dcase(
 dcase(
     "GPS_RAW_INT RTK fixed, unknown DOP/vel/cog",
     vehicle.gps_raw_int_encode(1, 6, 1, 2, 3, 65535, 65535, 65535, 65535, 30),
-    {"fix_type": 6, "eph": 0, "epv": 0, "vel": 0, "cog": 0, "satellites_visible": 30},
+    # Unknown HDOP decodes as NaN (shown "--", not a perfect 0.00); the others stay 0.
+    {"fix_type": 6, "eph": "NaN", "epv": 0, "vel": 0, "cog": 0, "satellites_visible": 30},
 )
 
 # --- GPS2_RAW --------------------------------------------------------------

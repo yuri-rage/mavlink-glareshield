@@ -165,7 +165,7 @@
    "hex": "fd1e00000001011800000100000000000000010000000200000003000000ffffffffffffffff061ed125",
    "expect": {
     "fix_type": 6,
-    "eph": 0,
+    "eph": "NaN",
     "epv": 0,
     "vel": 0,
     "cog": 0,
