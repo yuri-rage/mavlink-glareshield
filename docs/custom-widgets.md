@@ -675,7 +675,7 @@ How a composite card behaves:
 ### Building a composite in the creator
 
 1. In the creator, set **Display UI Type** to **Composite (several panels in one card)**. Whatever you had set up becomes panel 1. For a built-in widget, set the panel type to **Built-in Widget** and pick one.
-2. **Add panel** adds another, up to 8. Click a panel in the list to edit it: the settings below the list then apply to that panel (its type, title, width, accent colour and everything else).
+2. **Add panel** adds another, up to 12. Click a panel in the list to edit it: the settings below the list then apply to that panel (its type, title, width, accent colour and everything else).
 3. Set each panel's width in the list, and reorder panels with the arrows. The preview shows the card as laid out.
 4. **Save & Place** adds the card full width. **Export Widget JSON** saves the whole composite as one file.
 
@@ -702,7 +702,7 @@ These rules apply to everything imported, and to everything saved from the creat
 | Item | Rule |
 |---|---|
 | `displayType` | Must be a known type, otherwise it becomes `stat-card`. |
-| `panels` | At most 8, each cleaned by these same rules. A panel can't be `composite`. A composite reads at most 32 values in all; extra values are trimmed from the last panels first. |
+| `panels` | At most 12, each cleaned by these same rules. A panel can't be `composite`. A composite reads at most 32 values in all; extra values are trimmed from the last panels first. |
 | `action` | Needs a numeric `commandId`, otherwise it is dropped. `params` always becomes seven numbers; missing or invalid ones are 0. |
 | `span` | 1–12 |
 | `widgetId` | Must name a built-in widget, otherwise the panel is dropped. |

@@ -65,8 +65,11 @@ export function sanitizeParamSetEntries(raw: unknown): string[] {
   }
   return out;
 }
-/** Panels a composite widget may hold. */
-export const MAX_PANELS = 8;
+/**
+ * Panels a composite widget may hold: one per column of its 12-column grid at most. What it costs to run is bounded
+ * by MAX_COMPOSITE_BINDINGS, not by this.
+ */
+export const MAX_PANELS = 12;
 /** Bound values across all panels of a composite widget (each is read 8 times a second). */
 export const MAX_COMPOSITE_BINDINGS = 32;
 
