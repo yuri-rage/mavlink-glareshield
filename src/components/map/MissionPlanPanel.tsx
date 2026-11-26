@@ -71,7 +71,7 @@ import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { FencePlanBody } from './FencePlanBody';
 import { OPEN_ACCEPT } from './MissionMenu';
-import { frameTag, ICON_BTN, INPUT, NumField } from './planUi';
+import { ClearDraftButton, frameTag, ICON_BTN, INPUT, NumField } from './planUi';
 import { RallyPlanBody } from './RallyPlanBody';
 
 export { typedValue } from './planUi';
@@ -936,6 +936,12 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
                 <RotateCcw className="h-3 w-3" />
                 {resetConfirm.armed ? 'Discard changes?' : 'Vehicle mission'}
               </button>
+              {/* Home (item 0) stays: it's the vehicle's, not a mission item. */}
+              <ClearDraftButton
+                what="mission"
+                empty={draft.items.length <= 1}
+                onClear={() => apply((d) => ({ ...d, items: d.items.slice(0, 1) }), null)}
+              />
             </div>
           </div>
         </>
