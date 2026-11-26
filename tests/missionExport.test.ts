@@ -83,6 +83,38 @@ check('fence circle as a polygon', kml.includes('Exclusion circle 1 (50 m)'));
 check('rally point at home + 60 m', kml.includes('<name>Rally 1</name>') && kml.includes('-106.003,35.003,1660'));
 check('balanced tags', (kml.match(/<Placemark>/g) ?? []).length === (kml.match(/<\/Placemark>/g) ?? []).length);
 
+// The _INT frames (MISSION_ITEM_INT) mean the same as their float twins: 5 sea level, 6 home, 11 terrain.
+const intFrames = toKml({
+  waypoints: [
+    wp(0, 16, 35, -106, 1600, 0),
+    wp(1, 16, 35.001, -106, 1700, 5),
+    wp(2, 16, 35.002, -106, 40, 6),
+    wp(3, 16, 35.003, -106, 25, 11),
+  ],
+  fencePoints: [],
+  rallyPoints: [],
+});
+check(
+  'frame 5 described and placed as above sea level',
+  /<name>1 WAYPOINT<\/name>\s*<description>WAYPOINT, 1700 m \(above sea level\)<\/description>[\s\S]*?<altitudeMode>absolute<\/altitudeMode><coordinates>-106,35.001,1700</.test(
+    intFrames
+  )
+);
+check(
+  'frame 6 described as above home, placed at home + alt',
+  /\(above home\)[\s\S]*?-106,35.002,1640</.test(intFrames)
+);
+check(
+  'frame 11 described and placed as above terrain',
+  /<name>3 WAYPOINT<\/name>\s*<description>WAYPOINT, 25 m \(above terrain\)<\/description>[\s\S]*?<altitudeMode>relativeToGround<\/altitudeMode><coordinates>-106,35.003,25</.test(
+    intFrames
+  )
+);
+check(
+  'a route with a frame-11 waypoint is drawn above ground',
+  /<LineString><altitudeMode>relativeToGround/.test(intFrames)
+);
+
 const noHome = toKml({ waypoints: waypoints.filter((w) => w.seq !== 0), fencePoints: [], rallyPoints: [] });
 check('without a home: relative altitudes above ground', /<LineString><altitudeMode>relativeToGround/.test(noHome));
 

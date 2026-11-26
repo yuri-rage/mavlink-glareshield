@@ -25,10 +25,20 @@ interface KmlAlt {
 }
 
 /** MAV_FRAME to a KML altitude: MSL as is, relative-to-home on top of home's MSL altitude, terrain as above ground. */
-function kmlAlt(alt: number, frame: number | undefined, homeMsl: number | null): KmlAlt {
+/** A MAV_FRAME's altitude reference: sea level (0, 5: GLOBAL, GLOBAL_INT), terrain (10, 11), else home (3, 6...). */
+function frameRef(frame: number | undefined): 'msl' | 'terrain' | 'home' {
   const f = frame ?? 3;
-  if (f === 0 || f === 5) return { alt, mode: 'absolute' };
-  if (f === 10 || f === 11) return { alt, mode: 'relativeToGround' };
+  if (f === 0 || f === 5) return 'msl';
+  if (f === 10 || f === 11) return 'terrain';
+  return 'home';
+}
+
+const FRAME_TEXT = { msl: 'above sea level', terrain: 'above terrain', home: 'above home' } as const;
+
+function kmlAlt(alt: number, frame: number | undefined, homeMsl: number | null): KmlAlt {
+  const ref = frameRef(frame);
+  if (ref === 'msl') return { alt, mode: 'absolute' };
+  if (ref === 'terrain') return { alt, mode: 'relativeToGround' };
   // Relative to home (3, 6) and anything else: absolute when home's altitude is known, else above ground (close
   // enough near home).
   return homeMsl !== null ? { alt: homeMsl + alt, mode: 'absolute' } : { alt, mode: 'relativeToGround' };
@@ -91,12 +101,12 @@ export function toKml(input: PlanInput & { name?: string }): string {
   );
   // A line has one altitude mode. Above sea level when home is known and no point is above terrain; otherwise
   // above ground, with heights relative to home (close to above ground near home) and terrain heights as they are.
-  const terrain = (w: MissionWaypoint) => w.frame === 10 || w.frame === 11;
+  const terrain = (w: MissionWaypoint) => frameRef(w.frame) === 'terrain';
   const lineMode = homeMsl !== null && !route.some(terrain) ? 'absolute' : 'relativeToGround';
   const lineAlt = (w: MissionWaypoint) => {
     if (lineMode === 'absolute') return kmlAlt(w.alt, w.frame, homeMsl).alt;
     if (terrain(w)) return w.alt;
-    const msl = w.frame === 0 || w.frame === 5;
+    const msl = frameRef(w.frame) === 'msl';
     return msl && homeMsl !== null ? w.alt - homeMsl : w.alt;
   };
   const routeCoords = [
@@ -113,7 +123,7 @@ export function toKml(input: PlanInput & { name?: string }): string {
         w.lat,
         w.lon,
         kmlAlt(w.alt, w.frame, homeMsl),
-        `${cmdLabel(w.command)}, ${fmt(w.alt, 1)} m (${(w.frame ?? 3) === 0 ? 'above sea level' : (w.frame ?? 3) === 10 ? 'above terrain' : 'above home'})`
+        `${cmdLabel(w.command)}, ${fmt(w.alt, 1)} m (${FRAME_TEXT[frameRef(w.frame)]})`
       )
     );
 
