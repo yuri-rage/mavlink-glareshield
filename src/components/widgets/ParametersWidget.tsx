@@ -39,6 +39,7 @@ import {
 import { decodePayload } from '../../mavlink/parser';
 import { markBusy, onActiveVehicleChange } from '../../mavlink/vehicleRoster';
 import { useParamMetaStore } from '../../store/paramMetaStore';
+import { useReplaying } from '../../store/replayStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useInPane } from '../dashboard/paneContext';
 import { Badge } from '../ui/badge';
@@ -62,9 +63,12 @@ export const ParametersWidget: React.FC = () => {
   // Use selector so this component ONLY re-renders when parameters or connection state change,
   // NOT on 50Hz attitude, GPS, or VFR_HUD telemetry updates.
   const parameters = useTelemetryStore((state) => state.parameters);
-  const connected = useTelemetryStore(
-    (state) => state.heartbeat.lastHeartbeatTime > 0 && state.heartbeat.modeName !== 'DISCONNECTED'
-  );
+  // A replayed log is not a vehicle to read or write parameters on: treated as no link.
+  const replaying = useReplaying();
+  const connected =
+    useTelemetryStore(
+      (state) => state.heartbeat.lastHeartbeatTime > 0 && state.heartbeat.modeName !== 'DISCONNECTED'
+    ) && !replaying;
   const firmwareVersion = useTelemetryStore((state) => state.firmwareVersion);
 
   const [search, setSearch] = useState('');

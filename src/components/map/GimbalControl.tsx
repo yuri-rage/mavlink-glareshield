@@ -21,6 +21,7 @@ import {
 } from '../../mavlink/gimbal';
 import { getVehicleCategory } from '../../mavlink/messages';
 import { gimbalEnabled, useGimbalStore } from '../../store/gimbalStore';
+import { useReplaying } from '../../store/replayStore';
 import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
 import { AckChip } from '../widgets/custom/panelKit';
 import { describeAck, type AckView } from '../widgets/custom/panelModel';
@@ -49,12 +50,14 @@ export function useGimbalEnabled(): boolean {
   const info = useGimbalStore((s) => s.info);
   const attitude = useGimbalStore((s) => s.attitude);
   const linked = useTelemetryStore((s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED');
+  const replaying = useReplaying();
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-  return linked && gimbalEnabled({ mountTypes, info, attitude }, now);
+  // Not while replaying a log: there is no live gimbal to point.
+  return linked && !replaying && gimbalEnabled({ mountTypes, info, attitude }, now);
 }
 
 export const GimbalControlBody: React.FC = () => {
