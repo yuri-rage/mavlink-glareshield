@@ -727,6 +727,7 @@ export const ArmingModesWidget: React.FC = () => {
                 size="sm"
                 className="h-7 border-emerald-700/60 text-emerald-300"
                 title="Hover in place (QLOITER): back-transitions from forward flight"
+                disabled={!canCommand}
                 onClick={() => handleSetMode(PLANE_MODE.QLOITER, 'Hover (QLOITER)', 'mode-loiter')}
               >
                 Hover
@@ -736,6 +737,7 @@ export const ArmingModesWidget: React.FC = () => {
                 size="sm"
                 className={`h-7 ${forwardConfirm.armed ? 'border-amber-500 bg-amber-600 text-zinc-950' : 'border-sky-700/60 text-sky-300'} ${getFeedbackRing('mode-cruise')}`}
                 title="Forward flight (CRUISE): from a hover this starts a forward transition"
+                disabled={!canCommand}
                 onClick={() => {
                   if (vtolState !== 4 && !forwardConfirm.armed) return forwardConfirm.arm();
                   forwardConfirm.cancel();
