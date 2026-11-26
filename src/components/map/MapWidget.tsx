@@ -10,9 +10,9 @@ import {
   Home,
   LocateFixed,
   Map as MapIcon,
+  MapPinned,
   MapPinPlus,
   MousePointer2,
-  Navigation,
   RefreshCw,
   Shield,
   Upload,
@@ -2645,7 +2645,8 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               disabled={!connected || planning}
               onClick={() => setFlyToMode((v) => !v)}
               aria-pressed={flyToMode}
-              className={`h-7 w-7 p-0 ${flyToMode ? 'bg-sky-500 text-white ring-2 ring-sky-300' : 'text-zinc-300 hover:text-white disabled:opacity-40'}`}
+              aria-label="Fly to a point"
+              className={`h-7 gap-1 px-1.5 text-[11px] font-bold ${flyToMode ? 'bg-sky-500 text-white ring-2 ring-sky-300' : 'text-zinc-300 hover:text-white disabled:opacity-40'}`}
               title={
                 planning
                   ? 'Fly To is off while planning'
@@ -2656,7 +2657,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                     : 'Connect to a vehicle to use Fly To'
               }
             >
-              <Navigation className={`h-3.5 w-3.5 ${flyToMode ? '' : 'text-sky-300'}`} />
+              {/* A pin, not the navigation arrow: that arrow reads as "centre on my position" (Google Maps). */}
+              <MapPinned className={`h-3.5 w-3.5 ${flyToMode ? '' : 'text-sky-300'}`} />
+              <span className="hidden sm:inline">Fly to</span>
             </Button>
             <AltitudeAction
               target={activeFlyToTarget ? { lat: activeFlyToTarget.lat, lon: activeFlyToTarget.lon } : null}

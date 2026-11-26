@@ -199,7 +199,7 @@ Every command shows its result (accepted, refused and why, or no answer).
 
 ### Guided actions on the map
 
-- **Fly here**: right-click the map (long-press on a touch screen), or use the map header's fly-to button (the arrow)
+- **Fly here**: right-click the map (long-press on a touch screen), or use the map header's **Fly to** button (a pin)
   then click the map. Choose the altitude above home, then **Switch to GUIDED & fly here**. The target is marked on the map
   until the vehicle arrives or leaves GUIDED.
 - **Orbit here** (Plane): from the same card, with a radius. Outside GUIDED it reads **Switch to GUIDED & orbit**
