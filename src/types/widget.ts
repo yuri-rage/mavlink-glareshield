@@ -169,7 +169,10 @@ export interface WidgetPanelDefinition {
   widgetId?: string;
   /** Small heading above the panel. Controls also use it to name the command they send. */
   title?: string;
-  /** Width in twelfths of the card (default 12, a full row). Narrow cards stack every panel full width. */
+  /**
+   * Width in twelfths of the card (default 12, a full row). In a narrow card (a phone) a panel of 4 or less takes half
+   * the row, the others the whole row.
+   */
   span?: number;
   description?: string;
   binding?: WidgetDataBinding;

@@ -32,7 +32,7 @@ import { panelFills, panelIcon, WidgetPanel } from './custom/WidgetPanel';
 
 valueSampler.setStateGetter(() => useTelemetryStore.getState());
 
-/** Below this content width a composite card stacks its panels in one column. */
+/** Below this content width a composite card reflows: small panels two to a row, the others full width. */
 const STACK_BELOW_PX = 360;
 
 interface CustomWidgetRendererProps {
@@ -182,7 +182,10 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
             className={`grid h-full grid-cols-12 ${inPane ? 'content-stretch gap-2 [grid-auto-rows:minmax(min-content,1fr)]' : 'content-start gap-2.5'}`}
           >
             {panels.map((p, i) => {
-              const span = stacked ? 12 : panelSpan(definition, i);
+              // Narrow (a phone): small panels (a third of the card or less) two to a row, the rest full width, rather
+              // than every panel in one long column.
+              const own = panelSpan(definition, i);
+              const span = stacked ? (own <= 4 ? 6 : 12) : own;
               const title = definition.panels?.[i]?.title?.trim();
               const Icon = panelIcon(p.def.displayType);
               return (

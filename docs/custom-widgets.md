@@ -669,7 +669,7 @@ How a composite card behaves:
 - **Alerts.** Each panel's border turns amber or red with its own thresholds. The card's border and badge show the worst panel.
 - **Stale data.** The card's **Stale** badge covers every panel's values. Each panel dims on its own.
 - **Controls.** Each control panel confirms, sends and shows the vehicle's acknowledgement on its own. Arming one never affects another.
-- **Narrow cards.** In a card narrower than about 360 px, such as on a phone, every panel takes a full row.
+- **Narrow cards.** In a card narrower than about 360 px, such as on a phone, a panel a third of the card wide or less (`span` 4 or less) takes half a row, so they pair up; wider panels take a full row.
 - **Import.** The import preview lists every panel and every command or parameter write in it, and confirmation is forced on all of them.
 
 ### Building a composite in the creator
