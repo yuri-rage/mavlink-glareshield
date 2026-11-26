@@ -510,6 +510,11 @@ export function decodePayload(messageId: number, payload: Uint8Array): any {
     case MAVLINK_MSG_ID.MISSION_CURRENT:
       return {
         seq: getUint16(0),
+        // MAVLink 2 extensions (ArduPilot 4.4+): items on the vehicle (home excluded), and MISSION_STATE: 0 unknown
+        // (older firmware), 1 no mission, 2 not started, 3 active, 4 paused, 5 complete. ArduPilot sends total 0 with
+        // no mission, so "no mission" is mission_state 1, not total 65535.
+        total: getUint16(2),
+        mission_state: getUint8(4),
       };
 
     case MAVLINK_MSG_ID.MISSION_ITEM_REACHED:

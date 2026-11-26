@@ -338,6 +338,8 @@ interface TelemetryState {
   parameters: Record<string, { value: number; type: number; index: number; defaultValue?: number }>;
   missionWaypoints: MissionWaypoint[];
   currentWaypointSeq: number;
+  /** MISSION_CURRENT's mission_state: 1 = no mission on the vehicle, 0 = not reported (older firmware). */
+  missionState: number;
   lastReachedWaypointSeq: number;
   /** When the last MISSION_ITEM_REACHED arrived (ms epoch), so reaching the same waypoint again is still an event. */
   lastReachedAt: number;
@@ -937,6 +939,7 @@ export const useTelemetryStore = create<TelemetryState>()(
     parameters: {},
     missionWaypoints: initialNav.missionWaypoints ?? [],
     currentWaypointSeq: 0,
+    missionState: 0,
     lastReachedWaypointSeq: 0,
     lastReachedAt: 0,
     missionItemReachedSeen: false,
@@ -1662,6 +1665,7 @@ export const useTelemetryStore = create<TelemetryState>()(
               const currentChanged = state.missionWaypoints.some((w) => w.current !== (w.seq === data.seq));
               return {
                 currentWaypointSeq: data.seq,
+                missionState: data.mission_state ?? 0,
                 ...(currentChanged
                   ? { missionWaypoints: state.missionWaypoints.map((w) => ({ ...w, current: w.seq === data.seq })) }
                   : {}),
