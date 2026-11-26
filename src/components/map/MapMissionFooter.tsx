@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-import { Navigation, RefreshCw, RotateCcw, SkipForward, X } from 'lucide-react';
+import { MapPinned, RefreshCw, RotateCcw, SkipForward, X } from 'lucide-react';
 
 import { formatEta, useConfirmStep, useWaypointNavigation } from '../../lib/useWaypointNavigation';
 import { followsPath } from '../../mavlink/guidedActions';
@@ -184,7 +184,7 @@ export const MapMissionFooter: React.FC<FooterProps> = ({ isFetching, onFetch })
             className="flex h-7 items-center gap-1 rounded-md bg-sky-600 px-2 text-[11px] font-bold text-white hover:bg-sky-500 disabled:opacity-40"
             title={`Fly to WP ${selected} now`}
           >
-            <Navigation className="h-3 w-3" />
+            <MapPinned className="h-3 w-3" />
             Go
           </button>
 

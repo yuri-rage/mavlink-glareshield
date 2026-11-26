@@ -7,7 +7,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
-import { ArrowUpDown, Gauge, Home, Orbit, Pause, Play, RotateCcw, RotateCw } from 'lucide-react';
+import { Gauge, Home, MoveVertical, Orbit, Pause, Play, RotateCcw, RotateCw } from 'lucide-react';
 
 import { useLengthUnit, useSpeedUnit, wholeLength } from '../../lib/inputUnits';
 import { useConnectionParam } from '../../lib/useConnectionParam';
@@ -263,7 +263,7 @@ export const AltitudeAction: React.FC<{ target: { lat: number; lon: number } | n
         title={disabled ? 'Connect to a vehicle (not while planning)' : 'Altitude · speed · home'}
         className={`inline-flex h-7 w-7 items-center justify-center rounded-md border ${open ? 'border-sky-400 bg-sky-500 text-white' : 'border-zinc-700 text-sky-300 hover:bg-zinc-800'} disabled:opacity-40`}
       >
-        <ArrowUpDown className="h-3.5 w-3.5" />
+        <MoveVertical className="h-3.5 w-3.5" />
       </button>
       {open && (
         <div className="absolute right-0 top-8 z-[1000] w-60 space-y-2 rounded-lg border border-sky-500/40 bg-zinc-950/95 p-2.5 text-xs shadow-2xl backdrop-blur-md">
@@ -301,7 +301,7 @@ export const AltitudeAction: React.FC<{ target: { lat: number; lon: number } | n
                 disabled={!plan}
                 className={`${BTN} ${confirm.armed ? CONFIRM : 'border-sky-600 bg-sky-600 text-white hover:bg-sky-500'} disabled:opacity-40`}
               >
-                <ArrowUpDown className="h-3.5 w-3.5" />
+                <MoveVertical className="h-3.5 w-3.5" />
                 {confirm.armed
                   ? 'Confirm: switch to GUIDED'
                   : plan?.switchesToGuided

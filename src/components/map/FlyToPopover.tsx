@@ -3,7 +3,7 @@
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import { LocateFixed, Minus, Navigation, Plus, X } from 'lucide-react';
+import { LocateFixed, MapPinned, Minus, Plus, X } from 'lucide-react';
 
 import { useLengthUnit } from '../../lib/inputUnits';
 
@@ -113,7 +113,7 @@ export const FlyToPopover: React.FC<FlyToPopoverProps> = ({
             </>
           ) : (
             <>
-              <Navigation className="h-3.5 w-3.5" /> Fly here
+              <MapPinned className="h-3.5 w-3.5" /> Fly here
             </>
           )}
         </span>
