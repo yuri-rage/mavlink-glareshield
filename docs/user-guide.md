@@ -357,6 +357,21 @@ and can erase them. ArduPilot doesn't send logs while armed.
 Data**), keeping up to the size you choose (oldest first; logs you mark kept are spared). The **REC** chip in the navbar
 shows it's recording and opens the list to download them for Mission Planner or other tools.
 
+**Replaying a telemetry log**: play a recorded flight on the dashboard itself, with the HUD, map, widgets and messages
+showing it as they did live. Use ▶ beside a log in the **Logs** widget's list, or **Replay a .tlog file…** there or in
+**Settings → Data** (logs from Glareshield, Mission Planner and QGroundControl all play).
+
+- A **Replay** bar under the navbar has play / pause, the speed (0.5× to 10×), a scrubber to jump anywhere (jumping
+  back replays the log from the start up to that point, so everything shown is as it was), the time, and **Stop**.
+  The navbar's link status reads **Replay**.
+- **Read-only**: nothing is sent to any vehicle. Commands come back as not sent; parameter, mission and log
+  downloads, MAVFTP, stream rates and Glareshield's own heartbeat don't run; the replay isn't recorded as a new log.
+  What the ground station sent at the time isn't replayed: the replay shows the vehicle.
+- Starting a replay disconnects from the live vehicle (it asks first if one is connected, and says so plainly when
+  it's armed). **Stop** (or **Disconnect**) clears what the replay showed; **Connect** brings the live link back.
+- Pauses in the log longer than a minute (a log continued after an interruption) play as a second.
+- The map doesn't show the mission yet: a mission download recorded in the log isn't rebuilt from it.
+
 Other widgets: **PID Tuning** (charts per vehicle type), **MAVLink Inspector** (every message received, with its
 fields), **RTK / NTRIP** (corrections to the vehicle), and **Gimbal** controls on the map when the vehicle has one.
 
@@ -372,7 +387,7 @@ fields), **RTK / NTRIP** (corrections to the vehicle), and **Gimbal** controls o
 | Display | Speed and distance units, altitude reference (AGL / MSL), theme (Dark cockpit / Daylight), content width |
 | Alerts | Chimes, voice callouts (a neural voice, or the device's own), waypoint announcements. The neural voice downloads once (about 80 MB with its runtime) and then works offline |
 | Traffic & terrain | ADS-B display, warnings and limits; terrain data and planning clearance |
-| Data | Telemetry log recording; Restore defaults |
+| Data | Telemetry log recording; replay a .tlog file; Restore defaults |
 | About | This build, **Check for updates**, links to these guides, the source and its issues. The logo opens it too |
 
 **Updates**: the build you're running is shown at the foot of Settings (e.g. `Glareshield 2026.11.25 · 55b37e4`).

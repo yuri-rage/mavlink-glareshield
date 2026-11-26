@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
+  History,
   Home,
   Loader2,
   Moon,
@@ -36,6 +37,7 @@ import {
 } from '../../mavlink/messages';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { useConnectionStore } from '../../store/connectionStore';
+import { useReplayStore } from '../../store/replayStore';
 import { evaluatePreArmReadiness, sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { Badge } from '../ui/badge';
@@ -43,6 +45,7 @@ import { Button } from '../ui/button';
 import { Modal } from '../ui/modal';
 // Loaded with the app, not on demand: Settings holds the link controls, so it must open offline or after a redeploy
 // (when a lazily fetched chunk can fail to load), and it's small (~7 kB gzipped).
+import { ReplayBar } from './ReplayBar';
 import { SettingsDialog, type SettingsTab } from './SettingsDialog';
 import { TlogIndicator } from './TlogSettings';
 import { UpdateButton } from './UpdateButton';
@@ -245,6 +248,7 @@ export const Navbar: React.FC = () => {
     Math.max(s.vibration.vibrationX, s.vibration.vibrationY, s.vibration.vibrationZ).toFixed(1)
   );
   const hasConnectedInSession = useTelemetryStore((state) => state.hasConnectedInSession);
+  const replaying = useReplayStore((s) => s.active);
   const armedStartedAt = useTelemetryStore((state) => state.armedStartedAt);
   const accumulatedArmedMs = useTelemetryStore((state) => state.accumulatedArmedMs);
   const firmwareVersion = useTelemetryStore((state) => state.firmwareVersion);
@@ -399,6 +403,20 @@ export const Navbar: React.FC = () => {
   };
 
   const getStatusBadge = () => {
+    // A replay is not a vehicle link: say so where Connected would be.
+    if (replaying) {
+      return (
+        <Badge
+          variant="secondary"
+          className="flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-violet-500/60 bg-violet-950/70 px-2 font-sans text-xs font-semibold text-violet-100 shadow-sm sm:px-2.5"
+          onClick={() => openConnectModal('data')}
+          title="Replaying a telemetry log: read-only, nothing is sent to a vehicle"
+        >
+          <History className="h-3.5 w-3.5 shrink-0 text-violet-300" />
+          <span className="hidden md:inline">Replay</span>
+        </Badge>
+      );
+    }
     switch (status) {
       case 'connected':
         return (
@@ -847,6 +865,9 @@ export const Navbar: React.FC = () => {
             </Button>
           </div>
         )}
+
+        {/* A telemetry log is replayed: its controls, and the reminder that nothing is sent */}
+        <ReplayBar />
 
         {/* The commanded vehicle is silent and another is on the link: offered, not taken */}
         <TakeoverBanner />
