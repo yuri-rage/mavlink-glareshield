@@ -38,8 +38,64 @@ export interface TileKey {
 }
 
 /**
+ * Inland basins below sea level: a box [south, west, north, east] in degrees, and the floor, the lowest real surface
+ * in it (land or a lake's surface, in these tiles, with a few metres' margin). Inside one, a height below sea level is
+ * kept down to the floor; anything lower is a lake bed (ETOPO1 fills some lakes at coarse zooms). None of the boxes
+ * reaches the open sea. Coastal land a few metres below sea level (Dutch polders, the Fens, New Orleans, deltas) is
+ * left out: there it reads 0, a few metres high, which the vehicle's own arming correction (TERRAIN_OFS_MAX) absorbs
+ * near home.
+ */
+export const BELOW_SEA_BASINS: readonly {
+  name: string;
+  box: readonly [number, number, number, number];
+  floor: number;
+}[] = [
+  { name: 'Dead Sea, Jordan valley and Sea of Galilee', box: [30.9, 35.2, 32.95, 35.8], floor: -445 },
+  { name: 'Death Valley', box: [35.8, -117.4, 36.8, -116.5], floor: -90 },
+  {
+    name: 'Salton Trough, Imperial and Mexicali valleys, Laguna Salada',
+    box: [32.0, -116.3, 33.8, -115.0],
+    floor: -75,
+  },
+  { name: 'Qattara Depression and Siwa', box: [28.6, 25.0, 30.6, 29.6], floor: -135 },
+  { name: 'Turpan Depression', box: [42.3, 88.5, 43.2, 90.0], floor: -160 },
+  { name: 'Danakil Depression (Dallol, Lake Asale)', box: [13.9, 39.9, 14.4, 40.6], floor: -130 },
+  { name: 'Lake Afrera', box: [13.1, 40.75, 13.4, 41.0], floor: -120 },
+  { name: 'Lake Assal', box: [11.58, 42.32, 11.72, 42.48], floor: -170 },
+  // The Caspian's surface is about -28 m; the deep lowland beside it is Karagiye, in its own box.
+  { name: 'Caspian Sea and Caspian lowland', box: [36.5, 45.0, 48.5, 58.0], floor: -30 },
+  { name: 'Karagiye Depression', box: [43.2, 51.45, 43.9, 52.15], floor: -135 },
+  { name: 'Chott Melrhir and Chott el Gharsa', box: [33.5, 5.5, 34.7, 8.3], floor: -40 },
+  { name: 'Lake Eyre', box: [-29.8, 136.6, -27.5, 138.5], floor: -20 },
+  { name: 'Gran Bajo de San Julian (Laguna del Carbon)', box: [-49.8, -68.7, -49.4, -68.1], floor: -110 },
+  { name: 'Lake Enriquillo', box: [18.35, -71.85, 18.6, -71.35], floor: -48 },
+];
+
+/** The lowest a height can be at (lat, lon): a basin's floor, the lowest of any that contain it, else 0 (sea level). */
+export function terrainFloor(lat: number, lon: number): number {
+  let floor = 0;
+  for (const {
+    box: [s, w, n, e],
+    floor: f,
+  } of BELOW_SEA_BASINS)
+    if (lat >= s && lat <= n && lon >= w && lon <= e && f < floor) floor = f;
+  return floor;
+}
+
+/** Whether (lat, lon) is in one of the inland basins below sea level. */
+export const inBelowSeaBasin = (lat: number, lon: number) => terrainFloor(lat, lon) < 0;
+
+/**
+ * A height as land: never below sea level, except inside a known basin, down to its floor. The tiles fill the sea
+ * with ETOPO1 sea-floor depths, which the vehicle would take as terrain (following terrain at 50 m over 30 m of water:
+ * 20 m above the waves), and the clearance checks with it. Mission Planner, MAVProxy and QGroundControl send 0 over
+ * the sea (SRTM and Copernicus have no bathymetry) and real heights on land below sea level; this does the same.
+ */
+export const landHeight = (h: number, lat: number, lon: number) => (h >= 0 ? h : Math.max(h, terrainFloor(lat, lon)));
+
+/**
  * Height (m) at a point, from decoded tiles fetched by `getTile` (null when a tile isn't available). Bilinear between
- * pixel centres; at a tile edge it reads the neighbouring tile.
+ * pixel centres; at a tile edge it reads the neighbouring tile. Sea floor reads 0 (landHeight).
  */
 export function sampleHeight(
   lat: number,
@@ -71,7 +127,7 @@ export function sampleHeight(
   const c = at(x0, y0 + 1);
   const d = at(x0 + 1, y0 + 1);
   if (a === null || b === null || c === null || d === null) return null;
-  return a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy;
+  return landHeight(a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy, lat, lon);
 }
 
 /** The tiles `sampleHeight` reads for a point (so they can be fetched first). */
