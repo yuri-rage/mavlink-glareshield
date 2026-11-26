@@ -2,8 +2,15 @@ import React, { useEffect, useState } from 'react';
 
 import { Check, Pencil, Plus, Sliders } from 'lucide-react';
 
-import { COCKPIT_PRESETS, panesInOrder, WIDE_ASPECT, type CockpitPresetId } from '../../lib/cockpitLayout';
-import { useDashboardStore } from '../../store/dashboardStore';
+import {
+  COCKPIT_PRESETS,
+  COMPACT_PREVIEWS,
+  panesInOrder,
+  WIDE_ASPECT,
+  type CockpitPresetId,
+  type CompactPreviewId,
+} from '../../lib/cockpitLayout';
+import { COCKPIT_VARIANTS, editTarget, layoutOf, useDashboardStore } from '../../store/dashboardStore';
 import { Button } from '../ui/button';
 
 interface EditToolbarProps {
@@ -21,20 +28,31 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({ onOpenWidgetModal, onO
     applyCockpitPreset,
     editVariant,
     setEditVariant,
-    addWideLayout,
-    removeWideLayout,
+    addLayout,
+    removeLayout,
+    compactPreview,
+    setCompactPreview,
   } = useDashboardStore();
-  const [confirmRemoveWide, setConfirmRemoveWide] = useState(false);
-  // A pending "Remove the wide layout?" doesn't outlive what it was about.
-  useEffect(() => setConfirmRemoveWide(false), [activeTabId, editVariant, isEditing]);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  // A pending "Remove the ... layout?" doesn't outlive what it was about.
+  useEffect(() => setConfirmRemove(false), [activeTabId, editVariant, isEditing]);
 
   if (!isEditing) return null;
 
   const activeTab = profile.tabs.find((t) => t.id === activeTabId) || profile.tabs[0];
   const cockpit = activeTab?.mode === 'cockpit';
-  const hasWide = Boolean(activeTab?.cockpitWide);
-  const editingWide = cockpit && hasWide && editVariant === 'wide';
-  const shown = cockpit ? panesInOrder(editingWide ? activeTab.cockpitWide : activeTab.cockpit).length : 0;
+  // The tab's layouts (standard always; wide and compact when it has them) and the one being edited.
+  const variants = cockpit ? COCKPIT_VARIANTS.filter((v) => v === 'standard' || layoutOf(activeTab, v)) : [];
+  const editing = cockpit ? editTarget(activeTab, editVariant) : 'standard';
+  const shown = cockpit ? panesInOrder(layoutOf(activeTab, editing)).length : 0;
+  const VARIANT_INFO = {
+    standard: { name: 'Standard', when: 'the usual layout' },
+    wide: { name: 'Wide', when: `used when the window is wider than ${WIDE_ASPECT}:1 (an ultrawide)` },
+    compact: {
+      name: 'Compact',
+      when: "used when the standard (or wide) layout doesn't fit the window, e.g. a laptop, before stacking",
+    },
+  } as const;
 
   return (
     <div
@@ -46,8 +64,8 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({ onOpenWidgetModal, onO
         <span className="font-bold uppercase tracking-tight text-amber-200">Dashboard Editor:</span>
         <span className="hidden truncate text-zinc-400 md:inline">
           Editing <strong className="text-zinc-200">{activeTab?.title}</strong>
-          {cockpit && hasWide && (
-            <strong className="text-sky-300">{editingWide ? ' (wide layout)' : ' (standard layout)'}</strong>
+          {cockpit && variants.length > 1 && (
+            <strong className="text-sky-300"> ({VARIANT_INFO[editing].name.toLowerCase()} layout)</strong>
           )}{' '}
           {cockpit
             ? `(${shown} shown${activeTab.widgets.length > shown ? `, ${activeTab.widgets.length - shown} hidden` : ''})`
@@ -84,72 +102,88 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({ onOpenWidgetModal, onO
                 </button>
               ))}
             </div>
-            {/* A second layout for ultrawide screens: explicit, and always shown which one is being edited. */}
+            {/* Other layouts (wide: ultrawides; compact: short windows): explicit, and always shown which one is being
+                edited. */}
+            {cockpit && variants.length > 1 && (
+              <div
+                className="flex gap-0.5 rounded-md border border-sky-700/60 bg-zinc-900 p-0.5"
+                role="radiogroup"
+                aria-label="Layout being edited"
+              >
+                {variants.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    role="radio"
+                    aria-checked={editing === v}
+                    onClick={() => setEditVariant(v)}
+                    title={`${VARIANT_INFO[v].name}: ${VARIANT_INFO[v].when}`}
+                    className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
+                      editing === v ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    {VARIANT_INFO[v].name}
+                  </button>
+                ))}
+              </div>
+            )}
             {cockpit &&
-              (hasWide ? (
-                <div
-                  className="grid grid-cols-2 gap-0.5 rounded-md border border-sky-700/60 bg-zinc-900 p-0.5"
-                  role="radiogroup"
-                  aria-label="Layout being edited"
-                  title={`The wide layout is used when the window is wider than ${WIDE_ASPECT}:1 (an ultrawide); the standard one otherwise`}
-                >
-                  {(['standard', 'wide'] as const).map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      role="radio"
-                      aria-checked={(editVariant === 'wide') === (v === 'wide')}
-                      onClick={() => setEditVariant(v)}
-                      className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
-                        (editVariant === 'wide') === (v === 'wide')
-                          ? 'bg-sky-500/20 text-sky-300'
-                          : 'text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      {v === 'standard' ? 'Standard' : 'Wide'}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => addWideLayout(activeTab.id)}
-                  className="h-7 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-[11px] font-semibold text-zinc-300 hover:text-white"
-                  title={`A second layout of this tab for windows wider than ${WIDE_ASPECT}:1 (an ultrawide), starting as a copy of this one`}
-                >
-                  + Wide layout
-                </button>
-              ))}
-            {editingWide &&
-              (confirmRemoveWide ? (
+              (['wide', 'compact'] as const)
+                .filter((v) => !layoutOf(activeTab, v))
+                .map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => addLayout(activeTab.id, v)}
+                    className="h-7 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-[11px] font-semibold text-zinc-300 hover:text-white"
+                    title={`A ${VARIANT_INFO[v].name.toLowerCase()} layout of this tab, ${VARIANT_INFO[v].when}; it starts as a copy of the standard one`}
+                  >
+                    + {VARIANT_INFO[v].name}
+                  </button>
+                ))}
+            {cockpit && editing === 'compact' && (
+              <select
+                value={compactPreview}
+                onChange={(e) => setCompactPreview(e.target.value as CompactPreviewId)}
+                className="h-7 rounded-md border border-sky-700/60 bg-zinc-900 px-1.5 text-[11px] font-semibold text-sky-300"
+                aria-label="Preview the compact layout at"
+                title="Edit the compact layout in a frame the size of a laptop's browser window (when this window is larger)"
+              >
+                {COMPACT_PREVIEWS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    Preview: {p.label}
+                  </option>
+                ))}
+                <option value="off">Preview: off (this window)</option>
+              </select>
+            )}
+            {cockpit &&
+              editing !== 'standard' &&
+              (confirmRemove ? (
                 <span className="flex items-center gap-1 rounded border border-red-500/40 bg-red-950/90 px-1.5 py-0.5 text-[10px] text-red-200">
-                  Remove the wide layout?
+                  Remove the {VARIANT_INFO[editing].name.toLowerCase()} layout?
                   <button
                     type="button"
                     onClick={() => {
-                      removeWideLayout(activeTab.id);
-                      setConfirmRemoveWide(false);
+                      removeLayout(activeTab.id, editing);
+                      setConfirmRemove(false);
                     }}
                     className="rounded bg-red-600 px-1 font-bold text-white"
                   >
                     Remove
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmRemoveWide(false)}
-                    className="rounded bg-zinc-800 px-1"
-                  >
+                  <button type="button" onClick={() => setConfirmRemove(false)} className="rounded bg-zinc-800 px-1">
                     No
                   </button>
                 </span>
               ) : (
                 <button
                   type="button"
-                  onClick={() => setConfirmRemoveWide(true)}
+                  onClick={() => setConfirmRemove(true)}
                   className="h-7 rounded-md px-1.5 text-[11px] text-zinc-400 hover:text-red-300"
-                  title="Remove the wide layout (the standard one is then used on every screen)"
+                  title={`Remove the ${VARIANT_INFO[editing].name.toLowerCase()} layout (its widgets stay on the tab)`}
                 >
-                  Remove wide
+                  Remove {VARIANT_INFO[editing].name.toLowerCase()}
                 </button>
               ))}
             {cockpit && (

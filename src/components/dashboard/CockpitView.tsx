@@ -18,7 +18,7 @@ import {
   type DropZone,
   type Size,
 } from '../../lib/cockpitLayout';
-import { useDashboardStore } from '../../store/dashboardStore';
+import { editTarget, layoutOf, otherLayouts, useDashboardStore, type DashboardState } from '../../store/dashboardStore';
 import type { CockpitNode, CustomWidgetDefinition, DashboardTab, PlacedWidget } from '../../types/widget';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { HeaderSlotContext, PaneContext } from './paneContext';
@@ -253,6 +253,17 @@ interface OverlayProps {
  * one stays on the tab, hidden); Hide takes it out of the layout, Delete off the tab. In a narrow pane the bar keeps
  * to one row (the title folds to its grip).
  */
+/** How many of the tab's other layouts (than the one being edited) show a widget. */
+function shownInOthers(s: DashboardState, tabId: string, instanceId: string): number {
+  const full = s.profile.tabs.find((t) => t.id === tabId);
+  if (!full) return 0;
+  return otherLayouts(full, editTarget(full, s.editVariant)).filter((v) =>
+    panesInOrder(layoutOf(full, v)).includes(instanceId)
+  ).length;
+}
+/** "both layouts" (this and one other), "all 3 layouts". */
+const layoutsText = (others: number) => (others === 1 ? 'both layouts' : `all ${others + 1} layouts`);
+
 export const PaneEditOverlay: React.FC<OverlayProps> = ({
   tab,
   placed,
@@ -266,13 +277,9 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({
   const id = placed.instanceId;
   const customWidgets = useDashboardStore((s) => s.profile.customWidgets);
   const customDef = customWidgets.find((w) => w.id === placed.widgetId);
-  // Shown in the tab's other layout too (standard / wide)? Deleting it removes it there as well: the prompt says so.
-  const inOther = useDashboardStore((s) => {
-    const full = s.profile.tabs.find((t) => t.id === tab.id);
-    if (!full?.cockpitWide) return false;
-    const other = s.editVariant === 'wide' ? full.cockpit : full.cockpitWide;
-    return panesInOrder(other).includes(placed.instanceId);
-  });
+  // Shown in the tab's other layouts too (standard / wide / compact)? Deleting it removes it there as well: the
+  // prompt says so.
+  const inOther = useDashboardStore((s) => shownInOthers(s, tab.id, placed.instanceId));
   const {
     unplaceFromCockpit,
     splitInCockpit,
@@ -454,10 +461,12 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({
                 onClick={() => removeWidgetFromActiveTab(id)}
                 className="rounded bg-red-600 px-1 font-bold text-white"
                 title={
-                  inOther ? `Delete ${title} from the tab: it leaves both layouts` : `Delete ${title} from the tab`
+                  inOther
+                    ? `Delete ${title} from the tab: it leaves ${layoutsText(inOther)}`
+                    : `Delete ${title} from the tab`
                 }
               >
-                {inOther ? 'Delete (both layouts)' : 'Delete'}
+                {inOther ? `Delete (${layoutsText(inOther)})` : 'Delete'}
               </button>
               <button type="button" onClick={() => setConfirmDelete(false)} className="rounded bg-zinc-800 px-1">
                 No
@@ -529,12 +538,7 @@ export const CockpitView: React.FC<Props> = ({
   const removeWidget = useDashboardStore((s) => s.removeWidgetFromActiveTab);
   const [confirmHeaderDelete, setConfirmHeaderDelete] = useState(false);
   useEffect(() => setConfirmHeaderDelete(false), [header?.instanceId, isEditing]);
-  const headerInOther = useDashboardStore((s) => {
-    const full = s.profile.tabs.find((t) => t.id === tab.id);
-    if (!full?.cockpitWide || !header) return false;
-    const other = s.editVariant === 'wide' ? full.cockpit : full.cockpitWide;
-    return panesInOrder(other).includes(header.instanceId);
-  });
+  const headerInOther = useDashboardStore((s) => (header ? shownInOthers(s, tab.id, header.instanceId) : 0));
 
   const pane = (id: string) => {
     const placed = byId.get(id);
@@ -620,11 +624,11 @@ export const CockpitView: React.FC<Props> = ({
                       className="rounded bg-red-600 px-1.5 font-bold text-white"
                       title={
                         headerInOther
-                          ? `Delete ${titleOf(header.widgetId)} from the tab: it leaves both layouts`
+                          ? `Delete ${titleOf(header.widgetId)} from the tab: it leaves ${layoutsText(headerInOther)}`
                           : `Delete ${titleOf(header.widgetId)} from the tab`
                       }
                     >
-                      {headerInOther ? 'Delete (both layouts)' : 'Delete'}
+                      {headerInOther ? `Delete (${layoutsText(headerInOther)})` : 'Delete'}
                     </button>
                     <button
                       type="button"

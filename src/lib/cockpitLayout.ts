@@ -540,21 +540,47 @@ export function placedOrUnchanged(
 }
 
 // ------------------------------------------------------------------------------------------------
-// The wide layout (ultrawide screens)
+// The wide layout (ultrawide screens) and the compact one (short windows)
 // ------------------------------------------------------------------------------------------------
 
 /** Width / height above which a tab's wide layout (if it has one) is used: an ultrawide (21:9 and wider). */
 export const WIDE_ASPECT = 2.2;
 
-export type CockpitVariant = 'standard' | 'wide';
+export type CockpitVariant = 'standard' | 'wide' | 'compact';
 
 /** The least window width for the wide layout: a phone in landscape is as wide in proportion, but small. */
 export const WIDE_MIN_WIDTH = 1200;
 
-/** Which of a tab's layouts a window of this shape shows: the wide one only when the tab has it and it's wide. */
-export function variantFor(hasWide: boolean, width: number, height: number): CockpitVariant {
+/**
+ * Which of a tab's layouts a window of this shape starts from: the wide one only when the tab has it and it's wide.
+ * (Whether that fits, or the compact one is needed, is measured: chooseFit.)
+ */
+export function variantFor(hasWide: boolean, width: number, height: number): 'standard' | 'wide' {
   return hasWide && height > 0 && width >= WIDE_MIN_WIDTH && width / height > WIDE_ASPECT ? 'wide' : 'standard';
 }
+
+/**
+ * What a Cockpit tab shows in the room it has: its layout for the window's shape (standard or wide) if that fits,
+ * else its compact layout if it has one and that fits, else the stacked list (phones). Decided by fit, not by a fixed
+ * window size: a tab without a compact layout behaves as before, and the switch happens where it would have stacked.
+ */
+export function chooseFit(
+  base: 'standard' | 'wide',
+  baseFits: boolean,
+  compactFits: boolean | null
+): CockpitVariant | 'stacked' {
+  if (baseFits) return base;
+  if (compactFits) return 'compact';
+  return 'stacked';
+}
+
+/** Browser windows (content area, inside the browser's own bars) to preview a compact layout at, while editing it. */
+export const COMPACT_PREVIEWS = [
+  { id: '1366', label: '1366×768 laptop', w: 1366, h: 657 },
+  { id: '1440', label: '1440×900 laptop', w: 1440, h: 790 },
+  { id: '1536', label: '1536×864 laptop', w: 1536, h: 730 },
+] as const;
+export type CompactPreviewId = (typeof COMPACT_PREVIEWS)[number]['id'] | 'off';
 
 /**
  * The layout with `id` along a whole edge of it: a full-width row at the top or bottom, or a full-height column at the

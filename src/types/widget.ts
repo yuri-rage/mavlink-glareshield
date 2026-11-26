@@ -222,6 +222,12 @@ export interface DashboardTab {
    * widgets; the standard layout is used otherwise. Made in Edit mode, from a copy of the standard one.
    */
   cockpitWide?: CockpitLayout;
+  /**
+   * An optional Cockpit layout for windows too short for the standard (or wide) one, e.g. a laptop: used when that
+   * doesn't fit the window and this does, before falling back to the stacked list. Same widgets; made in Edit mode
+   * from a copy of the standard one.
+   */
+  cockpitCompact?: CockpitLayout;
 }
 
 export interface DashboardProfile {
