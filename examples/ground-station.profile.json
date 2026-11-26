@@ -6,7 +6,7 @@
     {
       "id": "custom-gs-vitals",
       "name": "Vitals",
-      "description": "Battery, power, GNSS quality, link loss and throttle at a glance. Values turn amber or red past their limits.",
+      "description": "What needs attention at a glance: battery, power, GNSS quality, link loss and autopilot load; throttle, vibration and EKF health. Values turn amber or red past their limits.",
       "category": "telemetry",
       "displayType": "composite",
       "colorScheme": "default",
@@ -82,6 +82,20 @@
           }
         },
         {
+          "displayType": "stat-card",
+          "title": "CPU Load",
+          "span": 4,
+          "colorScheme": "default",
+          "binding": {
+            "messageName": "SYS_STATUS",
+            "fieldName": "load",
+            "unit": "%",
+            "decimals": 0,
+            "warnThreshold": 80,
+            "critThreshold": 95
+          }
+        },
+        {
           "displayType": "gauge-radial",
           "title": "Throttle",
           "span": 4,
@@ -100,21 +114,11 @@
             "majorTicks": 5,
             "minorTicks": 4
           }
-        }
-      ]
-    },
-    {
-      "id": "custom-gs-health",
-      "name": "Health",
-      "description": "Vibration and EKF variances, each bar turning amber or red past ArduPilot's usual limits.",
-      "category": "telemetry",
-      "displayType": "composite",
-      "colorScheme": "default",
-      "panels": [
+        },
         {
           "displayType": "multi-bar",
           "title": "Vibration",
-          "span": 6,
+          "span": 4,
           "multiBarConfig": {
             "group": "vibration-xyz"
           }
@@ -122,7 +126,7 @@
         {
           "displayType": "multi-bar",
           "title": "EKF variances",
-          "span": 6,
+          "span": 4,
           "multiBarConfig": {
             "group": "ekf-variances"
           }
@@ -277,11 +281,6 @@
           "instanceId": "gs-track",
           "widgetId": "custom-gs-track",
           "colSpan": 6
-        },
-        {
-          "instanceId": "gs-health",
-          "widgetId": "custom-gs-health",
-          "colSpan": 4
         }
       ],
       "cockpit": {
@@ -292,7 +291,7 @@
           "children": [
             {
               "split": "column",
-              "sizes": [50, 50],
+              "sizes": [40, 60],
               "children": [
                 {
                   "pane": "gs-hud"
@@ -311,13 +310,10 @@
                 },
                 {
                   "split": "row",
-                  "sizes": [36, 32, 32],
+                  "sizes": [50, 50],
                   "children": [
                     {
                       "pane": "gs-track"
-                    },
-                    {
-                      "pane": "gs-health"
                     },
                     {
                       "pane": "gs-messages"
@@ -352,13 +348,10 @@
             },
             {
               "split": "column",
-              "sizes": [34, 30, 36],
+              "sizes": [50, 50],
               "children": [
                 {
                   "pane": "gs-track"
-                },
-                {
-                  "pane": "gs-health"
                 },
                 {
                   "pane": "gs-messages"
