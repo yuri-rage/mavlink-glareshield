@@ -69,6 +69,7 @@ import {
 } from '../../store/missionPlanStore';
 import { useMissionTerrainStore } from '../../store/missionTerrainStore';
 import { useOfflineMapStore } from '../../store/offlineMapStore';
+import { useReplaying, useReplayStore } from '../../store/replayStore';
 import { computeDistanceAndBearing, sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
 import { useTerrainStore } from '../../store/terrainStore';
 import { useUnitsStore } from '../../store/unitsStore';
@@ -337,6 +338,9 @@ const PositionReadout: React.FC<{ show: boolean }> = ({ show }) => {
 export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const heartbeat = useTelemetryStore((s) => s.heartbeat);
   const connected = heartbeat.lastHeartbeatTime > 0 && heartbeat.modeName !== 'DISCONNECTED';
+  // Replaying a log: the vehicle shows, but nothing can be sent to it (fly-to, guided actions, mission transfers).
+  const replaying = useReplaying();
+  const canCommand = connected && !replaying;
   const hasConnectedInSession = useTelemetryStore((s) => s.hasConnectedInSession);
   // Not the position itself: it changes with every fix (5-10 Hz) and would re-render this whole component. What
   // follows it (the marker, the readout, Fly-to, the home popup) subscribes on its own; renders need only these.
@@ -990,6 +994,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   const openFlyToPrompt = (lat: number, lon: number, accuracyM?: number) => {
     const st = useTelemetryStore.getState();
     if (st.heartbeat.lastHeartbeatTime === 0 || st.heartbeat.modeName === 'DISCONNECTED') return;
+    if (useReplayStore.getState().active) return;
     // Typed in the display units (ft or m); sent in metres. Read now: this runs from map handlers bound at mount,
     // so a unit captured then could be stale.
     const curAlt = Math.max(10, st.position.relativeAlt || 20);
@@ -2642,7 +2647,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             <Button
               variant={flyToMode ? 'default' : 'outline'}
               size="sm"
-              disabled={!connected || planning}
+              disabled={!canCommand || planning}
               onClick={() => setFlyToMode((v) => !v)}
               aria-pressed={flyToMode}
               aria-label="Fly to a point"
@@ -2650,11 +2655,13 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               title={
                 planning
                   ? 'Fly To is off while planning'
-                  : connected
-                    ? flyToMode
-                      ? 'Pick a point on the map (Esc to cancel)'
-                      : 'Fly to a point: click here, then the map. Right-click or long-press the map works too.'
-                    : 'Connect to a vehicle to use Fly To'
+                  : replaying
+                    ? 'Not while replaying a log: nothing is sent to a vehicle'
+                    : connected
+                      ? flyToMode
+                        ? 'Pick a point on the map (Esc to cancel)'
+                        : 'Fly to a point: click here, then the map. Right-click or long-press the map works too.'
+                      : 'Connect to a vehicle to use Fly To'
               }
             >
               {/* A pin, not the navigation arrow: that arrow reads as "centre on my position" (Google Maps). */}
@@ -2663,7 +2670,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             </Button>
             <AltitudeAction
               target={activeFlyToTarget ? { lat: activeFlyToTarget.lat, lon: activeFlyToTarget.lon } : null}
-              disabled={!connected || planning}
+              disabled={!canCommand || planning}
             />
 
             <Button
@@ -2709,7 +2716,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             />
 
             <MissionMenu
-              connected={connected}
+              connected={canCommand}
               isFetching={missionStatus.isFetching}
               isUploading={Boolean(missionStatus.isUploading)}
               onFetch={handleFetchMission}
@@ -2945,7 +2952,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
         </div>
 
         {/* Fly-To prompt (mission progress moved to the footer below the map) */}
-        {connected && (flyToMode || locating || locateError) && !pendingFlyTo && (
+        {canCommand && (flyToMode || locating || locateError) && !pendingFlyTo && (
           <div className="absolute bottom-2 left-2 right-2 z-[400] flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/85 px-2.5 py-1 font-mono text-[11px] shadow-md backdrop-blur-md sm:right-auto">
             {locateError ? (
               <span className="text-amber-400">{locateError}</span>
@@ -3047,7 +3054,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
             onExit={stopPlanning}
             onRequestUpload={() => setDraftUploadVehicle(vehicleDraft())}
             onKeepDraft={() => useMissionPlanStore.getState().rebase(vehicleDraft())}
-            connected={connected}
+            connected={canCommand}
             transferBusy={missionStatus.isFetching || Boolean(missionStatus.isUploading)}
             onFocusRallyPoint={focusRallyPoint}
             onRallyResetToVehicle={() => {

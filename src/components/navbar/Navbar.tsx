@@ -248,6 +248,7 @@ export const Navbar: React.FC = () => {
     Math.max(s.vibration.vibrationX, s.vibration.vibrationY, s.vibration.vibrationZ).toFixed(1)
   );
   const hasConnectedInSession = useTelemetryStore((state) => state.hasConnectedInSession);
+  // Replaying a log: the arm and mode pills show the log's state, but their menus (which send) don't open.
   const replaying = useReplayStore((s) => s.active);
   const armedStartedAt = useTelemetryStore((state) => state.armedStartedAt);
   const accumulatedArmedMs = useTelemetryStore((state) => state.accumulatedArmedMs);
@@ -564,12 +565,13 @@ export const Navbar: React.FC = () => {
                     isArmMenuOpen ? 'bg-zinc-800 ring-2 ring-sky-400' : 'hover:brightness-110'
                   }`}
                   onClick={() => {
+                    if (replaying) return;
                     setIsArmMenuOpen(!isArmMenuOpen);
                     setArmConfirmAction(null);
                     setIsModeMenuOpen(false);
                     setIsPreArmMenuOpen(false);
                   }}
-                  title="Click to Arm / Disarm vehicle"
+                  title={replaying ? 'Replaying a log: read-only' : 'Click to Arm / Disarm vehicle'}
                   aria-label={heartbeat.isArmed ? 'Armed: arm / disarm menu' : 'Disarmed: arm / disarm menu'}
                 >
                   {heartbeat.isArmed ? (
@@ -736,11 +738,12 @@ export const Navbar: React.FC = () => {
                     isModeMenuOpen ? 'bg-sky-950/80 ring-2 ring-sky-400' : 'hover:brightness-110'
                   }`}
                   onClick={() => {
+                    if (replaying) return;
                     setIsModeMenuOpen(!isModeMenuOpen);
                     setIsArmMenuOpen(false);
                     setIsPreArmMenuOpen(false);
                   }}
-                  title="Click to switch flight mode"
+                  title={replaying ? 'Replaying a log: read-only' : 'Click to switch flight mode'}
                 >
                   <span className="max-w-[7.5rem] truncate whitespace-nowrap sm:max-w-[10rem]">
                     {heartbeat.modeName}
@@ -1039,7 +1042,7 @@ export const Navbar: React.FC = () => {
               type="button"
               variant="outline"
               size="sm"
-              disabled={!isHeartbeatActive}
+              disabled={!isHeartbeatActive || replaying}
               onClick={handleRunPreArmChecks}
               className="h-8 shrink-0 border-sky-500/50 bg-sky-950/40 px-3 text-xs font-bold text-sky-200 hover:bg-sky-900/60"
             >

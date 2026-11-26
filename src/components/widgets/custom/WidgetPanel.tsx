@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
+import { useReplaying } from '../../../store/replayStore';
 import type { PanelDisplayType, WidgetDisplayType } from '../../../types/widget';
 import { BuiltinPanel } from './BuiltinPanel';
 import { ActionButtonPanel, ParamPanel, SliderPanel, TogglePanel } from './ControlPanels';
@@ -91,8 +92,25 @@ export function panelFills(type: WidgetDisplayType): boolean {
   );
 }
 
+/** Panels that send to the vehicle (commands, parameter writes): disabled while a log replays. */
+const CONTROL_TYPES: ReadonlySet<string> = new Set([
+  'action-button',
+  'toggle-switch',
+  'slider-control',
+  'param-control',
+  'param-set',
+]);
+
 export const WidgetPanel: React.FC<PanelProps> = (props) => {
+  const replaying = useReplaying();
   const Panel = PANELS[props.def.displayType as PanelDisplayType] ?? StatPanel;
   // Keyed by type so a panel's own state (confirmations, slider position) never carries over to another type.
-  return <Panel key={props.def.displayType} {...props} />;
+  const panel = <Panel key={props.def.displayType} {...props} />;
+  if (!replaying || !CONTROL_TYPES.has(props.def.displayType)) return panel;
+  // A disabled fieldset disables every button and input inside it; display: contents keeps the layout as it is.
+  return (
+    <fieldset disabled className="contents" title="Replaying a log: nothing is sent to a vehicle">
+      {panel}
+    </fieldset>
+  );
 };

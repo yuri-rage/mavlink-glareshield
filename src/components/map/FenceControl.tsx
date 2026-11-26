@@ -24,6 +24,7 @@ import { FENCE_PARAMS, fenceActionText, fenceDraftFromPoints } from '../../mavli
 import { getVehicleCategory, MAVLINK_MSG_ID } from '../../mavlink/messages';
 import { paramManager } from '../../mavlink/paramManager';
 import { messageRateManager } from '../../mavlink/rateManager';
+import { useReplaying } from '../../store/replayStore';
 import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
 import { AckChip } from '../widgets/custom/panelKit';
 import { describeAck, type AckView } from '../widgets/custom/panelModel';
@@ -31,7 +32,8 @@ import { describeAck, type AckView } from '../widgets/custom/panelModel';
 const EXTRA_PARAMS = ['FENCE_RADIUS', 'FENCE_ALT_MAX', 'FENCE_ALT_MIN'];
 
 /** The fence's state, kept current (FENCE_STATUS goes stale on its own, so this re-checks every second). */
-function useFenceState(): FenceState & { connected: boolean } {
+function useFenceState(): FenceState & { connected: boolean; replaying: boolean } {
+  const replaying = useReplaying();
   const sensorsPresent = useTelemetryStore((s) => s.sysStatus.sensorsPresent);
   const sensorsEnabled = useTelemetryStore((s) => s.sysStatus.sensorsEnabled);
   const sensorsHealth = useTelemetryStore((s) => s.sysStatus.sensorsHealth);
@@ -72,7 +74,7 @@ function useFenceState(): FenceState & { connected: boolean } {
     fenceAction,
     hasZones,
   });
-  return { ...st, connected };
+  return { ...st, connected, replaying };
 }
 
 /** The controls: state, what's enforced, Enable / Disable (with their confirmations), the vehicle's answer. */
@@ -210,7 +212,7 @@ export const FenceControlBody: React.FC<{ compact?: boolean }> = ({ compact }) =
       <div className="flex gap-1.5">
         <button
           type="button"
-          disabled={!fs.connected || nothing || isOn}
+          disabled={!fs.connected || fs.replaying || nothing || isOn}
           title={
             nothing
               ? 'Nothing to enforce: upload a fence, or configure FENCE_TYPE altitude or circle limits'
@@ -230,7 +232,7 @@ export const FenceControlBody: React.FC<{ compact?: boolean }> = ({ compact }) =
         </button>
         <button
           type="button"
-          disabled={!fs.connected || !isOn}
+          disabled={!fs.connected || fs.replaying || !isOn}
           onClick={onDisable}
           title={isOn ? 'Disable the fence now' : 'The fence is off'}
           className={`${BTN} ${disable.armed ? 'border-amber-500 bg-amber-600 text-zinc-950' : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'}`}

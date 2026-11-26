@@ -32,6 +32,7 @@ import {
   MAV_TYPE,
   PLANE_MODE,
 } from '../../mavlink/messages';
+import { useReplaying } from '../../store/replayStore';
 import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { useInHeaderSlot } from '../dashboard/paneContext';
@@ -94,6 +95,10 @@ export const ArmingModesWidget: React.FC = () => {
     heartbeat.modeName !== 'DISCONNECTED' &&
     nowMs - heartbeat.lastHeartbeatTime <= 3500;
 
+  // Replaying a log: the vehicle shown isn't live. Its state still shows; nothing can be sent to it.
+  const replaying = useReplaying();
+  const canCommand = isVehicleConnected && !replaying;
+
   const isInTakeoffMode = isVehicleConnected && heartbeat.customMode === targetTakeoffModeNum;
   const isTakeoffReady = isInTakeoffMode && heartbeat.isArmed;
 
@@ -113,7 +118,7 @@ export const ArmingModesWidget: React.FC = () => {
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLInputElement>) => {
-    if (!isVehicleConnected) {
+    if (!canCommand) {
       e.preventDefault();
       return;
     }
@@ -128,13 +133,13 @@ export const ArmingModesWidget: React.FC = () => {
   };
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (dragStartedFromLeft.current && isVehicleConnected) {
+    if (dragStartedFromLeft.current && canCommand) {
       setSliderValue(Number(e.target.value));
     }
   };
 
   const handleSliderRelease = () => {
-    if (dragStartedFromLeft.current && sliderValue >= 90 && isVehicleConnected) {
+    if (dragStartedFromLeft.current && sliderValue >= 90 && canCommand) {
       if (heartbeat.isArmed) {
         handleArm(false);
       } else {
@@ -392,7 +397,7 @@ export const ArmingModesWidget: React.FC = () => {
                 {getFeedbackBadge('arm')}
               </span>
               <span className={`hidden shrink-0 font-sans text-[10px] text-zinc-500 ${pinned ? '' : 'sm:inline'}`}>
-                {isVehicleConnected ? 'Slide right' : 'Offline'}
+                {replaying ? 'Replay' : isVehicleConnected ? 'Slide right' : 'Offline'}
               </span>
             </div>
 
@@ -401,7 +406,7 @@ export const ArmingModesWidget: React.FC = () => {
                 type="range"
                 min="0"
                 max="100"
-                disabled={!isVehicleConnected}
+                disabled={!canCommand}
                 value={sliderValue}
                 onPointerDown={handlePointerDown}
                 onChange={handleSliderChange}
@@ -411,7 +416,7 @@ export const ArmingModesWidget: React.FC = () => {
                 onTouchEnd={handleSliderRelease}
                 onKeyDown={(e) => e.preventDefault()}
                 className={`w-full ${pinned ? 'h-7' : 'h-8'} select-none appearance-none rounded-lg transition-all ${
-                  !isVehicleConnected
+                  !canCommand
                     ? 'cursor-not-allowed border border-zinc-800 bg-zinc-950/60 accent-zinc-600'
                     : heartbeat.isArmed
                       ? 'cursor-pointer border border-red-800/60 bg-red-950/40 accent-red-500'
@@ -419,7 +424,13 @@ export const ArmingModesWidget: React.FC = () => {
                 }`}
               />
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs font-bold uppercase tracking-wider text-zinc-200">
-                {!isVehicleConnected ? 'NO LINK — Locked' : heartbeat.isArmed ? 'Slide to DISARM' : 'Slide to ARM'}
+                {replaying
+                  ? 'Replay — read-only'
+                  : !isVehicleConnected
+                    ? 'NO LINK — Locked'
+                    : heartbeat.isArmed
+                      ? 'Slide to DISARM'
+                      : 'Slide to ARM'}
               </div>
             </div>
           </div>
@@ -440,7 +451,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!canCommand}
                   onClick={() => handleSetMode(4, 'Rover Hold', 'mode-4')}
                   className={`h-10 gap-1 border-rose-600/60 font-bold text-rose-300 hover:bg-rose-950/40 ${
                     isHoldActive ? 'border-rose-400 bg-rose-950/60 shadow-sm ring-1 ring-rose-400' : ''
@@ -455,7 +466,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!canCommand}
                   onClick={() => handleSetMode(0, 'Rover Manual', 'mode-0')}
                   className={`h-10 gap-1 border-zinc-700 font-bold text-zinc-200 hover:bg-zinc-800 ${
                     isManualActive ? 'border-sky-400 bg-zinc-800 text-white shadow-sm ring-1 ring-sky-400' : ''
@@ -471,7 +482,7 @@ export const ArmingModesWidget: React.FC = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={!isVehicleConnected}
+                    disabled={!canCommand}
                     onClick={() => handleSetMode(5, 'Boat Loiter', 'mode-5')}
                     className={`h-10 gap-1 border-cyan-600/50 font-bold text-cyan-300 hover:bg-cyan-950/40 ${
                       isLoiterActive ? 'border-cyan-400 bg-cyan-950/60 shadow-sm ring-1 ring-cyan-400' : ''
@@ -485,7 +496,7 @@ export const ArmingModesWidget: React.FC = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={!isVehicleConnected}
+                    disabled={!canCommand}
                     onClick={() => handleSetMode(3, 'Rover Steering', 'mode-3')}
                     className={`h-10 gap-1 border-sky-600/50 font-bold text-sky-300 hover:bg-sky-950/40 ${
                       isSteeringActive ? 'border-sky-400 bg-sky-950/60 shadow-sm ring-1 ring-sky-400' : ''
@@ -501,7 +512,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!canCommand}
                   onClick={() => handleSetMode(1, 'Rover Acro', 'mode-1')}
                   className={`h-10 gap-1 border-amber-600/50 font-bold text-amber-300 hover:bg-amber-950/40 ${
                     isAcroActive ? 'border-amber-400 bg-amber-950/60 shadow-sm ring-1 ring-amber-400' : ''
@@ -516,7 +527,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!canCommand}
                   onClick={() => handleSetMode(10, 'Rover Auto', 'mode-10')}
                   className={`h-10 gap-1 border-emerald-600/50 font-bold text-emerald-300 hover:bg-emerald-950/40 ${
                     isAutoActive ? 'border-emerald-400 bg-emerald-950/60 shadow-sm ring-1 ring-emerald-400' : ''
@@ -532,7 +543,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!canCommand}
                   onClick={() => handleSetMode(9, 'Sub Surface', 'mode-9')}
                   className={`h-10 gap-1 border-amber-600/50 font-bold text-amber-300 hover:bg-amber-950/40 ${getFeedbackRing('mode-9')}`}
                 >
@@ -544,7 +555,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!canCommand}
                   onClick={() => handleSetMode(16, 'Sub PosHold', 'mode-16')}
                   className={`h-10 gap-1 border-sky-600/50 font-bold text-sky-300 hover:bg-sky-950/40 ${getFeedbackRing('mode-16')}`}
                 >
@@ -556,7 +567,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!canCommand}
                   onClick={() => handleSetMode(2, 'Sub Depth Hold', 'mode-2')}
                   className={`h-10 gap-1 border-emerald-600/50 font-bold text-emerald-300 hover:bg-emerald-950/40 ${getFeedbackRing('mode-2')}`}
                 >
@@ -568,7 +579,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!canCommand}
                   onClick={() => handleSetMode(19, 'Sub Manual', 'mode-19')}
                   className={`h-10 gap-1 border-zinc-700 font-bold text-zinc-200 hover:bg-zinc-800 ${
                     isManualActive ? 'border-sky-400 bg-zinc-800 shadow-sm ring-1 ring-sky-400' : ''
@@ -582,7 +593,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!canCommand}
                   onClick={() => handleSetMode(3, 'Sub Auto', 'mode-3')}
                   className={`h-10 gap-1 border-emerald-600/50 font-bold text-emerald-300 hover:bg-emerald-950/40 ${
                     isAutoActive ? 'border-emerald-400 bg-emerald-950/60 shadow-sm ring-1 ring-emerald-400' : ''
@@ -600,7 +611,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!canCommand}
                   onClick={() => {
                     setAutoSeqError(null);
                     setShowTakeoffPanel((prev) => !prev);
@@ -618,7 +629,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!canCommand}
                   onClick={() => handleSetMode(autoModeNum, 'Auto Mission', 'mode-auto')}
                   className={`h-10 gap-1 border-emerald-600/50 font-bold text-emerald-300 hover:bg-emerald-950/40 ${
                     isAutoActive ? 'border-emerald-400 bg-emerald-950/60 shadow-sm ring-1 ring-emerald-400' : ''
@@ -633,7 +644,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!canCommand}
                   onClick={() =>
                     handleSetMode(
                       loiterModeNum,
@@ -654,7 +665,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected}
+                  disabled={!canCommand}
                   onClick={triggerRTL}
                   className={`h-10 gap-1 border-amber-600/50 font-bold text-amber-300 hover:bg-amber-950/40 ${
                     isRtlActive ? 'border-amber-400 bg-amber-950/60 shadow-sm ring-1 ring-amber-400' : ''
@@ -669,7 +680,7 @@ export const ArmingModesWidget: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={!isVehicleConnected || landsHow === null}
+                  disabled={!canCommand || landsHow === null}
                   title={
                     landsHow === 'mission'
                       ? "Fly the mission's landing sequence (AUTO from the nearest DO_LAND_START; refused without one)"
@@ -876,7 +887,7 @@ export const ArmingModesWidget: React.FC = () => {
                     <Button
                       variant="default"
                       size="sm"
-                      disabled={!isVehicleConnected}
+                      disabled={!canCommand}
                       onClick={runAutoTakeoffSequence}
                       className="h-9 w-full gap-1.5 bg-sky-600 text-xs font-bold text-white hover:bg-sky-500"
                       title={
@@ -896,7 +907,7 @@ export const ArmingModesWidget: React.FC = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={!isVehicleConnected}
+                        disabled={!canCommand}
                         onClick={() => triggerTakeoff(takeoffAltMeters)}
                         className="h-7 w-full border-zinc-700 text-[11px] text-zinc-300 hover:bg-zinc-800"
                       >

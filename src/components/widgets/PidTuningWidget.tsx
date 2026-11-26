@@ -25,6 +25,7 @@ import {
 } from '../../mavlink/pidTuning';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { useParamMetaStore } from '../../store/paramMetaStore';
+import { useReplaying } from '../../store/replayStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useVehicleTarget } from './custom/panelKit';
@@ -109,6 +110,7 @@ const SHORT_BELOW_PX = 470;
 export const PidTuningWidget: React.FC = () => {
   const { sysId, compId } = useVehicleTarget();
   const linked = useTelemetryStore((s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED');
+  const replaying = useReplaying();
   const heartbeatType = useTelemetryStore((s) => s.heartbeat.type);
   const firmwareVersion = useTelemetryStore((s) => s.firmwareVersion);
   const maskEntry = useTelemetryStore((s) => s.parameters[MASK_PARAM]);
@@ -324,7 +326,7 @@ export const PidTuningWidget: React.FC = () => {
               )}
               <button
                 type="button"
-                disabled={!linked || !maskKnown || maskEntry?.type === undefined || pending !== null}
+                disabled={!linked || replaying || !maskKnown || maskEntry?.type === undefined || pending !== null}
                 onClick={() => maskKnown && writeMask(withMaskBit(mask, current.bit, !reporting))}
                 className={cn(
                   'rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase disabled:cursor-not-allowed disabled:opacity-40',
@@ -339,7 +341,7 @@ export const PidTuningWidget: React.FC = () => {
               {maskKnown && mask > 0 && (
                 <button
                   type="button"
-                  disabled={!linked || pending !== null}
+                  disabled={!linked || replaying || pending !== null}
                   onClick={() => writeMask(0)}
                   className="rounded-md border border-zinc-700 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-400 hover:bg-zinc-800 disabled:opacity-40"
                   title="Set GCS_PID_MASK to 0: stop all PID_TUNING reporting"

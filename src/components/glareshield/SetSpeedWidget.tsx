@@ -5,6 +5,7 @@ import { Gauge, RotateCcw } from 'lucide-react';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { getVehicleCategory, MAV_CMD, MAVLINK_MSG_ID } from '../../mavlink/messages';
 import { messageRateManager } from '../../mavlink/rateManager';
+import { useReplaying } from '../../store/replayStore';
 import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
 import { UnitSystem, useUnitsStore } from '../../store/unitsStore';
 import { Button } from '../ui/button';
@@ -59,6 +60,7 @@ export const SetSpeedWidget: React.FC = () => {
   const sysId = heartbeat.systemId || 1;
   const compId = heartbeat.componentId || 1;
 
+  const replaying = useReplaying();
   const isVehicleConnected =
     heartbeat.lastHeartbeatTime > 0 &&
     heartbeat.modeName !== 'DISCONNECTED' &&
@@ -199,7 +201,7 @@ export const SetSpeedWidget: React.FC = () => {
             <Button
               variant="default"
               size="sm"
-              disabled={!isVehicleConnected}
+              disabled={!isVehicleConnected || replaying}
               className="ml-0.5 h-8 gap-1 bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700"
               onClick={() => handleSetSpeed()}
             >

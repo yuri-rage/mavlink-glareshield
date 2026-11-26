@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 import { getVehicleCategory } from '../mavlink/messages';
+import { useReplaying } from '../store/replayStore';
 import { setMissionCurrentWaypoint, useTelemetryStore, type CommandAckInfo } from '../store/telemetryStore';
 import { speakCallout } from './audioAlerts';
 
@@ -45,7 +46,9 @@ export function useWaypointNavigation() {
   const currentWaypointSeq = useTelemetryStore((s) => s.currentWaypointSeq);
   const [isPending, setIsPending] = useState(false);
 
-  const connected = heartbeat.lastHeartbeatTime > 0 && heartbeat.modeName !== 'DISCONNECTED';
+  // A replayed log isn't a vehicle to command: no waypoint changes while one plays.
+  const replaying = useReplaying();
+  const connected = heartbeat.lastHeartbeatTime > 0 && heartbeat.modeName !== 'DISCONNECTED' && !replaying;
   // User waypoints exclude WP0 (home).
   const userWps = missionWaypoints.filter((w) => w.seq > 0);
   const userWpCount = userWps.length;

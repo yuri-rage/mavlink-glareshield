@@ -32,3 +32,9 @@ export const initialReplayState: ReplayStoreState = {
 };
 
 export const useReplayStore = create<ReplayStoreState>(() => ({ ...initialReplayState }));
+
+/**
+ * A log is replaying: the vehicle shown isn't live, so every control that would command it is disabled (the
+ * connection drops anything sent anyway; this keeps the controls from looking live).
+ */
+export const useReplaying = () => useReplayStore((s) => s.active);

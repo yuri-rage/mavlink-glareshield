@@ -4,6 +4,7 @@ import { Search, Sliders } from 'lucide-react';
 
 import { mavlinkConnection } from '../../mavlink/connection';
 import { getAllVehicleFlightModes, getVehicleCategoryLabel } from '../../mavlink/messages';
+import { useReplaying } from '../../store/replayStore';
 import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
 import { Card, CardContent } from '../ui/card';
 import { feedbackBadge, feedbackRing } from './commandFeedback';
@@ -23,6 +24,7 @@ export const AllFlightModesWidget: React.FC = () => {
   const sysId = heartbeat.systemId || 1;
   const compId = heartbeat.componentId || 1;
 
+  const replaying = useReplaying();
   const isVehicleConnected =
     heartbeat.lastHeartbeatTime > 0 &&
     heartbeat.modeName !== 'DISCONNECTED' &&
@@ -90,7 +92,7 @@ export const AllFlightModesWidget: React.FC = () => {
             return (
               <button
                 key={mode}
-                disabled={!isVehicleConnected}
+                disabled={!isVehicleConnected || replaying}
                 onClick={() => handleSetMode(mode, label, modeKey)}
                 className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-center font-sans text-xs font-bold transition-all sm:text-[13px] ${
                   isActive
