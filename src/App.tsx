@@ -4,6 +4,7 @@ import { DashboardGrid } from './components/dashboard/DashboardGrid';
 import { EditToolbar } from './components/editor/EditToolbar';
 import { Navbar } from './components/navbar/Navbar';
 import { VehicleSwitchDialog } from './components/navbar/VehiclePicker';
+import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { useAudioAlertListener } from './lib/audioAlerts';
 import { useConnectionStore } from './store/connectionStore';
 import { useLayoutStore } from './store/layoutStore';
@@ -58,6 +59,9 @@ export const App: React.FC = () => {
 
       {/* Confirms a switch to another vehicle when something is at stake */}
       <VehicleSwitchDialog />
+
+      {/* In-app confirmations that mustn't block the page (and the vehicle heartbeat) while they're open */}
+      <ConfirmDialog />
 
       {/* Edit Mode Toolbar (populates just below the top bar when edit mode is active) */}
       <EditToolbar
