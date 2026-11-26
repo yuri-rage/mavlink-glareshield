@@ -129,7 +129,7 @@ export class WhepSession {
     await gathered(pc, this.opts.gatherTimeoutMs ?? 2000, this.abort.signal);
     if (this.stopped) throw new WhepError('stopped');
 
-    // The POST: cancelled by stop(), or after POST_TIMEOUT_MS.
+    // The POST: canceled by stop(), or after POST_TIMEOUT_MS.
     const post = new AbortController();
     const onStop = () => post.abort();
     this.abort.signal.addEventListener('abort', onStop);

@@ -864,7 +864,7 @@ if (!paramStatus?.isFetching) {
   process.exit(1);
 }
 paramManager.cancelFetch();
-if (paramStatus?.isFetching || paramStatus?.message !== 'Parameter fetch cancelled') {
+if (paramStatus?.isFetching || paramStatus?.message !== 'Parameter fetch canceled') {
   console.error('ParamManager cancelFetch failed to reset status:', paramStatus);
   process.exit(1);
 }
@@ -881,7 +881,7 @@ if (!missionStatus?.isFetching) {
   process.exit(1);
 }
 missionManager.cancelFetch();
-if (missionStatus?.isFetching || missionStatus?.message !== 'Mission & fence sync cancelled') {
+if (missionStatus?.isFetching || missionStatus?.message !== 'Mission & fence sync canceled') {
   console.error('MissionManager cancelFetch failed to reset status:', missionStatus);
   process.exit(1);
 }

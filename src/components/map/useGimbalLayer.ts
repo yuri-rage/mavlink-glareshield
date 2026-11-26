@@ -1,4 +1,4 @@
-// Where the camera looks, on the map: a dashed line from the vehicle along the gimbal's heading to where its centre
+// Where the camera looks, on the map: a dashed line from the vehicle along the gimbal's heading to where its center
 // ray meets the ground (taken as home's height), ending in a ring there (or an open end when it looks at the
 // horizon). The place it was told to point at from here is a crosshair until stopped.
 //

@@ -1,5 +1,5 @@
 // Over the map: the worst ADS-B traffic threat (alert in red, caution in amber), with how many others are near.
-// Nothing shows when no traffic is a caution or alert. Clicking centres the map on the aircraft.
+// Nothing shows when no traffic is a caution or alert. Clicking centers the map on the aircraft.
 
 import React, { useEffect, useState } from 'react';
 

@@ -84,7 +84,7 @@ check(
   countTiles(across, 6, 6) === (rs[0].x1 - rs[0].x0 + 1 + rs[1].x1 - rs[1].x0 + 1) * (rs[0].y1 - rs[0].y0 + 1) &&
     countTiles(across, 6, 6) > 0
 );
-check('west > east (normalised) also wraps', tileRanges({ south: 0, west: 179, north: 1, east: -179 }, 6).length === 2);
+check('west > east (normalized) also wraps', tileRanges({ south: 0, west: 179, north: 1, east: -179 }, 6).length === 2);
 check(
   'wider than the world: every column once',
   tileRanges({ south: 0, west: -200, north: 1, east: 200 }, 3).length === 1 &&

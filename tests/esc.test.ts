@@ -45,7 +45,7 @@ check(
 );
 const rpm = extractMultiBarItems('esc-rpm', st());
 check(
-  'the ESC RPM bars show all 8, labelled ESC1-ESC8',
+  'the ESC RPM bars show all 8, labeled ESC1-ESC8',
   rpm.length === 8 && rpm[7].label === 'ESC8' && rpm[7].value === 6300,
   rpm.map((i: any) => `${i.label}=${i.value}`).join(' ')
 );

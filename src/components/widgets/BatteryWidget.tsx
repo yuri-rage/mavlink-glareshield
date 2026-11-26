@@ -75,7 +75,7 @@ export const BatteryWidget: React.FC = () => {
         </div>
       </CardHeader>
       <CardContent className={`flex min-h-0 flex-1 flex-col space-y-2.5 p-3 ${inPane ? 'overflow-y-auto' : ''}`}>
-        {/* Voltage, current, power and consumption, laid out like the neighbouring flight cards */}
+        {/* Voltage, current, power and consumption, laid out like the neighboring flight cards */}
         <div className="grid grid-cols-2 gap-2">
           <div className="min-w-0 rounded-xl border border-zinc-800 bg-zinc-900/80 p-2.5">
             <span className="flex items-center gap-1 truncate text-[11px] font-bold uppercase text-zinc-400">

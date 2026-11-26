@@ -16,7 +16,7 @@
  *
  *   libraries/AP_Filesystem/AP_Filesystem_Mission.cpp + AP_Mission::get_item()
  *     - reading @MISSION/mission.dat regenerates it from storage: seq = index, current = 0,
- *       autocontinue = 1, altitude round-tripped through integer centimetres.
+ *       autocontinue = 1, altitude round-tripped through integer centimeters.
  *       So a correct upload does NOT read back byte-identical.
  *
  * Run: npx tsx tests/ftp_ardupilot.test.ts
@@ -232,7 +232,7 @@ class ArduPilotFtpSim {
 }
 
 /** What AP_Filesystem_Mission::read() hands back for a stored mission.dat (or rally.dat: AP_Rally keeps altitude as
- *  int16 metres, so whole metres). */
+ *  int16 meters, so whole meters). */
 function regenerateMissionDat(stored: Uint8Array, rally = false): Uint8Array {
   const out = stored.slice();
   const v = new DataView(out.buffer);
@@ -543,7 +543,7 @@ for (const loss of [0.1, 0.2]) {
   );
 }
 
-// 10. Rally points: upload a rally draft, read it back (the vehicle regenerates rally.dat: seq, alt in whole metres) and judge.
+// 10. Rally points: upload a rally draft, read it back (the vehicle regenerates rally.dat: seq, alt in whole meters) and judge.
 {
   const { missionManager } = await import('../src/mavlink/missionManager.ts');
   const rd = await import('../src/mavlink/rallyDraft.ts');
@@ -563,7 +563,7 @@ for (const loss of [0.1, 0.2]) {
     `${res.success} ${res.method} ${res.readBack.length}`
   );
   check(
-    'rally upload: regenerated read-back (alt in whole metres, frame kept) verifies',
+    'rally upload: regenerated read-back (alt in whole meters, frame kept) verifies',
     verdict.status === 'verified',
     verdict.differences.join('; ')
   );
@@ -703,14 +703,14 @@ for (const loss of [0.1, 0.2]) {
     `${autoRtl.method} ${legacyCalls}`
   );
 
-  // A mode the app doesn't recognise (named by number) might run the mission: item-by-item to be safe.
+  // A mode the app doesn't recognize (named by number) might run the mission: item-by-item to be safe.
   useTelemetryStore.setState({ heartbeat: { ...hb, isArmed: true, modeName: 'COPTER_31' } });
   const unknownSim = new ArduPilotFtpSim();
   unknownSim.install();
   const unknownMode = await missionManager.uploadSection('mission', 0, items as any, undefined, 1, 1);
   await sleep(50);
   check(
-    'armed in an unrecognised mode: mission item-by-item (it might be running the mission)',
+    'armed in an unrecognized mode: mission item-by-item (it might be running the mission)',
     unknownMode.success &&
       unknownMode.method === 'legacy' &&
       !unknownSim.requests.some((r) => r.startsWith(`${FTP_OPCODE.CreateFile}#`)),
@@ -820,7 +820,7 @@ for (const loss of [0.1, 0.2]) {
 }
 
 // 15. The refusal that starts a session reset arrives just before the create's own timeout (a slow link). The
-// pending timeout must be cancelled, or it fires during the 80 ms pause and sends a duplicate create.
+// pending timeout must be canceled, or it fires during the 80 ms pause and sends a duplicate create.
 {
   const SLOW_TIMEOUT_MS = 200;
   const sim = new ArduPilotFtpSim({

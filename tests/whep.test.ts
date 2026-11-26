@@ -248,9 +248,9 @@ await sleep(40);
 await s.stop();
 const why = await pending;
 await sleep(150);
-check('stopped mid-POST: cancelled, connection closed', /stopped/.test(String(why)) && pc!.closed, String(why));
+check('stopped mid-POST: canceled, connection closed', /stopped/.test(String(why)) && pc!.closed, String(why));
 
-// A server that answers after stop() anyway (its fetch didn't honour the cancel): that late session is DELETEd.
+// A server that answers after stop() anyway (its fetch didn't honor the cancel): that late session is DELETEd.
 calls.length = 0;
 const stubborn = {
   fetch: (async (url: string, init: any) => {

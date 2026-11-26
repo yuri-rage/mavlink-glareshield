@@ -225,7 +225,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
           </div>
         </CardContent>
       ) : (
-        // In a pane, content taller than the pane scrolls inside the card. Centring uses my-auto on a wrapper, not
+        // In a pane, content taller than the pane scrolls inside the card. Centering uses my-auto on a wrapper, not
         // justify-center, which would push overflowing content's top out of reach.
         <CardContent className={`flex min-h-0 flex-1 flex-col p-3 sm:p-4 ${inPane ? 'overflow-y-auto' : ''}`}>
           <div

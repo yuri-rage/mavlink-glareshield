@@ -521,7 +521,7 @@ for (const [type, landCmd, opts, label] of [
   // Imperial (still 'kts' here): tenths of an inch under a foot, for RTK and precision work.
   check('crosstrack under a foot (imperial): tenths of an inch', fx(0.15) === '5.9 in', fx(0.15));
   check('crosstrack under a foot, the other side: negative', fx(-0.25) === '-9.8 in', fx(-0.25));
-  check('crosstrack a few millimetres: not rounded to zero', fx(0.004) === '0.2 in', fx(0.004));
+  check('crosstrack a few millimeters: not rounded to zero', fx(0.004) === '0.2 in', fx(0.004));
   check('crosstrack just under a foot: inches', fx(0.302) === '11.9 in', fx(0.302));
   check('crosstrack that rounds to 12.0 in: 1.0 ft', fx(0.3047) === '1.0 ft', fx(0.3047));
   check(
@@ -531,11 +531,11 @@ for (const [type, landCmd, opts, label] of [
   );
   useUnitsStore.getState().setSystem('ms');
   check(
-    'crosstrack under a metre (metric): centimetres to a tenth',
+    'crosstrack under a meter (metric): centimeters to a tenth',
     fx(0.47) === '47.0 cm' && fx(-0.0312) === '-3.1 cm',
     fx(0.47) + ' ' + fx(-0.0312)
   );
-  check('crosstrack just under a metre: centimetres', fx(0.996) === '99.6 cm', fx(0.996));
+  check('crosstrack just under a meter: centimeters', fx(0.996) === '99.6 cm', fx(0.996));
   check('crosstrack that rounds to 100.0 cm: 1.0 m', fx(0.99996) === '1.0 m', fx(0.99996));
   check('crosstrack zero (metric): 0.0 cm, no minus sign', fx(0) === '0.0 cm' && fx(-0.0001) === '0.0 cm', fx(-0.0001));
 
@@ -971,7 +971,7 @@ for (const [type, landCmd, opts, label] of [
   (mavlinkConnection as any).send = origSendN;
   check('setMissionCurrentWaypoint reports NOT_SENT to its ack callback when the link is down', notSent?.result === -2);
   check(
-    'mission complete: Rover, Copter and Plane wording recognised',
+    'mission complete: Rover, Copter and Plane wording recognized',
     isMissionCompleteText('Mission Complete') &&
       isMissionCompleteText('Mission complete, changing mode to RTL') &&
       !isMissionCompleteText('Mission: 5 WP')

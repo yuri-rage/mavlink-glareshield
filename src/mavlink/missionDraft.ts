@@ -377,7 +377,7 @@ export function insertWaypointAfter(
 const EARTH_RADIUS_M = 6371008.8;
 
 /**
- * The point `distM` metres from (lat, lon) along the great circle starting on `bearingDeg` (true): exact on the
+ * The point `distM` meters from (lat, lon) along the great circle starting on `bearingDeg` (true): exact on the
  * sphere at any range, unlike a flat-earth offset. Longitude wrapped to [-180, 180).
  */
 export function destinationPoint(

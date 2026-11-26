@@ -205,7 +205,7 @@ function homePopupHtml(home: {
 const ZOOM_KEY = 'mavlink_glareshield_map_zoom';
 /**
  * How far the map zooms in. Imagery only goes to zoom 19 (maxNativeZoom) and is enlarged beyond it, so it softens,
- * but pins and routes stay sharp: the extra levels are for placing and checking waypoints to within a metre.
+ * but pins and routes stay sharp: the extra levels are for placing and checking waypoints to within a meter.
  */
 const MAP_MAX_ZOOM = 24;
 /**
@@ -481,7 +481,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   /** The point picked to fly to; `accuracyM` is set when it is the browser's own location ("fly to me"). */
   const [pendingFlyTo, setPendingFlyTo] = useState<{ lat: number; lon: number; accuracyM?: number } | null>(null);
   // While the Fly-to card is open, following the vehicle doesn't pan the map: the card is pinned to its point and
-  // would slide out from under the pointer as a moving vehicle is re-centred.
+  // would slide out from under the pointer as a moving vehicle is re-centered.
   const flyToOpenRef = useRef(false);
   flyToOpenRef.current = pendingFlyTo !== null;
   const [locating, setLocating] = useState(false);
@@ -696,7 +696,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     const renderItemsPreview = (items: MissionItemIntData[], type: string) => {
       if (type === 'mission') {
         // Only items with a position (for the others x/y are plain params), drawn along the path the vehicle
-        // flies (missionPath: spline legs curved for a copter), each labelled with its item number.
+        // flies (missionPath: spline legs curved for a copter), each labeled with its item number.
         const sorted = [...items].sort((a, b) => a.seq - b.seq);
         const pathItems: PathItem[] = sorted.map((w) => ({
           command: w.command,
@@ -995,7 +995,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     const st = useTelemetryStore.getState();
     if (st.heartbeat.lastHeartbeatTime === 0 || st.heartbeat.modeName === 'DISCONNECTED') return;
     if (useReplayStore.getState().active) return;
-    // Typed in the display units (ft or m); sent in metres. Read now: this runs from map handlers bound at mount,
+    // Typed in the display units (ft or m); sent in meters. Read now: this runs from map handlers bound at mount,
     // so a unit captured then could be stale.
     const curAlt = Math.max(10, st.position.relativeAlt || 20);
     setFlyToAltInput(String(Math.round(lengthUnit(useUnitsStore.getState().system).fromSi(curAlt))));
@@ -1055,7 +1055,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
     const position = useTelemetryStore.getState().position;
     const hasFix = position.lat !== 0 || position.lon !== 0;
-    // Following: centre on the vehicle. Otherwise back where the user left the map. With neither (a fresh load
+    // Following: center on the vehicle. Otherwise back where the user left the map. With neither (a fresh load
     // before a fix), home: one the vehicle gave this session, else where it was last session, else the cached
     // mission's item 0; and only failing all of those, the middle of the US.
     const st = useTelemetryStore.getState();
@@ -1207,7 +1207,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     return () => {
       saveView();
       // A pan or zoom animation still running can fire moveend after remove(), when the map has no panes left to
-      // read its centre from (switching tabs mid-animation): stop listening first.
+      // read its center from (switching tabs mid-animation): stop listening first.
       map.off('moveend', saveView);
       map.remove();
       mapInstanceRef.current = null;
@@ -2615,7 +2615,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                 title={planDirty ? 'Planning: unsaved changes' : 'Planning'}
               >
                 PLANNING
-                {/* The badge's own text colour: visible on its dark (night) and light amber (daylight) background. */}
+                {/* The badge's own text color: visible on its dark (night) and light amber (daylight) background. */}
                 {planDirty && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
               </Badge>
             )}
@@ -2664,7 +2664,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                       : 'Connect to a vehicle to use Fly To'
               }
             >
-              {/* A pin, not the navigation arrow: that arrow reads as "centre on my position" (Google Maps). */}
+              {/* A pin, not the navigation arrow: that arrow reads as "center on my position" (Google Maps). */}
               <MapPinned className={`h-3.5 w-3.5 ${flyToMode ? '' : 'text-sky-300'}`} />
               <span className="hidden sm:inline">Fly to</span>
             </Button>

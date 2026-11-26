@@ -1,7 +1,7 @@
 // Does the mission's route stay inside the fence? Warnings while planning (not errors: a fence can be off, or the
 // route deliberately cross it), one per leg at the leg's end item:
 // - polygons and circles (FENCE_TYPE bit 2, value 4): each leg flown (jump returns and RTL's included) sampled
-//   every few metres along the route as drawn;
+//   every few meters along the route as drawn;
 //   each shape it goes outside (inclusion) or inside (exclusion) is named once (as fenceBreachReasons);
 // - the circle around home (FENCE_TYPE bit 1, value 2): farther than FENCE_RADIUS;
 // - the maximum altitude (FENCE_TYPE bit 0, value 1): an item above FENCE_ALT_MAX (above home, the default
@@ -51,7 +51,7 @@ function distanceM(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
 }
 
 /**
- * Points along a polyline, evenly about every `step` metres (coarser for a long one: at most MAX_SAMPLES over the
+ * Points along a polyline, evenly about every `step` meters (coarser for a long one: at most MAX_SAMPLES over the
  * whole of it, never cut short), its vertices included.
  */
 function samples(pts: [number, number][], step: number): { lat: number; lon: number }[] {

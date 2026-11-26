@@ -119,7 +119,7 @@ function sanitizeBinding(raw: unknown): WidgetDataBinding | undefined {
   if (b.unitKind === 'speed' || b.unitKind === 'altitude' || b.unitKind === 'distance') out.unitKind = b.unitKind;
   const label = text(b.label, 32);
   if (label) out.label = label;
-  // Colours reach canvas and inline styles: accept hex only.
+  // Colors reach canvas and inline styles: accept hex only.
   if (typeof b.color === 'string' && /^#[0-9a-f]{3,8}$/i.test(b.color)) out.color = b.color;
   return out;
 }
@@ -245,7 +245,7 @@ export interface SanitizeOptions {
   forceConfirmation?: boolean;
 }
 
-/** Normalise an untrusted widget definition in place-safe fashion (returns a cleaned copy). */
+/** Normalize an untrusted widget definition in place-safe fashion (returns a cleaned copy). */
 /** A param control's optional fields as the editor and panel expect them: numbers finite, options a list of
  *  { label, value } (anything else in an imported file would throw when drawn). */
 function sanitizeParamControlFields(pc: WidgetParamControl): WidgetParamControl {

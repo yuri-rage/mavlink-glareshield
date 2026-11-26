@@ -21,7 +21,7 @@ import { onActiveVehicleChange } from '../mavlink/vehicleRoster';
 const STORAGE_KEY = 'mavlink_glareshield_mission_draft';
 
 /** What a click on the map does while planning: select pins only, or add a waypoint where clicked. */
-export type PlanTool = 'select' | 'add'; // 'add' is labelled Place
+export type PlanTool = 'select' | 'add'; // 'add' is labeled Place
 
 /** Which draft the map and panel edit. */
 export type PlanLayer = 'mission' | 'rally' | 'fence';

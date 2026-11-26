@@ -122,7 +122,7 @@ export const FenceControlBody: React.FC<{ compact?: boolean }> = ({ compact }) =
     enable1.cancel();
     enable2.cancel();
     disable.cancel();
-    setAck({ status: 'pending', text: 'Sent, awaiting acknowledgement', time: Date.now() });
+    setAck({ status: 'pending', text: 'Sent, awaiting acknowledgment', time: Date.now() });
     const packet = mavlinkConnection
       .getEncoder()
       .createCommandLong(sysId, compId || 1, MAV_CMD_DO_FENCE_ENABLE, [param1, 0, 0, 0, 0, 0, 0]);

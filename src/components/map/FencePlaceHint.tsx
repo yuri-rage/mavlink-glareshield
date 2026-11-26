@@ -14,12 +14,12 @@ const KINDS: { kind: FenceDrawKind; label: string; title: string }[] = [
   {
     kind: 'circle-inclusion',
     label: 'Incl. circle',
-    title: 'Click the centre ({r} radius; drag its handle to resize)',
+    title: 'Click the center ({r} radius; drag its handle to resize)',
   },
   {
     kind: 'circle-exclusion',
     label: 'Excl. circle',
-    title: 'Click the centre ({r} radius; drag its handle to resize)',
+    title: 'Click the center ({r} radius; drag its handle to resize)',
   },
   {
     kind: 'return-point',
@@ -94,7 +94,7 @@ export const FencePlaceHint: React.FC = () => {
         <div>
           {kind === 'return-point'
             ? 'Click the map to place the return point'
-            : 'Click the map to place a circle centre'}
+            : 'Click the map to place a circle center'}
           <span className="text-zinc-500"> · Esc to stop</span>
         </div>
       )}

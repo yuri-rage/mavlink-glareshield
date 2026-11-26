@@ -142,7 +142,7 @@ function distanceM(lat1: number, lon1: number, lat2: number, lon2: number): numb
 const polylineM = (pts: [number, number][]) =>
   pts.reduce((sum, p, i) => (i === 0 ? 0 : sum + distanceM(pts[i - 1][0], pts[i - 1][1], p[0], p[1])), 0);
 
-/** The last few metres of a Copter landing, at its landing speed (LAND_SPEED default 0.5 m/s below 10 m). */
+/** The last few meters of a Copter landing, at its landing speed (LAND_SPEED default 0.5 m/s below 10 m). */
 const COPTER_LAND_FINAL_M = 10;
 const COPTER_LAND_FINAL_SPEED = 0.5;
 /** Steps through the mission before giving up (a jump loop with huge repeat counts). */
@@ -199,7 +199,7 @@ export function missionSummary(
   /** An item's height above home; with an MSL altitude and no MSL home, unknown (the height stays as it was). */
   const heightOf = (it: SummaryItem): number => (isMsl(it.frame) ? (homeMsl === null ? alt : it.z - homeMsl) : it.z);
   const climbTime = (to: number) => (to > alt ? (to - alt) / speeds.up : (alt - to) / speeds.down);
-  /** A vertical landing (Copter, a QuadPlane's VTOL land): the last few metres at the landing speed. */
+  /** A vertical landing (Copter, a QuadPlane's VTOL land): the last few meters at the landing speed. */
   const verticalLandTime = (from: number) =>
     from <= 0
       ? 0

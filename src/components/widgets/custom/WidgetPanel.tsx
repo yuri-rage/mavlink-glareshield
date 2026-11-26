@@ -79,8 +79,8 @@ export function panelIcon(type: WidgetDisplayType): LucideIcon {
 }
 
 /**
- * Display types that grow to fill the space they are given (the rest are centred). A toggle fills so its slider
- * sits at the bottom of the cell and lines up with its neighbours'.
+ * Display types that grow to fill the space they are given (the rest are centered). A toggle fills so its slider
+ * sits at the bottom of the cell and lines up with its neighbors'.
  */
 export function panelFills(type: WidgetDisplayType): boolean {
   return (

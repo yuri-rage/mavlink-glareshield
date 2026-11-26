@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 
 export type ColorScheme = 'default' | 'green' | 'amber' | 'blue' | 'red';
 
-/** Accent colours (SVG / canvas) matching the Tailwind classes used elsewhere for each scheme. */
+/** Accent colors (SVG / canvas) matching the Tailwind classes used elsewhere for each scheme. */
 export const ACCENT_HEX: Record<ColorScheme, string> = {
   default: '#0ea5e9', // sky-500
   blue: '#38bdf8', // sky-400
@@ -13,7 +13,7 @@ export const ACCENT_HEX: Record<ColorScheme, string> = {
 
 export const ZONE_HEX = { normal: '#10b981', warn: '#f59e0b', crit: '#ef4444' } as const;
 
-/** Series colours, chosen to stay distinguishable from each other and on both themes. */
+/** Series colors, chosen to stay distinguishable from each other and on both themes. */
 export const SERIES_HEX = ['#0ea5e9', '#f59e0b', '#10b981', '#d946ef', '#f43f5e', '#84cc16', '#a78bfa', '#14b8a6'];
 
 export interface ChromeColors {
@@ -63,7 +63,7 @@ function readDaylight(): boolean {
   return typeof document !== 'undefined' && document.documentElement.classList.contains('daylight-theme');
 }
 
-/** Theme-aware chrome colours; follows the navbar's daylight toggle. */
+/** Theme-aware chrome colors; follows the navbar's daylight toggle. */
 export function useChromeColors(): ChromeColors {
   const [daylight, setDaylight] = useState(readDaylight);
   useEffect(() => {

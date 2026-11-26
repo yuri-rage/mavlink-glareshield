@@ -118,13 +118,13 @@ check('from items: return point', base.returnPoint?.lat === 35.0003);
   const areaBefore = f.polygonAreaM2((base.shapes[0] as any).vertices);
   const shifted = f.moveShape(base, 0, { lat: 36, lon: -105 });
   const c = f.polygonCenter((shifted.shapes[0] as any).vertices);
-  check('move a whole polygon: its centre lands where dropped', near(c.lat, 36, 1e-9) && near(c.lon, -105, 1e-9));
+  check('move a whole polygon: its center lands where dropped', near(c.lat, 36, 1e-9) && near(c.lon, -105, 1e-9));
   check(
-    'move a whole polygon: it keeps its size (in metres)',
+    'move a whole polygon: it keeps its size (in meters)',
     near(f.polygonAreaM2((shifted.shapes[0] as any).vertices), areaBefore, areaBefore * 0.002)
   );
   check(
-    'move a circle: its centre',
+    'move a circle: its center',
     (f.moveShape(base, 2, { lat: 35.5, lon: -106.5 }).shapes[2] as any).center.lat === 35.5
   );
   check('set radius', (f.setRadius(base, 2, 120).shapes[2] as any).radius === 120);
@@ -137,7 +137,7 @@ check('from items: return point', base.returnPoint?.lat === 35.0003);
   check('clear the return point', f.setReturnPoint(base, null).returnPoint === null);
   const square = f.squareAt({ lat: 35.01, lon: -106.01 }, 100, true) as any;
   check(
-    'square helper: 100 m sides, centred',
+    'square helper: 100 m sides, centered',
     near(f.polygonAreaM2(square.vertices), 10000, 20) && near(f.polygonCenter(square.vertices).lat, 35.01, 1e-9)
   );
 }
@@ -214,7 +214,7 @@ check("empty fence: warns it clears the vehicle's", has(f.validateFenceDraft(f.E
   const inOuter = { lat: 35.0003, lon: -105.9997 }; // inside the square, outside the hole and the circle? (circle: 300 m around 35.001,-106.001)
   const inHole = { lat: 35.001, lon: -105.999 };
   check('inside an exclusion zone: breached', f.fenceBreached(base, inHole));
-  const insideSquareOnly = { lat: 35.0019, lon: -105.9981 }; // in the square, far from the circle's centre
+  const insideSquareOnly = { lat: 35.0019, lon: -105.9981 }; // in the square, far from the circle's center
   check(
     'outside one inclusion zone (default intersection): breached',
     f.distanceM(insideSquareOnly, { lat: 35.001, lon: -106.001 }) > 200 && f.fenceBreached(base, insideSquareOnly)

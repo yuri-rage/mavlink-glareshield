@@ -160,7 +160,7 @@ export function toKml(input: PlanInput & { name?: string }): string {
     '<kml xmlns="http://www.opengis.net/kml/2.2">',
     '  <Document>',
     `    <name>${xml(input.name ?? 'Mission')}</name>`,
-    // KML colours are aabbggrr.
+    // KML colors are aabbggrr.
     style('route', 'ff0bbff5'),
     style('wp', 'ff0bbff5', '<IconStyle><color>ff0bbff5</color></IconStyle>'),
     style('fenceIn', 'ff3c3cef', '<PolyStyle><color>333c3cef</color></PolyStyle>'),

@@ -1,5 +1,5 @@
 // Custom widget panels that act on the vehicle: command buttons, toggles, sliders and parameter setters.
-// Each panel owns its confirmation and acknowledgement state, so several can share a card independently.
+// Each panel owns its confirmation and acknowledgment state, so several can share a card independently.
 
 import React, { useEffect, useRef, useState } from 'react';
 
@@ -43,7 +43,7 @@ export const ActionButtonPanel: React.FC<PanelProps> = ({ def, scheme }) => {
     setIsConfirming(false);
     const packet = actionPacket(mavlinkConnection.getEncoder(), sysId, compId, def.action, def.action.params);
     if (def.action.special === 'system-time') {
-      // No acknowledgement comes for this message; ArduPilot uses it only without GPS time (RTC_TYPES).
+      // No acknowledgment comes for this message; ArduPilot uses it only without GPS time (RTC_TYPES).
       sendUnacknowledged(packet, 'not acknowledged; used only if the vehicle has no GPS time');
       return;
     }
@@ -129,7 +129,7 @@ export const TogglePanel: React.FC<PanelProps> = ({ def, feedback, scheme }) => 
   const commandName = def.action ? getMavCmdName(def.action.commandId) : '';
 
   // Laid out top-down with the slider pinned to the bottom, so side-by-side toggles line up however long their
-  // status text runs (or while one shows an acknowledgement).
+  // status text runs (or while one shows an acknowledgment).
   return (
     <div className="flex flex-1 flex-col gap-2 py-1">
       <div className="flex items-start justify-between gap-2">

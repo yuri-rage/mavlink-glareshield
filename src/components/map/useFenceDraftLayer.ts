@@ -2,7 +2,7 @@
 // - inclusion polygons and circles in solid red, exclusion ones dashed with a darker fill; the selected shape in yellow;
 //   clicking a shape selects it, right-clicking opens its menu;
 // - the selected polygon shows a handle per vertex (drag to move, right-click for its menu), a "+" on each edge to
-//   insert a vertex, and a centre handle that moves the whole polygon; a circle shows a centre handle and a radius
+//   insert a vertex, and a center handle that moves the whole polygon; a circle shows a center handle and a radius
 //   handle; each drag redraws live and is committed on release, as one undo step;
 // - the return point is a marker (dragged when selected);
 // - with the Place tool, a click draws what the panel chose: polygon vertices (finished with the first vertex, Enter
@@ -110,7 +110,7 @@ export function useFenceDraftLayer(
     const shapes = map.createPane(SHAPES_PANE);
     shapes.style.zIndex = '585';
     // A dark halo around every line, so red reads on red soil, rock and roofs as well as on green: a filter on the
-    // pane follows every drag (vertex, centre, radius) with no extra paths.
+    // pane follows every drag (vertex, center, radius) with no extra paths.
     shapes.style.filter = 'drop-shadow(0 0 1px rgba(0,0,0,0.95)) drop-shadow(0 0 2px rgba(0,0,0,0.6))';
     map.createPane(HANDLES_PANE).style.zIndex = '660';
   }, [mapRef, ready]);
@@ -196,7 +196,7 @@ export function useFenceDraftLayer(
         });
       }
 
-      // Centre handle: drag to move the whole shape.
+      // Center handle: drag to move the whole shape.
       const centre = shape.kind === 'polygon' ? polygonCenter(shape.vertices) : shape.center;
       const c = L.marker(ll(centre), {
         icon: centreIcon,

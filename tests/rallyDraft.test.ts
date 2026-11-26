@@ -80,11 +80,11 @@ check(
   const u = r.updateRallyPoint(base, 2, { alt: 80 });
   check('update: altitude only', u.points[2].alt === 80 && u.points[2].lat === 35.02);
   check(
-    'altitude kept to whole metres (ArduPilot stores int16 m): 100 ft = 30.48 m becomes 30',
+    'altitude kept to whole meters (ArduPilot stores int16 m): 100 ft = 30.48 m becomes 30',
     r.updateRallyPoint(base, 0, { alt: 30.48 }).points[0].alt === 30
   );
   check(
-    'file altitudes rounded to whole metres too',
+    'file altitudes rounded to whole meters too',
     r.rallyDraftFromItems([{ seq: 0, command: 5100, frame: 3, x: 35.1, y: -106.1, z: 45.6 }] as any).points[0].alt ===
       46
   );

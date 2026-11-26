@@ -6,7 +6,7 @@
 //   no such command; DO_REPOSITION to the same point at the new altitude (a reposition without a position is
 //   refused: Location::sanitize), which needs GUIDED (asked for with the change-mode flag). Rover: no altitude.
 // - Orbit. Plane: DO_REPOSITION with param3 the loiter radius and param4 the direction (non-zero: counter-clockwise);
-//   GUIDED then circles the point. Copter has no DO_ORBIT, and CIRCLE mode can't be given a centre; Rover doesn't.
+//   GUIDED then circles the point. Copter has no DO_ORBIT, and CIRCLE mode can't be given a center; Rover doesn't.
 // - Set home. DO_SET_HOME, common to all: param1 1 for the vehicle's own position, else the point given (frame
 //   GLOBAL: altitude above sea level).
 

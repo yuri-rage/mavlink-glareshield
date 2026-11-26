@@ -7,7 +7,7 @@
 //   waypoint parameters moved to WP_; WPNAV_RADIUS in cm on 4.6 and before) and Rover's WP_RADIUS.
 // - LOITER_UNLIM param3 and LOITER_TO_ALT param2 are the loiter radius (sign = direction) for Plane; 0 =
 //   WP_LOITER_RAD. Copter holds position (no circle), and Rover has no LOITER_TO_ALT.
-// - LOITER_TURNS param3 is the circle radius for all three (stored as a byte; over 255 m in tens of metres). Plane's
+// - LOITER_TURNS param3 is the circle radius for all three (stored as a byte; over 255 m in tens of meters). Plane's
 //   0 is WP_LOITER_RAD; Copter's 0 turns in place.
 // - LOITER_TIME has no room for a radius: Plane always uses WP_LOITER_RAD, and the param3 entered is ignored.
 // - SPLINE_WAYPOINT: Copter's waypoint radius.
@@ -39,7 +39,7 @@ const DEFAULTS = { planeWp: 90, planeLoiter: 60, copterWp: 2, roverWp: 2 };
 const positive = (v: number | undefined): number | undefined =>
   v !== undefined && Number.isFinite(v) && v > 0 ? v : undefined;
 
-/** The stored loiter-turns radius: a byte, or tens of metres above 255 (up to 2550). */
+/** The stored loiter-turns radius: a byte, or tens of meters above 255 (up to 2550). */
 function turnsRadius(r: number): number {
   const a = Math.abs(r);
   return a <= 255 ? Math.floor(a) : Math.min(255, Math.floor(a * 0.1)) * 10;

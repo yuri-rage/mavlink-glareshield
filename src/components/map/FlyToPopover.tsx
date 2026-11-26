@@ -18,7 +18,7 @@ interface FlyToPopoverProps {
   onAltInput: (v: string) => void;
   modeName: string;
   armed: boolean;
-  /** Set when the point is this device's location: the fix's accuracy in metres. */
+  /** Set when the point is this device's location: the fix's accuracy in meters. */
   accuracyM?: number;
   onSend: () => void;
   onCancel: () => void;

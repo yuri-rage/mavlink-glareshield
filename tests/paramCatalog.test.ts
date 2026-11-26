@@ -80,7 +80,7 @@ check(
 
   const dev = catalogCandidates('Copter', parseFirmwareVersion('4.8.0-dev')!);
   check(
-    'dev build: same major.minor first, labelled as a dev match',
+    'dev build: same major.minor first, labeled as a dev match',
     dev[0].folder === 'Copter-4.8' && dev[0].match === 'dev-same-minor'
   );
   check(
@@ -141,21 +141,21 @@ const cat = parsePdefJson(fixture);
   check('parse: read-only flag', Boolean(ro));
   check('parse: negative value keys survive', cat.SERIAL1_PROTOCOL.values?.[-1] === 'None');
   check(
-    'parse: junk input gives an empty catalogue',
+    'parse: junk input gives an empty catalog',
     Object.keys(parsePdefJson(null)).length === 0 && Object.keys(parsePdefJson({ json: { version: 0 } })).length === 0
   );
 }
 
 // ------------------------------------------------------------------------------------------------
-// Lookups go to the active catalogue first, then the built-in descriptions
+// Lookups go to the active catalog first, then the built-in descriptions
 // ------------------------------------------------------------------------------------------------
 {
   setActiveParamCatalog(cat);
   check(
-    'lookup: active catalogue wins',
+    'lookup: active catalog wins',
     getParamMetadata('cruise_speed')?.displayName === 'Target cruise speed in auto modes'
   );
-  check('lookup: built-in fallback for names the catalogue lacks', Boolean(getParamMetadata('WPNAV_SPEED')));
+  check('lookup: built-in fallback for names the catalog lacks', Boolean(getParamMetadata('WPNAV_SPEED')));
   setActiveParamCatalog(null);
 }
 
@@ -190,7 +190,7 @@ const cat = parsePdefJson(fixture);
       st().source?.match === 'exact' &&
       Boolean(getParamMetadata('CRUISE_SPEED')?.displayName)
   );
-  check('loader: the catalogue is cached', cacheData.has(`${PARAM_REPO_BASE}/Rover-4.6/apm.pdef.json`));
+  check('loader: the catalog is cached', cacheData.has(`${PARAM_REPO_BASE}/Rover-4.6/apm.pdef.json`));
 
   fetched.length = 0;
   st().ensure('rover', '4.5.1');
@@ -215,7 +215,7 @@ const cat = parsePdefJson(fixture);
   st().ensure('copter', '4.8.0-dev');
   await settle();
   check(
-    'loader: a dev build gets its own minor, labelled dev',
+    'loader: a dev build gets its own minor, labeled dev',
     st().source?.folder === 'Copter-4.8' && st().source?.match === 'dev-same-minor' && /development/.test(st().summary)
   );
 
@@ -648,5 +648,5 @@ const cat = parsePdefJson(fixture);
   goOffline();
 }
 
-console.log(failures.length ? `\n${failures.length} FAILED` : '\nAll parameter catalogue checks passed');
+console.log(failures.length ? `\n${failures.length} FAILED` : '\nAll parameter catalog checks passed');
 process.exit(failures.length ? 1 : 0);

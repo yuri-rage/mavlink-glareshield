@@ -1,5 +1,5 @@
 // Pure geometry for dials and axes: value-to-angle mapping, "nice" tick values, arc paths and threshold zones.
-// Angles are degrees clockwise from 12 o'clock; a sweep is centred on 12 o'clock.
+// Angles are degrees clockwise from 12 o'clock; a sweep is centered on 12 o'clock.
 
 import type { WidgetDataBinding } from '../types/widget';
 

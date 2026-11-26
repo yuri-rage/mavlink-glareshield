@@ -14,7 +14,7 @@ interface SlideToConfirmProps {
   label: string;
   onConfirm: () => void;
   disabled?: boolean;
-  /** Track colours and thumb accent, e.g. "accent-emerald-500 bg-emerald-950/40 border-emerald-800/60". */
+  /** Track colors and thumb accent, e.g. "accent-emerald-500 bg-emerald-950/40 border-emerald-800/60". */
   toneClass: string;
   ariaLabel: string;
 }

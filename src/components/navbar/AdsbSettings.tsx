@@ -9,7 +9,7 @@ import { useUnitsStore } from '../../store/unitsStore';
 
 const M_PER_FT = 0.3048;
 
-/** Horizontal distances: metres (metric), nautical miles (knots), statute miles (mph). Vertical: metres or feet. */
+/** Horizontal distances: meters (metric), nautical miles (knots), statute miles (mph). Vertical: meters or feet. */
 function units(system: string) {
   const h =
     system === 'kts'

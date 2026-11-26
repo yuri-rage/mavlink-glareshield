@@ -49,7 +49,7 @@ export function roiTurnsVehicle(category: string, capFlags: number | null): bool
 }
 
 /**
- * Where the camera's centre ray meets the ground, taken as flat at home's height: the vehicle `heightM` above it,
+ * Where the camera's center ray meets the ground, taken as flat at home's height: the vehicle `heightM` above it,
  * looking `pitchDeg` (negative down) along `headingDeg` (true). When the ray is level or points up, or the ground is
  * further than `maxM`, the point `maxM` along the heading is returned with `ground` false.
  */

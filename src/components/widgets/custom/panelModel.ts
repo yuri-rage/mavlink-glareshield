@@ -50,7 +50,7 @@ export const MULTI_VALUE_TYPES: ReadonlySet<WidgetDisplayType> = new Set<WidgetD
 ]);
 
 /**
- * The panels a card draws, each as a stand-alone definition: a composite card's panels with the card's name, colour
+ * The panels a card draws, each as a stand-alone definition: a composite card's panels with the card's name, color
  * scheme and stale timeout filled in where a panel sets none, or the card itself for every other type.
  */
 export function cardPanels(def: CustomWidgetDefinition): CustomWidgetDefinition[] {
@@ -182,7 +182,7 @@ export function staleSummary(bindings: WidgetDataBinding[], readings: BindingRea
   };
 }
 
-/** The colour scheme a panel draws in: red or amber while alerting, otherwise its own. */
+/** The color scheme a panel draws in: red or amber while alerting, otherwise its own. */
 export function effectiveScheme(alert: AlertState, scheme: ColorScheme | undefined): ColorScheme {
   return alert === 'crit' ? 'red' : alert === 'warn' ? 'amber' : scheme || 'default';
 }

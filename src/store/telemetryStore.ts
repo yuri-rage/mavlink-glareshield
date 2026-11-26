@@ -319,7 +319,7 @@ interface TelemetryState {
   pressure: VehiclePressure;
   homePosition: HomePositionInfo;
   /**
-   * Where home was when the app was last open, for centring the map before a fix. Never the live home: a saved
+   * Where home was when the app was last open, for centering the map before a fix. Never the live home: a saved
    * home could be another site or vehicle, so it must not stand in for what the vehicle reports.
    */
   lastKnownHome: { lat: number; lon: number } | null;
@@ -390,7 +390,7 @@ export const TRACE_MIN_SPACING_M = 0.25;
 /** Points kept in the trace (about 1.4 h at 5 Hz while moving). */
 export const TRACE_MAX_POINTS = 25000;
 
-/** Approximate ground distance in metres between two nearby lat/lon points (equirectangular). */
+/** Approximate ground distance in meters between two nearby lat/lon points (equirectangular). */
 function nearDistanceM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const rad = Math.PI / 180;
   const x = (lon2 - lon1) * rad * Math.cos(((lat1 + lat2) / 2) * rad);

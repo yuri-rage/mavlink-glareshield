@@ -29,7 +29,7 @@ import { describeAck, type AckView } from '../widgets/custom/panelModel';
 function useSender() {
   const [ack, setAck] = useState<AckView | null>(null);
   const send = (packet: Uint8Array, label: string, onAccepted?: () => void) => {
-    setAck({ status: 'pending', text: 'Sent, awaiting acknowledgement', time: Date.now() });
+    setAck({ status: 'pending', text: 'Sent, awaiting acknowledgment', time: Date.now() });
     void sendTrackedCommand(packet, { label }).then((info) => {
       setAck(describeAck(info));
       if (info.result === 0) onAccepted?.();

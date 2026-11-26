@@ -114,7 +114,7 @@ const SplitView: React.FC<SplitProps> = ({ tab, node, path, isEditing, minFor, r
 /** The data type a dragged pane carries (its instance ID). */
 const PANE_DRAG_TYPE = 'application/x-glareshield-pane';
 
-/** Which part of a pane a pointer is over: an edge (within a quarter of the way in) or the centre. */
+/** Which part of a pane a pointer is over: an edge (within a quarter of the way in) or the center. */
 function zoneAt(rect: DOMRect, x: number, y: number): DropZone {
   const fx = (x - rect.left) / rect.width;
   const fy = (y - rect.top) / rect.height;
@@ -248,7 +248,7 @@ interface OverlayProps {
 
 /**
  * A pane in Edit mode: its widget locked (as in Flow tabs), with a bar to arrange it. Drag the pane (by its body or
- * grip) onto another: an edge puts it there, the centre swaps them; the highlight shows where. From the keyboard, Add…
+ * grip) onto another: an edge puts it there, the center swaps them; the highlight shows where. From the keyboard, Add…
  * puts a widget on any side of this one, Replace… swaps it with another pane or shows another widget here (the old
  * one stays on the tab, hidden); Hide takes it out of the layout, Delete off the tab. In a narrow pane the bar keeps
  * to one row (the title folds to its grip).
@@ -330,7 +330,7 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({
     e.dataTransfer.setData(PANE_DRAG_TYPE, id);
     setDragging(id);
   };
-  // No drag under way (it ended, or Escape cancelled it): no highlight left behind.
+  // No drag under way (it ended, or Escape canceled it): no highlight left behind.
   useEffect(() => {
     if (!dragging) setZone(null);
   }, [dragging]);
@@ -366,7 +366,7 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({
           onDragStart={startDrag}
           onDragEnd={() => setDragging(null)}
           className="flex min-w-0 cursor-grab items-center gap-1 font-bold text-sky-300 active:cursor-grabbing"
-          title={`${title}: drag onto another pane (an edge puts it there, the centre swaps them)`}
+          title={`${title}: drag onto another pane (an edge puts it there, the center swaps them)`}
         >
           <GripVertical className="h-3.5 w-3.5 shrink-0 text-sky-400" />
           <Lock className="hidden h-3 w-3 shrink-0 text-amber-400 @xs:block" />

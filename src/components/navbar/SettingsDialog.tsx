@@ -118,7 +118,7 @@ const AboutPanel: React.FC = () => {
             <ExternalLink className="h-3 w-3" />
           </a>
           <a href={repoFile('LICENSE')} target="_blank" rel="noreferrer" className={link}>
-            Licence: GPL-3.0
+            License: GPL-3.0
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
@@ -540,7 +540,7 @@ export const SettingsDialog: React.FC<Props> = ({
                 {
                   value: 'standard',
                   label: 'Standard',
-                  hint: 'Scrolling (Flow) tabs up to 1280 px wide, centred: suits laptops and HD screens. Cockpit tabs always fill the window.',
+                  hint: 'Scrolling (Flow) tabs up to 1280 px wide, centered: suits laptops and HD screens. Cockpit tabs always fill the window.',
                 },
                 {
                   value: 'wide',

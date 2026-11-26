@@ -81,7 +81,7 @@ export const LogsWidget: React.FC = () => {
     setListError(null);
     try {
       const l = await logManager.listLogs(sysId, compId);
-      // Still the vehicle it was asked of (not switched meanwhile): else the result, or the "Cancelled" a switch
+      // Still the vehicle it was asked of (not switched meanwhile): else the result, or the "Canceled" a switch
       // causes, isn't the new vehicle's.
       if (mounted.current && useTelemetryStore.getState().heartbeat.systemId === sysId) setList(l);
     } catch (e) {
@@ -308,8 +308,8 @@ export const LogsWidget: React.FC = () => {
                         >
                           {result.kind === 'saved'
                             ? `Saved as ${downloadName(e)} (${result.method === 'mavftp' ? 'MAVFTP' : 'MAVLink'}, ${formatDuration(result.seconds)})`
-                            : result.text === 'Cancelled'
-                              ? 'Cancelled'
+                            : result.text === 'Canceled'
+                              ? 'Canceled'
                               : `Not downloaded: ${result.text}`}
                         </p>
                       )}

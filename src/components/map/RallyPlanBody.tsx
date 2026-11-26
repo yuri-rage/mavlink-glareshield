@@ -61,7 +61,7 @@ const PointEditor: React.FC<{
       <div className="grid grid-cols-2 gap-1.5">
         <NumField
           label={`Altitude (${len.unit})`}
-          title="ArduPilot keeps rally altitudes in whole metres"
+          title="ArduPilot keeps rally altitudes in whole meters"
           value={len.fromSi(p.alt)}
           digits={0}
           onCommit={(v) => set({ alt: len.toSi(v) })}

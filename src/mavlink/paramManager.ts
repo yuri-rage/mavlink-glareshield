@@ -18,7 +18,7 @@ export interface ParamManagerStatus {
   fromPreviousConnection?: boolean;
   /**
    * The vehicle's whole list has been read this connection (MAVFTP, or every streamed index): a name not in it isn't
-   * a parameter of this vehicle. False while a fetch runs, after one is cancelled or gave up with gaps, and after a
+   * a parameter of this vehicle. False while a fetch runs, after one is canceled or gave up with gaps, and after a
    * disconnect.
    */
   listComplete?: boolean;
@@ -406,7 +406,7 @@ export class ParamManager {
       isFetching: false,
       method: 'idle',
       listComplete: false,
-      message: 'Parameter fetch cancelled',
+      message: 'Parameter fetch canceled',
     });
   }
 
@@ -437,7 +437,7 @@ export class ParamManager {
         message: 'Downloading params via MAVFTP…',
       });
       const loaded = await this.backgroundLoad;
-      if (loaded || this.isCancelled) return; // loaded, or the user cancelled while waiting
+      if (loaded || this.isCancelled) return; // loaded, or the user canceled while waiting
       this.setStatus({ isFetching: false, method: 'idle' });
     }
 

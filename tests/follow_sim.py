@@ -79,7 +79,7 @@ def run(speed_px_s: float, gps_hz: float, secs: float = 10.0, mode: str = "shipp
         "frames marker ~stopped": f"{sum(1 for v in vel if v < 0.05 * speed_px_s) / len(vel):4.0%}",
         "camera idle frames": f"{sum(1 for s in steps if s < 1e-6) / len(steps):4.0%}",
         "camera steps px": [float(x) for x in sorted({round(s, 2) for s in steps})[:5]],
-        "vehicle off-centre px (mean/max)": f"{st.mean(abs(o) for o in off):4.1f} / {max(abs(o) for o in off):4.1f}",
+        "vehicle off-center px (mean/max)": f"{st.mean(abs(o) for o in off):4.1f} / {max(abs(o) for o in off):4.1f}",
         "marker lag behind truth (m)": f"{lag / speed_px_s * 15.0:4.1f}",
     }
 
@@ -206,9 +206,9 @@ if __name__ == "__main__":
             lo, hi = (float(x) for x in str(shp["speed min/max (x true)"]).split("/"))
             if not (0.95 <= lo and hi <= 1.05):
                 failures.append(f"zoom {zoom} GPS {hz} Hz: marker speed {lo:.2f}-{hi:.2f}x true (want 0.95-1.05)")
-            off_max = float(str(shp["vehicle off-centre px (mean/max)"]).split("/")[1])
+            off_max = float(str(shp["vehicle off-center px (mean/max)"]).split("/")[1])
             if off_max > 1.0:
-                failures.append(f"zoom {zoom} GPS {hz} Hz: vehicle {off_max:.1f} px off centre (want <= 1)")
+                failures.append(f"zoom {zoom} GPS {hz} Hz: vehicle {off_max:.1f} px off center (want <= 1)")
 
     if num(res_shipped["backward_jumps_count"]) != 0:
         failures.append(f"stop-and-move: {res_shipped['backward_jumps_count']} backward jumps (want 0)")
