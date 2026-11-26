@@ -6,7 +6,7 @@
     {
       "id": "custom-mp-vitals",
       "name": "Vitals",
-      "description": "What needs attention at a glance: battery, GNSS quality (HDOP) and throttle, with vibration and EKF health. Values turn amber or red past their limits.",
+      "description": "What needs attention at a glance: battery, power, GNSS quality, link loss and autopilot load, with vibration and EKF health. Values turn amber or red past their limits.",
       "category": "telemetry",
       "displayType": "composite",
       "colorScheme": "default",
@@ -30,35 +30,69 @@
         },
         {
           "displayType": "stat-card",
+          "title": "Voltage",
+          "span": 4,
+          "colorScheme": "amber",
+          "binding": {
+            "messageName": "SYS_STATUS",
+            "fieldName": "voltage_battery",
+            "unit": "V",
+            "decimals": 2
+          }
+        },
+        {
+          "displayType": "stat-card",
+          "title": "Current",
+          "span": 4,
+          "colorScheme": "amber",
+          "binding": {
+            "messageName": "SYS_STATUS",
+            "fieldName": "current_battery",
+            "unit": "A",
+            "decimals": 1
+          }
+        },
+        {
+          "displayType": "stat-card",
           "title": "GNSS HDOP",
           "span": 4,
           "colorScheme": "blue",
           "binding": {
             "messageName": "GPS_RAW_INT",
             "fieldName": "eph",
+            "unit": "",
             "decimals": 2,
             "warnThreshold": 1.4,
             "critThreshold": 2.0
           }
         },
         {
-          "displayType": "gauge-radial",
-          "title": "Throttle",
+          "displayType": "stat-card",
+          "title": "Link Loss",
           "span": 4,
-          "colorScheme": "amber",
+          "colorScheme": "blue",
           "binding": {
-            "messageName": "VFR_HUD",
-            "fieldName": "throttle",
+            "messageName": "SYS_STATUS",
+            "fieldName": "drop_rate_comm",
+            "unit": "%",
+            "decimals": 1,
+            "multiplier": 0.01,
+            "warnThreshold": 5,
+            "critThreshold": 15
+          }
+        },
+        {
+          "displayType": "stat-card",
+          "title": "CPU Load",
+          "span": 4,
+          "colorScheme": "default",
+          "binding": {
+            "messageName": "SYS_STATUS",
+            "fieldName": "load",
             "unit": "%",
             "decimals": 0,
-            "min": 0,
-            "max": 100
-          },
-          "gauge": {
-            "sweep": 240,
-            "style": "arc",
-            "majorTicks": 5,
-            "minorTicks": 4
+            "warnThreshold": 80,
+            "critThreshold": 95
           }
         },
         {
@@ -80,19 +114,32 @@
       ]
     },
     {
-      "id": "custom-mp-altitude",
-      "name": "Altitude",
-      "description": "Altitude above home over the last minute or so.",
+      "id": "custom-mp-track",
+      "name": "Track Error",
+      "description": "How far off its path the vehicle is in Auto and Guided: cross-track error (all vehicles) and altitude error (aircraft). Flat at zero otherwise.",
       "category": "telemetry",
       "displayType": "sparkline",
-      "colorScheme": "amber",
+      "colorScheme": "blue",
       "binding": {
-        "messageName": "GLOBAL_POSITION_INT",
-        "fieldName": "relative_alt",
+        "messageName": "NAV_CONTROLLER_OUTPUT",
+        "fieldName": "xtrack_error",
         "unit": "m",
         "decimals": 1,
-        "unitKind": "altitude"
-      }
+        "unitKind": "distance",
+        "label": "Cross-track",
+        "color": "#38bdf8"
+      },
+      "bindings": [
+        {
+          "messageName": "NAV_CONTROLLER_OUTPUT",
+          "fieldName": "alt_error",
+          "unit": "m",
+          "decimals": 1,
+          "unitKind": "altitude",
+          "label": "Altitude",
+          "color": "#f59e0b"
+        }
+      ]
     },
     {
       "id": "custom-mp-attitude",
@@ -211,8 +258,8 @@
           "colSpan": 4
         },
         {
-          "instanceId": "mp-altitude",
-          "widgetId": "custom-mp-altitude",
+          "instanceId": "mp-track",
+          "widgetId": "custom-mp-track",
           "colSpan": 6
         },
         {
@@ -229,7 +276,7 @@
           "children": [
             {
               "split": "column",
-              "sizes": [44, 56],
+              "sizes": [36, 64],
               "children": [
                 {
                   "pane": "mp-hud"
@@ -251,7 +298,7 @@
                   "sizes": [50, 50],
                   "children": [
                     {
-                      "pane": "mp-altitude"
+                      "pane": "mp-track"
                     },
                     {
                       "pane": "mp-messages"
@@ -271,7 +318,7 @@
           "children": [
             {
               "split": "column",
-              "sizes": [55, 45],
+              "sizes": [48, 52],
               "children": [
                 {
                   "pane": "mp-hud"
@@ -289,7 +336,7 @@
               "sizes": [34, 30, 36],
               "children": [
                 {
-                  "pane": "mp-altitude"
+                  "pane": "mp-track"
                 },
                 {
                   "pane": "mp-battery"
@@ -332,6 +379,11 @@
           "colSpan": 12
         },
         {
+          "instanceId": "mp-tune-map",
+          "widgetId": "built-in-map",
+          "colSpan": 4
+        },
+        {
           "instanceId": "mp-attitude",
           "widgetId": "custom-mp-attitude",
           "colSpan": 4
@@ -359,7 +411,16 @@
           "sizes": [50, 50],
           "children": [
             {
-              "pane": "mp-pid"
+              "split": "row",
+              "sizes": [66, 34],
+              "children": [
+                {
+                  "pane": "mp-pid"
+                },
+                {
+                  "pane": "mp-tune-map"
+                }
+              ]
             },
             {
               "split": "row",
