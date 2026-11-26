@@ -12,3 +12,6 @@ tests/vectors.json
 
 # Prose and data: formatted by hand
 *.md
+
+# Claude Code (agent worktrees live here: each is a checkout of this repo with its own formatting)
+.claude/
