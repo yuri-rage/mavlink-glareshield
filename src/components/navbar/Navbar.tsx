@@ -36,7 +36,7 @@ import {
   VTOL_STATE_NAMES,
 } from '../../mavlink/messages';
 import { messageRateManager } from '../../mavlink/rateManager';
-import { flightNow } from '../../mavlink/replayClock';
+import { flightNow, heartbeatLiveMs } from '../../mavlink/replayClock';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useReplayStore } from '../../store/replayStore';
 import { evaluatePreArmReadiness, sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
@@ -473,11 +473,15 @@ export const Navbar: React.FC = () => {
   };
 
   const isHeartbeatActive =
-    status === 'connected' && heartbeat.lastHeartbeatTime > 0 && nowMs - heartbeat.lastHeartbeatTime <= 3500;
+    status === 'connected' &&
+    heartbeat.lastHeartbeatTime > 0 &&
+    nowMs - heartbeat.lastHeartbeatTime <= heartbeatLiveMs();
 
   const isLinkLost =
     hasConnectedInSession &&
-    (status !== 'connected' || heartbeat.lastHeartbeatTime === 0 || nowMs - heartbeat.lastHeartbeatTime > 3500);
+    (status !== 'connected' ||
+      heartbeat.lastHeartbeatTime === 0 ||
+      nowMs - heartbeat.lastHeartbeatTime > heartbeatLiveMs());
 
   const linkLostSeconds =
     heartbeat.lastHeartbeatTime > 0 ? Math.max(4, Math.floor((nowMs - heartbeat.lastHeartbeatTime) / 1000)) : null;

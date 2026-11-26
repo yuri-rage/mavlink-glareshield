@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 
 import { History, Loader2, Pause, Play, Plug, Square } from 'lucide-react';
 
-import { replayControls, stopReplay, stopReplayAndReconnect } from '../../mavlink/replay';
+import { replayControls, replayEpochAt, stopReplay, stopReplayAndReconnect } from '../../mavlink/replay';
 import { REPLAY_SPEEDS } from '../../mavlink/tlogReplay';
 import { useReplayStore } from '../../store/replayStore';
 
@@ -28,9 +28,10 @@ export const ReplayBar: React.FC = () => {
   if (!r.active) return null;
 
   const shown = drag ?? r.positionMs;
+  // The log's own time of day at that point (after a compressed pause it's ahead of start + position).
   const clock =
     r.startEpochMs > 0
-      ? new Date(r.startEpochMs + shown).toLocaleString(undefined, {
+      ? new Date(replayEpochAt(shown) || r.startEpochMs + shown).toLocaleString(undefined, {
           month: 'short',
           day: 'numeric',
           hour: '2-digit',
@@ -91,7 +92,10 @@ export const ReplayBar: React.FC = () => {
           step={100}
           value={Math.min(shown, r.durationMs)}
           onChange={(e) => setDrag(Number(e.target.value))}
+          // Held on to while dragging, so letting go outside the slider still ends the drag (and seeks).
+          onPointerDown={(e) => e.currentTarget.setPointerCapture?.(e.pointerId)}
           onPointerUp={commit}
+          onLostPointerCapture={commit}
           onKeyUp={commit}
           onBlur={commit}
           aria-label="Replay position"

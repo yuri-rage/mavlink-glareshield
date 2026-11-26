@@ -7,6 +7,7 @@ import { displayAltitudeM } from '../../lib/displayAltitude';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { MAVLINK_MSG_ID } from '../../mavlink/messages';
 import { messageRateManager } from '../../mavlink/rateManager';
+import { heartbeatLiveMs } from '../../mavlink/replayClock';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
 import { useInPane } from '../dashboard/paneContext';
@@ -378,7 +379,7 @@ export const HudWidget: React.FC = () => {
       const hasLink =
         heartbeat.lastHeartbeatTime > 0 &&
         heartbeat.modeName !== 'DISCONNECTED' &&
-        Date.now() - heartbeat.lastHeartbeatTime <= 3500;
+        Date.now() - heartbeat.lastHeartbeatTime <= heartbeatLiveMs();
 
       // Geometric layouts for HUD overlay instruments
       const PITCH_SCALE = 4.2; // Pixels per degree

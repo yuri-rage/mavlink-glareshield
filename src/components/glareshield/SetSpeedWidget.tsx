@@ -5,6 +5,7 @@ import { Gauge, RotateCcw } from 'lucide-react';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { getVehicleCategory, MAV_CMD, MAVLINK_MSG_ID } from '../../mavlink/messages';
 import { messageRateManager } from '../../mavlink/rateManager';
+import { heartbeatLiveMs } from '../../mavlink/replayClock';
 import { useReplaying } from '../../store/replayStore';
 import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
 import { UnitSystem, useUnitsStore } from '../../store/unitsStore';
@@ -64,7 +65,7 @@ export const SetSpeedWidget: React.FC = () => {
   const isVehicleConnected =
     heartbeat.lastHeartbeatTime > 0 &&
     heartbeat.modeName !== 'DISCONNECTED' &&
-    nowMs - heartbeat.lastHeartbeatTime <= 3500;
+    nowMs - heartbeat.lastHeartbeatTime <= heartbeatLiveMs();
 
   const activeUnit = system === 'ms' ? 'm/s' : system === 'kmh' ? 'km/h' : system === 'mph' ? 'mph' : 'kts';
   const defaultSpeedMs = category === 'plane' ? 15 : category === 'rover' ? 2 : category === 'sub' ? 1 : 5;

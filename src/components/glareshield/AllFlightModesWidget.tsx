@@ -4,6 +4,7 @@ import { Search, Sliders } from 'lucide-react';
 
 import { mavlinkConnection } from '../../mavlink/connection';
 import { getAllVehicleFlightModes, getVehicleCategoryLabel } from '../../mavlink/messages';
+import { heartbeatLiveMs } from '../../mavlink/replayClock';
 import { useReplaying } from '../../store/replayStore';
 import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
 import { Card, CardContent } from '../ui/card';
@@ -28,7 +29,7 @@ export const AllFlightModesWidget: React.FC = () => {
   const isVehicleConnected =
     heartbeat.lastHeartbeatTime > 0 &&
     heartbeat.modeName !== 'DISCONNECTED' &&
-    nowMs - heartbeat.lastHeartbeatTime <= 3500;
+    nowMs - heartbeat.lastHeartbeatTime <= heartbeatLiveMs();
 
   const allModes = getAllVehicleFlightModes(heartbeat.type);
   const filteredModes = filterQuery.trim()
