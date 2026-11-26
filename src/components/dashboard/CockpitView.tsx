@@ -525,6 +525,16 @@ export const CockpitView: React.FC<Props> = ({
   };
   const layout = tab.cockpit!;
   const header = layout.header ? byId.get(layout.header) : undefined;
+  // Deleting the pinned bar, as a pane's Delete: confirmed first, and the prompt says when it leaves both layouts.
+  const removeWidget = useDashboardStore((s) => s.removeWidgetFromActiveTab);
+  const [confirmHeaderDelete, setConfirmHeaderDelete] = useState(false);
+  useEffect(() => setConfirmHeaderDelete(false), [header?.instanceId, isEditing]);
+  const headerInOther = useDashboardStore((s) => {
+    const full = s.profile.tabs.find((t) => t.id === tab.id);
+    if (!full?.cockpitWide || !header) return false;
+    const other = s.editVariant === 'wide' ? full.cockpit : full.cockpitWide;
+    return panesInOrder(other).includes(header.instanceId);
+  });
 
   const pane = (id: string) => {
     const placed = byId.get(id);
@@ -602,6 +612,40 @@ export const CockpitView: React.FC<Props> = ({
                   <EyeOff className="h-3 w-3" />
                   Hide
                 </button>
+                {confirmHeaderDelete ? (
+                  <span className="flex items-center gap-1 rounded border border-red-500/40 bg-red-950/90 px-1 py-0.5 text-[11px] text-red-200">
+                    <button
+                      type="button"
+                      onClick={() => removeWidget(header.instanceId)}
+                      className="rounded bg-red-600 px-1.5 font-bold text-white"
+                      title={
+                        headerInOther
+                          ? `Delete ${titleOf(header.widgetId)} from the tab: it leaves both layouts`
+                          : `Delete ${titleOf(header.widgetId)} from the tab`
+                      }
+                    >
+                      {headerInOther ? 'Delete (both layouts)' : 'Delete'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmHeaderDelete(false)}
+                      className="rounded bg-zinc-800 px-1.5"
+                    >
+                      No
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmHeaderDelete(true)}
+                    className="flex items-center gap-1 rounded bg-zinc-900/95 px-1.5 py-0.5 text-[11px] text-red-400 hover:text-red-300"
+                    title="Delete it from the tab"
+                    aria-label={`Delete ${titleOf(header.widgetId)}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Delete
+                  </button>
+                )}
               </span>
             </div>
           )}
