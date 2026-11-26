@@ -5,6 +5,7 @@
 // Read-only by design: a replay only ever produces frames for the parser; nothing goes back to any vehicle (the
 // connection drops every send while a replay is its link).
 
+import { isVehicleAutopilotHeartbeat } from './messages';
 import { readTlog } from './tlog';
 
 /** MAV_COMP_ID_MISSIONPLANNER: the component Glareshield, Mission Planner and QGroundControl send from. */
@@ -130,6 +131,12 @@ export const REPLAY_SPEEDS = [0.5, 1, 2, 5, 10] as const;
  * `seekTo` moves it anywhere (backwards: `onRestart` first, so everything shown can start over, then the frames up
  * to the target are handed out again, in bounded batches). Owns no timers.
  */
+/** An autopilot's heartbeat (not a GCS's, gimbal's, companion computer's or tracker's), from the frame's payload. */
+export function isAutopilotHeartbeatFrame(frame: Uint8Array, componentId: number): boolean {
+  const p = frame[0] === 0xfd ? 10 : 6;
+  return isVehicleAutopilotHeartbeat(frame[p + 4] ?? 0, frame[p + 5] ?? 8, componentId);
+}
+
 export class TlogPlayer {
   positionMs = 0;
   /** The next frame to hand out. */
@@ -138,6 +145,10 @@ export class TlogPlayer {
   speed = 1;
   /** The last vehicle heartbeat handed out (repeated while paused, so the vehicle doesn't look lost). */
   lastHeartbeat: Uint8Array | null = null;
+  /** The last autopilot heartbeat of each vehicle (system ID): what a pause repeats (not a gimbal's or companion's). */
+  readonly autopilotHeartbeats = new Map<number, Uint8Array>();
+  /** The sequence number each sender (system:component) last used: a pause's repeated heartbeat continues it. */
+  readonly lastSeq = new Map<string, number>();
   /** The time of the frame being handed out, while one is (null between frames). */
   private emittingMs: number | null = null;
 
@@ -192,7 +203,13 @@ export class TlogPlayer {
       }
       const frame = frames[this.index++];
       const h = frameHeader(frame);
-      if (h && h.messageId === 0) this.lastHeartbeat = frame;
+      if (h) {
+        this.lastSeq.set(`${h.systemId}:${h.componentId}`, frame[0] === 0xfd ? frame[4] : frame[2]);
+        if (h.messageId === 0 && isAutopilotHeartbeatFrame(frame, h.componentId)) {
+          this.lastHeartbeat = frame;
+          this.autopilotHeartbeats.set(h.systemId, frame);
+        }
+      }
       this.emittingMs = timesMs[this.index - 1];
       try {
         this.emit(frame);
@@ -216,6 +233,8 @@ export class TlogPlayer {
       this.index = 0;
       this.positionMs = 0;
       this.lastHeartbeat = null;
+      this.autopilotHeartbeats.clear();
+      this.lastSeq.clear();
     }
     return target;
   }
