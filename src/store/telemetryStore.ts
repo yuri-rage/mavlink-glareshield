@@ -1895,13 +1895,22 @@ const VEHICLE_FIELDS = [
   'lastCommandAck',
   'armedStartedAt',
   'accumulatedArmedMs',
+  'missionState',
+  'gps2',
 ] as const satisfies readonly (keyof TelemetryState)[];
 const initialVehicleState = (() => {
   const st = useTelemetryStore.getState();
-  return Object.fromEntries(VEHICLE_FIELDS.map((k) => [k, st[k]])) as Pick<
+  const snapshot = Object.fromEntries(VEHICLE_FIELDS.map((k) => [k, st[k]])) as Pick<
     TelemetryState,
     (typeof VEHICLE_FIELDS)[number]
   >;
+  // At start, home may come from the saved mission's item 0 (offline planning). A switched-to vehicle or a replay
+  // (both empty the mission) has no home until it gives one: not the saved mission's.
+  return {
+    ...snapshot,
+    homePosition: { lat: 0, lon: 0, alt: 0, distanceM: null, bearingDeg: null, source: 'none' as const },
+    homeFromVehicle: false,
+  };
 })();
 
 /**
