@@ -15,10 +15,10 @@ health bars, charts, curated parameter lists and a layout for ultrawide screens.
 
 - **Flight**: the HUD over Vitals on the left; the map fills the right, with Track Error and Messages under it.
   Arming and the quick modes are the slim bar pinned on top.
-  - **Vitals**: battery %, voltage and current; GNSS HDOP, link loss and autopilot CPU load; a throttle gauge with
-    vibration and EKF variance bars. Battery (30 / 15 %), HDOP (1.4, ArduPilot's GPS_HDOP_GOOD default, / 2.0), link
-    loss (5 / 15 %) and CPU load (80 / 95 %) turn amber, then red, past their limits, as do the vibration and EKF bars
-    at theirs; the card's border shows the worst.
+  - **Vitals**: battery %, voltage and current; GNSS HDOP, link loss and a throttle gauge; vibration and EKF
+    variance bars. Battery (30 / 15 %), HDOP (1.4, ArduPilot's GPS_HDOP_GOOD default, / 2.0) and link loss (5 / 15 %)
+    turn amber, then red, past their limits, as do the vibration and EKF bars at theirs; the card's border shows the
+    worst.
   - **Track Error** (cross-track and altitude error, charted): how well it holds its path in Auto and Guided, for
     every vehicle type. Mission progress is on the map itself.
   - A **wide layout** for ultrawide screens: HUD and Vitals, the map, then Track Error over Messages.

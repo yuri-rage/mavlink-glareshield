@@ -86,7 +86,7 @@ export const StatPanel: React.FC<PanelProps> = (props) => {
     <div className={`py-2 text-center transition-opacity ${props.staleAll ? 'opacity-40' : ''}`}>
       <div
         className={`${inPane ? '' : 'text-3xl'} font-mono font-bold leading-tight ${props.scheme.valueText}`}
-        style={inPane ? { fontSize: 'clamp(1.875rem, 13cqw, 4.5rem)' } : undefined}
+        style={inPane ? { fontSize: 'clamp(1.5rem, 13cqw, 4.5rem)' } : undefined}
       >
         {boundText} <span className="text-sm font-normal text-zinc-400">{unit}</span>
       </div>
@@ -107,6 +107,7 @@ export const TextPanel: React.FC<PanelProps> = (props) => {
 };
 
 export const RadialGaugePanel: React.FC<PanelProps> = (props) => {
+  const inPane = useInPane();
   const multi = isMultiGauge(props.def);
   const items = multi ? gaugeItems(props) : [];
   const { numVal, boundText, unit, min, max, pb } = primaryView(props);
@@ -120,7 +121,12 @@ export const RadialGaugePanel: React.FC<PanelProps> = (props) => {
     // row (neighbouring widgets, or the row-height setting), with a modest minimum.
     <div
       className={`relative flex-1 ${multi && items.length > 4 ? 'min-h-[240px]' : ''}`}
-      style={multi && items.length > 4 ? undefined : { minHeight: `min(190px, ${(dialRatio * 100).toFixed(1)}cqw)` }}
+      // In a Cockpit pane (fixed height) it may shrink further when space is short; with room it still grows.
+      style={
+        multi && items.length > 4
+          ? undefined
+          : { minHeight: `min(${inPane ? 100 : 190}px, ${(dialRatio * 100).toFixed(1)}cqw)` }
+      }
     >
       {multi ? (
         <GaugeGrid gauges={items} config={props.def.gauge} />
