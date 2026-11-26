@@ -111,6 +111,8 @@ export class MavlinkConnection {
   private sendListeners: Set<SendCallback> = new Set();
   private textListeners: Set<(msg: string) => void> = new Set();
   private replayListeners: Set<(replaying: boolean) => void> = new Set();
+  /** Told when the link settings change (another bridge, serial port, UDP target): another vehicle may be there. */
+  private linkChangeListeners: Set<() => void> = new Set();
   /** The replay being played as the link, if any: read-only (every send is dropped). */
   private replay: Transport | null = null;
 
@@ -193,6 +195,9 @@ export class MavlinkConnection {
     this.link = { ...link };
     // During a replay the new link is kept for afterwards; the replay goes on.
     if (this.replay) return;
+    // Another link may reach other vehicles: what was learned about the old one's (which is active, armed, heard
+    // together) doesn't carry over, even when the old link had dropped and was waiting to reconnect.
+    this.linkChangeListeners.forEach((l) => l());
     if (this.status === 'connected' || this.status === 'connecting') {
       this.disconnect();
       this.connect();
@@ -449,6 +454,12 @@ export class MavlinkConnection {
   /** Whether the link is a replay: read-only, nothing is sent. */
   public isReplaying(): boolean {
     return this.replay !== null;
+  }
+
+  /** The link settings changed (not during a replay): the vehicles of the old link don't carry over. */
+  public onLinkChange(callback: () => void): () => void {
+    this.linkChangeListeners.add(callback);
+    return () => this.linkChangeListeners.delete(callback);
   }
 
   public onReplayChange(callback: (replaying: boolean) => void): () => void {
