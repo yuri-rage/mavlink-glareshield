@@ -572,6 +572,26 @@ const DEFAULT_PROFILE: DashboardProfile = {
           ],
         },
       },
+      // Ultrawide: PID tuning a tall column (both charts at full size), each curated list a full-height column, then
+      // the map and Track Error over the full parameter list.
+      cockpitWide: {
+        header: null,
+        root: {
+          split: 'row',
+          sizes: [30, 15, 15, 15, 25],
+          children: [
+            { pane: 'w-pid' },
+            { pane: 'w-attitude' },
+            { pane: 'w-navigation' },
+            { pane: 'w-failsafes' },
+            {
+              split: 'column',
+              sizes: [38, 24, 38],
+              children: [{ pane: 'w-tune-map' }, { pane: 'w-tune-track' }, { pane: 'w-params' }],
+            },
+          ],
+        },
+      },
       cockpitCompact: {
         header: null,
         root: {

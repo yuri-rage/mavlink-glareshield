@@ -53,8 +53,9 @@ lists, with layouts for ultrawide screens and laptops.
 - **Map**: the map, full window, to fly from (fly here, guided actions, mission control) and to plan (the map's
   **Mission** menu → **Edit mission on map**).
 - **Tuning**: PID tuning over three curated parameter lists; on the right, a map and Track Error (to watch a tuning
-  flight) over the full parameter list. On a laptop, PID tuning beside the parameter list. Where PID tuning is short
-  of room, its two charts take turns (**Response** / **Terms**).
+  flight) over the full parameter list. On an ultrawide, PID tuning is a tall column and each list a full-height column
+  beside it; on a laptop, PID tuning sits beside the parameter list. Where PID tuning is short of room, its two charts
+  take turns (**Response** / **Terms**).
   - **Attitude Tuning**: the rate and angle controllers' gains (Copter and Rover `ATC_*`; Plane `RLL_RATE_*`,
     `PTCH_RATE_*`, `YAW_RATE_*`), without the filter and slew settings.
   - **Navigation**: Copter `WPNAV_*`, `LOIT_*` and the position controller's gains; Plane `NAVL1_*`, `WP_*`, the main
