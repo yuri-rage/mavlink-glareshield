@@ -48,8 +48,9 @@ st().setActiveTab('tab-flight');
   const p = st().profile;
   const tab = (id: string) => p.tabs.find((t) => t.id === id)!;
   check(
-    'default: Flight, Map and Tuning, all Cockpit',
-    p.tabs.map((t) => `${t.title}:${t.mode}`).join() === 'Flight:cockpit,Map:cockpit,Tuning:cockpit',
+    'default: Flight, Map and Tuning (Cockpit), Mobile (Flow)',
+    p.tabs.map((t) => `${t.title}:${t.mode ?? 'flow'}`).join() ===
+      'Flight:cockpit,Map:cockpit,Tuning:cockpit,Mobile:flow',
     p.tabs.map((t) => `${t.title}:${t.mode}`).join()
   );
   check(

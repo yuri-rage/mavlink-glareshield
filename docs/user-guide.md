@@ -36,9 +36,9 @@ In Edit Mode the toolbar has **Add Widget**, **Profiles & Backup**, and a switch
 
 ### The default dashboard
 
-Out of the box the dashboard is three Cockpit tabs. They start from an arrangement Mission Planner users will know (the
-HUD at the top left, the map filling the right) and add values that warn, health bars, charts and curated parameter
-lists, with layouts for ultrawide screens and laptops.
+Out of the box the dashboard is three Cockpit tabs and a Flow tab. They start from an arrangement Mission Planner
+users will know (the HUD at the top left, the map filling the right) and add values that warn, health bars, charts and
+curated parameter lists, with layouts for ultrawide screens, laptops and phones.
 
 - **Flight**: **Arm & Modes** pinned on top; the HUD over **Vitals** on the left; the map on the right, with **Track
   Error** and messages under it.
@@ -64,6 +64,10 @@ lists, with layouts for ultrawide screens and laptops.
 
   The lists are patterns, so each vehicle shows only the parameters it has. Edit them with the widget's **Edit** button
   (`-` leaves matches out, e.g. `-*_SMAX`). Writes always ask first.
+
+- **Mobile**: a Flow tab for a phone in the field: Arm & Modes, the HUD, the map, Vitals and messages, one under
+  another (on a wider screen the HUD and map side by side). The Cockpit tabs work on a phone too, stacked; this one is
+  in the order a phone wants.
 
 Vitals, Track Error and the parameter lists are ordinary custom widgets: change their values and limits in Edit Mode
 with the widget's **Edit** button (set the battery limits for your pack). A few more custom widgets (bus voltage, RC

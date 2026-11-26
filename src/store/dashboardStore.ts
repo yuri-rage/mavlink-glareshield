@@ -25,15 +25,17 @@ import { sanitizeWidgetDefinition } from '../lib/widgetValidation';
 import { CockpitLayout, CustomWidgetDefinition, DashboardProfile, DashboardTab, PlacedWidget } from '../types/widget';
 
 /**
- * The default dashboard, "Ground Station": three Cockpit tabs. Familiar to Mission Planner users (HUD top left, the map
- * filling the right), built on what Glareshield adds: values that warn, health bars, charts, curated parameter lists,
- * and layouts for ultrawide screens and laptops.
+ * The default dashboard, "Ground Station": three Cockpit tabs and a Flow tab. Familiar to Mission Planner users (HUD
+ * top left, the map filling the right), built on what Glareshield adds: values that warn, health bars, charts, curated
+ * parameter lists, and layouts for ultrawide screens, laptops and phones.
  * - Flight: Arm & Modes pinned on top; the HUD over Vitals (battery, voltage, current; HDOP, link loss, a throttle
  *   gauge; vibration and EKF bars) on the left; the map with Track Error and messages on the right. A wide layout for
  *   ultrawides, a compact one (HUD, Vitals and the map side by side) for laptops.
  * - Map: the map, full window, to fly from and to plan.
  * - Tuning: PID tuning over curated parameter lists (patterns, so each vehicle shows its own), a map and Track Error
- *   over the full parameter list; on laptops, PID tuning beside the parameter list.
+ *   over the full parameter list; on ultrawides each a full-height column, on laptops PID tuning beside the parameter
+ *   list.
+ * - Mobile (Flow): Arm & Modes, HUD, map, Vitals and messages in a phone's order.
  * Saved profiles are kept: this is what a first start, or Reset to Default Layout, gives.
  */
 const DEFAULT_PROFILE: DashboardProfile = {
@@ -607,6 +609,19 @@ const DEFAULT_PROFILE: DashboardProfile = {
           ],
         },
       },
+    },
+    // A Flow tab for phones (and a scrolling dashboard elsewhere): the cards in the order a phone in the field wants
+    // them, full width on a phone; on wider screens the HUD and map side by side.
+    {
+      id: 'tab-mobile',
+      title: 'Mobile',
+      widgets: [
+        { instanceId: 'w-m-actions', widgetId: 'built-in-glareshield', colSpan: 12 },
+        { instanceId: 'w-m-hud', widgetId: 'built-in-hud', colSpan: 6 },
+        { instanceId: 'w-m-map', widgetId: 'built-in-map', colSpan: 6 },
+        { instanceId: 'w-m-vitals', widgetId: 'custom-vitals', colSpan: 12 },
+        { instanceId: 'w-m-messages', widgetId: 'built-in-statustext-mini', colSpan: 12 },
+      ],
     },
   ],
 };
