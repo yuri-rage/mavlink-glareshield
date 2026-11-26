@@ -13,6 +13,7 @@ import {
   Milestone,
   Pencil,
   Plus,
+  Radio,
   Satellite,
   Shield,
   Sliders,
@@ -153,6 +154,15 @@ const BUILT_IN_CATALOG = [
     description: 'Live flight controller status message log with severity filtering and audio alerts.',
     icon: Terminal,
     defaultSpan: 6,
+  },
+  {
+    id: 'built-in-link',
+    name: 'Link',
+    category: 'telemetry',
+    description:
+      "The link to the vehicle: downlink quality (bars, from packet sequence numbers), packets received and lost, rate, uplink loss, a telemetry radio's signal, and quality over two minutes. Choose what it shows.",
+    icon: Radio,
+    defaultSpan: 4,
   },
   {
     id: 'built-in-statustext-mini',
