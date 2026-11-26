@@ -36,7 +36,9 @@ self.addEventListener('install', (event) => {
       .open(SHELL_CACHE)
       .then((cache) =>
         Promise.all([
-          cache.addAll(SHELL_ASSETS).catch(() => {}),
+          // One by one, as the build's files: with addAll, one failure (a flaky connection) dropped all of them,
+          // index.html included.
+          ...SHELL_ASSETS.map((url) => cache.add(url).catch(() => {})),
           // One by one: a file that fails (a flaky connection) doesn't stop the rest; it is cached when first fetched.
           ...BUILD_ASSETS.map((url) => cache.add(url).catch(() => {})),
         ])
@@ -122,7 +124,8 @@ self.addEventListener('fetch', (event) => {
             }
             return res;
           })
-          .catch(() => cached);
+          // Offline with nothing cached: a network error, not undefined (which respondWith rejects as a TypeError).
+          .catch(() => cached || Response.error());
         return cached || networkFetch;
       })
     );
