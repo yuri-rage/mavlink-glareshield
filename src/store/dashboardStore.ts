@@ -24,93 +24,248 @@ import {
 import { sanitizeWidgetDefinition } from '../lib/widgetValidation';
 import { CockpitLayout, CustomWidgetDefinition, DashboardProfile, DashboardTab, PlacedWidget } from '../types/widget';
 
+/**
+ * The default dashboard, "Ground Station": three Cockpit tabs. Familiar to Mission Planner users (HUD top left, the map
+ * filling the right), built on what Glareshield adds: values that warn, health bars, charts, curated parameter lists,
+ * and layouts for ultrawide screens and laptops.
+ * - Flight: Arm & Modes pinned on top; the HUD over Vitals (battery, voltage, current; HDOP, link loss, a throttle
+ *   gauge; vibration and EKF bars) on the left; the map with Track Error and messages on the right. A wide layout for
+ *   ultrawides, a compact one (HUD, Vitals and the map side by side) for laptops.
+ * - Map: the map, full window, to fly from and to plan.
+ * - Tuning: PID tuning over curated parameter lists (patterns, so each vehicle shows its own), a map and Track Error
+ *   over the full parameter list; on laptops, PID tuning beside the parameter list.
+ * Saved profiles are kept: this is what a first start, or Reset to Default Layout, gives.
+ */
 const DEFAULT_PROFILE: DashboardProfile = {
   version: '1.0.0',
-  name: 'Default ArduPilot Layout',
+  name: 'Ground Station',
   updatedAt: new Date().toISOString(),
-  tabs: [
-    // The flying tabs are Cockpit tabs: they fill the window with no scrolling (stacked on phones and small windows).
-    // HUD has the HD cockpit layout, and the Ultrawide one for screens wider than 2.2:1 (Mini Messages is only in that).
-    {
-      id: 'tab-flight',
-      title: 'HUD',
-      widgets: [
-        { instanceId: 'w-glareshield', widgetId: 'built-in-glareshield', colSpan: 12 },
-        { instanceId: 'w-hud', widgetId: 'built-in-hud', colSpan: 6 },
-        { instanceId: 'w-map-flight', widgetId: 'built-in-map', colSpan: 6 },
-        { instanceId: 'w-vfr', widgetId: 'built-in-vfr-hud', colSpan: 4 },
-        { instanceId: 'w-battery', widgetId: 'built-in-battery-card', colSpan: 4 },
-        { instanceId: 'w-gps', widgetId: 'built-in-gps-card', colSpan: 4 },
-        { instanceId: 'w-messages-mini', widgetId: 'built-in-statustext-mini', colSpan: 12 },
-      ],
-      mode: 'cockpit',
-      cockpit: {
-        header: 'w-glareshield',
-        root: {
-          split: 'column',
-          children: [
-            { split: 'row', children: [{ pane: 'w-hud' }, { pane: 'w-map-flight' }], sizes: [45, 55] },
-            {
-              split: 'row',
-              children: [{ pane: 'w-vfr' }, { pane: 'w-battery' }, { pane: 'w-gps' }],
-              sizes: [33.34, 33.33, 33.33],
-            },
-          ],
-          sizes: [64, 36],
-        },
-      },
-      cockpitWide: {
-        header: 'w-glareshield',
-        root: {
-          split: 'row',
-          children: [
-            { pane: 'w-hud' },
-            { pane: 'w-map-flight' },
-            {
-              split: 'column',
-              children: [{ pane: 'w-vfr' }, { pane: 'w-battery' }, { pane: 'w-gps' }, { pane: 'w-messages-mini' }],
-              sizes: [25, 25, 25, 25],
-            },
-          ],
-          sizes: [30, 46, 24],
-        },
-      },
-    },
-    {
-      id: 'tab-map',
-      title: 'Moving Map',
-      widgets: [
-        { instanceId: 'w-glareshield-map', widgetId: 'built-in-glareshield', colSpan: 12 },
-        { instanceId: 'w-map-large', widgetId: 'built-in-map', colSpan: 12 },
-      ],
-      mode: 'cockpit',
-      cockpit: { header: 'w-glareshield-map', root: { pane: 'w-map-large' } },
-    },
-    {
-      id: 'tab-telemetry',
-      title: 'Telemetry',
-      widgets: [
-        { instanceId: 'w-charts', widgetId: 'built-in-charts', colSpan: 12 },
-        { instanceId: 'w-vfr-2', widgetId: 'built-in-vfr-hud', colSpan: 6 },
-        { instanceId: 'w-battery-2', widgetId: 'built-in-battery-card', colSpan: 6 },
-      ],
-    },
-    {
-      id: 'tab-console',
-      title: 'Configuration',
-      widgets: [
-        { instanceId: 'w-console', widgetId: 'built-in-statustext', colSpan: 6 },
-        { instanceId: 'w-params', widgetId: 'built-in-parameters', colSpan: 6 },
-      ],
-      // Messages and the parameter list side by side, each the full height of the window.
-      mode: 'cockpit',
-      cockpit: {
-        header: null,
-        root: { split: 'row', children: [{ pane: 'w-console' }, { pane: 'w-params' }], sizes: [40, 60] },
-      },
-    },
-  ],
+
   customWidgets: [
+    {
+      id: 'custom-vitals',
+      name: 'Vitals',
+      description:
+        'What needs attention at a glance: battery, power, GNSS quality, link loss and throttle, with vibration and EKF health. Values turn amber or red past their limits.',
+      category: 'telemetry',
+      displayType: 'composite',
+      colorScheme: 'default',
+      panels: [
+        {
+          displayType: 'stat-card',
+          title: 'Battery',
+          span: 4,
+          colorScheme: 'green',
+          binding: {
+            messageName: 'SYS_STATUS',
+            fieldName: 'battery_remaining',
+            unit: '%',
+            decimals: 0,
+            min: 0,
+            max: 100,
+            warnThreshold: 30,
+            critThreshold: 15,
+            thresholdInvert: true,
+          },
+        },
+        {
+          displayType: 'stat-card',
+          title: 'Voltage',
+          span: 4,
+          colorScheme: 'amber',
+          binding: {
+            messageName: 'SYS_STATUS',
+            fieldName: 'voltage_battery',
+            unit: 'V',
+            decimals: 2,
+          },
+        },
+        {
+          displayType: 'stat-card',
+          title: 'Current',
+          span: 4,
+          colorScheme: 'amber',
+          binding: {
+            messageName: 'SYS_STATUS',
+            fieldName: 'current_battery',
+            unit: 'A',
+            decimals: 1,
+          },
+        },
+        {
+          displayType: 'stat-card',
+          title: 'GNSS HDOP',
+          span: 4,
+          colorScheme: 'blue',
+          binding: {
+            messageName: 'GPS_RAW_INT',
+            fieldName: 'eph',
+            unit: '',
+            decimals: 2,
+            warnThreshold: 1.4,
+            critThreshold: 2.0,
+          },
+        },
+        {
+          displayType: 'stat-card',
+          title: 'Link Loss',
+          span: 4,
+          colorScheme: 'blue',
+          binding: {
+            messageName: 'SYS_STATUS',
+            fieldName: 'drop_rate_comm',
+            unit: '%',
+            decimals: 1,
+            multiplier: 0.01,
+            warnThreshold: 5,
+            critThreshold: 15,
+          },
+        },
+        {
+          displayType: 'gauge-radial',
+          title: 'Throttle',
+          span: 4,
+          colorScheme: 'amber',
+          binding: {
+            messageName: 'VFR_HUD',
+            fieldName: 'throttle',
+            unit: '%',
+            decimals: 0,
+            min: 0,
+            max: 100,
+          },
+          gauge: {
+            sweep: 240,
+            style: 'arc',
+            majorTicks: 5,
+            minorTicks: 4,
+          },
+        },
+        {
+          displayType: 'multi-bar',
+          title: 'Vibration',
+          span: 6,
+          multiBarConfig: {
+            group: 'vibration-xyz',
+          },
+        },
+        {
+          displayType: 'multi-bar',
+          title: 'EKF variances',
+          span: 6,
+          multiBarConfig: {
+            group: 'ekf-variances',
+          },
+        },
+      ],
+    },
+    {
+      id: 'custom-track-error',
+      name: 'Track Error',
+      description:
+        'How far off its path the vehicle is in Auto and Guided: cross-track error (all vehicles) and altitude error (aircraft). Flat at zero otherwise.',
+      category: 'telemetry',
+      displayType: 'sparkline',
+      colorScheme: 'blue',
+      binding: {
+        messageName: 'NAV_CONTROLLER_OUTPUT',
+        fieldName: 'xtrack_error',
+        unit: 'm',
+        decimals: 1,
+        unitKind: 'distance',
+        label: 'Cross-track',
+        color: '#38bdf8',
+      },
+      bindings: [
+        {
+          messageName: 'NAV_CONTROLLER_OUTPUT',
+          fieldName: 'alt_error',
+          unit: 'm',
+          decimals: 1,
+          unitKind: 'altitude',
+          label: 'Altitude',
+          color: '#f59e0b',
+        },
+      ],
+    },
+    {
+      id: 'custom-attitude-tuning',
+      name: 'Attitude Tuning',
+      description:
+        "The rate and angle controllers' gains: Copter and Rover ATC_*, Plane RLL_ / PTCH_ / YAW_RATE_*. Only the vehicle's own are listed.",
+      category: 'control',
+      displayType: 'param-set',
+      colorScheme: 'blue',
+      paramSet: {
+        params: [
+          'ATC_RAT_RLL_*',
+          'ATC_RAT_PIT_*',
+          'ATC_RAT_YAW_*',
+          'ATC_ANG_*',
+          'ATC_ACCEL_*',
+          'RLL_RATE_*',
+          'PTCH_RATE_*',
+          'YAW_RATE_*',
+          '-*_SMAX',
+          '-*_PDMX',
+          '-*_NTF',
+          '-*_NEF',
+          '-*_FLT?',
+          '-*_D_FF',
+        ],
+        confirmation: true,
+      },
+    },
+    {
+      id: 'custom-navigation',
+      name: 'Navigation',
+      description:
+        'How it flies between waypoints: Copter WPNAV_*, LOIT_* and position controller gains; Plane NAVL1_*, TECS speed and height limits, WP_* and airspeeds.',
+      category: 'control',
+      displayType: 'param-set',
+      colorScheme: 'green',
+      paramSet: {
+        params: [
+          'WPNAV_*',
+          'LOIT_SPEED*',
+          'LOIT_ACC_MAX*',
+          'PSC_POSXY_P*',
+          'PSC_VELXY_*',
+          'PSC_POSZ_P*',
+          'PSC_VELZ_P*',
+          'NAVL1_*',
+          'WP_*',
+          'TECS_CLMB_MAX*',
+          'TECS_SINK_*',
+          'TECS_TIME_CONST*',
+          'TECS_SPDWEIGHT*',
+          'TECS_PITCH_M*',
+          'AIRSPEED_CRUISE*',
+          'AIRSPEED_MIN*',
+          'AIRSPEED_MAX*',
+          '-*_SMAX',
+          '-*_PDMX',
+          '-*_NTF',
+          '-*_NEF',
+          '-*_FLT?',
+          '-*_D_FF',
+        ],
+        confirmation: true,
+      },
+    },
+    {
+      id: 'custom-failsafes',
+      name: 'Failsafes & RTL',
+      description: 'What it does when something goes wrong: battery, radio and GCS failsafes, and the return home.',
+      category: 'control',
+      displayType: 'param-set',
+      colorScheme: 'red',
+      paramSet: {
+        params: ['FS_*', 'BATT_FS_*', 'BATT_LOW_*', 'BATT_CRT_*', 'THR_FS*', 'RTL_*', 'FENCE_ENABLE*', 'FENCE_ACTION*'],
+        confirmation: true,
+      },
+    },
+    // Samples for the custom widget list (Add Widget): on no tab, ready to place or copy.
     {
       id: 'custom-batt-voltage',
       name: 'Custom Bus Voltage',
@@ -136,9 +291,7 @@ const DEFAULT_PROFILE: DashboardProfile = {
       description: 'Live PWM pulse width bars for radio channels 1–8',
       category: 'telemetry',
       displayType: 'multi-bar',
-      multiBarConfig: {
-        group: 'rc-8',
-      },
+      multiBarConfig: { group: 'rc-8' },
       colorScheme: 'blue',
     },
     {
@@ -147,14 +300,7 @@ const DEFAULT_PROFILE: DashboardProfile = {
       description: 'Real-time wind direction compass rose',
       category: 'avionics',
       displayType: 'compass-rose',
-      binding: {
-        messageName: 'WIND',
-        fieldName: 'direction',
-        unit: '°',
-        min: 0,
-        max: 360,
-        decimals: 0,
-      },
+      binding: { messageName: 'WIND', fieldName: 'direction', unit: '°', min: 0, max: 360, decimals: 0 },
       colorScheme: 'default',
     },
     {
@@ -163,14 +309,7 @@ const DEFAULT_PROFILE: DashboardProfile = {
       description: 'Adjust ArduPilot WPNAV_SPEED parameter in flight',
       category: 'control',
       displayType: 'param-control',
-      paramControl: {
-        paramId: 'WPNAV_SPEED',
-        unit: 'cm/s',
-        min: 100,
-        max: 2000,
-        step: 50,
-        confirmation: true,
-      },
+      paramControl: { paramId: 'WPNAV_SPEED', unit: 'cm/s', min: 100, max: 2000, step: 50, confirmation: true },
       colorScheme: 'blue',
     },
     {
@@ -179,13 +318,275 @@ const DEFAULT_PROFILE: DashboardProfile = {
       description: 'One-click Return to Launch button',
       category: 'control',
       displayType: 'action-button',
-      action: {
-        label: 'Trigger Return to Launch',
-        commandId: 20, // MAV_CMD_NAV_RETURN_TO_LAUNCH
-        params: [0, 0, 0, 0, 0, 0, 0],
-        confirmation: true,
-      },
+      action: { label: 'Trigger Return to Launch', commandId: 20, params: [0, 0, 0, 0, 0, 0, 0], confirmation: true },
       colorScheme: 'amber',
+    },
+  ],
+  tabs: [
+    {
+      id: 'tab-flight',
+      title: 'Flight',
+      widgets: [
+        {
+          instanceId: 'w-actions',
+          widgetId: 'built-in-glareshield',
+          colSpan: 12,
+        },
+        {
+          instanceId: 'w-hud',
+          widgetId: 'built-in-hud',
+          colSpan: 4,
+        },
+        {
+          instanceId: 'w-map',
+          widgetId: 'built-in-map',
+          colSpan: 8,
+        },
+        {
+          instanceId: 'w-vitals',
+          widgetId: 'custom-vitals',
+          colSpan: 4,
+        },
+        {
+          instanceId: 'w-messages',
+          widgetId: 'built-in-statustext-mini',
+          colSpan: 4,
+        },
+        {
+          instanceId: 'w-track',
+          widgetId: 'custom-track-error',
+          colSpan: 6,
+        },
+      ],
+      mode: 'cockpit',
+      cockpit: {
+        header: 'w-actions',
+        root: {
+          split: 'row',
+          sizes: [34, 66],
+          children: [
+            {
+              split: 'column',
+              sizes: [35, 65],
+              children: [
+                {
+                  pane: 'w-hud',
+                },
+                {
+                  pane: 'w-vitals',
+                },
+              ],
+            },
+            {
+              split: 'column',
+              sizes: [73, 27],
+              children: [
+                {
+                  pane: 'w-map',
+                },
+                {
+                  split: 'row',
+                  sizes: [50, 50],
+                  children: [
+                    {
+                      pane: 'w-track',
+                    },
+                    {
+                      pane: 'w-messages',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      cockpitWide: {
+        header: 'w-actions',
+        root: {
+          split: 'row',
+          sizes: [27, 49, 24],
+          children: [
+            {
+              split: 'column',
+              sizes: [50, 50],
+              children: [
+                {
+                  pane: 'w-hud',
+                },
+                {
+                  pane: 'w-vitals',
+                },
+              ],
+            },
+            {
+              pane: 'w-map',
+            },
+            {
+              split: 'column',
+              sizes: [50, 50],
+              children: [
+                {
+                  pane: 'w-track',
+                },
+                {
+                  pane: 'w-messages',
+                },
+              ],
+            },
+          ],
+        },
+      },
+      cockpitCompact: {
+        header: 'w-actions',
+        root: {
+          split: 'row',
+          sizes: [30, 36, 34],
+          children: [
+            {
+              pane: 'w-hud',
+            },
+            {
+              pane: 'w-vitals',
+            },
+            {
+              split: 'column',
+              sizes: [74, 26],
+              children: [
+                {
+                  pane: 'w-map',
+                },
+                {
+                  pane: 'w-messages',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      id: 'tab-map',
+      title: 'Map',
+      widgets: [
+        {
+          instanceId: 'w-plan-map',
+          widgetId: 'built-in-map',
+          colSpan: 12,
+        },
+      ],
+      mode: 'cockpit',
+      cockpit: {
+        header: null,
+        root: {
+          pane: 'w-plan-map',
+        },
+      },
+    },
+    {
+      id: 'tab-tuning',
+      title: 'Tuning',
+      widgets: [
+        {
+          instanceId: 'w-pid',
+          widgetId: 'built-in-pid-tuning',
+          colSpan: 12,
+        },
+        {
+          instanceId: 'w-tune-map',
+          widgetId: 'built-in-map',
+          colSpan: 4,
+        },
+        {
+          instanceId: 'w-tune-track',
+          widgetId: 'custom-track-error',
+          colSpan: 4,
+        },
+        {
+          instanceId: 'w-attitude',
+          widgetId: 'custom-attitude-tuning',
+          colSpan: 4,
+        },
+        {
+          instanceId: 'w-navigation',
+          widgetId: 'custom-navigation',
+          colSpan: 4,
+        },
+        {
+          instanceId: 'w-failsafes',
+          widgetId: 'custom-failsafes',
+          colSpan: 4,
+        },
+        {
+          instanceId: 'w-params',
+          widgetId: 'built-in-parameters',
+          colSpan: 12,
+        },
+      ],
+      mode: 'cockpit',
+      cockpit: {
+        header: null,
+        root: {
+          split: 'row',
+          sizes: [68, 32],
+          children: [
+            {
+              split: 'column',
+              sizes: [50, 50],
+              children: [
+                {
+                  pane: 'w-pid',
+                },
+                {
+                  split: 'row',
+                  sizes: [34, 33, 33],
+                  children: [
+                    {
+                      pane: 'w-attitude',
+                    },
+                    {
+                      pane: 'w-navigation',
+                    },
+                    {
+                      pane: 'w-failsafes',
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              split: 'column',
+              sizes: [36, 28, 36],
+              children: [
+                {
+                  pane: 'w-tune-map',
+                },
+                {
+                  pane: 'w-tune-track',
+                },
+                {
+                  pane: 'w-params',
+                },
+              ],
+            },
+          ],
+        },
+      },
+      cockpitCompact: {
+        header: null,
+        root: {
+          split: 'row',
+          sizes: [60, 40],
+          children: [
+            {
+              pane: 'w-pid',
+            },
+            {
+              pane: 'w-params',
+            },
+          ],
+        },
+      },
     },
   ],
 };
