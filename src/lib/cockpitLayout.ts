@@ -162,7 +162,11 @@ export interface Size {
   h: number;
 }
 
-/** Roughly how tall a custom widget panel's content is at its smallest (px), by type and how many values it shows. */
+/**
+ * How tall a custom widget panel's content is at its smallest in a pane (px), by type and how many values it shows.
+ * Measured in the browser (a composite's content collapsed to its rows' minimum) and kept a little over: under, a
+ * layout could be chosen whose pane then scrolls.
+ */
 function panelMinHeight(
   p: Pick<WidgetPanelDefinition, 'displayType' | 'widgetId' | 'bindings' | 'gauge' | 'multiBarConfig'>
 ): number {
@@ -171,9 +175,10 @@ function panelMinHeight(
     // A built-in widget as it is in a pane (not its taller Flow-card minimum).
     case 'builtin':
       return widgetMinSize(p.widgetId ?? '').h;
-    // TelemetryPanels' own minimums: 190 px a gauge (240 px for more than four side by side), 170 px a chart.
+    // In a pane a dial's minimum is 80 px (TelemetryPanels; 190 px is a Flow card's), with its readout ~81 measured;
+    // more than four side by side keep 240. A chart is 170.
     case 'gauge-radial':
-      return p.gauge?.layout === 'multiple' && n > 4 ? 240 : 190;
+      return p.gauge?.layout === 'multiple' && n > 4 ? 240 : 84;
     case 'compass-rose':
       return 190;
     case 'sparkline':
@@ -184,15 +189,20 @@ function panelMinHeight(
       return 22 * n + 16;
     // The bars come from the group, not the bindings: eight RC or servo channels, a few ESCs, cells or axes.
     case 'multi-bar':
-      return 26 * multiBarCount(p.multiBarConfig?.group) + 16;
+      // Four bars measured 161 px with title and padding: 27 a bar keeps it just over.
+      return 27 * multiBarCount(p.multiBarConfig?.group) + 16;
     // One bar per value only with layout 'multiple' (otherwise further values are markers on one bar).
     case 'gauge-linear':
       return 40 * (p.gauge?.layout === 'multiple' ? n : 1) + 10;
     case 'param-control':
       return 90;
     case 'slider-control':
-    case 'stat-card':
       return 70;
+    // A stat card measured 39 px of value (77 with title and padding); an LED with its state a little more.
+    case 'stat-card':
+      return 40;
+    case 'indicator-led':
+      return 45;
     default:
       return 60;
   }
@@ -220,9 +230,10 @@ const COMPOSITE_STACK_PX = 360;
  * The smallest a custom widget may be (px), from its definition: a composite's panels in their rows (as wide as
  * needed to keep panels side by side), each row as tall as its tallest panel; a single panel by its type.
  */
-export function customWidgetMinSize(def: CustomWidgetDefinition): Size {
+export function customWidgetMinSize(def: CustomWidgetDefinition, opts: { capped?: boolean } = {}): Size {
+  const cap = opts.capped === false ? Infinity : CUSTOM_MIN_H_CAP;
   if (def.displayType !== 'composite')
-    return { w: 220, h: Math.min(CUSTOM_MIN_H_CAP, panelMinHeight(def as WidgetPanelDefinition) + CARD_CHROME) };
+    return { w: 220, h: Math.min(cap, panelMinHeight(def as WidgetPanelDefinition) + CARD_CHROME) };
   const panels = def.panels ?? [];
   if (panels.length === 0) return { w: 220, h: 140 };
   // Panels fill rows of twelve columns, left to right.
@@ -242,12 +253,16 @@ export function customWidgetMinSize(def: CustomWidgetDefinition): Size {
     }
   }
   const h = rows.reduce((a, b) => a + b, 0) + 10 * (rows.length - 1) + CARD_CHROME;
-  return { w: multi ? COMPOSITE_STACK_PX : 240, h: Math.min(CUSTOM_MIN_H_CAP, h) };
+  return { w: multi ? COMPOSITE_STACK_PX : 240, h: Math.min(cap, h) };
 }
 
 /** The smallest a pane showing this widget may be (px): what it needs to stay readable and usable. */
-export function widgetMinSize(widgetId: string, custom?: CustomWidgetDefinition): Size {
-  if (custom) return customWidgetMinSize(custom);
+export function widgetMinSize(
+  widgetId: string,
+  custom?: CustomWidgetDefinition,
+  opts: { capped?: boolean } = {}
+): Size {
+  if (custom) return customWidgetMinSize(custom, opts);
   switch (widgetId) {
     case 'built-in-hud':
     case 'built-in-pfd':
@@ -628,12 +643,19 @@ export function variantFor(hasWide: boolean, width: number, height: number): 'st
  * What a Cockpit tab shows in the room it has: its layout for the window's shape (standard or wide) if that fits,
  * else its compact layout if it has one and that fits, else the stacked list (phones). Decided by fit, not by a fixed
  * window size: a tab without a compact layout behaves as before, and the switch happens where it would have stacked.
+ *
+ * In two tiers when `whole` is given (each layout's fit with every pane at its full, uncapped need): first a layout
+ * in which no pane scrolls (the window's shape, then compact), and only if neither, the capped fit (a tall composite
+ * scrolls in its pane rather than sending the tab to the stacked list).
  */
 export function chooseFit(
   base: 'standard' | 'wide',
   baseFits: boolean,
-  compactFits: boolean | null
+  compactFits: boolean | null,
+  whole?: { base: boolean; compact: boolean | null }
 ): CockpitVariant | 'stacked' {
+  if (whole?.base && baseFits) return base;
+  if (whole?.compact && compactFits) return 'compact';
   if (baseFits) return base;
   if (compactFits) return 'compact';
   return 'stacked';
