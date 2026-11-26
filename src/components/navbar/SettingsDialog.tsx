@@ -629,7 +629,7 @@ export const SettingsDialog: React.FC<Props> = ({
 
         {tab === 'data' && (
           <div className="space-y-5" role="tabpanel" aria-label="Data">
-            <TlogSettings />
+            <TlogSettings onReplayStarted={onClose} />
             <div className="border-t border-zinc-800 pt-3">
               <RestoreDefaults />
             </div>
