@@ -17,6 +17,13 @@ function check(name: string, ok: boolean, detail = '') {
   if (!ok) failures.push(name);
 }
 const st = () => useDashboardStore.getState();
+// The tests' own profile (not the app's default, which may change): loaded as an import would.
+const { COCKPIT_FIXTURE } = await import('./fixtures/cockpitFixture.ts');
+const loadFixture = () => {
+  st().importProfileJson(JSON.stringify(COCKPIT_FIXTURE));
+  st().setActiveTab('tab-flight');
+};
+loadFixture();
 const hud = () => st().profile.tabs.find((t) => t.id === 'tab-flight')!;
 st().setActiveTab('tab-flight');
 
