@@ -382,20 +382,44 @@ export const ChartPanel: React.FC<PanelProps> = (props) => {
 
 export const LedPanel: React.FC<PanelProps> = (props) => {
   const { primary, boundText, unit } = primaryView(props);
+  const inPane = useInPane();
   const threshold = props.def.stateThreshold ?? 0;
-  const on = primary?.base !== null && primary?.base !== undefined && primary.base > threshold && !primary.stale;
+  const labels = props.def.stateLabels;
+  const known = primary?.base !== null && primary?.base !== undefined && !primary.stale;
+  const on = known && primary!.base! > threshold;
+  // Off is an alert for a health flag (offAlert): red or amber, like a value past its threshold.
+  const alert = known && !on ? props.def.offAlert : undefined;
+  const ledClass = on
+    ? `${props.scheme.ledActive} animate-pulse`
+    : alert === 'crit'
+      ? 'border-red-400 bg-red-500 shadow-red-500/50 animate-pulse'
+      : alert === 'warn'
+        ? 'border-amber-400 bg-amber-500 shadow-amber-500/50'
+        : 'border-zinc-700 bg-zinc-800';
+  const text = primary?.stale
+    ? 'NO DATA'
+    : !known
+      ? '--'
+      : on
+        ? (labels?.on ?? 'ACTIVE / HIGH')
+        : (labels?.off ?? 'INACTIVE / LOW');
   return (
-    <div className="flex items-center gap-3 py-2">
-      <div
-        className={`h-5 w-5 rounded-full border shadow-lg ${on ? `${props.scheme.ledActive} animate-pulse` : 'border-zinc-700 bg-zinc-800'}`}
-      />
-      <div>
-        <span className="text-sm font-bold text-zinc-200">
-          {primary?.stale ? 'NO DATA' : on ? 'ACTIVE / HIGH' : 'INACTIVE / LOW'}
+    <div className={`flex items-center gap-3 py-2 ${inPane ? 'justify-center' : ''}`}>
+      <div className={`shrink-0 rounded-full border shadow-lg ${inPane ? 'h-7 w-7' : 'h-5 w-5'} ${ledClass}`} />
+      <div className="min-w-0">
+        <span
+          className={`block truncate font-bold ${inPane ? 'font-mono text-xl' : 'text-sm'} ${
+            alert === 'crit' ? 'text-red-400' : alert === 'warn' ? 'text-amber-300' : 'text-zinc-200'
+          }`}
+        >
+          {text}
         </span>
-        <span className="block font-mono text-[11px] text-zinc-500">
-          Value: {boundText} {unit} · on above {threshold}
-        </span>
+        {/* The raw value, unless the light has its own words. */}
+        {!labels && (
+          <span className="block font-mono text-[11px] text-zinc-500">
+            Value: {boundText} {unit} · on above {threshold}
+          </span>
+        )}
       </div>
     </div>
   );

@@ -152,6 +152,12 @@ export function panelAlert(
   readings: BindingReading[]
 ): AlertState {
   if (isMultiGauge(def)) return worstAlert(gaugeLevels(bindings, readings));
+  // An LED that alerts when off (a health flag): only on a received, fresh value ("--" or stale never alerts).
+  if (def.displayType === 'indicator-led' && def.offAlert) {
+    const r = readings[0];
+    if (r && r.base !== null && !r.stale && !(r.base > (def.stateThreshold ?? 0))) return def.offAlert;
+    return evaluateAlert(r?.base ?? null, def.binding);
+  }
   return evaluateAlert(readings[0]?.base ?? null, def.binding);
 }
 
