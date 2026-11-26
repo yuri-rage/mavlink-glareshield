@@ -13,6 +13,7 @@ import { paramManager, type ParamManagerStatus } from '../../../mavlink/paramMan
 import { expandParamPatterns, isParamPattern } from '../../../mavlink/paramMatch';
 import { formatParamValue, getParamMetadata } from '../../../mavlink/paramMetadata';
 import { useParamMetaStore } from '../../../store/paramMetaStore';
+import { useReplaying } from '../../../store/replayStore';
 import { useTelemetryStore } from '../../../store/telemetryStore';
 import { useInPane } from '../../dashboard/paneContext';
 import { BitmaskEditor, DetailsButton, EnumSelect, ParamDetails } from '../params/ParamEditors';
@@ -36,7 +37,12 @@ export const ParamSetPanel: React.FC<PanelProps> = ({ def }) => {
   // On unless set to false, as the editor and loading treat it (a missing field confirms).
   const confirmEveryWrite = def.paramSet?.confirmation !== false;
   const parameters = useTelemetryStore((s) => s.parameters);
-  const linked = useTelemetryStore((s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED');
+  // A replayed log isn't a vehicle to read or write parameters on: treated as no link (no requests that go nowhere,
+  // no "loading…" turning into "not on this vehicle"), and the read-only details stay usable.
+  const replaying = useReplaying();
+  const linked =
+    useTelemetryStore((s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED') &&
+    !replaying;
   const heartbeatType = useTelemetryStore((s) => s.heartbeat.type);
   const firmwareVersion = useTelemetryStore((s) => s.firmwareVersion);
 

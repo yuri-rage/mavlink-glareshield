@@ -98,8 +98,8 @@ const CONTROL_TYPES: ReadonlySet<string> = new Set([
   'toggle-switch',
   'slider-control',
   'param-control',
-  'param-set',
 ]);
+// (A parameter set handles a replay itself, as no link, so its read-only details button keeps working.)
 
 export const WidgetPanel: React.FC<PanelProps> = (props) => {
   const replaying = useReplaying();
@@ -112,7 +112,10 @@ export const WidgetPanel: React.FC<PanelProps> = (props) => {
   return (
     <fieldset disabled className="contents">
       {panel}
-      <p className="text-center text-[10px] font-semibold text-violet-300">Replay: read-only</p>
+      {/* A toggle's slider already says so. */}
+      {props.def.displayType !== 'toggle-switch' && (
+        <p className="text-center text-[10px] font-semibold text-violet-300">Replay: read-only</p>
+      )}
     </fieldset>
   );
 };
