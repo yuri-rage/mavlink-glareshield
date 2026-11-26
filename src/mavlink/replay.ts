@@ -13,7 +13,12 @@
 import { resetMessageCache } from '../lib/messageCache';
 import { useConnectionStore } from '../store/connectionStore';
 import { initialReplayState, useReplayStore } from '../store/replayStore';
-import { applyHomeFromMissionItem0, resetVehicleState, useTelemetryStore } from '../store/telemetryStore';
+import {
+  applyHomeFromMissionItem0,
+  resetVehicleState,
+  restoreSavedNav,
+  useTelemetryStore,
+} from '../store/telemetryStore';
 import { mavlinkConnection } from './connection';
 import { MAVLINK_MSG_ID } from './messages';
 import { missionManager } from './missionManager';
@@ -193,4 +198,6 @@ mavlinkConnection.onReplayChange((replaying) => {
   setReplayClock(null);
   useReplayStore.setState({ ...initialReplayState });
   clearShown();
+  // What was saved before the replay (mission, fence, rally points, home), as when the app starts.
+  restoreSavedNav();
 });

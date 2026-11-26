@@ -1905,6 +1905,25 @@ const initialVehicleState = (() => {
 })();
 
 /**
+ * The saved mission, fence, rally points and home back in the store, as when the app starts (after a replay, which
+ * showed the log's and saved none of it).
+ */
+export function restoreSavedNav(): void {
+  const nav = loadInitialNavCache();
+  const wp0 = nav.missionWaypoints?.find((w) => w.seq === 0 && (w.lat !== 0 || w.lon !== 0));
+  useTelemetryStore.setState({
+    missionWaypoints: nav.missionWaypoints ?? [],
+    fencePoints: nav.fencePoints ?? [],
+    rallyPoints: nav.rallyPoints ?? [],
+    homePosition: wp0
+      ? { lat: wp0.lat, lon: wp0.lon, alt: wp0.alt, distanceM: null, bearingDeg: null, source: 'wp0' }
+      : { lat: 0, lon: 0, alt: 0, distanceM: null, bearingDeg: null, source: 'none' },
+    lastKnownHome: validHome(nav.home),
+    homeFromVehicle: false,
+  });
+}
+
+/**
  * Everything learned about a vehicle dropped, as before the first connection: values, mission, trace, messages and
  * pending commands. A replay starts (or starts over, or stops) with this, so nothing from a live vehicle or another
  * point in the log is mixed in.
@@ -2211,6 +2230,9 @@ let lastHomeFromVehicle = false;
 let savedHome: { lat: number; lon: number } | null = validHome(initialNav.home);
 
 useTelemetryStore.subscribe((state) => {
+  // A replayed log's mission, fence, rally points and home are the log's, not this vehicle's: never saved (and the
+  // replay's start and stop, which empty them, don't erase what is saved). restoreSavedNav() brings them back after.
+  if (mavlinkConnection.isReplaying()) return;
   const h = state.homePosition;
   const homeSame =
     h.lat === lastHomeLat &&
@@ -2237,6 +2259,8 @@ useTelemetryStore.subscribe((state) => {
 let navSaveTimer: ReturnType<typeof setTimeout> | null = null;
 function flushNavCache() {
   navSaveTimer = null;
+  // A save due from before a replay started would write the log's state.
+  if (mavlinkConnection.isReplaying()) return;
   const state = useTelemetryStore.getState();
   // A home the vehicle gave this session; otherwise keep the latest saved one. A home that only came from the cached
   // mission's item 0 never replaces it (it may be an old mission), and a session with no vehicle keeps it.
