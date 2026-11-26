@@ -27,6 +27,7 @@ import { setReplayClock } from './replayClock';
 import { scanReplayMissionFiles, type ReplayMissionFile } from './replayMissionFiles';
 import { buildReplayTimeline, frameHeader, type ReplayTimeline } from './tlogReplay';
 import { ReplayTransport } from './transport/replayTransport';
+import { useVehicleRosterStore } from './vehicleRoster';
 
 let current: ReplayTransport | null = null;
 
@@ -96,12 +97,9 @@ export function startReplay(bytes: Uint8Array, name: string): void {
   }
   hoistHomePosition(timeline);
   // A live vehicle this replay leaves (Stop offers to reconnect); a replay replacing a replay leaves the first one's.
-  const hb = useTelemetryStore.getState().heartbeat;
   const leftVehicle = mavlinkConnection.isReplaying()
     ? useReplayStore.getState().leftVehicle
-    : mavlinkConnection.getStatus() === 'connected' && hb.lastHeartbeatTime > 0
-      ? hb.systemId
-      : null;
+    : (liveVehicle()?.sysId ?? null);
   const transport = new ReplayTransport('mavlink-replay', timeline, {
     onRestart: () => {
       // Seeking backwards: the stores start over, then the log plays again up to the new position.
@@ -191,24 +189,35 @@ export function gcsFailsafeNote(params: Record<string, { value: number } | undef
  * when it is armed. In the app's own dialog: window.confirm() would block the page, and with it the heartbeat, while
  * the warning is read. Resolves true to go ahead.
  */
+/**
+ * The live vehicle a replay would leave: the one connected, or (a dropped link reconnecting by itself) the one the
+ * roster keeps for it. The store's heartbeat is cleared on any drop, so the roster is what still knows the vehicle
+ * then. Null when there's none (never connected, or a deliberate Disconnect).
+ */
+export function liveVehicle(): { sysId: number; armed: boolean; type: number; reconnecting: boolean } | null {
+  if (mavlinkConnection.isReplaying()) return null;
+  const hb = useTelemetryStore.getState().heartbeat;
+  if (mavlinkConnection.getStatus() === 'connected' && hb.lastHeartbeatTime > 0)
+    return { sysId: hb.systemId, armed: hb.isArmed, type: hb.type, reconnecting: false };
+  if (mavlinkConnection.isManualDisconnect) return null;
+  const roster = useVehicleRosterStore.getState();
+  const v = roster.activeSystemId !== null ? roster.vehicles[roster.activeSystemId] : undefined;
+  return v ? { sysId: v.sysId, armed: v.armed, type: v.type, reconnecting: true } : null;
+}
+
 export function confirmLeavingLiveLink(): Promise<boolean> {
-  if (mavlinkConnection.isReplaying()) return Promise.resolve(true);
-  const st = useTelemetryStore.getState();
-  const hb = st.heartbeat;
-  const connected = mavlinkConnection.getStatus() === 'connected';
-  // A dropped link reconnecting by itself still has the vehicle (the roster and its heartbeat are kept).
-  const reconnecting = !connected && !mavlinkConnection.isManualDisconnect && hb.lastHeartbeatTime > 0;
-  if ((!connected && !reconnecting) || hb.lastHeartbeatTime === 0) return Promise.resolve(true);
-  const failsafe = gcsFailsafeNote(st.parameters, hb.type);
-  const link = reconnecting ? ' (its link is reconnecting now; that stops too)' : '';
+  const v = liveVehicle();
+  if (!v) return Promise.resolve(true);
+  const failsafe = gcsFailsafeNote(useTelemetryStore.getState().parameters, v.type);
+  const link = v.reconnecting ? ' (its link is reconnecting now; that stops too)' : '';
   return askConfirm({
-    title: hb.isArmed ? `Vehicle ${hb.systemId} is ARMED` : 'Leave the live vehicle?',
+    title: v.armed ? `Vehicle ${v.sysId} is ARMED` : 'Leave the live vehicle?',
     message: [
-      `Replaying a log disconnects from vehicle ${hb.systemId}${link}: no telemetry, alerts or commands from here until you connect again.`,
+      `Replaying a log disconnects from vehicle ${v.sysId}${link}: no telemetry, alerts or commands from here until you connect again.`,
       failsafe,
     ],
-    confirmLabel: hb.isArmed ? 'Replay anyway' : 'Replay',
-    danger: hb.isArmed,
+    confirmLabel: v.armed ? 'Replay anyway' : 'Replay',
+    danger: v.armed,
   });
 }
 
