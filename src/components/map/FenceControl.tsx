@@ -245,8 +245,9 @@ export const FenceControlBody: React.FC<{ compact?: boolean }> = ({ compact }) =
         <button
           type="button"
           onClick={() => send(2, 'Fence: disable floor')}
+          disabled={!fs.connected || fs.replaying}
           title="Disable only the minimum-altitude fence (e.g. to land)"
-          className="w-full rounded-md border border-zinc-700 px-2 py-1 text-[10px] font-bold text-zinc-300 hover:bg-zinc-800"
+          className="w-full rounded-md border border-zinc-700 px-2 py-1 text-[10px] font-bold text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
         >
           Disable the floor only (FENCE_ALT_MIN)
         </button>

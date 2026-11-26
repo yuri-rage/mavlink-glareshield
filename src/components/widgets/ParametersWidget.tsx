@@ -174,6 +174,8 @@ export const ParametersWidget: React.FC = () => {
   };
 
   const handleStartEdit = (paramId: string, currentVal: number, anchor?: HTMLElement) => {
+    // No link (or a replayed log, which has no vehicle to write to): nothing to edit on.
+    if (!connected) return;
     if (getParamMetadata(paramId)?.readOnly) return;
     setEditingParam(paramId);
     // The shortest text that reads back as the same stored value (as the table shows it), not the raw float32
@@ -194,7 +196,11 @@ export const ParametersWidget: React.FC = () => {
       const hb = useTelemetryStore.getState().heartbeat;
       const p = parameters[paramId];
       const cmd = encoder.createParamSet(hb.systemId || 1, hb.componentId || 1, paramId, num, p ? p.type : 9);
-      mavlinkConnection.send(cmd);
+      // Saved only if it went out (a replay, or a link that dropped meanwhile, refuses it).
+      if (!mavlinkConnection.send(cmd)) {
+        setEditingParam(null);
+        return;
+      }
 
       setSavedSuccess(paramId);
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
@@ -782,10 +788,15 @@ export const ParametersWidget: React.FC = () => {
                           <button
                             type="button"
                             onClick={(e) => handleStartEdit(key, item.value, e.currentTarget)}
-                            className={`-mx-1 flex min-w-0 max-w-[calc(100%+0.5rem)] cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-left text-sky-400 transition-colors hover:bg-sky-500/10 hover:text-sky-300 ${
+                            disabled={!connected}
+                            className={`-mx-1 flex min-w-0 max-w-[calc(100%+0.5rem)] cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 text-left text-sky-400 transition-colors hover:bg-sky-500/10 hover:text-sky-300 disabled:cursor-default disabled:text-zinc-400 disabled:hover:bg-transparent ${
                               isEditing ? 'bg-sky-500/10 ring-1 ring-sky-500/60' : ''
                             }`}
-                            title={`Click to edit ${key} (raw: ${item.value})`}
+                            title={
+                              connected
+                                ? `Click to edit ${key} (raw: ${item.value})`
+                                : `${key} (raw: ${item.value}); connect to a vehicle to edit`
+                            }
                             aria-haspopup={meta?.bitmask ? 'dialog' : undefined}
                           >
                             <span className="shrink-0">

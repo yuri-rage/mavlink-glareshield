@@ -14,6 +14,7 @@ import {
   type LogTransferMethod,
 } from '../../mavlink/logManager';
 import { onActiveVehicleChange } from '../../mavlink/vehicleRoster';
+import { useReplaying } from '../../store/replayStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useVehicleTarget } from './custom/panelKit';
@@ -56,7 +57,11 @@ type RowResult = { kind: 'saved'; method: LogTransferMethod; seconds: number } |
 
 export const LogsWidget: React.FC = () => {
   const { sysId, compId } = useVehicleTarget();
-  const linked = useTelemetryStore((s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED');
+  // A replayed log has no vehicle to list, download or erase logs on: treated as no link.
+  const replaying = useReplaying();
+  const linked =
+    useTelemetryStore((s) => s.heartbeat.lastHeartbeatTime > 0 && s.heartbeat.modeName !== 'DISCONNECTED') &&
+    !replaying;
   const armed = useTelemetryStore((s) => s.heartbeat.isArmed);
   const maxLogFiles = useTelemetryStore((s) => s.parameters.LOG_MAX_FILES?.value);
 
@@ -118,6 +123,14 @@ export const LogsWidget: React.FC = () => {
   useEffect(() => {
     if (!linked) listedFor.current = null;
   }, [linked]);
+  // A replay starts: the live vehicle's list (and an open erase prompt) aren't the log's.
+  useEffect(() => {
+    if (!replaying) return;
+    setList(null);
+    setResults({});
+    setListError(null);
+    setConfirmErase(false);
+  }, [replaying]);
 
   const download = async (entry: LogEntry) => {
     if (!list || transfer) return;
@@ -157,11 +170,13 @@ export const LogsWidget: React.FC = () => {
     setTimeout(() => mounted.current && void refresh(), 2500);
   };
 
-  const blocked = !linked
-    ? 'Connect to a vehicle to see its logs.'
-    : armed
-      ? 'ArduPilot does not send logs while armed. Disarm to list or download them.'
-      : null;
+  const blocked = replaying
+    ? "Replaying a log: the vehicle's onboard logs aren't available (this browser's telemetry logs are below)."
+    : !linked
+      ? 'Connect to a vehicle to see its logs.'
+      : armed
+        ? 'ArduPilot does not send logs while armed. Disarm to list or download them.'
+        : null;
   const entries = list ? [...list.entries].reverse() : []; // newest first
   const totalSize = entries.reduce((n, e) => n + e.size, 0);
 
