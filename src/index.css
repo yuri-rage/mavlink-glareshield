@@ -244,6 +244,34 @@ html.daylight-theme .text-purple-400 {
   color: #7e22ce !important;
 }
 
+/* Violet: replay (the replay bar, the navbar's Replay badge) and the vehicle takeover banner. */
+html.daylight-theme .bg-violet-950\/90,
+html.daylight-theme .bg-violet-950\/70,
+html.daylight-theme .bg-violet-950\/50,
+html.daylight-theme .bg-violet-900\/60,
+html.daylight-theme .bg-violet-900\/50 {
+  background-color: #ede9fe !important;
+  color: #5b21b6 !important;
+  border-color: #a78bfa !important;
+}
+
+html.daylight-theme .border-violet-500\/60,
+html.daylight-theme .border-violet-400\/60 {
+  border-color: #a78bfa !important;
+}
+
+html.daylight-theme .text-violet-100,
+html.daylight-theme .text-violet-200,
+html.daylight-theme .text-violet-200\/90,
+html.daylight-theme .text-violet-300,
+html.daylight-theme .text-violet-300\/80 {
+  color: #6d28d9 !important;
+}
+
+html.daylight-theme [class*='hover:bg-violet-8']:hover {
+  background-color: #ddd6fe !important;
+}
+
 /* Hover states. The surface rules above match a class that starts with the name, so hover: variants kept their
    dark colours: a hovered row or button turned dark grey (or dark navy, amber, …) on the light theme. */
 html.daylight-theme :is([class*='hover:bg-zinc-9'], [class*='hover:bg-zinc-8']):hover {

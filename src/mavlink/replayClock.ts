@@ -19,3 +19,16 @@ export function replaySpeed(): number {
   const s = source?.speed() ?? 1;
   return s > 0 ? s : 1;
 }
+
+/** A heartbeat older than this (wall-clock ms) means the vehicle isn't heard: the link is lost. */
+export const HEARTBEAT_LIVE_MS = 3500;
+
+/**
+ * How old the last heartbeat may be (wall-clock ms) before the vehicle counts as not heard. Slowed down (a replay at
+ * 0.5x), a log's heartbeats arrive further apart in wall time: the limit stretches with it, so they don't read as
+ * a lost link.
+ */
+export function heartbeatLiveMs(): number {
+  const s = replaySpeed();
+  return s < 1 ? HEARTBEAT_LIVE_MS / s : HEARTBEAT_LIVE_MS;
+}

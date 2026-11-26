@@ -32,6 +32,7 @@ import {
   MAV_TYPE,
   PLANE_MODE,
 } from '../../mavlink/messages';
+import { heartbeatLiveMs } from '../../mavlink/replayClock';
 import { useReplaying } from '../../store/replayStore';
 import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
@@ -93,7 +94,7 @@ export const ArmingModesWidget: React.FC = () => {
   const isVehicleConnected =
     heartbeat.lastHeartbeatTime > 0 &&
     heartbeat.modeName !== 'DISCONNECTED' &&
-    nowMs - heartbeat.lastHeartbeatTime <= 3500;
+    nowMs - heartbeat.lastHeartbeatTime <= heartbeatLiveMs();
 
   // Replaying a log: the vehicle shown isn't live. Its state still shows; nothing can be sent to it.
   const replaying = useReplaying();

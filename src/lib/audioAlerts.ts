@@ -3,7 +3,9 @@ import { useEffect, useRef } from 'react';
 import { create } from 'zustand';
 
 import { mavlinkConnection } from '../mavlink/connection';
+import { heartbeatLiveMs } from '../mavlink/replayClock';
 import { onActiveVehicleChange } from '../mavlink/vehicleRoster';
+import { useReplayStore } from '../store/replayStore';
 import { useTelemetryStore } from '../store/telemetryStore';
 
 export const STORAGE_KEY_SOUND = 'mavlink_glareshield_sound_enabled';
@@ -435,9 +437,13 @@ export function normalizeCalloutText(text: string): string {
     .trim();
 }
 
+/** A replay seek is handing out frames: what changes on the way to the target isn't news (no chimes, no callouts). */
+const replaySeeking = () => useReplayStore.getState().seeking;
+
 export function speakCallout(text: string, priority = false) {
   try {
     if (typeof window === 'undefined') return;
+    if (replaySeeking()) return;
     const { soundEnabled, voiceEnabled, ttsStatus } = useAudioAlertsStore.getState();
     if (!soundEnabled || !voiceEnabled) return;
 
@@ -500,6 +506,7 @@ export function speakCallout(text: string, priority = false) {
 
 export function playAlertChime(severity: number) {
   try {
+    if (replaySeeking()) return;
     const ctx = getSharedAudioContext(true);
     if (!ctx) return;
 
@@ -1005,7 +1012,7 @@ export function useAudioAlertListener() {
       const lastHb = st.heartbeat.lastHeartbeatTime;
       // Just switched to another vehicle: not lost until its heartbeat is overdue (as long as for a known one).
       const awaitingSwitched = lastHb === 0 && Date.now() - switchedAtRef.current <= 3500;
-      const isLost = !awaitingSwitched && (lastHb === 0 || Date.now() - lastHb > 3500);
+      const isLost = !awaitingSwitched && (lastHb === 0 || Date.now() - lastHb > heartbeatLiveMs());
 
       if (isLost && !prevLinkLostRef.current) {
         prevLinkLostRef.current = true;
