@@ -147,5 +147,20 @@ check(
   J(t.cockpitWide)
 );
 
+// Deleting the pinned bar (the default HUD tab pins it in both layouts): gone from the tab and both headers.
+{
+  st().resetToDefaults();
+  st().setActiveTab('tab-flight');
+  st().removeWidgetFromActiveTab('w-glareshield');
+  const t = st().profile.tabs.find((x) => x.id === 'tab-flight')!;
+  check(
+    'the pinned bar deleted: off the tab, neither layout pins anything',
+    !t.widgets.some((w) => w.instanceId === 'w-glareshield') &&
+      t.cockpit!.header === null &&
+      t.cockpitWide!.header === null,
+    JSON.stringify([t.cockpit!.header, t.cockpitWide!.header])
+  );
+}
+
 console.log(failures.length ? `\n${failures.length} wide-layout check(s) FAILED` : '\nAll wide-layout checks PASSED');
 if (failures.length) process.exit(1);
