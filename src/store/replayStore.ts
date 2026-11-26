@@ -11,6 +11,8 @@ export interface ReplayStoreState {
   playing: boolean;
   speed: number;
   seeking: boolean;
+  /** Seeks completed (ReplayTransport): the alerts resync to the new moment instead of announcing the jump. */
+  seeksDone: number;
   ended: boolean;
   /** Wall-clock time of the log's first frame (ms since 1970). */
   startEpochMs: number;
@@ -28,6 +30,7 @@ export const initialReplayState: ReplayStoreState = {
   playing: false,
   speed: 1,
   seeking: false,
+  seeksDone: 0,
   ended: false,
   startEpochMs: 0,
   gapsCompressed: 0,

@@ -4,7 +4,7 @@
 
 import { MAVLINK_MESSAGE_CRC_EXTRA, MAVLINK_MSG_ID } from '../messages';
 import { calculateCrc } from '../parser';
-import { TlogPlayer, type ReplayTimeline } from '../tlogReplay';
+import { frameHeader, TlogPlayer, type ReplayTimeline } from '../tlogReplay';
 import type { FrameListener, StatusListener, Transport, TransportStatus, Unsubscribe } from './types';
 
 /** Frames handed out per step of a seek, so a long seek doesn't freeze the page. */
@@ -38,6 +38,8 @@ export interface ReplayState {
   speed: number;
   /** A seek is handing out frames. */
   seeking: boolean;
+  /** Seeks completed: what's shown jumped to another moment (the alerts take it up silently, no transitions). */
+  seeksDone: number;
   ended: boolean;
 }
 
@@ -48,6 +50,8 @@ export interface ReplayTransportOptions {
   onState?: (state: ReplayState) => void;
   tickMs?: number;
   now?: () => number;
+  /** The vehicle the dashboard shows (system ID): a pause repeats its heartbeat. */
+  activeSystem?: () => number | null;
 }
 
 export class ReplayTransport implements Transport {
@@ -63,10 +67,9 @@ export class ReplayTransport implements Transport {
   private lastStateAt = 0;
   private lastKeepAlive = 0;
   /** Paused heartbeats sent since the last real one (each numbered on from it). */
-  private keepAlives = 0;
-  private keepAliveFor: Uint8Array | null = null;
   private seekGeneration = 0;
   private seeking = false;
+  private seeksDone = 0;
   /** Whether to play once the seek in progress is done (kept across a seek that starts before the last finished). */
   private resumeAfterSeek = false;
   private readonly tickMs: number;
@@ -157,6 +160,7 @@ export class ReplayTransport implements Transport {
         return;
       }
       this.seeking = false;
+      this.seeksDone++;
       this.lastTick = this.now();
       if (this.resumeAfterSeek && !this.player.ended) this.player.playing = true;
       this.publish(true);
@@ -171,6 +175,7 @@ export class ReplayTransport implements Transport {
       playing: this.player.playing,
       speed: this.player.speed,
       seeking: this.seeking,
+      seeksDone: this.seeksDone,
       ended: this.player.ended,
     };
   }
@@ -185,15 +190,18 @@ export class ReplayTransport implements Transport {
       this.player.advance(dt);
       this.publish(!this.player.playing);
     } else if (this.player.lastHeartbeat && now - this.lastKeepAlive >= PAUSED_HEARTBEAT_MS) {
-      // Paused (or at the end): the vehicle as it was at this moment, still there.
+      // Paused (or at the end): the vehicle as it was at this moment, still there. The shown vehicle's own autopilot
+      // heartbeat, numbered on from what that autopilot last sent (so no gap at the pause, at any packet rate).
       this.lastKeepAlive = now;
-      const last = this.player.lastHeartbeat;
-      if (this.keepAliveFor !== last) {
-        this.keepAliveFor = last;
-        this.keepAlives = 0;
-      }
-      const seq = last[0] === 0xfd ? last[4] : last[2];
-      const hb = renumberFrame(last, seq + ++this.keepAlives);
+      const active = this.opts.activeSystem?.() ?? null;
+      const last =
+        (active !== null ? this.player.autopilotHeartbeats.get(active) : undefined) ?? this.player.lastHeartbeat;
+      const h = frameHeader(last);
+      if (!h) return;
+      const key = `${h.systemId}:${h.componentId}`;
+      const seq = ((this.player.lastSeq.get(key) ?? (last[0] === 0xfd ? last[4] : last[2])) + 1) & 0xff;
+      this.player.lastSeq.set(key, seq);
+      const hb = renumberFrame(last, seq);
       this.frameListeners.forEach((l) => l(hb));
     }
   }
