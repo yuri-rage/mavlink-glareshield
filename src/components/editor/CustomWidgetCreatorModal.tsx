@@ -11,6 +11,7 @@ import {
   COMMAND_PRESET_GROUPS,
   COMMAND_PRESETS,
   findCommandPreset,
+  irreversibleCommand,
   presetFitsWidget,
   presetKindFor,
   presetTitle,
@@ -397,6 +398,13 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
   // value is what the command expects (see CommandPreset.toggle / slider).
   const presetKind: PresetWidgetKind = presetKindFor(displayType);
   const offeredPresets = COMMAND_PRESETS.filter((c) => presetFitsWidget(c, presetKind));
+  // An irreversible command (terminate, parachute release, reboot, format) always confirms: the box can't be unticked.
+  const irreversible = specialAction
+    ? null
+    : irreversibleCommand(
+        parseInt(commandId, 10) || 0,
+        presetKind === 'button' ? cmdParams.map((v) => parseFloat(v) || 0) : null
+      );
   const selectedPreset = customCommand
     ? undefined
     : findCommandPreset(
@@ -647,7 +655,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
         label: actionLabel,
         commandId: parseInt(commandId, 10) || 0,
         params: cmdParams.map((v) => parseFloat(v) || 0) as [number, number, number, number, number, number, number],
-        confirmation: requireConfirm,
+        confirmation: requireConfirm || irreversible !== null,
         ...(specialAction
           ? { special: specialAction }
           : sendAs === 'int'
@@ -1601,10 +1609,14 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
             <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">MAVLink Command Trigger</h4>
-                <label className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-300">
+                <label
+                  className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-300"
+                  title={irreversible ? `Always confirms: this command ${irreversible}` : undefined}
+                >
                   <input
                     type="checkbox"
-                    checked={requireConfirm}
+                    checked={requireConfirm || irreversible !== null}
+                    disabled={irreversible !== null}
                     onChange={(e) => setRequireConfirm(e.target.checked)}
                     className="rounded border-zinc-700 bg-zinc-900 accent-amber-500"
                   />

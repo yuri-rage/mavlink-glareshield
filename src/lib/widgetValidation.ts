@@ -2,6 +2,7 @@
 // Imported JSON is untrusted: unknown types fall back to safe defaults, malformed values are dropped, and every
 // command or parameter write is forced to ask for confirmation.
 
+import { actionNeedsConfirmation } from '../mavlink/commandPresets';
 import type {
   CustomWidgetDefinition,
   MultiBarGroupType,
@@ -318,7 +319,9 @@ export function sanitizeWidgetDefinition(
   if (raw.action !== undefined) w.action = sanitizeAction(raw.action);
   // The set-clock action isn't a command: only a button sends it (a toggle or slider would wait for an ACK).
   if (w.action?.special && w.displayType !== 'action-button') delete w.action.special;
-  if (w.action && force) w.action = { ...w.action, confirmation: true };
+  // Imports always confirm; an irreversible command (terminate, parachute, reboot, format) always does, however saved.
+  if (w.action && (force || actionNeedsConfirmation(w.action, w.displayType)))
+    w.action = { ...w.action, confirmation: true };
   if (w.paramControl) {
     w.paramControl =
       typeof w.paramControl === 'object' && typeof w.paramControl.paramId === 'string'
