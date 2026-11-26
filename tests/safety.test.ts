@@ -264,8 +264,20 @@ const ack = (command: number, result: number) => {
   );
   check('arming is not irreversible', irreversibleCommand(400, p7(1)) === null);
   check(
+    'also irreversible: engine stop (and an engine toggle), a parameter reset to defaults',
+    [irreversibleCommand(223, p7(0)), irreversibleCommand(223, null), irreversibleCommand(245, p7(2))].every(
+      (r) => r !== null
+    )
+  );
+  check(
+    'not irreversible: engine start, parameter read or write to storage',
+    [irreversibleCommand(223, p7(1)), irreversibleCommand(245, p7(0)), irreversibleCommand(245, p7(1))].every(
+      (r) => r === null
+    )
+  );
+  check(
     'every irreversible preset is caught',
-    ['terminate', 'parachute', 'reboot', 'reboot-mass-storage', 'format-sd'].every((k) => {
+    ['terminate', 'parachute', 'reboot', 'reboot-mass-storage', 'format-sd', 'engine-stop'].every((k) => {
       const pr = COMMAND_PRESETS.find((c) => c.key === k);
       return pr && irreversibleCommand(pr.commandId, pr.params) !== null;
     })

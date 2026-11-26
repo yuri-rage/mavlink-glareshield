@@ -30,7 +30,7 @@ export interface CommandPreset {
 
 /**
  * Why a command can't be taken back, or null: terminate the flight, release the parachute, disarm (in flight, the
- * aircraft falls), a motor test, reboot or shut down the autopilot or another component, format the SD card. A widget sending one always confirms first, whatever its setting. `params` as sent;
+ * aircraft falls), a motor test, stop the engine, reboot or shut down the autopilot or another component, reset the parameters to defaults, format the SD card. A widget sending one always confirms first, whatever its setting. `params` as sent;
  * null for toggles and sliders, which put their own value in the params (only the command counts then).
  */
 export function irreversibleCommand(commandId: number, params: readonly number[] | null): string | null {
@@ -48,6 +48,10 @@ export function irreversibleCommand(commandId: number, params: readonly number[]
       return p1 === null || p1 === 0 ? 'disarms the vehicle (in flight, it falls)' : null;
     case 209: // MAV_CMD_DO_MOTOR_TEST
       return 'spins a motor (props on, it moves)';
+    case 223: // MAV_CMD_DO_ENGINE_CONTROL: P1 0 stops the engine (in flight, an engine-driven aircraft loses power)
+      return p1 === null || p1 === 0 ? 'stops the engine' : null;
+    case 245: // MAV_CMD_PREFLIGHT_STORAGE: P1 2 resets the parameters to their defaults
+      return p1 === null || p1 === 2 ? 'resets the parameters to defaults' : null;
     case 526: // MAV_CMD_STORAGE_FORMAT
       return 'erases the SD card';
     default:
