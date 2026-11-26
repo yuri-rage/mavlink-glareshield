@@ -173,12 +173,13 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
 
       {isComposite ? (
         // In a pane, a composite taller than the pane scrolls inside the card (its header and border stay put).
-        <CardContent className={`min-h-0 flex-1 p-2.5 sm:p-3 ${inPane ? 'overflow-y-auto' : ''}`}>
+        // In a pane, a little tighter (padding, gaps, tiles): a pane's height is fixed, a Flow card's grows.
+        <CardContent className={`min-h-0 flex-1 ${inPane ? 'overflow-y-auto p-2' : 'p-2.5 sm:p-3'}`}>
           {/* In a Cockpit pane the rows share its height (each at least its content), so the card fills the pane rather
               than leaving a gap below or scrolling; elsewhere they keep their natural heights. */}
           <div
             ref={gridRef}
-            className={`grid h-full grid-cols-12 gap-2.5 ${inPane ? 'content-stretch [grid-auto-rows:minmax(min-content,1fr)]' : 'content-start'}`}
+            className={`grid h-full grid-cols-12 ${inPane ? 'content-stretch gap-2 [grid-auto-rows:minmax(min-content,1fr)]' : 'content-start gap-2.5'}`}
           >
             {panels.map((p, i) => {
               const span = stacked ? 12 : panelSpan(definition, i);
@@ -189,7 +190,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                   key={`${i}-${p.def.displayType}`}
                   style={{ gridColumn: `span ${span} / span ${span}` }}
                   // A size container: a panel's values scale with its own width (TelemetryPanels).
-                  className={`flex min-w-0 flex-col rounded-lg border bg-zinc-900/30 p-2.5 transition-colors @container ${
+                  className={`flex min-w-0 flex-col rounded-lg border bg-zinc-900/30 ${inPane ? 'p-2' : 'p-2.5'} transition-colors @container ${
                     p.alert === 'crit'
                       ? 'border-red-500/60'
                       : p.alert === 'warn'
