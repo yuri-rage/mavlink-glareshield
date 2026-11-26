@@ -396,6 +396,11 @@
           "colSpan": 4
         },
         {
+          "instanceId": "gs-tune-track",
+          "widgetId": "custom-gs-track",
+          "colSpan": 4
+        },
+        {
           "instanceId": "gs-attitude",
           "widgetId": "custom-gs-attitude",
           "colSpan": 4
@@ -448,10 +453,13 @@
             },
             {
               "split": "column",
-              "sizes": [50, 50],
+              "sizes": [36, 28, 36],
               "children": [
                 {
                   "pane": "gs-tune-map"
+                },
+                {
+                  "pane": "gs-tune-track"
                 },
                 {
                   "pane": "gs-params"
