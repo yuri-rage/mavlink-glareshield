@@ -227,13 +227,17 @@ export function getObservedCatalog(): Record<string, string[]> {
   return catalog;
 }
 
-export function resetMessageCache(): void {
+/**
+ * Everything received dropped. `keepLinkHistory`: the two-minute link-quality history stays (a dropped link coming
+ * back: its dropout is what the chart is for).
+ */
+export function resetMessageCache(opts: { keepLinkHistory?: boolean } = {}): void {
   latest.clear();
   lastSeen.clear();
   vehicleSystemId = undefined;
   vehicleType = undefined;
   linkMeter.reset();
-  linkHistory.length = 0;
+  if (!opts.keepLinkHistory) linkHistory.length = 0;
 }
 
 mavlinkConnection.onPacket((packet) => recordPacket(packet));
@@ -242,9 +246,13 @@ onActiveVehicleChange(() => resetMessageCache());
 
 // A new connection starts with an empty cache: the previous connection's values (possibly another vehicle's) would
 // otherwise stay bound until each message arrived again. While a link is down the last values stay, shown as stale
-// by their age.
+// by their age. A dropped link that reconnects by itself keeps the link-quality history (the dropout stays on the
+// chart); after a deliberate Disconnect it starts over.
 let lastStatus: string | null = null;
+let droppedManually = true;
 mavlinkConnection.onStatus((status) => {
-  if (status === 'connected' && lastStatus !== null && lastStatus !== 'connected') resetMessageCache();
+  if (status === 'disconnected') droppedManually = mavlinkConnection.isManualDisconnect;
+  if (status === 'connected' && lastStatus !== null && lastStatus !== 'connected')
+    resetMessageCache({ keepLinkHistory: !droppedManually });
   lastStatus = status;
 });
