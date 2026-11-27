@@ -5,7 +5,7 @@ import { AlertTriangle, Check, Copy, Download, Layers, RotateCcw, Upload } from 
 import { downloadFile } from '../../lib/download';
 import { profileVehicleControls } from '../../lib/vehicleControls';
 import { askConfirm } from '../../store/confirmStore';
-import { useDashboardStore } from '../../store/dashboardStore';
+import { parseProfileImport, useDashboardStore } from '../../store/dashboardStore';
 import { DashboardProfile } from '../../types/widget';
 import { Button } from '../ui/button';
 import { Modal } from '../ui/modal';
@@ -45,12 +45,13 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
       const content = event.target?.result as string;
       if (content) {
         try {
-          const parsed = JSON.parse(content) as DashboardProfile;
-          if (parsed && Array.isArray(parsed.tabs)) {
+          JSON.parse(content); // syntax first, for its own message
+          const parsed = parseProfileImport(content);
+          if (parsed) {
             setPendingProfile(parsed);
             setImportStatus(null);
           } else {
-            setImportStatus('Invalid profile format: missing tabs array.');
+            setImportStatus('Invalid profile format: no tabs.');
           }
         } catch {
           setImportStatus('Invalid JSON syntax.');
@@ -64,8 +65,9 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
   const handleTextImport = () => {
     if (!jsonText.trim()) return;
     try {
-      const parsed = JSON.parse(jsonText.trim()) as DashboardProfile;
-      if (parsed && Array.isArray(parsed.tabs)) {
+      JSON.parse(jsonText.trim()); // syntax first, for its own message
+      const parsed = parseProfileImport(jsonText.trim());
+      if (parsed) {
         setPendingProfile(parsed);
         setImportStatus(null);
       } else {
