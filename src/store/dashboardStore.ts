@@ -850,6 +850,11 @@ export interface DashboardState {
   /** Which of a tab's Cockpit layouts the editor works on (the wide one only if the tab has it). */
   editVariant: CockpitVariant;
   setEditVariant: (v: CockpitVariant) => void;
+  /** The layout the open tab is showing now (DashboardGrid; not saved): Edit Mode starts by editing it. */
+  shownVariant: CockpitVariant;
+  setShownVariant: (v: CockpitVariant) => void;
+  /** Enter Edit Mode on the layout being shown (from the navbar's Edit button). */
+  startEditing: () => void;
   /** While editing a compact layout: the laptop window it's previewed in (not saved). */
   compactPreview: CompactPreviewId;
   setCompactPreview: (id: CompactPreviewId) => void;
@@ -1205,6 +1210,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   editVariant: 'standard',
   setEditVariant: (editVariant) => set({ editVariant }),
+  shownVariant: 'standard',
+  setShownVariant: (shownVariant) => {
+    if (get().shownVariant !== shownVariant) set({ shownVariant });
+  },
+  startEditing: () => {
+    if (get().isEditing) return;
+    set({ editVariant: get().shownVariant });
+    get().toggleEditing();
+  },
 
   compactPreview: '1366',
   setCompactPreview: (compactPreview) => set({ compactPreview }),

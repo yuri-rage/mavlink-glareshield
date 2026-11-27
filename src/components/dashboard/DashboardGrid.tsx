@@ -12,7 +12,6 @@ import {
   Layers,
   LayoutPanelTop,
   Lock,
-  Pencil,
   Plus,
   Sliders,
   Trash2,
@@ -69,7 +68,6 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
     profile,
     activeTabId,
     isEditing,
-    toggleEditing,
     setActiveTab,
     addTab,
     removeTab,
@@ -169,6 +167,8 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       : variantFor(Boolean(tab?.cockpitWide), windowSize.w, windowSize.h);
   };
   const variant: CockpitVariant = isEditing && activeTab ? editTarget(activeTab, editVariant) : shownVariant;
+  // What's on screen, for the navbar's Edit button (Edit Mode starts on it).
+  useEffect(() => useDashboardStore.getState().setShownVariant(shownVariant), [shownVariant]);
   const cockpit = isCockpit ? (layoutOf(activeTab, variant) ?? { header: null, root: null }) : undefined;
   // Editing the compact layout on a window larger than the chosen laptop: shown in a frame that size, so what's
   // arranged is what a laptop shows.
@@ -453,221 +453,205 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
           : `flex flex-1 flex-col p-3 sm:p-5 ${CONTENT_WIDTH_CLASS[contentWidth]} mx-auto w-full space-y-4`
       }
     >
-      {/* Tab Navigation Bar */}
-      <div className="relative flex items-center justify-between gap-2 border-b border-zinc-800 pb-2">
-        {/* Scrollable Tabs with Mobile Scroll Hint */}
-        <div className="relative flex min-w-0 flex-1 items-center">
-          <div className="scrollbar-thin flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-1 pr-6 sm:gap-2">
-            {profile.tabs.map((tab, tabIdx) => {
-              const isActive = tab.id === activeTab?.id;
-              const isBeingRenamed = editingTabId === tab.id;
-              const isConfirmingDelete = confirmDeleteTabId === tab.id;
-              const isTabDropTarget = dropTargetTabIdx === tabIdx && draggedTabIdx !== null && draggedTabIdx !== tabIdx;
+      {/* The tab row in Edit Mode (rename, delete, reorder, New Tab); otherwise the tabs are in the navbar (HeaderTabs). */}
+      {isEditing && (
+        <div className="relative flex items-center justify-between gap-2 border-b border-zinc-800 pb-2">
+          {/* Scrollable Tabs with Mobile Scroll Hint */}
+          <div className="relative flex min-w-0 flex-1 items-center">
+            <div className="scrollbar-thin flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-1 pr-6 sm:gap-2">
+              {profile.tabs.map((tab, tabIdx) => {
+                const isActive = tab.id === activeTab?.id;
+                const isBeingRenamed = editingTabId === tab.id;
+                const isConfirmingDelete = confirmDeleteTabId === tab.id;
+                const isTabDropTarget =
+                  dropTargetTabIdx === tabIdx && draggedTabIdx !== null && draggedTabIdx !== tabIdx;
 
-              if (isConfirmingDelete) {
+                if (isConfirmingDelete) {
+                  return (
+                    <div
+                      key={tab.id}
+                      className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-500/50 bg-red-950/80 px-2.5 py-1 text-xs text-red-200 shadow-sm"
+                    >
+                      <span className="text-[11px] font-semibold">Delete &quot;{tab.title}&quot;?</span>
+                      <button
+                        onClick={() => {
+                          removeTab(tab.id);
+                          setConfirmDeleteTabId(null);
+                          // Deleting the open tab moves to another: edit the layout shown for that one. (Deleting another
+                          // tab leaves the open one, and the layout being edited, as they are.)
+                          const st = useDashboardStore.getState();
+                          if (isActive && st.isEditing) st.setEditVariant(variantShownFor(st.activeTabId));
+                        }}
+                        className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-red-500"
+                      >
+                        Delete
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteTabId(null)}
+                        className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  );
+                }
+
                 return (
                   <div
                     key={tab.id}
-                    className="flex shrink-0 items-center gap-1.5 rounded-lg border border-red-500/50 bg-red-950/80 px-2.5 py-1 text-xs text-red-200 shadow-sm"
+                    draggable={isEditing && !isBeingRenamed}
+                    onDragStart={(e) => {
+                      if (!isEditing) return;
+                      e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setData('text/plain', `tab:${tabIdx}`);
+                      setDraggedTabIdx(tabIdx);
+                    }}
+                    onDragOver={(e) => {
+                      if (!isEditing || draggedTabIdx === null) return;
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dropTargetTabIdx !== tabIdx) {
+                        setDropTargetTabIdx(tabIdx);
+                      }
+                    }}
+                    onDrop={(e) => {
+                      if (!isEditing || draggedTabIdx === null) return;
+                      e.preventDefault();
+                      if (draggedTabIdx !== tabIdx) {
+                        reorderTabs(draggedTabIdx, tabIdx);
+                      }
+                      setDraggedTabIdx(null);
+                      setDropTargetTabIdx(null);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedTabIdx(null);
+                      setDropTargetTabIdx(null);
+                    }}
+                    className={`group relative flex shrink-0 items-center rounded-lg transition-all ${
+                      isTabDropTarget ? 'bg-sky-950/30 ring-2 ring-sky-400' : ''
+                    } ${draggedTabIdx === tabIdx ? 'opacity-50' : ''}`}
                   >
-                    <span className="text-[11px] font-semibold">Delete &quot;{tab.title}&quot;?</span>
-                    <button
-                      onClick={() => {
-                        removeTab(tab.id);
-                        setConfirmDeleteTabId(null);
-                        // Deleting the open tab moves to another: edit the layout shown for that one. (Deleting another
-                        // tab leaves the open one, and the layout being edited, as they are.)
-                        const st = useDashboardStore.getState();
-                        if (isActive && st.isEditing) st.setEditVariant(variantShownFor(st.activeTabId));
-                      }}
-                      className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-red-500"
-                    >
-                      Delete
-                    </button>
-                    <button
-                      onClick={() => setConfirmDeleteTabId(null)}
-                      className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300 hover:bg-zinc-700"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                );
-              }
-
-              return (
-                <div
-                  key={tab.id}
-                  draggable={isEditing && !isBeingRenamed}
-                  onDragStart={(e) => {
-                    if (!isEditing) return;
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', `tab:${tabIdx}`);
-                    setDraggedTabIdx(tabIdx);
-                  }}
-                  onDragOver={(e) => {
-                    if (!isEditing || draggedTabIdx === null) return;
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                    if (dropTargetTabIdx !== tabIdx) {
-                      setDropTargetTabIdx(tabIdx);
-                    }
-                  }}
-                  onDrop={(e) => {
-                    if (!isEditing || draggedTabIdx === null) return;
-                    e.preventDefault();
-                    if (draggedTabIdx !== tabIdx) {
-                      reorderTabs(draggedTabIdx, tabIdx);
-                    }
-                    setDraggedTabIdx(null);
-                    setDropTargetTabIdx(null);
-                  }}
-                  onDragEnd={() => {
-                    setDraggedTabIdx(null);
-                    setDropTargetTabIdx(null);
-                  }}
-                  className={`group relative flex shrink-0 items-center rounded-lg transition-all ${
-                    isTabDropTarget ? 'bg-sky-950/30 ring-2 ring-sky-400' : ''
-                  } ${draggedTabIdx === tabIdx ? 'opacity-50' : ''}`}
-                >
-                  {isBeingRenamed ? (
-                    <div className="flex items-center gap-1 rounded-lg border border-sky-500 bg-zinc-900 px-2 py-1">
-                      <Input
-                        type="text"
-                        value={editTabTitle}
-                        onChange={(e) => setEditTabTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleSaveRename(tab.id);
-                          } else if (e.key === 'Escape') {
-                            e.preventDefault();
-                            setEditingTabId(null);
-                          }
-                        }}
-                        onBlur={() => handleSaveRename(tab.id)}
-                        className="h-6 w-28 px-1 py-0 text-xs font-semibold"
-                        autoFocus
-                      />
-                      <button onClick={() => handleSaveRename(tab.id)} className="text-emerald-400 hover:text-white">
-                        <Check className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        if (isEditing) useDashboardStore.getState().setEditVariant(variantShownFor(tab.id));
-                        setActiveTab(tab.id);
-                      }}
-                      className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-all sm:px-4 sm:text-sm ${
-                        isActive
-                          ? 'border border-zinc-700 bg-zinc-800 text-sky-400 shadow-sm'
-                          : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
-                      } ${isEditing ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                      title={isEditing ? 'Drag to reorder tab' : tab.title}
-                    >
-                      {isEditing && <GripVertical className="-ml-1 h-3 w-3 text-zinc-500" />}
-                      <span>{tab.title}</span>
-                      <span className="font-mono text-[10px] text-zinc-500">({tab.widgets.length})</span>
-                    </button>
-                  )}
-
-                  {/* Tab Edit Controls */}
-                  {isEditing && (
-                    <div className="ml-0.5 flex items-center opacity-70 hover:opacity-100">
+                    {isBeingRenamed ? (
+                      <div className="flex items-center gap-1 rounded-lg border border-sky-500 bg-zinc-900 px-2 py-1">
+                        <Input
+                          type="text"
+                          value={editTabTitle}
+                          onChange={(e) => setEditTabTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleSaveRename(tab.id);
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              setEditingTabId(null);
+                            }
+                          }}
+                          onBlur={() => handleSaveRename(tab.id)}
+                          className="h-6 w-28 px-1 py-0 text-xs font-semibold"
+                          autoFocus
+                        />
+                        <button onClick={() => handleSaveRename(tab.id)} className="text-emerald-400 hover:text-white">
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
                       <button
                         onClick={() => {
-                          setEditingTabId(tab.id);
-                          setEditTabTitle(tab.title);
+                          if (isEditing) useDashboardStore.getState().setEditVariant(variantShownFor(tab.id));
+                          setActiveTab(tab.id);
                         }}
-                        className="p-1 text-zinc-400 hover:text-white"
-                        title="Rename tab"
+                        className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-all sm:px-4 sm:text-sm ${
+                          isActive
+                            ? 'border border-zinc-700 bg-zinc-800 text-sky-400 shadow-sm'
+                            : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
+                        } ${isEditing ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                        title={isEditing ? 'Drag to reorder tab' : tab.title}
                       >
-                        <Edit2 className="h-3 w-3" />
+                        {isEditing && <GripVertical className="-ml-1 h-3 w-3 text-zinc-500" />}
+                        <span>{tab.title}</span>
+                        <span className="font-mono text-[10px] text-zinc-500">({tab.widgets.length})</span>
                       </button>
-                      {profile.tabs.length > 1 && (
+                    )}
+
+                    {/* Tab Edit Controls */}
+                    {isEditing && (
+                      <div className="ml-0.5 flex items-center opacity-70 hover:opacity-100">
                         <button
-                          onClick={() => setConfirmDeleteTabId(tab.id)}
-                          className="p-1 text-zinc-400 hover:text-red-400"
-                          title="Delete tab"
+                          onClick={() => {
+                            setEditingTabId(tab.id);
+                            setEditTabTitle(tab.title);
+                          }}
+                          className="p-1 text-zinc-400 hover:text-white"
+                          title="Rename tab"
                         >
-                          <X className="h-3 w-3" />
+                          <Edit2 className="h-3 w-3" />
                         </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                        {profile.tabs.length > 1 && (
+                          <button
+                            onClick={() => setConfirmDeleteTabId(tab.id)}
+                            className="p-1 text-zinc-400 hover:text-red-400"
+                            title="Delete tab"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
 
-            {/* Add Tab Button */}
-            {isEditing && !isAddingTab && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsAddingTab(true)}
-                className="h-8 shrink-0 gap-1 border-dashed px-2 text-xs text-zinc-400 hover:text-zinc-100"
-              >
-                <Plus className="h-3 w-3" />
-                <span>New Tab</span>
-              </Button>
-            )}
-
-            {isEditing && isAddingTab && (
-              <form onSubmit={handleCreateTab} className="flex shrink-0 items-center gap-1">
-                <Input
-                  type="text"
-                  placeholder="Tab Name..."
-                  value={newTabTitle}
-                  onChange={(e) => setNewTabTitle(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') setIsAddingTab(false);
-                  }}
-                  className="h-7 w-28 px-2 py-0 text-xs font-semibold"
-                  autoFocus
-                />
-                <Button type="submit" size="sm" variant="default" className="h-7 px-2 text-xs">
-                  Add
-                </Button>
+              {/* Add Tab Button */}
+              {isEditing && !isAddingTab && (
                 <Button
-                  type="button"
+                  variant="outline"
                   size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-xs text-zinc-500"
-                  onClick={() => setIsAddingTab(false)}
+                  onClick={() => setIsAddingTab(true)}
+                  className="h-8 shrink-0 gap-1 border-dashed px-2 text-xs text-zinc-400 hover:text-zinc-100"
                 >
-                  Cancel
+                  <Plus className="h-3 w-3" />
+                  <span>New Tab</span>
                 </Button>
-              </form>
-            )}
-          </div>
-          {/* Right scroll fade & chevron hint on narrow mobile viewports */}
-          <div
-            className="pointer-events-none absolute bottom-0 right-0 top-0 flex w-7 items-center justify-end bg-gradient-to-l from-zinc-950 via-zinc-950/80 to-transparent pr-0.5 text-zinc-500 sm:hidden"
-            aria-hidden="true"
-          >
-            <ChevronRight className="h-3.5 w-3.5" />
+              )}
+
+              {isEditing && isAddingTab && (
+                <form onSubmit={handleCreateTab} className="flex shrink-0 items-center gap-1">
+                  <Input
+                    type="text"
+                    placeholder="Tab Name..."
+                    value={newTabTitle}
+                    onChange={(e) => setNewTabTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setIsAddingTab(false);
+                    }}
+                    className="h-7 w-28 px-2 py-0 text-xs font-semibold"
+                    autoFocus
+                  />
+                  <Button type="submit" size="sm" variant="default" className="h-7 px-2 text-xs">
+                    Add
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-xs text-zinc-500"
+                    onClick={() => setIsAddingTab(false)}
+                  >
+                    Cancel
+                  </Button>
+                </form>
+              )}
+            </div>
+            {/* Right scroll fade & chevron hint on narrow mobile viewports */}
+            <div
+              className="pointer-events-none absolute bottom-0 right-0 top-0 flex w-7 items-center justify-end bg-gradient-to-l from-zinc-950 via-zinc-950/80 to-transparent pr-0.5 text-zinc-500 sm:hidden"
+              aria-hidden="true"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </div>
           </div>
         </div>
-
-        {/* Far Right: Edit Mode Button (hidden while editing since EditToolbar has Finish Edit) */}
-        {!isEditing && (
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (activeTab) useDashboardStore.getState().setEditVariant(shownVariant);
-                toggleEditing();
-              }}
-              className="h-8 gap-1.5 px-3 text-xs font-semibold"
-              title="Edit dashboard layout & widgets"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Edit Mode</span>
-            </Button>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Edit mode, Cockpit tab: the tab's widgets the layout doesn't show. */}
       {isEditing && isCockpit && unplaced.length > 0 && (
