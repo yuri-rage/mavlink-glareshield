@@ -33,6 +33,8 @@ The quickest way to write a definition is to let the app write it for you.
 
 To change a widget later, enter Edit Mode and click the pencil on the widget's card. The same creator opens with its settings filled in.
 
+**To change just the value a tile shows**, right-click the tile (long-press on a touch screen) and choose **Change value…**, or click the tile in Edit Mode. This works for a tile showing one value: a stat card, a single gauge, an LED, a single-line chart or a compass rose, in a composite or as a widget of its own. Pick the message and field, and the tile's title. Picking another field clears the old value's units, scaling and thresholds, since they described the old value. The change is to the widget, so it shows everywhere the widget is placed. **Edit widget…** in the same menu opens the full creator.
+
 ## Sharing widgets: export and import
 
 | To share | Do this | File |

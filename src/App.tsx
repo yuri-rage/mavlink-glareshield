@@ -9,8 +9,10 @@ import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { isDesktop } from './desktop/api';
 import { useAudioAlertListener } from './lib/audioAlerts';
 import { acceptPairingLink } from './lib/pairing';
+import { useRebindStore } from './lib/tileRebind';
 import { askConfirm } from './store/confirmStore';
 import { useConnectionStore } from './store/connectionStore';
+import { useDashboardStore } from './store/dashboardStore';
 import { useLayoutStore } from './store/layoutStore';
 import { CustomWidgetDefinition } from './types/widget';
 
@@ -20,6 +22,11 @@ const AddWidgetModal = lazy(() =>
 );
 const CustomWidgetCreatorModal = lazy(() =>
   import('./components/editor/CustomWidgetCreatorModal').then((m) => ({ default: m.CustomWidgetCreatorModal }))
+);
+// Changing a tile's value (right-click a tile, or click it in Edit Mode): loaded on first use.
+const RebindDialog = lazy(() => import('./components/editor/TileRebind').then((m) => ({ default: m.RebindDialog })));
+const TileContextMenu = lazy(() =>
+  import('./components/editor/TileRebind').then((m) => ({ default: m.TileContextMenu }))
 );
 const ProfileManagerModal = lazy(() =>
   import('./components/editor/ProfileManagerModal').then((m) => ({ default: m.ProfileManagerModal }))
@@ -43,6 +50,19 @@ export const App: React.FC = () => {
   const [isWidgetCreatorOpen, setIsWidgetCreatorOpen] = useState(false);
   const [editingCustomWidget, setEditingCustomWidget] = useState<CustomWidgetDefinition | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const rebindEditing = useRebindStore((s) => s.editing !== null);
+  const tileMenuOpen = useRebindStore((s) => s.menu !== null);
+  // The tile menu and the rebind dialog can open the full widget editor.
+  useEffect(() => {
+    useRebindStore.setState({
+      openEditor: (widgetId) => {
+        const cw = useDashboardStore.getState().profile.customWidgets.find((w) => w.id === widgetId);
+        if (!cw) return;
+        setEditingCustomWidget(cw);
+        setIsWidgetCreatorOpen(true);
+      },
+    });
+  }, []);
 
   // Attempt auto-connect to default websocket on mount
   useEffect(() => {
@@ -130,6 +150,8 @@ export const App: React.FC = () => {
         )}
 
         {isProfileModalOpen && <ProfileManagerModal isOpen onClose={() => setIsProfileModalOpen(false)} />}
+        {rebindEditing && <RebindDialog />}
+        {tileMenuOpen && <TileContextMenu />}
       </Suspense>
     </div>
   );
