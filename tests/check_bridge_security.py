@@ -192,6 +192,10 @@ async def main(url):
         r == "accepted",
         r,
     )
+    r = await handshake(url, "app://glareshield")
+    check("Origin app://glareshield (the desktop app) is accepted", r == "accepted", r)
+    r = await handshake(url, "app://evil")
+    check("Origin app://evil is refused", r.startswith("rejected"), r)
     r = await handshake(url, "https://other.yurirage.com")
     check(
         "Origin https://other.yurirage.com is refused",

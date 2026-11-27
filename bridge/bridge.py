@@ -43,6 +43,8 @@ DEFAULT_ALLOWED_ORIGINS: list[Any] = [
         r"^https?://(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$"
     ),
     re.compile(r"^https://glareshield\.yurirage\.com(:\d+)?$"),
+    # The Glareshield desktop app (Electron, desktop/main.ts): its page is app://glareshield.
+    re.compile(r"^app://glareshield$"),
     re.compile(r"^tauri://.*$"),
     re.compile(r"^https?://tauri\.localhost(:\d+)?$"),
     None,
