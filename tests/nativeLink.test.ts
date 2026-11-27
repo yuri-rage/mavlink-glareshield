@@ -134,5 +134,28 @@ check(
     JSON.stringify(buildLinkConfig('websocket', 'ws://x', 57600)) === '{"kind":"websocket","url":"ws://x"}'
 );
 
+// A UDP listener waiting for a vehicle isn't reopened by the silent-link watchdog (it would only flash errors), while
+// a TCP link that goes quiet still is.
+{
+  const { MavlinkConnection, LINK_SILENCE_TIMEOUT_MS } = await import('../src/mavlink/connection.ts');
+  const f = fakeApi();
+  (globalThis as any).window ??= globalThis;
+  (globalThis as any).window.glareshieldDesktop = { link: f.api };
+  const udp = new MavlinkConnection('ws://x:1', { reconnectDelayMs: 20 });
+  udp.setLink({ kind: 'udp', port: 14550 });
+  udp.connect();
+  for (let n = 0; n < 50 && udp.getStatus() !== 'connected'; n++) await new Promise((r) => setTimeout(r, 10));
+  udp.checkLinkSilence(Date.now() + LINK_SILENCE_TIMEOUT_MS * 3);
+  check('UDP: a silent listener is left open', udp.getStatus() === 'connected' && f.log.closedIds.length === 0);
+  udp.disconnect();
+  const tcp = new MavlinkConnection('ws://x:1', { reconnectDelayMs: 20 });
+  tcp.setLink({ kind: 'tcp', host: '127.0.0.1', port: 5760 });
+  tcp.connect();
+  for (let n = 0; n < 50 && tcp.getStatus() !== 'connected'; n++) await new Promise((r) => setTimeout(r, 10));
+  tcp.checkLinkSilence(Date.now() + LINK_SILENCE_TIMEOUT_MS * 3);
+  check('TCP: a silent link is still reopened', tcp.getStatus() !== 'connected');
+  tcp.disconnect();
+}
+
 console.log(failures.length ? `\n${failures.length} native-link check(s) FAILED` : '\nAll native-link checks PASSED');
 process.exit(failures.length ? 1 : 0);
