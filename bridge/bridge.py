@@ -1748,7 +1748,7 @@ class BridgeServer:
             import segno  # pyright: ignore[reportMissingImports]
 
             qr = segno.make(url, error="m")
-            qr.terminal(compact=True)
+            print(qr_text(qr))
             if self.pair_svg:
                 try:
                     qr.save(self.pair_svg, scale=8, border=2)
@@ -1833,6 +1833,24 @@ class BridgeServer:
             await self.setup_tcp()
         elif self.mode == "serial":
             await self.setup_serial()
+
+
+def qr_text(qr: Any) -> str:
+    """The QR code in half-block characters, two rows per line, drawn black on white whatever the terminal's
+    theme: a light-on-dark (inverted) code, as plain blocks give on a light terminal, many phones won't read.
+    NO_COLOR: plain blocks (light-on-dark on a dark terminal)."""
+    rows = [list(r) for r in qr.matrix_iter(border=2)]
+    if len(rows) % 2:
+        rows.append([0] * len(rows[0]))
+    plain = bool(os.environ.get("NO_COLOR"))
+    lines = []
+    for top, bottom in zip(rows[0::2], rows[1::2], strict=True):
+        # Plain: a glyph draws light modules (the terminal's light foreground). Colored: it draws dark ones
+        # (black on a white background).
+        cells = [(not t, not b) if plain else (bool(t), bool(b)) for t, b in zip(top, bottom, strict=True)]
+        line = "".join({(1, 1): "█", (1, 0): "▀", (0, 1): "▄", (0, 0): " "}[(int(t), int(b))] for t, b in cells)
+        lines.append(line if plain else f"\x1b[30;107m{line}\x1b[0m")
+    return "\n".join(lines)
 
 
 def guess_lan_ip() -> str | None:
