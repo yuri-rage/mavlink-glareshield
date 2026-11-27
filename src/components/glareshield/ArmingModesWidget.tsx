@@ -20,6 +20,7 @@ import {
   Zap,
 } from 'lucide-react';
 
+import { AutoTakeoffSequence } from '../../lib/autoTakeoff';
 import { useConnectionParam } from '../../lib/useConnectionParam';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { mavlinkConnection } from '../../mavlink/connection';
@@ -61,9 +62,7 @@ export const ArmingModesWidget: React.FC = () => {
   const [takeoffAltMeters, setTakeoffAltMeters] = useState<number>(10);
   const [autoSeqStep, setAutoSeqStep] = useState<string | null>(null);
   const [autoSeqError, setAutoSeqError] = useState<string | null>(null);
-  const abortAutoSeqRef = useRef<boolean>(false);
   const dragStartedFromLeft = useRef(false);
-  const armedBySequenceRef = useRef<boolean>(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 1000);
@@ -207,127 +206,47 @@ export const ArmingModesWidget: React.FC = () => {
     });
   };
 
-  const runAutoTakeoffSequence = async () => {
-    abortAutoSeqRef.current = false;
-    armedBySequenceRef.current = false;
+  // The running Auto: Takeoff sequence, if any (its Abort goes to the vehicle it started with).
+  const autoSeqRef = useRef<AutoTakeoffSequence | null>(null);
+
+  const runAutoTakeoffSequence = () => {
     setAutoSeqError(null);
     const safeAlt = Math.max(1, Math.min(500, takeoffAltMeters));
-    const dispAlt = altUnit === 'ft' ? `${Math.round(safeAlt * 3.28084)} ft` : `${safeAlt.toFixed(0)} m`;
-
-    const safetyDisarmIfArmedBySeq = async () => {
-      if (armedBySequenceRef.current) {
-        try {
-          const disarmCmd = encoder.createArmDisarm(sysId, compId, false, true);
-          await sendTrackedCommand(disarmCmd, {
-            label: 'Takeoff Failure: Safety Disarm',
-            targetKey: 'arm',
-          });
-        } catch {}
-        armedBySequenceRef.current = false;
+    const hb = useTelemetryStore.getState().heartbeat;
+    const seq = new AutoTakeoffSequence(
+      {
+        sysId: hb.systemId || 1,
+        compId: hb.componentId || 1,
+        fixedWing,
+        takeoffModeNum: targetTakeoffModeNum,
+        takeoffModeLabel: targetTakeoffModeLabel,
+        // A VTOL aborting its takeoff holds its hover (QLOITER), never fixed-wing LOITER (a transition near the ground).
+        holdModeNum: isVtol ? PLANE_MODE.QLOITER : fixedWing ? PLANE_MODE.LOITER : 5,
+        altM: safeAlt,
+        dispAlt: altUnit === 'ft' ? `${Math.round(safeAlt * 3.28084)} ft` : `${safeAlt.toFixed(0)} m`,
+      },
+      {
+        send: sendTrackedCommand,
+        encoder,
+        vehicle: () => useTelemetryStore.getState().heartbeat,
+        wait: (ms) => new Promise((r) => setTimeout(r, ms)),
+        onStep: setAutoSeqStep,
+        onError: setAutoSeqError,
+        onDone: () => setShowTakeoffPanel(false),
       }
-    };
-
-    try {
-      const st1 = useTelemetryStore.getState();
-      if (st1.heartbeat.customMode !== targetTakeoffModeNum) {
-        setAutoSeqStep(`Step 1/${fixedWing ? '2' : '3'}: Switching to ${targetTakeoffModeLabel} mode…`);
-        const modeAck = await sendTrackedCommand(encoder.createSetMode(sysId, compId, targetTakeoffModeNum), {
-          label: `Auto-Takeoff: Switch to ${targetTakeoffModeLabel}`,
-          targetKey: 'mode-takeoff',
-        });
-        if (abortAutoSeqRef.current) {
-          await safetyDisarmIfArmedBySeq();
-          return;
-        }
-        if (modeAck.result !== 0 && modeAck.result !== 5) {
-          setAutoSeqError(
-            `Mode switch to ${targetTakeoffModeLabel} rejected (${modeAck.resultText})${modeAck.reason ? `: ${modeAck.reason}` : ''}`
-          );
-          setAutoSeqStep(null);
-          await safetyDisarmIfArmedBySeq();
-          return;
-        }
-        await new Promise((r) => setTimeout(r, 350));
-      }
-
-      if (abortAutoSeqRef.current) {
-        await safetyDisarmIfArmedBySeq();
-        return;
-      }
-
-      const st2 = useTelemetryStore.getState();
-      if (!st2.heartbeat.isArmed) {
-        setAutoSeqStep(`Step 2/${fixedWing ? '2' : '3'}: Arming motors…`);
-        const armAck = await sendTrackedCommand(encoder.createArmDisarm(sysId, compId, true), {
-          label: 'Auto-Takeoff: Arm Motors',
-          targetKey: 'mode-takeoff',
-        });
-        if (abortAutoSeqRef.current) {
-          await safetyDisarmIfArmedBySeq();
-          return;
-        }
-        if (armAck.result !== 0 && armAck.result !== 5) {
-          setAutoSeqError(`Arming rejected (${armAck.resultText})${armAck.reason ? `: ${armAck.reason}` : ''}`);
-          setAutoSeqStep(null);
-          await safetyDisarmIfArmedBySeq();
-          return;
-        }
-        armedBySequenceRef.current = true;
-        await new Promise((r) => setTimeout(r, 450));
-      }
-
-      if (abortAutoSeqRef.current) {
-        await safetyDisarmIfArmedBySeq();
-        return;
-      }
-
-      if (!fixedWing) {
-        setAutoSeqStep(`Step 3/3: Commanding Takeoff to ${dispAlt}…`);
-        const toAck = await sendTrackedCommand(
-          encoder.createCommandLong(sysId, compId, MAV_CMD.NAV_TAKEOFF, [0, 0, 0, 0, 0, 0, safeAlt]),
-          { label: `Takeoff (${dispAlt})`, targetKey: 'mode-takeoff' }
-        );
-        if (abortAutoSeqRef.current) {
-          await safetyDisarmIfArmedBySeq();
-          return;
-        }
-        if (toAck.result !== 0 && toAck.result !== 5) {
-          setAutoSeqError(`Takeoff rejected (${toAck.resultText})${toAck.reason ? `: ${toAck.reason}` : ''}`);
-          setAutoSeqStep(null);
-          await safetyDisarmIfArmedBySeq();
-          return;
-        }
-      }
-
-      setAutoSeqStep(null);
-      setShowTakeoffPanel(false);
-      armedBySequenceRef.current = false;
-    } catch (e: any) {
-      setAutoSeqError(String(e?.message ?? e));
-      setAutoSeqStep(null);
-      await safetyDisarmIfArmedBySeq();
-    }
+    );
+    autoSeqRef.current = seq;
+    void seq.run().finally(() => {
+      if (autoSeqRef.current === seq) autoSeqRef.current = null;
+    });
   };
 
   const handleAbortAutoSeq = () => {
-    abortAutoSeqRef.current = true;
-    setAutoSeqStep(null);
-    setAutoSeqError('Takeoff sequence aborted by operator.');
-    if (armedBySequenceRef.current) {
-      const disarmCmd = encoder.createArmDisarm(sysId, compId, false, true);
-      void sendTrackedCommand(disarmCmd, {
-        label: 'Auto-Takeoff Abort: Safety Disarm',
-        targetKey: 'arm',
-      });
-      armedBySequenceRef.current = false;
-    } else {
-      // A VTOL aborting its takeoff holds its hover (QLOITER), never fixed-wing LOITER (a transition near the ground).
-      handleSetMode(
-        isVtol ? PLANE_MODE.QLOITER : fixedWing ? PLANE_MODE.LOITER : 5,
-        'Abort Takeoff (Loiter)',
-        'mode-loiter'
-      );
+    if (autoSeqRef.current) {
+      autoSeqRef.current.abort();
+      return;
     }
+    setAutoSeqStep(null);
   };
 
   const displayTakeoffAlt = altUnit === 'ft' ? Math.round(takeoffAltMeters * 3.28084) : Math.round(takeoffAltMeters);
