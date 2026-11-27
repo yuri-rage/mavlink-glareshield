@@ -2,8 +2,8 @@
 #
 # - Push a version tag (v0.2.0): both are built and published to that tag's GitHub Release, where the installed apps
 #   look for updates. The tag sets the version (package.json's is only the default).
-# - Run it by hand (Actions → Desktop release → Run workflow): both are built and kept as workflow artifacts, nothing
-#   is published. For trying a build before tagging.
+# - Run it by hand (Actions → Desktop release → Run workflow), or a pull request that touches the desktop app: both
+#   are built and kept as workflow artifacts, nothing is published. For trying a build before tagging.
 #
 # macOS isn't built: it needs a paid Apple Developer ID. Windows builds are unsigned for now (SmartScreen warns on
 # first run).
@@ -14,6 +14,14 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'src/desktop/**'
+      - 'electron-builder.yml'
+      - '.github/workflows/desktop-release.yml'
+      - 'package.json'
+      - 'package-lock.json'
 
 permissions:
   contents: write
@@ -64,5 +72,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: glareshield-${{ matrix.os }}
+          retention-days: 14
           path: ${{ matrix.artifact }}
           if-no-files-found: error
