@@ -177,10 +177,13 @@ export const MenuItem: React.FC<{
   danger?: boolean;
   /** Shows a check and marks the item as the selected one of a group. */
   checked?: boolean;
+  /** More about it, on hover. */
+  hint?: string;
   onClick: () => void;
-}> = ({ icon, label, detail, disabled, danger, checked, onClick }) => (
+}> = ({ icon, label, detail, disabled, danger, checked, hint, onClick }) => (
   <button
     type="button"
+    title={hint}
     role={checked === undefined ? 'menuitem' : 'menuitemradio'}
     aria-checked={checked}
     disabled={disabled}

@@ -153,7 +153,8 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
         )
       }
       label="Mission"
-      title="Mission: download from the vehicle, upload a file, save to files"
+      title="Mission: download from the vehicle, send a file to it, save to files"
+      widthClass="w-72"
       extra={
         <input
           ref={fileRef}
@@ -196,12 +197,14 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
               <MenuItem
                 icon={<FolderOpen className="h-3.5 w-3.5 text-sky-400" />}
                 label="Open file into draft…"
+                hint="Load a .plan or .waypoints file into the draft (nothing is sent until you upload)"
                 onClick={run(() => fileRef.current?.click())}
               />
             ) : (
               <MenuItem
                 icon={<FolderOpen className="h-3.5 w-3.5 text-sky-400" />}
-                label="Upload from file…"
+                label="Send a file to the vehicle…"
+                hint="Upload a .plan or .waypoints file's mission, fence and rally points to the vehicle"
                 detail={connected ? undefined : 'offline'}
                 disabled={!connected || busy}
                 onClick={run(() => fileRef.current?.click())}
@@ -215,10 +218,11 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
               onClick={run(onTogglePlanning)}
             />
 
-            <MenuSection label="Save to file" />
+            <MenuSection label="Save to file · opens here again" />
             <MenuItem
               icon={<FileJson className="h-3.5 w-3.5 text-emerald-400" />}
               label="Everything (.plan)"
+              hint={`${planning ? 'From the drafts. ' : 'What the map shows. '}Files open in QGroundControl and Mission Planner, and can be dropped back on the map.`}
               detail="QGC"
               disabled={nothingToSave}
               onClick={run(savePlan)}
@@ -226,6 +230,7 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
             <MenuItem
               icon={<Download className="h-3.5 w-3.5 text-amber-400" />}
               label={planning ? 'Draft waypoints (.waypoints)' : 'Waypoints (.waypoints)'}
+              hint={`${planning ? 'From the drafts. ' : 'What the map shows. '}Files open in QGroundControl and Mission Planner, and can be dropped back on the map.`}
               detail={String(wpCount)}
               disabled={waypoints.length === 0}
               onClick={run(saveWaypoints)}
@@ -233,6 +238,7 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
             <MenuItem
               icon={<Shield className="h-3.5 w-3.5 text-red-400" />}
               label={planning ? 'Draft geofence (.waypoints)' : 'Geofence (.waypoints)'}
+              hint={`${planning ? 'From the drafts. ' : 'What the map shows. '}Files open in QGroundControl and Mission Planner, and can be dropped back on the map.`}
               detail={String(fencePoints.length)}
               disabled={fencePoints.length === 0}
               onClick={run(saveFence)}
@@ -240,19 +246,17 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
             <MenuItem
               icon={<Flag className="h-3.5 w-3.5 text-[#f0abfc]" />}
               label={planning ? 'Draft rally points (.waypoints)' : 'Rally points (.waypoints)'}
+              hint={`${planning ? 'From the drafts. ' : 'What the map shows. '}Files open in QGroundControl and Mission Planner, and can be dropped back on the map.`}
               detail={String(rallyPoints.length)}
               disabled={rallyPoints.length === 0}
               onClick={run(saveRally)}
             />
-            <div className="px-2.5 pb-1 pt-1 text-[10px] leading-snug text-zinc-500">
-              {planning ? 'Saves the drafts (mission, rally points and fence). ' : 'Saves what the map shows. '}
-              Files open in QGroundControl and Mission Planner, and can be dropped back on the map.
-            </div>
 
-            <MenuSection label="Export" />
+            <MenuSection label="Export for other tools" />
             <MenuItem
               icon={<Earth className="h-3.5 w-3.5 text-sky-400" />}
               label="Map view (.kml)"
+              hint="Route, waypoints, fence and rally points for Google Earth or QGIS. Not loaded back here."
               detail="Google Earth"
               disabled={nothingToSave}
               onClick={run(saveKml)}
@@ -260,14 +264,11 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
             <MenuItem
               icon={<Hexagon className="h-3.5 w-3.5 text-amber-400" />}
               label="Polygon (.poly)"
+              hint="For Mission Planner's survey and fence tools. Not loaded back here."
               detail={String(polyPoints)}
               disabled={polyPoints < 3}
               onClick={run(savePoly)}
             />
-            <div className="px-2.5 pb-1 pt-1 text-[10px] leading-snug text-zinc-500">
-              For other tools: KML (route, waypoints, fence and rally points) for Google Earth or QGIS; the polygon for
-              Mission Planner&apos;s survey and fence tools. Not loaded back here.
-            </div>
           </>
         );
       }}

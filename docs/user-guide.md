@@ -240,7 +240,7 @@ older releases) and point them all at the bridge's UDP port.
 Open the map's **Mission** menu:
 
 - **Download from vehicle**: read the vehicle's mission, fence and rally points.
-- **Upload from file…** (or drop a file on the map): QGC `.plan`; `.waypoints`, `.fence` and `.rally` text files (as
+- **Send a file to the vehicle…** (or drop a file on the map): QGC `.plan`; `.waypoints`, `.fence` and `.rally` text files (as
   Mission Planner saves them); and ArduPilot's own `mission.dat`, `fence.dat` and `rally.dat`.
 - **Save to file**: everything as `.plan`, or the mission, geofence or rally points as `.waypoints`.
 - **Export**, for other tools (not loaded back here):
