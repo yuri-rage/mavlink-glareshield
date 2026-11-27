@@ -605,8 +605,8 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Add Widget to Current View"
-      description="Choose a built-in instrument or select/upload a declarative custom widget."
+      title="Add a Widget"
+      description="To this tab: an instrument, a readout or a control, or one you build yourself."
     >
       <div className="space-y-4">
         {pendingImportWidget ? (
@@ -653,7 +653,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                   onClose();
                 }}
               >
-                Accept & Add to View
+                Add to this tab
               </Button>
               <Button variant="outline" onClick={() => setPendingImportWidget(null)} className="text-zinc-400">
                 Cancel
@@ -662,43 +662,6 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
           </div>
         ) : (
           <>
-            {/* Action Header: Creator & Upload */}
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 p-3">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => {
-                  onClose();
-                  onOpenWidgetCreator();
-                }}
-                className="h-9 min-w-[9rem] flex-1 gap-1.5 bg-sky-500 font-bold text-white hover:bg-sky-600"
-              >
-                <Plus className="h-4 w-4 shrink-0" />
-                <span className="truncate">Build Custom Widget</span>
-              </Button>
-
-              <input
-                ref={uploadRef}
-                type="file"
-                accept=".json,application/json"
-                onChange={(e) => {
-                  handleUploadJson(e);
-                  e.target.value = ''; // the same file can be chosen again
-                }}
-                className="hidden"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                type="button"
-                onClick={() => uploadRef.current?.click()}
-                className="h-9 min-w-[9rem] flex-1 gap-1.5 border-zinc-700 text-zinc-200"
-              >
-                <Upload className="h-4 w-4 shrink-0 text-emerald-400" />
-                <span className="truncate">Upload .json Widget</span>
-              </Button>
-            </div>
-
             {/* Search */}
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
@@ -746,6 +709,42 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
               {entries.map((e) =>
                 e.kind === 'custom' ? renderCustom(e.cw, e === enterTarget) : renderBuiltIn(e.item, e === enterTarget)
               )}
+            </div>
+            {/* Making one: below the catalog, secondary to finding one. */}
+            <div className="flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
+              <span className="text-[11px] text-zinc-500">Not here?</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onClose();
+                  onOpenWidgetCreator();
+                }}
+                className="h-7 gap-1.5 border-zinc-700 text-xs text-zinc-200"
+              >
+                <Plus className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+                Build a custom widget
+              </Button>
+              <input
+                ref={uploadRef}
+                type="file"
+                accept=".json,application/json"
+                onChange={(e) => {
+                  handleUploadJson(e);
+                  e.target.value = ''; // the same file can be chosen again
+                }}
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={() => uploadRef.current?.click()}
+                className="h-7 gap-1.5 border-zinc-700 text-xs text-zinc-200"
+              >
+                <Upload className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                Upload a .json widget
+              </Button>
             </div>
           </>
         )}

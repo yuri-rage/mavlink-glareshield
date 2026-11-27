@@ -22,7 +22,7 @@ This guide covers:
 The quickest way to write a definition is to let the app write it for you.
 
 1. Connect to the vehicle, or to SITL. You can build widgets offline, but a live link lets the creator list the fields the vehicle is actually sending.
-2. Turn on **Edit Mode** (the pencil button in the dashboard header). Then choose **Add Widget → Build Custom Widget**.
+2. Turn on **Edit Mode** (the pencil button in the dashboard header). Then choose **Add Widget → Build a custom widget**.
 3. Pick a **display type** and a **category**. Name the widget and, if you like, describe it.
 4. Bind the value. Choose a message, then a field:
    - Fields the vehicle is sending now are marked **●**.
@@ -40,7 +40,7 @@ To change a widget later, enter Edit Mode and click the pencil on the widget's c
 | One widget | **Export Widget JSON** in the creator | `<name>.widget.json`: a single definition |
 | A whole layout | Edit Mode → **Profiles & Backup**: **Export Active Profile** | A profile: tabs, layout and every custom widget |
 
-**To import a widget,** open **Edit Mode → Add Widget** and choose **Upload .json Widget**. Select a `.json` file containing one definition. An **Import Preview** shows what the widget is:
+**To import a widget,** open **Edit Mode → Add Widget** and choose **Upload a .json widget**. Select a `.json` file containing one definition. An **Import Preview** shows what the widget is:
 
 - its display type, category and binding;
 - for command widgets, the exact `MAV_CMD` and the seven parameters;
