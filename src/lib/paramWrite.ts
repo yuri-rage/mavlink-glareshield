@@ -55,3 +55,23 @@ export async function writeParamVerified(
   }
   return { outcome: 'no-answer' };
 }
+
+/**
+ * The Parameters widget's two kinds of write. An inline edit stops only when the widget is gone; a batch (the file
+ * compare) also on Stop writing or a vehicle switch. Kept apart: a batch's stop must not silence later inline edits.
+ */
+export function paramWriters(
+  deps: Omit<ParamWriteDeps, 'stopped'>,
+  flags: { unmounted: () => boolean; batchStopped: () => boolean }
+) {
+  type Target = { sysId: number; compId: number };
+  return {
+    inline: (target: Target, name: string, value: number, paramType: number) =>
+      writeParamVerified(target, name, value, paramType, { ...deps, stopped: flags.unmounted }),
+    batch: (target: Target, name: string, value: number, paramType: number) =>
+      writeParamVerified(target, name, value, paramType, {
+        ...deps,
+        stopped: () => flags.unmounted() || flags.batchStopped(),
+      }),
+  };
+}
