@@ -6,6 +6,8 @@ import { Navbar } from './components/navbar/Navbar';
 import { VehicleSwitchDialog } from './components/navbar/VehiclePicker';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { useAudioAlertListener } from './lib/audioAlerts';
+import { acceptPairingLink } from './lib/pairing';
+import { askConfirm } from './store/confirmStore';
 import { useConnectionStore } from './store/connectionStore';
 import { useLayoutStore } from './store/layoutStore';
 import { CustomWidgetDefinition } from './types/widget';
@@ -44,6 +46,22 @@ export const App: React.FC = () => {
   useEffect(() => {
     connect();
   }, [connect]);
+
+  // Opened from a bridge's pairing QR code (#link=…): ask, then connect there.
+  useEffect(() => {
+    void acceptPairingLink({
+      hash: window.location.hash,
+      clearHash: () => window.history.replaceState(null, '', window.location.pathname + window.location.search),
+      ask: askConfirm,
+      currentUrl: useConnectionStore.getState().linkKind === 'websocket' ? useConnectionStore.getState().url : null,
+      use: (link) => {
+        const store = useConnectionStore.getState();
+        store.setLinkKind('websocket');
+        store.setUrl(link);
+        store.connect();
+      },
+    });
+  }, []);
 
   return (
     // A Cockpit tab shown as panes: the page is exactly the window's height and doesn't scroll; the navbar (and its

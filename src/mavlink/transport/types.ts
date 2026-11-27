@@ -19,7 +19,7 @@ export type TransportStatus =
   | { kind: 'idle' }
   | { kind: 'connecting' }
   | { kind: 'connected' }
-  | { kind: 'disconnected'; reason?: string }
+  | { kind: 'disconnected'; reason?: string; code?: number }
   | { kind: 'error'; message: string };
 
 export type FrameListener = (frame: Uint8Array) => void;

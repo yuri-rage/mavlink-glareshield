@@ -5,10 +5,11 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
-import { AlertTriangle, ExternalLink, Shield } from 'lucide-react';
+import { AlertTriangle, Check, Copy, ExternalLink, Share2, Shield, Smartphone } from 'lucide-react';
 
 import { useAudioAlertsStore, type VoiceEngine } from '../../lib/audioAlerts';
 import { DOC_LINKS, REPO_URL, repoFile } from '../../lib/links';
+import { pairingUrl } from '../../lib/pairing';
 import { BUILD, buildLabel, checkForUpdate, useUpdateStore } from '../../lib/updateCheck';
 import { getWssHost, isLoopbackWs, SERIAL_BAUD_RATES } from '../../mavlink/connection';
 import type { BandwidthProfile } from '../../mavlink/rateManager';
@@ -192,6 +193,58 @@ interface Props {
   daylightMode: boolean;
   setDaylightMode: (on: boolean) => void;
 }
+
+/**
+ * Pair another device with the bridge this one is paired with (its link has a token): the same link the bridge's QR
+ * code holds. Over wss:// it opens the bridge first (that device's one-time certificate step), which then opens
+ * Glareshield there, connected.
+ */
+const PairAnotherDevice: React.FC<{ url: string }> = ({ url }) => {
+  const [copied, setCopied] = useState(false);
+  const link = typeof window !== 'undefined' ? pairingUrl(url, window.location.href) : null;
+  if (!link) return null;
+  const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
+  return (
+    <div className="space-y-1.5 rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-2.5 text-xs">
+      <div className="flex items-center gap-1.5 font-semibold text-emerald-300">
+        <Smartphone className="h-3.5 w-3.5 shrink-0" />
+        Pair another device
+      </div>
+      <p className="text-[11px] leading-relaxed text-zinc-300">
+        Open this link on the other device to connect it to this bridge (it holds the pairing token: send it only to
+        yourself).{' '}
+        {link.startsWith('https://') && !link.includes('#link=')
+          ? 'It opens the bridge first: accept its certificate there, and Glareshield opens, connected.'
+          : ''}
+      </p>
+      <div className="flex items-center gap-1.5">
+        <Input readOnly value={link} onFocus={(e) => e.currentTarget.select()} className="font-mono text-[11px]" />
+        <Button type="button" variant="outline" size="sm" onClick={copy} className="shrink-0 gap-1" title="Copy">
+          {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+        </Button>
+        {canShare && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void navigator.share({ title: 'Glareshield bridge', url: link }).catch(() => {})}
+            className="shrink-0 gap-1"
+            title="Share"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export const SettingsDialog: React.FC<Props> = ({
   open,
@@ -464,6 +517,8 @@ export const SettingsDialog: React.FC<Props> = ({
                 })()}
               </div>
             )}
+
+            {inputLinkKind === 'websocket' && linkKind === 'websocket' && <PairAnotherDevice url={url} />}
 
             {errorMessage && (
               <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-950/25 p-2.5 text-xs text-red-300">
