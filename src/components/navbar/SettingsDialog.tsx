@@ -364,6 +364,7 @@ export const SettingsDialog: React.FC<Props> = ({
       onClose={onClose}
       title="Settings"
       description="Link, display, alerts, traffic and terrain, and data kept in this browser."
+      anchor="top"
     >
       <form onSubmit={handleConnect} className="space-y-4">
         {/* Stuck at the dialog's scroll edge (its 24 px padding), across its full width: nothing scrolls into view above it. */}
@@ -696,7 +697,10 @@ export const SettingsDialog: React.FC<Props> = ({
         <div className="flex items-center justify-between border-t border-zinc-800 pt-3">
           {/* Different keys: the same <button> turned into the submit button during the click, and the click then
               submitted the form (connecting again). */}
-          {status === 'connected' ? (
+          {/* Connect / Disconnect belong to the Link tab (the navbar has its own button everywhere else). */}
+          {tab !== 'link' ? (
+            <span className="w-20" />
+          ) : status === 'connected' ? (
             <Button key="disconnect" type="button" variant="destructive" size="sm" onClick={() => disconnect()}>
               Disconnect
             </Button>
