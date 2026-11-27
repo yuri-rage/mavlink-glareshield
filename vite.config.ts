@@ -163,7 +163,13 @@ function ntripProxyPlugin() {
           socket.write(reqStr);
         });
 
+        // A reconnect to the same caster/mountpoint replaces the old socket: close that one, and let each socket
+        // remove only its own entry (the old one's close must not drop the new one).
+        activeSockets.get(sessionKey)?.destroy();
         activeSockets.set(sessionKey, socket);
+        const forget = () => {
+          if (activeSockets.get(sessionKey) === socket) activeSockets.delete(sessionKey);
+        };
 
         let headerParsed = false;
         let headerBuf = Buffer.alloc(0);
@@ -192,7 +198,7 @@ function ntripProxyPlugin() {
                 });
                 res.end(`Caster rejected: ${headerStr.trim()}`);
                 socket.destroy();
-                activeSockets.delete(sessionKey);
+                forget();
                 return;
               }
 
@@ -214,7 +220,7 @@ function ntripProxyPlugin() {
         });
 
         socket.on('error', (err) => {
-          activeSockets.delete(sessionKey);
+          forget();
           if (!headerParsed) {
             res.writeHead(502, {
               'Access-Control-Allow-Origin': corsOrigin,
@@ -227,13 +233,13 @@ function ntripProxyPlugin() {
         });
 
         socket.on('close', () => {
-          activeSockets.delete(sessionKey);
+          forget();
           res.end();
         });
 
         req.on('close', () => {
           socket.destroy();
-          activeSockets.delete(sessionKey);
+          forget();
         });
       });
     },
