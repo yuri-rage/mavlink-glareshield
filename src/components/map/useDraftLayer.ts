@@ -32,6 +32,7 @@ import { planningVehicle, RADIUS_PARAMS, useLastVehicleStore } from '../../store
 import { useMissionPlanStore, type PlanLayer } from '../../store/missionPlanStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { radiusCircle } from './radiusCircle';
+import { wpPinHtml } from './wpPin';
 
 const DRAFT_LINES_PANE = 'draftLinesPane';
 const DRAFT_MARKERS_PANE = 'draftMarkersPane';
@@ -41,19 +42,10 @@ const MIN_HANDLE_LEG_PX = 56;
 function pinIcon(label: string, selected: boolean, isHome: boolean): L.DivIcon {
   const fill = selected ? '#0ea5e9' : isHome ? '#b45309' : '#f59e0b';
   const text = selected ? '#075985' : '#92400e';
-  const scale = selected ? 1.2 : 1;
-  const w = Math.round(26 * scale);
-  const h = Math.round(36 * scale);
+  const { html, w, h } = wpPinHtml({ label, fill, text, scale: selected ? 1.2 : 1, stroke: selected ? 1.8 : 1.2 });
   return L.divIcon({
     className: `wp-marker${selected && !isHome ? ' gs-draft-draggable' : ''}`,
-    html: `
-      <div style="filter: drop-shadow(0 3px 6px rgba(0,0,0,0.85)); width: ${w}px; height: ${h}px;">
-        <svg width="${w}" height="${h}" viewBox="0 0 26 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M 13 35 L 4.2 14.5 A 9.5 9.5 0 1 1 21.8 14.5 Z" fill="${fill}" stroke="#ffffff" stroke-width="${selected ? 2 : 1.5}" stroke-linejoin="round"/>
-          <circle cx="13" cy="11.5" r="7.5" fill="#ffffff" />
-          <text x="13" y="15" font-size="${label.length > 2 ? '8.5' : '10.5'}" font-weight="900" font-family="ui-monospace, monospace, sans-serif" text-anchor="middle" fill="${text}">${label}</text>
-        </svg>
-      </div>`,
+    html,
     iconSize: [w, h],
     iconAnchor: [w / 2, h - 1],
   });
@@ -186,17 +178,18 @@ export function useDraftLayer(
     const route = routeIndices(pathItems, splines);
     const legs = missionPathLegs(pathItems, route, splines);
 
-    const line =
-      legs.length > 0
-        ? L.polyline(joinLegs(legs), {
-            pane: DRAFT_LINES_PANE,
-            color: '#f59e0b',
-            weight: 3,
-            opacity: editing ? 0.95 : 0.4,
-            interactive: false,
-          }).addTo(map)
-        : null;
+    // The leg from home (item 0) dashed, as on the vehicle's mission: the way onto the mission, not a leg of it.
+    const split = (all: typeof legs) => {
+      const home = all[0]?.from === 0 ? all[0] : null;
+      return { home: home ? home.latLngs : [], rest: joinLegs(home ? all.slice(1) : all) };
+    };
+    const style = { pane: DRAFT_LINES_PANE, color: '#f59e0b', opacity: editing ? 0.95 : 0.4, interactive: false };
+    const parts = split(legs);
+    const line = legs.length > 0 ? L.polyline(parts.rest, { ...style, weight: 3 }).addTo(map) : null;
+    const homeLine =
+      legs.length > 0 ? L.polyline(parts.home, { ...style, weight: 2.5, dashArray: '7, 6' }).addTo(map) : null;
     if (line) layersRef.current.push(line);
+    if (homeLine) layersRef.current.push(homeLine);
 
     // Waypoint radii: thin dashed circles, under the pins; each follows its pin while dragged.
     const vehicle = planningVehicle();
@@ -267,7 +260,9 @@ export function useDraftLayer(
           const p = marker.getLatLng();
           const moved = pathItems.slice();
           moved[r.index] = { ...moved[r.index], lat: p.lat, lon: p.lng };
-          line?.setLatLngs(joinLegs(missionPathLegs(moved, route, splines)));
+          const p2 = split(missionPathLegs(moved, route, splines));
+          line?.setLatLngs(p2.rest);
+          homeLine?.setLatLngs(p2.home);
           circles.get(r.index)?.setLatLng(p);
         });
         marker.on('dragend', () => {
