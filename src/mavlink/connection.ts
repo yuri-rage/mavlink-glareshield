@@ -129,6 +129,11 @@ export class MavlinkConnection {
   private status: ConnectionStatus = 'disconnected';
   private shouldReconnect = true;
   public isManualDisconnect = false;
+
+  /** Whether a link that isn't up will be tried again by itself (not after a manual disconnect, or a refusal). */
+  public willRetry(): boolean {
+    return !this.replay && !this.isManualDisconnect && this.shouldReconnect;
+  }
   private isReconnectPaused = false;
   private reconnectTimeout: any = null;
   private heartbeatInterval: any = null;
