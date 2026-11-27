@@ -45,7 +45,7 @@ function unmaskPassword(stored: string): string {
 }
 
 export const NtripWidget: React.FC = () => {
-  const [injectorState, setInjectorState] = useState<RtcmInjectorState>(() => (rtcmInjector as any).state);
+  const [injectorState, setInjectorState] = useState<RtcmInjectorState>(() => rtcmInjector.getState());
   const [sourceMode, setSourceMode] = useState<'ntrip' | 'serial'>('ntrip');
   const [manualFormExpanded, setManualFormExpanded] = useState<boolean | null>(null);
 
