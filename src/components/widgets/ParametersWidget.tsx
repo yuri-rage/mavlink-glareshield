@@ -17,13 +17,8 @@ import {
 } from 'lucide-react';
 
 import { downloadFile } from '../../lib/download';
-import {
-  compareParams,
-  filterEntries,
-  writeOutcome,
-  type CompareResult,
-  type WriteOutcome,
-} from '../../lib/paramCompare';
+import { compareParams, filterEntries, type CompareResult, type WriteOutcome } from '../../lib/paramCompare';
+import { writeParamVerified } from '../../lib/paramWrite';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { getVehicleCategory } from '../../mavlink/messages';
 import { bitmaskSummary, valueLabel } from '../../mavlink/paramBits';
@@ -75,7 +70,12 @@ export const ParametersWidget: React.FC = () => {
   const [onlyModified, setOnlyModified] = useState(false);
   const [editingParam, setEditingParam] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
-  const [savedSuccess, setSavedSuccess] = useState<string | null>(null);
+  // An inline edit's write: writing, then what the vehicle's echo said (it may refuse or clamp the value).
+  const [inlineWrite, setInlineWrite] = useState<{
+    id: string;
+    state: 'writing' | WriteOutcome;
+    echoed?: number;
+  } | null>(null);
   /** Typing a number for a named-value parameter ("Other value…"), instead of the dropdown. */
   const [editCustom, setEditCustom] = useState(false);
   /** The value cell being edited, which the bitmask checklist opens beside. */
@@ -185,7 +185,7 @@ export const ParametersWidget: React.FC = () => {
     setEditAnchor(anchor ?? null);
   };
 
-  const handleSaveParam = (paramId: string) => {
+  const handleSaveParam = async (paramId: string) => {
     const num = parseFloat(editValue);
     // The vehicle would refuse it anyway; don't send a write for a read-only parameter.
     if (getParamMetadata(paramId)?.readOnly) {
@@ -193,21 +193,17 @@ export const ParametersWidget: React.FC = () => {
       return;
     }
     if (!isNaN(num)) {
-      const hb = useTelemetryStore.getState().heartbeat;
-      const p = parameters[paramId];
-      const cmd = encoder.createParamSet(hb.systemId || 1, hb.componentId || 1, paramId, num, p ? p.type : 9);
-      // Saved only if it went out (a replay, or a link that dropped meanwhile, refuses it).
-      if (!mavlinkConnection.send(cmd)) {
-        setEditingParam(null);
-        return;
-      }
-
-      setSavedSuccess(paramId);
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-      savedTimerRef.current = setTimeout(() => {
-        setSavedSuccess((cur) => (cur === paramId ? null : cur));
-      }, 2500);
       setEditingParam(null);
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      setInlineWrite({ id: paramId, state: 'writing' });
+      // Saved only when the vehicle echoes the value back (as the file compare's writes): it may refuse or clamp
+      // it, or not answer (a replay, or a link that dropped, doesn't send it at all).
+      const { outcome, echoed } = await writeOne(paramId, num);
+      setInlineWrite((cur) => (cur?.id === paramId ? { id: paramId, state: outcome, echoed } : cur));
+      savedTimerRef.current = setTimeout(
+        () => setInlineWrite((cur) => (cur?.id === paramId ? null : cur)),
+        outcome === 'ok' ? 2500 : 6000
+      );
     }
   };
 
@@ -247,43 +243,22 @@ export const ParametersWidget: React.FC = () => {
     setDiffModalOpen(true);
   };
 
-  /**
-   * Write one parameter and wait for the vehicle's echo; once more if none comes (a slow or lossy link). The echoed
-   * value tells whether it took (the vehicle may refuse or clamp it).
-   */
-  const writeOne = async (name: string, value: number): Promise<{ outcome: WriteOutcome; echoed?: number }> => {
+  /** Write one parameter to the active vehicle, confirmed by its echo (src/lib/paramWrite.ts). */
+  const writeOne = (name: string, value: number) => {
     const hb = useTelemetryStore.getState().heartbeat;
-    const sysId = hb.systemId || 1;
-    const compId = hb.componentId || 1;
-    const pType = parameters[name]?.type ?? 9;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      // Stopped between tries: no second one.
-      if (abortBatchRef.current) return { outcome: 'no-answer' };
-      let sent = true;
-      const echoed = await new Promise<number | undefined>((resolve) => {
-        let timer: ReturnType<typeof setTimeout> | null = null;
-        // The vehicle's own echo only: a gimbal, companion or another vehicle may have a parameter of that name.
-        const unsub = mavlinkConnection.onPacket((packet) => {
-          if (packet.messageId !== 22 || packet.systemId !== sysId || packet.componentId !== compId) return; // PARAM_VALUE
-          const data = decodePayload(packet.messageId, packet.payload);
-          if (data?.param_id?.trim().toUpperCase() === name.toUpperCase()) finish(data.param_value);
-        });
-        const finish = (v: number | undefined) => {
-          if (timer) clearTimeout(timer);
-          unsub();
-          resolve(v);
-        };
-        timer = setTimeout(() => finish(undefined), 1500);
-        if (!mavlinkConnection.send(encoder.createParamSet(sysId, compId, name, value, pType))) {
-          sent = false;
-          finish(undefined);
-        }
-      });
-      if (echoed !== undefined) return { outcome: writeOutcome(value, echoed), echoed };
-      // Not sent (no link): retrying won't help.
-      if (!sent) return { outcome: 'no-answer' };
-    }
-    return { outcome: 'no-answer' };
+    return writeParamVerified(
+      { sysId: hb.systemId || 1, compId: hb.componentId || 1 },
+      name,
+      value,
+      parameters[name]?.type ?? 9,
+      {
+        send: (p) => mavlinkConnection.send(p),
+        onPacket: (l) => mavlinkConnection.onPacket(l),
+        encoder,
+        decode: decodePayload,
+        stopped: () => abortBatchRef.current,
+      }
+    );
   };
 
   const handleWriteSelectedDiffs = async () => {
@@ -630,7 +605,7 @@ export const ParametersWidget: React.FC = () => {
                   if (!item) return null;
                   const meta = getParamMetadata(key);
                   const isEditing = editingParam === key;
-                  const isSaved = savedSuccess === key;
+                  const write = inlineWrite?.id === key ? inlineWrite : null;
                   const defVal = item.defaultValue !== undefined ? item.defaultValue : item.value;
                   const isAtDefault =
                     item.defaultValue === undefined || Math.abs(item.defaultValue - item.value) < 1e-6;
@@ -820,9 +795,30 @@ export const ParametersWidget: React.FC = () => {
                                 <ChevronDown className="h-2.5 w-2.5 shrink-0" />
                               </span>
                             )}
-                            {isSaved && (
+                            {write?.state === 'writing' && (
+                              <span className="inline-flex shrink-0 items-center gap-0.5 font-sans text-[10px] text-zinc-400">
+                                Writing…
+                              </span>
+                            )}
+                            {write?.state === 'ok' && (
                               <span className="inline-flex shrink-0 animate-pulse items-center gap-0.5 font-sans text-[10px] text-emerald-400">
                                 <Check className="h-2.5 w-2.5" /> Saved
+                              </span>
+                            )}
+                            {write?.state === 'kept' && (
+                              <span
+                                className="inline-flex shrink-0 items-center gap-0.5 font-sans text-[10px] text-amber-400"
+                                title="The vehicle refused or limited the value: it kept this one"
+                              >
+                                Kept {write.echoed !== undefined ? formatParamValue(write.echoed) : ''}
+                              </span>
+                            )}
+                            {write?.state === 'no-answer' && (
+                              <span
+                                className="inline-flex shrink-0 items-center gap-0.5 font-sans text-[10px] text-red-400"
+                                title="The vehicle didn't echo the value: it may not be written"
+                              >
+                                No answer
                               </span>
                             )}
                           </button>
