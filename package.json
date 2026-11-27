@@ -18,8 +18,9 @@
     "test:bridge-security": "python3 tests/check_bridge_security.py",
     "test:bridge-udp": "python3 tests/check_bridge_udp_target.py",
     "test:bridge-transport": "python3 tests/check_bridge_transport.py",
+    "test:bridge-pairing": "python3 tests/check_bridge_pairing.py",
     "test:follow": "python3 tests/follow_sim.py",
-    "test:review": "npm run test:mock && npm run test:bridge-security && npm run test:bridge-udp && npm run test:bridge-transport && npm run test:follow",
+    "test:review": "npm run test:mock && npm run test:bridge-security && npm run test:bridge-udp && npm run test:bridge-transport && npm run test:bridge-pairing && npm run test:follow",
     "format": "prettier --write . && ruff format && ruff check --fix",
     "format:check": "prettier --check . && ruff format --check && ruff check"
   },
