@@ -428,7 +428,7 @@ export const Navbar: React.FC = () => {
             variant="success"
             className="flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 font-sans text-xs font-semibold shadow-sm transition-colors hover:bg-emerald-950/80 sm:px-2.5"
             onClick={() => openConnectModal()}
-            title={`Connected: ${linkKind === 'serial' ? `serial @ ${serialBaud} baud` : url} (click for Link & Page Configuration)`}
+            title={`Connected: ${linkKind === 'serial' ? `serial @ ${serialBaud} baud` : linkKind === 'udp' ? `UDP port ${useConnectionStore.getState().udpPort}` : linkKind === 'tcp' ? `TCP ${useConnectionStore.getState().tcpTarget}` : url} (click for Settings › Link)`}
           >
             <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-400" />
             <span className="hidden md:inline">Connected</span>

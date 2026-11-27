@@ -1,3 +1,4 @@
+import { desktopApi, type NativeLinkConfig } from '../desktop/api';
 import { pairingCloseMessage } from '../lib/pairing';
 import { MavlinkEncoder } from './encoder';
 import { MavlinkPacket, MavlinkParser } from './parser';
@@ -6,6 +7,7 @@ import { replaySpeed } from './replayClock';
 import {
   getSerialApi,
   hasTextChannel,
+  NativeLinkTransport,
   resolveSerialPort,
   resolveUsbSerialDevice,
   WebSerialTransport,
@@ -39,7 +41,11 @@ export type SendCallback = (data: Uint8Array) => void;
  * What the MAVLink link runs over. 'serial' picks Web Serial (desktop Chrome/Edge) or WebUSB (Chrome on Android)
  * at connect time; the device itself is chosen with requestSerialDevice() from a user gesture.
  */
-export type LinkConfig = { kind: 'websocket'; url: string } | { kind: 'serial'; baudRate: number };
+export type LinkConfig =
+  | { kind: 'websocket'; url: string }
+  | { kind: 'serial'; baudRate: number }
+  // The desktop app only (src/desktop/api.ts): UDP (listen for the vehicle) or a TCP client.
+  | NativeLinkConfig;
 
 export const DEFAULT_SERIAL_BAUD = 57600;
 export const SERIAL_BAUD_RATES = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 500000, 921600] as const;
@@ -56,6 +62,8 @@ const MIXED_CONTENT_MESSAGE =
   'Mixed Content: HTTPS pages block unencrypted ws://. Use wss:// or permit insecure WebSockets.';
 
 export function getDefaultWsUrl(): string {
+  // The desktop app's page is app://glareshield: a bridge would be on this machine.
+  if (desktopApi()) return 'ws://localhost:56781';
   if (typeof window !== 'undefined' && window.location) {
     const host = window.location.hostname || 'localhost';
     return `ws://${host}:56781`;
@@ -315,6 +323,11 @@ export class MavlinkConnection {
     const link = this.link;
     if (link.kind === 'websocket') {
       return new WebSocketTransport('mavlink-ws', { url: link.url });
+    }
+    if (link.kind === 'udp' || link.kind === 'tcp') {
+      const desktop = desktopApi();
+      if (!desktop) throw new Error('UDP and TCP links need the Glareshield desktop app.');
+      return new NativeLinkTransport(desktop.link, link);
     }
     const api = getSerialApi();
     if (api === 'web-serial') {
@@ -594,6 +607,8 @@ export class MavlinkConnection {
 function sameLink(a: LinkConfig, b: LinkConfig): boolean {
   if (a.kind === 'websocket' && b.kind === 'websocket') return a.url === b.url;
   if (a.kind === 'serial' && b.kind === 'serial') return a.baudRate === b.baudRate;
+  if (a.kind === 'udp' && b.kind === 'udp') return a.port === b.port;
+  if (a.kind === 'tcp' && b.kind === 'tcp') return a.host === b.host && a.port === b.port;
   return false;
 }
 
