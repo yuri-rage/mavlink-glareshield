@@ -1,4 +1,4 @@
-// A small dropdown for the map header: a trigger button and a panel that closes on an outside click, on Escape,
+// A small dropdown (the map header's menus, a Cockpit pane's in Edit mode): a trigger button and a panel that closes on an outside click, on Escape,
 // or when an item is chosen.
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -18,9 +18,19 @@ interface HeaderMenuProps {
   widthClass?: string;
   /** Extra content kept outside the panel, such as a hidden file input. */
   extra?: React.ReactNode;
+  /** Just the icon, smaller (a pane's bar): no label or chevron. */
+  iconOnly?: boolean;
 }
 
-export const HeaderMenu: React.FC<HeaderMenuProps> = ({ icon, label, title, children, widthClass = 'w-64', extra }) => {
+export const HeaderMenu: React.FC<HeaderMenuProps> = ({
+  icon,
+  label,
+  title,
+  children,
+  widthClass = 'w-64',
+  extra,
+  iconOnly = false,
+}) => {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -108,7 +118,8 @@ export const HeaderMenu: React.FC<HeaderMenuProps> = ({ icon, label, title, chil
         aria-label={label}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'inline-flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-bold transition-colors',
+          'inline-flex items-center gap-1 rounded-md border text-xs font-bold transition-colors',
+          iconOnly ? 'h-6 px-1.5' : 'h-7 px-2',
           open
             ? 'border-zinc-600 bg-zinc-800 text-white'
             : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white'
@@ -116,8 +127,12 @@ export const HeaderMenu: React.FC<HeaderMenuProps> = ({ icon, label, title, chil
         title={title}
       >
         {icon}
-        <span className="hidden text-[11px] xl:inline">{label}</span>
-        <ChevronDown className={cn('h-3 w-3 text-zinc-500 transition-transform', open && 'rotate-180')} />
+        {!iconOnly && (
+          <>
+            <span className="hidden text-[11px] xl:inline">{label}</span>
+            <ChevronDown className={cn('h-3 w-3 text-zinc-500 transition-transform', open && 'rotate-180')} />
+          </>
+        )}
       </button>
       {extra}
       {open &&
