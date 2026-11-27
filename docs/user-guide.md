@@ -75,7 +75,7 @@ with the widget's **Edit** button (set the battery limits for your pack). A few 
 channels, a wind rose, a speed setter, an RTL button) are in **Add Widget** as examples, on no tab.
 
 Your dashboard is saved in the browser, so changing the default doesn't touch it. To get the default back without
-touching your other settings, use **Reset to Default Layout** (Edit Mode → **Profiles & Backup**). **Restore defaults**
+touching your other settings, use **Reset the dashboard…** (Edit Mode → **Profiles & Backup**). **Restore defaults**
 (Settings → Data) resets everything instead, including the link, units and alerts.
 
 ### Flow tabs
@@ -108,7 +108,7 @@ Cockpit tabs always fill the window; **Content width** doesn't apply to them.
 
 ### Arranging a Cockpit tab
 
-Switch a tab to **Cockpit** in Edit Mode, then start from a **Preset…**:
+Switch a tab to **Cockpit** in Edit Mode, then start from a preset in the **Layout** menu:
 
 | Preset | Layout |
 | :--- | :--- |
@@ -117,7 +117,8 @@ Switch a tab to **Cockpit** in Edit Mode, then start from a **Preset…**:
 | Map first | A large map with the HUD and telemetry in a side column |
 | This tab's widgets | The widgets already on the tab: large ones on top, small ones beneath |
 
-A preset reuses the tab's own widgets and adds any it lacks. Then, in Edit Mode:
+A preset reuses the tab's own widgets and adds any it lacks. Then, in Edit Mode (each pane's **⋯** menu has the
+actions below the drags):
 
 - **Resize**: drag the dividers between panes. Outside Edit Mode they're locked, so a stray drag in flight can't
   rearrange your instruments.
@@ -126,13 +127,14 @@ A preset reuses the tab's own widgets and adds any it lacks. Then, in Edit Mode:
 - **Across the whole layout**: once a drag moves away from where it started, a green strip appears along each outer
   edge of the layout. Drop on one to put the pane across the whole top or bottom, or down a whole side (a chart the
   full width of the screen, for example), rather than beside a single pane.
-- **Add…**: put a widget on any side of a pane, or along a whole edge of the layout, either a new one or one hidden
-  on the tab.
+- **Add beside…**: pick where (a side of this pane, or along a whole edge of the tab), then the widget: a new one or
+  one hidden on the tab.
 - **Replace…**: swap the pane with another, or show a different widget in it.
-- **Edit** (custom widgets): open the custom widget editor.
+- **Edit custom widget** (custom widgets): open the custom widget editor.
+- **Pin above the panes** (the quick-actions bar): full width, on top.
 - **Hide**: take the widget out of the layout. It stays on the tab, listed under **Not shown in this layout**, with
   **Show** to bring it back.
-- **Delete**: remove the widget from the tab.
+- **Delete…**: remove the widget from the tab.
 
 A custom widget fills its pane: a composite's rows share the pane's height and its values grow with the room. One
 too tall for its pane scrolls inside its card.
@@ -143,7 +145,7 @@ room: a layout that fits in flight stays as panes.
 
 ### A wide layout for ultrawide screens
 
-A Cockpit tab can have a second layout for wide screens. In Edit Mode, **+ Wide** makes one as a copy of the
+A Cockpit tab can have a second layout for wide screens. In Edit Mode, **Layout → Add a wide layout** makes one as a copy of the
 standard layout and starts editing it; arrange it as you like (the **Ultrawide** preset is a good start).
 
 - The wide layout is used when the window is wider than 2.2:1 (and at least 1200 px wide): an ultrawide monitor. 16:9
@@ -152,12 +154,12 @@ standard layout and starts editing it; arrange it as you like (the **Ultrawide**
   **Standard / Wide** switch edits either one from any screen.
 - The layouts all show the tab's widgets. Hiding a widget in one leaves the others alone; deleting a widget from the
   tab removes it from every layout (you're asked first if another layout shows it).
-- **Remove wide** drops the wide layout; the standard one is then used everywhere.
+- **Layout → Remove the wide layout…** (while editing it) drops it; the standard one is then used everywhere.
 
 ### A compact layout for laptops
 
 A Cockpit tab arranged for a large screen may not fit a laptop's window; it's then shown stacked, as on a phone. A
-**compact** layout is the tab arranged for that smaller window: **+ Compact** (Edit Mode) makes one as a copy of the
+**compact** layout is the tab arranged for that smaller window: **Layout → Add a compact layout** (Edit Mode) makes one as a copy of the
 standard layout and starts editing it.
 
 - It's used when the standard (or wide) layout doesn't fit the window and the compact one does, before falling back to
@@ -167,9 +169,9 @@ standard layout and starts editing it.
   widget (Vitals, say) and the compact one holds everything, the compact one is shown. Only when neither holds
   everything does a tall widget scroll in its pane.
 - While you edit it on a larger screen, it's shown in a dashed frame the size of a laptop's browser window, so what you
-  arrange is what the laptop shows: **Preview** picks 1366×768 (the default), 1440×900 or 1536×864, or **off** to use
+  arrange is what the laptop shows: the **Layout** menu's preview picks 1366×768 (the default), 1440×900 or 1536×864, or **off** to use
   the whole window.
-- **Remove compact** drops it.
+- **Layout → Remove the compact layout…** (while editing it) drops it.
 
 ### Profiles and backup
 
