@@ -7,6 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 
 import { AlertTriangle, Check, Copy, ExternalLink, Share2, Shield, Smartphone } from 'lucide-react';
 
+import { isDesktop } from '../../desktop/api';
 import { useAudioAlertsStore, type VoiceEngine } from '../../lib/audioAlerts';
 import { DOC_LINKS, REPO_URL, repoFile } from '../../lib/links';
 import { maskToken, pairingUrl } from '../../lib/pairing';
@@ -229,6 +230,10 @@ export const SettingsDialog: React.FC<Props> = ({
     serialBaud,
     setLinkKind,
     setSerialBaud,
+    udpPort,
+    tcpTarget,
+    setUdpPort,
+    setTcpTarget,
     status,
     errorMessage,
     setUrl,
@@ -263,6 +268,10 @@ export const SettingsDialog: React.FC<Props> = ({
   const [urlFocused, setUrlFocused] = useState(false);
   const [inputLinkKind, setInputLinkKind] = useState(linkKind);
   const [inputSerialBaud, setInputSerialBaud] = useState(serialBaud);
+  // The desktop app's UDP / TCP links (src/desktop/api.ts).
+  const desktop = isDesktop();
+  const [inputUdpPort, setInputUdpPort] = useState(String(udpPort));
+  const [inputTcpTarget, setInputTcpTarget] = useState(tcpTarget);
   const [serialPickerNotice, setSerialPickerNotice] = useState<string | null>(null);
   // Kept as typed (an empty field stays empty, not 0); checked when the settings are applied.
   const [inputGcsSysId, setInputGcsSysId] = useState(String(gcsSystemId));
@@ -274,6 +283,8 @@ export const SettingsDialog: React.FC<Props> = ({
     setInputUrl(url);
     setInputLinkKind(linkKind);
     setInputSerialBaud(serialBaud);
+    setInputUdpPort(String(udpPort));
+    setInputTcpTarget(tcpTarget);
     setSerialPickerNotice(null);
     setInputGcsSysId(String(gcsSystemId));
     // Only on opening: the form isn't reset while it's being edited.
@@ -298,13 +309,15 @@ export const SettingsDialog: React.FC<Props> = ({
       const picked = await requestSerialDevice();
       if (!picked) {
         setSerialPickerNotice(
-          'No device selected. Choose the telemetry radio or flight controller in the browser prompt.'
+          `No device selected. Choose the telemetry radio or flight controller ${desktop ? 'from the list' : 'in the browser prompt'}.`
         );
         return;
       }
       setSerialPickerNotice(null);
       setSerialBaud(inputSerialBaud);
     }
+    if (inputLinkKind === 'udp') setUdpPort(Number(inputUdpPort));
+    if (inputLinkKind === 'tcp') setTcpTarget(inputTcpTarget);
     setLinkKind(inputLinkKind);
     setUrl(inputUrl);
     // A whole number 1-255, else the ID stays as it was.
@@ -372,6 +385,21 @@ export const SettingsDialog: React.FC<Props> = ({
               options={[
                 { value: 'websocket', label: 'WebSocket' },
                 { value: 'serial', label: serialApi === 'web-usb-serial' ? 'USB (WebUSB)' : 'USB serial' },
+                // A browser can't open these; the desktop app can.
+                ...(desktop
+                  ? [
+                      {
+                        value: 'udp' as const,
+                        label: 'UDP',
+                        hint: 'Listens for the vehicle, as Mission Planner does: SITL, a companion computer, or a radio bridge sending to this machine.',
+                      },
+                      {
+                        value: 'tcp' as const,
+                        label: 'TCP',
+                        hint: 'Connects to the vehicle: SITL, or a serial-to-TCP adapter.',
+                      },
+                    ]
+                  : []),
               ]}
               aside={
                 status === 'connected' ? (
@@ -427,6 +455,34 @@ export const SettingsDialog: React.FC<Props> = ({
                   )}
                 </div>
               ))}
+
+            {inputLinkKind === 'udp' && (
+              <label className="flex items-center justify-between gap-2 text-xs font-medium text-zinc-300">
+                Listen on UDP port
+                <Input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={inputUdpPort}
+                  onChange={(e) => setInputUdpPort(e.target.value)}
+                  disabled={status === 'connected'}
+                  className="h-8 w-28 font-mono text-xs"
+                />
+              </label>
+            )}
+            {inputLinkKind === 'tcp' && (
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium text-zinc-300">Vehicle host:port</span>
+                <Input
+                  type="text"
+                  value={inputTcpTarget}
+                  onChange={(e) => setInputTcpTarget(e.target.value)}
+                  disabled={status === 'connected'}
+                  placeholder="127.0.0.1:5760"
+                  className="font-mono text-xs"
+                />
+              </label>
+            )}
 
             {inputLinkKind === 'websocket' && (
               <div className="space-y-2">

@@ -5,3 +5,4 @@ export * from './webUsbCdc';
 export * from './webUsbSerialTransport';
 export * from './serialDevices';
 export * from './replayTransport';
+export * from './nativeLinkTransport';

@@ -13,7 +13,10 @@ export type TransportKind =
   // Serial over WebUSB, for platforms with no Web Serial API (Android).
   | 'web-usb-serial'
   // A recorded telemetry log played back (read-only: nothing is ever sent).
-  | 'replay';
+  | 'replay'
+  // UDP and TCP, opened by the desktop app (src/desktop/api.ts): a browser can't.
+  | 'udp'
+  | 'tcp';
 
 export type TransportStatus =
   | { kind: 'idle' }
