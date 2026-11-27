@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Edit2,
   Eye,
-  EyeOff,
   GripVertical,
   Layers,
   LayoutPanelTop,
@@ -40,7 +39,7 @@ import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { Input } from '../ui/input';
 import { renderBuiltinWidget } from '../widgets/builtinRegistry';
 import { CustomWidgetRenderer } from '../widgets/CustomWidgetRenderer';
-import { CockpitView, PaneEditOverlay } from './CockpitView';
+import { CockpitView, PaneEditOverlay, PinnedEditOverlay } from './CockpitView';
 
 interface DashboardGridProps {
   onEditCustomWidget?: (widget: CustomWidgetDefinition) => void;
@@ -79,7 +78,6 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
     moveWidget,
     reorderWidgetsInActiveTab,
     placeInCockpit,
-    unplaceFromCockpit,
   } = useDashboardStore();
 
   const [newTabTitle, setNewTabTitle] = useState('');
@@ -798,19 +796,8 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                 </ErrorBoundary>
                 {isEditing &&
                   (isHeader ? (
-                    <div className="ring-dashed absolute inset-0 z-20 flex select-none items-start justify-between gap-2 rounded-xl bg-zinc-950/55 p-1.5 ring-1 ring-sky-500/50">
-                      <span className="rounded bg-zinc-900/95 px-2 py-0.5 text-[11px] font-bold text-sky-300">
-                        {getWidgetTitle(w.widgetId)} · pinned above the panes
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => unplaceFromCockpit(activeTab.id, id)}
-                        className="flex items-center gap-1 rounded bg-zinc-900/95 px-1.5 py-0.5 text-[11px] text-zinc-300 hover:text-white"
-                      >
-                        <EyeOff className="h-3 w-3" />
-                        Hide
-                      </button>
-                    </div>
+                    // The pinned bar's own controls (Unpin, Hide, Delete), as in the panes.
+                    <PinnedEditOverlay tab={{ ...activeTab, cockpit }} placed={w} titleOf={getWidgetTitle} />
                   ) : (
                     <PaneEditOverlay
                       tab={{ ...activeTab, cockpit }}
