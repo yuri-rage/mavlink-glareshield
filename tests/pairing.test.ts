@@ -38,7 +38,7 @@ class FakeWebSocket {
 }
 (globalThis as any).WebSocket = FakeWebSocket;
 
-const { linkFromHash, pairingUrl, acceptPairingLink, pairingCloseMessage, tokenOf, maskToken } =
+const { linkFromHash, pairingUrl, acceptPairingLink, pairingCloseMessage, tokenOf, maskToken, pairingAppUrl } =
   await import('../src/lib/pairing.ts');
 const { MavlinkConnection } = await import('../src/mavlink/connection.ts');
 
@@ -77,6 +77,12 @@ check(
   'pair another device, ws://: straight to the app with the link',
   pairingUrl('ws://10.0.0.5:56781/?token=abc', 'https://glareshield.yurirage.com/?x=1#y') ===
     `https://glareshield.yurirage.com/#link=${encodeURIComponent('ws://10.0.0.5:56781/?token=abc')}`
+);
+check(
+  'pair another device from the desktop app (app://): the link opens the hosted app',
+  pairingUrl('ws://10.0.0.5:56781/?token=abc', pairingAppUrl('app://glareshield/')) ===
+    `https://glareshield.yurirage.com/#link=${encodeURIComponent('ws://10.0.0.5:56781/?token=abc')}` &&
+    pairingAppUrl('http://localhost:3000/') === 'http://localhost:3000/'
 );
 check('pair another device: none without a token', pairingUrl('wss://h:1/', 'https://a/') === null);
 {
