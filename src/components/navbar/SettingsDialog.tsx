@@ -12,7 +12,7 @@ import { useAudioAlertsStore, type VoiceEngine } from '../../lib/audioAlerts';
 import { DOC_LINKS, REPO_URL, repoFile } from '../../lib/links';
 import { maskToken, pairingAppUrl, pairingUrl } from '../../lib/pairing';
 import { BUILD, buildLabel, checkForUpdate, useUpdateStore } from '../../lib/updateCheck';
-import { getWssHost, isLoopbackWs, SERIAL_BAUD_RATES } from '../../mavlink/connection';
+import { getWssHost, isLoopbackWs, mavlinkConnection, SERIAL_BAUD_RATES } from '../../mavlink/connection';
 import type { BandwidthProfile } from '../../mavlink/rateManager';
 import { getSerialApi, requestSerialDevice } from '../../mavlink/transport';
 import { useConnectionStore } from '../../store/connectionStore';
@@ -849,18 +849,34 @@ export const SettingsDialog: React.FC<Props> = ({
               Disconnect
             </Button>
           ) : (
-            <Button
-              key="connect"
-              type="submit"
-              onPointerDown={() => (connectPressedRef.current = true)}
-              onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (connectPressedRef.current = true)}
-              variant="default"
-              size="sm"
-              disabled={inputLinkKind === 'serial' && serialApi === null}
-              className="bg-sky-500 text-white hover:bg-sky-600"
-            >
-              Connect
-            </Button>
+            <span className="flex items-center gap-2">
+              {/* Trying (a first attempt, or retrying after failures): it can be stopped here, not only replaced. */}
+              {mavlinkConnection.willRetry() && (status === 'connecting' || Boolean(errorMessage)) && (
+                <Button
+                  key="stop"
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => disconnect()}
+                  className="border-red-500/50 text-red-300 hover:bg-red-950/40 hover:text-red-200"
+                  title="Stop trying to connect"
+                >
+                  Stop
+                </Button>
+              )}
+              <Button
+                key="connect"
+                type="submit"
+                onPointerDown={() => (connectPressedRef.current = true)}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (connectPressedRef.current = true)}
+                variant="default"
+                size="sm"
+                disabled={inputLinkKind === 'serial' && serialApi === null}
+                className="bg-sky-500 text-white hover:bg-sky-600"
+              >
+                Connect
+              </Button>
+            </span>
           )}
           <span
             className="font-mono text-[10px] text-zinc-500"
