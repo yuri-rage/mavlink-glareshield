@@ -15,8 +15,9 @@ const check = (name: string, ok: boolean, detail = '') => {
 // The bridge's side of the text channel: what the app sends, and replies played into its text listeners.
 const sent: any[] = [];
 let linkUp = true;
+let textChannel = true; // false: a link without one (USB serial)
 (mavlinkConnection as any).sendText = (m: string) => {
-  if (!linkUp) return false;
+  if (!linkUp || !textChannel) return false;
   sent.push(JSON.parse(m));
   return true;
 };
@@ -60,6 +61,35 @@ check('nothing through the bridge: Disconnect sends it nothing', sent.length ===
 
 // The widget reads the state through the public getter.
 check('getState() is the state', rtcmInjector.getState().status === 'disconnected');
+
+// One listener, however it's reached: connecting again without a disconnect, or after a failed attempt, doesn't
+// add another (each would inject every RTCM chunk again).
+const listeners = () => (mavlinkConnection as any).textListeners.size as number;
+const base = listeners();
+await rtcmInjector.connectViaBridge(config);
+await rtcmInjector.connectViaBridge(config);
+check('connecting twice: one listener', listeners() === base + 1, `${listeners() - base}`);
+await rtcmInjector.disconnect();
+check('Disconnect: none left', listeners() === base, `${listeners() - base}`);
+linkUp = false;
+await rtcmInjector.connectViaBridge(config).catch(() => {});
+linkUp = true;
+check('a failed attempt (no link): none left', listeners() === base, `${listeners() - base}`);
+
+// The link comes back without the bridge's text channel (switched to USB serial): it says so instead of waiting in
+// "connecting", and stops following the bridge.
+await rtcmInjector.connectViaBridge(config);
+setLink('disconnected');
+textChannel = false;
+setLink('connected');
+st = rtcmInjector.getState();
+check(
+  'back on a link without the bridge: an error, not "connecting"',
+  st.status === 'error' && /USB serial/.test(st.error ?? ''),
+  `${st.status}: ${st.error}`
+);
+check('…and no bridge listener left', listeners() === base, `${listeners() - base}`);
+textChannel = true;
 
 console.log(failures.length ? `\n${failures.length} RTCM bridge check(s) FAILED` : '\nAll RTCM bridge checks PASSED');
 process.exit(failures.length ? 1 : 0);

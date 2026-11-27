@@ -738,11 +738,28 @@ export class RtcmInjector {
             error: 'Link to the bridge lost: NTRIP resumes when it is back',
           });
         }
-      } else if (status === 'connected') {
-        this.sendBridgeConnect(this.bridgeConfig);
+      } else if (status === 'connected' && !this.sendBridgeConnect(this.bridgeConfig)) {
+        // Back, but on a link without the bridge's text channel (switched to USB serial): nothing to ask; say so
+        // rather than wait in "connecting".
+        this.stopBridgeWatch();
+        if (this.ggaIntervalTimer) {
+          clearInterval(this.ggaIntervalTimer);
+          this.ggaIntervalTimer = null;
+        }
+        this.updateState({
+          status: 'error',
+          source: 'none',
+          dataRateBps: 0,
+          packetRateHz: 0,
+          error:
+            "NTRIP through the bridge stopped: this link (USB serial) doesn't go through the bridge. Reconnect over WebSocket to stream corrections.",
+        });
       }
     });
 
+    // One listener at a time: connecting again (or after a failed attempt) replaces the last one, or each RTCM
+    // chunk would be injected once per listener.
+    this.unsubBridgeText?.();
     this.unsubBridgeText = mavlinkConnection.onText((msgStr) => {
       try {
         const msg = JSON.parse(msgStr);
@@ -794,9 +811,12 @@ export class RtcmInjector {
     );
   }
 
+  /** Stop following the bridge: its link status and its replies. */
   private stopBridgeWatch() {
     this.unsubBridgeStatus?.();
     this.unsubBridgeStatus = null;
+    this.unsubBridgeText?.();
+    this.unsubBridgeText = null;
     this.bridgeConfig = null;
   }
 
