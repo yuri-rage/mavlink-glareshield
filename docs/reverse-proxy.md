@@ -91,7 +91,7 @@ environment:
 python3 bridge/bridge.py --host 0.0.0.0 --port 56781 --udp 0.0.0.0:14550
 ```
 
-The bridge must listen on `0.0.0.0` (or its LAN address), not `127.0.0.1`, because the proxy reaches it from another container.
+The bridge must listen on `0.0.0.0` (or its LAN address), not `127.0.0.1`, because the proxy reaches it from another container. It is then reachable from your whole network, so give it a pairing token: the Docker bridge has one by default (`./certs/token`); with Python, set `BRIDGE_TOKEN` as in [Pairing Devices](connection-guide.md#pairing-devices-the-bridge-token). The proxy passes the link's `?token=` through to the bridge unchanged.
 
 You don't need to add an allowed origin. The proxy passes the browser's `Origin: https://glareshield.yurirage.com` header through unchanged, and the bridge allows that origin by default. If you host Glareshield yourself on another domain, add `--allow-origin "https://your-gcs.example.com"` (Docker: `ALLOW_ORIGINS=`).
 
@@ -220,11 +220,12 @@ The names only resolve inside your network, but an access list keeps every servi
 ## 8. Connect
 
 1. Open [https://glareshield.yurirage.com](https://glareshield.yurirage.com) on any device on the LAN.
-2. Open **Settings → Link** (the gear icon) and connect to:
+2. Open **Settings → Link** (the gear icon) and connect to the proxy, with the bridge's pairing token (`cat certs/token` on the bridge machine, or `docker compose logs`):
    ```text
-   wss://mav.home.example.com
+   wss://mav.home.example.com/?token=<token>
    ```
-   Leave off the port: the proxy listens on 443.
+   Leave off the port: the proxy listens on 443. Don't use the QR code in the bridge's log here: it points at the bridge's own address, not the proxy.
+   For your other devices, use **Settings → Link → Pair another device** on this one: its link goes through the proxy (the bridge sees the proxy's `X-Forwarded-Proto: https` and sends them on with `wss://`).
 3. Chrome and Edge may ask *"Allow Glareshield to connect to devices on your local network?"* the first time, because a public site is reaching a private address. Click **Allow**.
 
 For the HUD video:
@@ -254,6 +255,7 @@ To open Dock of the Base, browse to `https://dotb.home.example.com`.
 | `502 Bad Gateway`, or the WebSocket closes during the handshake | The proxy can't reach the bridge, or **Websockets Support** is off, or the scheme doesn't match the bridge (TLS on the bridge, `http` on the proxy) | Check the bridge listens on `0.0.0.0:56781`; turn on Websockets Support; run the bridge without TLS |
 | Glareshield reconnects about once a minute while idle | nginx's 60 s read timeout | Add the `proxy_read_timeout` lines from step 5 |
 | Bridge log: `Refused WebSocket connection from Origin` | Glareshield is served from a domain the bridge doesn't allow | Start the bridge with `--allow-origin "https://<that domain>"` |
+| Glareshield says *"This bridge needs a pairing token"* | The link has no `?token=` | Add the bridge's token: `wss://mav.home.example.com/?token=<token>` |
 | Connected, but no telemetry (0 pkts/s) | The vehicle isn't sending to the bridge's address, or a firewall on the container drops UDP 14550 | Check the vehicle's UDP output targets (step 2); allow 14550/udp on the container |
 | HUD settings say *"This camera does not allow CORS"* | The CORS header is missing: go2rtc's `origin` isn't set, or the URL points at the camera directly instead of go2rtc | Set `api: origin: "*"` in `go2rtc.yaml` and restart go2rtc; use the `cam.home.example.com/api/stream.mjpeg` URL |
 | HUD video lags or arrives in bursts | nginx is buffering the stream | Add `proxy_buffering off;` to the camera host (step 5) |
@@ -281,4 +283,4 @@ Caddy does all of this by default; see the [connection guide](connection-guide.m
 
 ### Reaching the bridge from outside the LAN
 
-Don't open the proxy to the internet. Use a VPN such as Tailscale or WireGuard, and point the VPN's DNS at Pi-hole so the same names resolve. The bridge has no authentication of its own; the [connection guide](connection-guide.md#option-4-local-reverse-proxy--cloudflare-tunnel--caddy) explains the risks.
+Don't open the proxy to the internet. Use a VPN such as Tailscale or WireGuard, and point the VPN's DNS at Pi-hole so the same names resolve. The bridge's pairing token keeps out devices on your LAN, but it is one shared secret in the link, not a login; the [connection guide](connection-guide.md#option-4-local-reverse-proxy--cloudflare-tunnel--caddy) explains the risks.

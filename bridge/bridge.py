@@ -10,6 +10,11 @@ Usage:
     python3 bridge.py --udp 127.0.0.1:14550      # Connect to SITL UDP
     python3 bridge.py --tcp 127.0.0.1:5760       # Connect to SITL TCP
     python3 bridge.py --serial /dev/ttyUSB0:57600# Connect to physical telemetry radio
+
+Reachable from the network (--host 0.0.0.0)? Give it a pairing token so only your devices can connect, and pair
+them with the QR code it prints (docs/connection-guide.md, "Pairing Devices"):
+    BRIDGE_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')" \
+        python3 bridge.py --host 0.0.0.0 --udp 0.0.0.0:14550 --ssl-cert cert.pem --ssl-key key.pem
 """
 
 import argparse
