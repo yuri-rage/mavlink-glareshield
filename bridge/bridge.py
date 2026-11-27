@@ -56,6 +56,9 @@ CLOSE_TOKEN_WRONG = 4003
 
 # Messages queued for one WebSocket client before its oldest are dropped (it isn't keeping up).
 CLIENT_QUEUE_MAX = 1000
+# Packets waiting for the serial writer thread: a port that stops draining (a radio's flow control stuck) drops new
+# ones past this instead of queueing without limit (~1 s of a busy link).
+SERIAL_QUEUE_MAX = 500
 
 # NTRIP relay limits: a caster's response header, and how long to wait for a connection and that header.
 NTRIP_MAX_HEADER = 8192
@@ -240,13 +243,16 @@ class ClientSession:
                 await self.websocket.send(data)
 
     async def stop_ntrip(self) -> None:
-        if self.ntrip_task:
-            self.ntrip_task.cancel()
+        was_active = self.ntrip_task is not None or self.ntrip_writer is not None
+        task, self.ntrip_task = self.ntrip_task, None
+        # Called from the read loop itself (the caster closed): it must not cancel itself, or the next await below
+        # raises CancelledError and the writer and the "disconnected" status are skipped.
+        if task and task is not asyncio.current_task():
+            task.cancel()
             try:
-                await self.ntrip_task
+                await task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001, S110
                 pass
-            self.ntrip_task = None
         if self.ntrip_writer:
             try:
                 self.ntrip_writer.close()
@@ -254,6 +260,8 @@ class ClientSession:
             except Exception:  # noqa: BLE001, S110
                 pass
             self.ntrip_writer = None
+        if not was_active:
+            return
         try:
             await self.websocket.send(json.dumps({"type": "ntrip_status", "status": "disconnected"}))
         except Exception:  # noqa: BLE001, S110
@@ -291,6 +299,7 @@ class BridgeServer:
         self.transport = None
         self.serial_conn = None
         self.serial_writer = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="serial-write")
+        self.serial_pending = 0
         self.udp_target = None
         # UDP vehicle endpoints (address -> last time a packet arrived from it). An address is
         # added when it sends an autopilot HEARTBEAT (see is_vehicle_heartbeat) and dropped after
@@ -400,7 +409,8 @@ class BridgeServer:
                 if isinstance(message, bytes):
                     if self.mode == "mock":
                         await self.handle_mock_command(message)
-                    elif self.transport:
+                    else:
+                        # send_to_vehicle checks the link per mode (serial has no self.transport, only serial_conn).
                         self.send_to_vehicle(message)
                 elif isinstance(message, str):
                     await self.handle_text_command(session, message)
@@ -598,8 +608,18 @@ class BridgeServer:
             except OSError as e:
                 self.note_write_error("TCP", e)
         elif self.mode == "serial" and self.serial_conn:
-            # A blocking write (a radio's flow control) would stall the event loop: on the writer thread instead.
-            self.serial_writer.submit(self.serial_write, self.serial_conn, data)
+            # A blocking write (a radio's flow control) would stall the event loop: on the writer thread instead,
+            # with a bound on what waits for it (a port that never drains drops new packets rather than piling up).
+            if self.serial_pending >= SERIAL_QUEUE_MAX:
+                self.note_write_error("Serial", OSError("write queue full: the port isn't draining"))
+                return
+            self.serial_pending += 1
+            future = self.serial_writer.submit(self.serial_write, self.serial_conn, data)
+            future.add_done_callback(self._serial_done)
+
+    def _serial_done(self, _future: Any) -> None:
+        # On the writer thread: a plain counter decrement (the GIL makes it safe enough for a bound).
+        self.serial_pending -= 1
 
     def note_write_error(self, kind: str, e: OSError):
         """A failed write to the vehicle: logged once per kind of error, not once per packet."""
