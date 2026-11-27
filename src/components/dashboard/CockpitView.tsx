@@ -573,6 +573,81 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({
   );
 };
 
+/**
+ * The pinned bar's controls in Edit Mode: Unpin (back to a pane), Hide, and Delete (confirmed, naming the other
+ * layouts it leaves). The same in the panes and in the stacked grid (a narrow window), so none go missing there.
+ */
+export const PinnedEditOverlay: React.FC<{
+  tab: DashboardTab;
+  placed: PlacedWidget;
+  titleOf: (widgetId: string) => string;
+}> = ({ tab, placed, titleOf }) => {
+  const unpin = useDashboardStore((s) => s.unpinInCockpit);
+  const unplace = useDashboardStore((s) => s.unplaceFromCockpit);
+  const removeWidget = useDashboardStore((s) => s.removeWidgetFromActiveTab);
+  const [confirmHeaderDelete, setConfirmHeaderDelete] = useState(false);
+  useEffect(() => setConfirmHeaderDelete(false), [placed.instanceId]);
+  const headerInOther = useDashboardStore((s) => shownInOthers(s, tab.id, placed.instanceId));
+  return (
+    <div className="ring-dashed absolute inset-0 z-20 flex select-none items-start justify-between gap-2 rounded-xl bg-zinc-950/55 p-1.5 ring-1 ring-sky-500/50">
+      <span className="flex items-center gap-1.5 rounded bg-zinc-900/95 px-2 py-0.5 text-[11px] font-bold text-sky-300">
+        <Lock className="h-3 w-3 text-amber-400" />
+        {titleOf(placed.widgetId)} · pinned above the panes
+      </span>
+      <span className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => unpin(tab.id)}
+          className="flex items-center gap-1 rounded bg-zinc-900/95 px-1.5 py-0.5 text-[11px] text-zinc-300 hover:text-white"
+          title="Make it a pane (across the bottom), to move and resize like the others"
+        >
+          <PinOff className="h-3 w-3" />
+          Unpin
+        </button>
+        <button
+          type="button"
+          onClick={() => unplace(tab.id, placed.instanceId)}
+          className="flex items-center gap-1 rounded bg-zinc-900/95 px-1.5 py-0.5 text-[11px] text-zinc-300 hover:text-white"
+          title="Take this widget out of the layout (it stays on the tab)"
+        >
+          <EyeOff className="h-3 w-3" />
+          Hide
+        </button>
+        {confirmHeaderDelete ? (
+          <span className="flex items-center gap-1 rounded border border-red-500/40 bg-red-950/90 px-1 py-0.5 text-[11px] text-red-200">
+            <button
+              type="button"
+              onClick={() => removeWidget(placed.instanceId)}
+              className="rounded bg-red-600 px-1.5 font-bold text-white"
+              title={
+                headerInOther
+                  ? `Delete ${titleOf(placed.widgetId)} from the tab: it leaves ${layoutsText(headerInOther)}`
+                  : `Delete ${titleOf(placed.widgetId)} from the tab`
+              }
+            >
+              {headerInOther ? `Delete (${layoutsText(headerInOther)})` : 'Delete'}
+            </button>
+            <button type="button" onClick={() => setConfirmHeaderDelete(false)} className="rounded bg-zinc-800 px-1.5">
+              No
+            </button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmHeaderDelete(true)}
+            className="flex items-center gap-1 rounded bg-zinc-900/95 px-1.5 py-0.5 text-[11px] text-red-400 hover:text-red-300"
+            title="Delete it from the tab"
+            aria-label={`Delete ${titleOf(placed.widgetId)}`}
+          >
+            <Trash2 className="h-3 w-3" />
+            Delete
+          </button>
+        )}
+      </span>
+    </div>
+  );
+};
+
 export const CockpitView: React.FC<Props> = ({
   tab,
   isEditing,
@@ -581,8 +656,6 @@ export const CockpitView: React.FC<Props> = ({
   headerRef,
   onEditCustomWidget,
 }) => {
-  const unplace = useDashboardStore((s) => s.unplaceFromCockpit);
-  const unpin = useDashboardStore((s) => s.unpinInCockpit);
   /** The pane being dragged (Edit mode), by instance ID. */
   const [dragging, setDragging] = useState<string | null>(null);
   const byId = new Map(tab.widgets.map((w) => [w.instanceId, w]));
@@ -597,11 +670,6 @@ export const CockpitView: React.FC<Props> = ({
   };
   const layout = tab.cockpit!;
   const header = layout.header ? byId.get(layout.header) : undefined;
-  // Deleting the pinned bar, as a pane's Delete: confirmed first, and the prompt says when it leaves both layouts.
-  const removeWidget = useDashboardStore((s) => s.removeWidgetFromActiveTab);
-  const [confirmHeaderDelete, setConfirmHeaderDelete] = useState(false);
-  useEffect(() => setConfirmHeaderDelete(false), [header?.instanceId, isEditing]);
-  const headerInOther = useDashboardStore((s) => (header ? shownInOthers(s, tab.id, header.instanceId) : 0));
 
   const pane = (id: string) => {
     const placed = byId.get(id);
@@ -654,68 +722,7 @@ export const CockpitView: React.FC<Props> = ({
           <HeaderSlotContext.Provider value={true}>
             <ErrorBoundary fallbackTitle={titleOf(header.widgetId)}>{renderWidget(header)}</ErrorBoundary>
           </HeaderSlotContext.Provider>
-          {isEditing && (
-            <div className="ring-dashed absolute inset-0 z-20 flex select-none items-start justify-between gap-2 rounded-xl bg-zinc-950/55 p-1.5 ring-1 ring-sky-500/50">
-              <span className="flex items-center gap-1.5 rounded bg-zinc-900/95 px-2 py-0.5 text-[11px] font-bold text-sky-300">
-                <Lock className="h-3 w-3 text-amber-400" />
-                {titleOf(header.widgetId)} · pinned above the panes
-              </span>
-              <span className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => unpin(tab.id)}
-                  className="flex items-center gap-1 rounded bg-zinc-900/95 px-1.5 py-0.5 text-[11px] text-zinc-300 hover:text-white"
-                  title="Make it a pane (across the bottom), to move and resize like the others"
-                >
-                  <PinOff className="h-3 w-3" />
-                  Unpin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => unplace(tab.id, header.instanceId)}
-                  className="flex items-center gap-1 rounded bg-zinc-900/95 px-1.5 py-0.5 text-[11px] text-zinc-300 hover:text-white"
-                  title="Take this widget out of the layout (it stays on the tab)"
-                >
-                  <EyeOff className="h-3 w-3" />
-                  Hide
-                </button>
-                {confirmHeaderDelete ? (
-                  <span className="flex items-center gap-1 rounded border border-red-500/40 bg-red-950/90 px-1 py-0.5 text-[11px] text-red-200">
-                    <button
-                      type="button"
-                      onClick={() => removeWidget(header.instanceId)}
-                      className="rounded bg-red-600 px-1.5 font-bold text-white"
-                      title={
-                        headerInOther
-                          ? `Delete ${titleOf(header.widgetId)} from the tab: it leaves ${layoutsText(headerInOther)}`
-                          : `Delete ${titleOf(header.widgetId)} from the tab`
-                      }
-                    >
-                      {headerInOther ? `Delete (${layoutsText(headerInOther)})` : 'Delete'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmHeaderDelete(false)}
-                      className="rounded bg-zinc-800 px-1.5"
-                    >
-                      No
-                    </button>
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmHeaderDelete(true)}
-                    className="flex items-center gap-1 rounded bg-zinc-900/95 px-1.5 py-0.5 text-[11px] text-red-400 hover:text-red-300"
-                    title="Delete it from the tab"
-                    aria-label={`Delete ${titleOf(header.widgetId)}`}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    Delete
-                  </button>
-                )}
-              </span>
-            </div>
-          )}
+          {isEditing && <PinnedEditOverlay tab={tab} placed={header} titleOf={titleOf} />}
         </div>
       )}
       <div className="relative min-h-0 flex-1">
