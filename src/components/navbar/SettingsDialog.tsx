@@ -10,7 +10,7 @@ import { AlertTriangle, Check, Copy, ExternalLink, RefreshCw, Share2, Shield, Sm
 import { desktopApi, isDesktop, type SerialPortListing } from '../../desktop/api';
 import { useAudioAlertsStore, type VoiceEngine } from '../../lib/audioAlerts';
 import { DOC_LINKS, REPO_URL, repoFile } from '../../lib/links';
-import { maskToken, pairingUrl } from '../../lib/pairing';
+import { maskToken, pairingAppUrl, pairingUrl } from '../../lib/pairing';
 import { BUILD, buildLabel, checkForUpdate, useUpdateStore } from '../../lib/updateCheck';
 import { getWssHost, isLoopbackWs, SERIAL_BAUD_RATES } from '../../mavlink/connection';
 import type { BandwidthProfile } from '../../mavlink/rateManager';
@@ -39,11 +39,40 @@ const TABS: { id: SettingsTab; label: string }[] = [
 ];
 
 /** This build (with its commit), an update check, the documentation and the source. */
+/** The desktop app's update line in About: its updater's state in words. */
+function desktopUpdateText(st: ReturnType<typeof useUpdateStore.getState>['desktop']): string | null {
+  switch (st?.kind) {
+    case 'checking':
+      return 'Checking for a newer version…';
+    case 'available':
+      return `Glareshield ${st.version} is available: downloading…`;
+    case 'downloading':
+      return `Downloading the update: ${st.percent}%`;
+    case 'ready':
+      return `Glareshield ${st.version} is downloaded: use Update in the top bar to restart into it.`;
+    case 'none':
+      return 'This is the latest version.';
+    case 'error':
+      return `The update check failed: ${st.message}`;
+    case 'unavailable':
+      return 'Updates come with the installed app (the AppImage or the Windows installer).';
+    default:
+      return null;
+  }
+}
+
 const AboutPanel: React.FC = () => {
   const available = useUpdateStore((s) => s.available);
+  const desktopUpdate = useUpdateStore((s) => s.desktop);
+  const desk = desktopApi();
   const [checking, setChecking] = useState(false);
   const [checked, setChecked] = useState(false);
   const check = async () => {
+    // The desktop app updates itself (electron-updater); its page is bundled, so the web check doesn't apply.
+    if (desk) {
+      desk.update.check();
+      return;
+    }
     setChecking(true);
     await checkForUpdate();
     setChecking(false);
@@ -62,6 +91,12 @@ const AboutPanel: React.FC = () => {
       <div className="space-y-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5 text-xs">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-zinc-400">
+            {desk && (
+              <>
+                Desktop app <span className="font-mono text-zinc-200">{desk.version}</span>
+                {' · '}
+              </>
+            )}
             Build <span className="font-mono text-zinc-200">{buildLabel()}</span>
             {BUILD.sha && (
               <>
@@ -73,7 +108,7 @@ const AboutPanel: React.FC = () => {
               </>
             )}
           </span>
-          {BUILD.id === 'dev' ? (
+          {BUILD.id === 'dev' && !desk ? (
             <span className="text-[11px] text-zinc-500">Development server: no update checks</span>
           ) : (
             <Button
@@ -82,13 +117,21 @@ const AboutPanel: React.FC = () => {
               size="sm"
               className="h-7 text-[11px]"
               onClick={check}
-              disabled={checking}
+              disabled={checking || desktopUpdate?.kind === 'checking' || desktopUpdate?.kind === 'downloading'}
             >
-              {checking ? 'Checking…' : 'Check for updates'}
+              {checking || desktopUpdate?.kind === 'checking' ? 'Checking…' : 'Check for updates'}
             </Button>
           )}
         </div>
-        {available ? (
+        {desk ? (
+          desktopUpdateText(desktopUpdate) && (
+            <p
+              className={`text-[11px] ${desktopUpdate?.kind === 'error' ? 'text-red-300' : desktopUpdate?.kind === 'none' ? 'text-emerald-300' : 'text-amber-300'}`}
+            >
+              {desktopUpdateText(desktopUpdate)}
+            </p>
+          )
+        ) : available ? (
           <p className="text-[11px] text-amber-300">
             A newer build ({available}) is available: use <strong>Update</strong> in the navbar to reload into it.
           </p>
@@ -148,7 +191,7 @@ const PairAnotherDevice: React.FC<{ url: string }> = ({ url }) => {
   const [copied, setCopied] = useState(false);
   // Hidden until asked for: the QR code and link carry the pairing token (screen sharing, someone looking on).
   const [shown, setShown] = useState(false);
-  const link = typeof window !== 'undefined' ? pairingUrl(url, window.location.href) : null;
+  const link = typeof window !== 'undefined' ? pairingUrl(url, pairingAppUrl(window.location.href)) : null;
   if (!link) return null;
   if (!shown)
     return (

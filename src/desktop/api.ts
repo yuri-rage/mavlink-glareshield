@@ -50,9 +50,13 @@ export type UpdateState =
   | { kind: 'downloading'; percent: number }
   | { kind: 'ready'; version: string }
   | { kind: 'none' }
-  | { kind: 'error'; message: string };
+  | { kind: 'error'; message: string }
+  /** Not an installed build (run from source): no updates. */
+  | { kind: 'unavailable' };
 
 export interface DesktopUpdateApi {
+  /** The latest state (kept by the main process, so a reloaded page sees a download that's ready). */
+  getState(): Promise<UpdateState | null>;
   onState(listener: (state: UpdateState) => void): Unsubscribe;
   check(): void;
   /** Restart into the downloaded version. */

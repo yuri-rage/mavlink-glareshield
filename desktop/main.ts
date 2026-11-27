@@ -3,22 +3,39 @@
 // - The built app (dist/) is served from app://glareshield/, a standard, secure scheme, so the service worker (offline
 //   map tiles) and the rest of the app behave as on the web. The web deploy's Content-Security-Policy (dist/_headers)
 //   is applied to it here too.
-// - UDP (listen, reply to whoever last sent, as Mission Planner does) and TCP client links, for the page over IPC.
-// - USB serial is the page's own Web Serial; Electron has no device picker, so the page is asked to show one.
+// - UDP (listen; reply to the vehicles heard on it, as Mission Planner does), TCP client and serial (by path) links,
+//   for the page over IPC.
+// - The page's own Web Serial is left only to the RTK widget's base station (with the page's own port list).
 // - Updates from GitHub Releases (AppImage, NSIS installer), when packaged.
 
 import dgram from 'node:dgram';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { app, BrowserWindow, net as electronNet, ipcMain, protocol, session, shell } from 'electron';
 import type { AppUpdater, ProgressInfo, UpdateInfo } from 'electron-updater';
+
+import { hasVehicleHeartbeat, UDP_VEHICLE_TIMEOUT_MS } from './udpVehicles';
 
 const SCHEME = 'app';
 const HOST = 'glareshield';
 const ORIGIN = `${SCHEME}://${HOST}`;
 const DIST = path.join(__dirname, '..', '..', 'dist');
+
+/** Whether a URL is this app's page (exactly app://glareshield; not a lookalike such as app://glareshield.evil). */
+function isAppUrl(u: string): boolean {
+  try {
+    const url = new URL(u);
+    return url.protocol === `${SCHEME}:` && url.host === HOST;
+  } catch {
+    return false;
+  }
+}
+
+/** Permissions the page may use (as on the web, Permissions-Policy: camera and microphone stay off). */
+const ALLOWED_PERMISSIONS = new Set(['geolocation', 'serial', 'clipboard-sanitized-write', 'fullscreen']);
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -55,14 +72,22 @@ function serveApp() {
   protocol.handle(SCHEME, async (request) => {
     const url = new URL(request.url);
     if (url.host !== HOST) return new Response('Not found', { status: 404 });
-    let rel = decodeURIComponent(url.pathname).replace(/^\/+/, '');
-    let file = path.normalize(path.join(DIST, rel));
-    // Nothing outside dist/; an unknown path is the app (as the web host's SPA fallback).
-    if (!file.startsWith(DIST) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+    let rel: string;
+    try {
+      rel = decodeURIComponent(url.pathname).replace(/^\/+/, '');
+    } catch {
+      return new Response('Bad request', { status: 400 });
+    }
+    let file = path.resolve(DIST, rel);
+    // Nothing outside dist/ (not even a sibling such as dist-extra/); an unknown path is the app (as the web host's
+    // SPA fallback).
+    const inside = path.relative(DIST, file);
+    if (inside.startsWith('..') || path.isAbsolute(inside) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
       rel = 'index.html';
       file = path.join(DIST, rel);
     }
-    const res = await electronNet.fetch(`file://${file}`);
+    // A proper file URL (Windows drive letters and backslashes, # or % in a path).
+    const res = await electronNet.fetch(pathToFileURL(file).href);
     const h = new Headers(res.headers);
     for (const [k, v] of Object.entries(headers)) h.set(k, v);
     if (rel.endsWith('.webmanifest')) h.set('Content-Type', 'application/manifest+json');
@@ -94,14 +119,33 @@ function openLink(win: BrowserWindow, config: any): Promise<string> {
     const port = Number(config.port);
     if (!(port > 0 && port < 65536)) return Promise.reject(new Error(`Not a UDP port: ${config.port}`));
     return new Promise((resolve, reject) => {
-      const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
-      // Whoever last sent to us (the vehicle, or a radio's bridge) is where our packets go.
-      let peer: { address: string; port: number } | null = null;
+      // Not shared (no reuseAddr): another program on the port (Mission Planner) is a clear "in use", rather than the
+      // two splitting the traffic.
+      const sock = dgram.createSocket({ type: 'udp4' });
+      // Where our packets go: every endpoint a vehicle's heartbeat came from lately (several vehicles on one port);
+      // until one is heard, whoever last sent. Another program's packets on the port don't redirect them.
+      const vehicles = new Map<string, { address: string; port: number; at: number }>();
+      let lastSender: { address: string; port: number } | null = null;
       sock.on('message', (msg, rinfo) => {
-        peer = { address: rinfo.address, port: rinfo.port };
+        const ep = { address: rinfo.address, port: rinfo.port };
+        if (hasVehicleHeartbeat(msg)) vehicles.set(`${ep.address}:${ep.port}`, { ...ep, at: Date.now() });
+        lastSender = ep;
         emitData(new Uint8Array(msg));
       });
-      sock.once('error', (e) => reject(new Error(`UDP port ${port}: ${e.message}`)));
+      const targets = () => {
+        const now = Date.now();
+        const live = [...vehicles.values()].filter((v) => now - v.at < UDP_VEHICLE_TIMEOUT_MS);
+        return live.length ? live : lastSender ? [lastSender] : [];
+      };
+      sock.once('error', (e: NodeJS.ErrnoException) =>
+        reject(
+          new Error(
+            e.code === 'EADDRINUSE'
+              ? `UDP port ${port} is in use by another program (Mission Planner, MAVProxy, another Glareshield).`
+              : `UDP port ${port}: ${e.message}`
+          )
+        )
+      );
       sock.bind(port, '0.0.0.0', () => {
         sock.removeAllListeners('error');
         sock.on('error', (e) => {
@@ -110,7 +154,8 @@ function openLink(win: BrowserWindow, config: any): Promise<string> {
         });
         links.set(id, {
           send: (data) => {
-            if (peer) sock.send(data, peer.port, peer.address);
+            // A failed send (network unreachable for a moment) is dropped, not the end of the link.
+            for (const t of targets()) sock.send(data, t.port, t.address, () => {});
           },
           close: () => sock.close(),
         });
@@ -192,13 +237,24 @@ function openLink(win: BrowserWindow, config: any): Promise<string> {
   return Promise.reject(new Error('Unknown link kind'));
 }
 
+/** Close every link (the page reloaded, crashed or closed: none of its links are wanted any more). */
+function closeAllLinks() {
+  for (const l of links.values()) l.close();
+  links.clear();
+}
+
 function setupLinks(win: BrowserWindow) {
+  const fromWin = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) => e.sender === win.webContents;
   ipcMain.handle('link:open', (e, config) => {
-    if (e.sender !== win.webContents) throw new Error('Not this window');
+    if (!fromWin(e)) throw new Error('Not this window');
     return openLink(win, config);
   });
-  ipcMain.on('link:send', (_e, id: string, data: Uint8Array) => links.get(id)?.send(data));
-  ipcMain.handle('link:close', (_e, id: string) => {
+  ipcMain.on('link:send', (e, id: unknown, data: unknown) => {
+    if (!fromWin(e) || typeof id !== 'string' || !(data instanceof Uint8Array)) return;
+    links.get(id)?.send(data);
+  });
+  ipcMain.handle('link:close', (e, id: unknown) => {
+    if (!fromWin(e) || typeof id !== 'string') return;
     const l = links.get(id);
     links.delete(id);
     l?.close();
@@ -273,21 +329,37 @@ async function openSerial(portPath: string, baudRate: number) {
   }
 }
 
+/** The page's answer to the open Web Serial prompt (the RTK widget's), if one is waiting. */
+let pendingSerialChoice: ((portId: string) => void) | null = null;
+
+/** No answer is coming (a newer prompt, the page reloaded or crashed): the request gets "no port". */
+function cancelSerialChoice() {
+  pendingSerialChoice?.('');
+  pendingSerialChoice = null;
+}
+
 function setupSerial(win: BrowserWindow) {
-  ipcMain.handle('serial:list', () => listSerialPorts());
-  // The RTK widget's Web Serial: allowed for this app, with the page's own list as the picker.
-  const ses = win.webContents.session;
-  ses.setPermissionCheckHandler((_wc, permission, origin) => permission === 'serial' && origin.startsWith(ORIGIN));
-  ses.setDevicePermissionHandler((details) => details.deviceType === 'serial' && details.origin.startsWith(ORIGIN));
-  ses.on('select-serial-port', (event, portList, _wc, callback) => {
+  ipcMain.handle('serial:list', (e) => {
+    if (e.sender !== win.webContents) throw new Error('Not this window');
+    return listSerialPorts();
+  });
+  // The RTK widget's Web Serial, with the page's own list as the picker.
+  ipcMain.on('serial:choose', (e, portId: unknown) => {
+    if (e.sender !== win.webContents) return;
+    const answer = pendingSerialChoice;
+    pendingSerialChoice = null;
+    answer?.(typeof portId === 'string' ? portId : '');
+  });
+  win.webContents.session.on('select-serial-port', (event, portList, _wc, callback) => {
     event.preventDefault();
+    cancelSerialChoice();
+    pendingSerialChoice = callback;
     const ports = portList.map((p) => ({
       portId: p.portId,
       label: [p.displayName || p.portName, p.portName && p.displayName ? `(${p.portName})` : '']
         .filter(Boolean)
         .join(' '),
     }));
-    ipcMain.once('serial:choose', (_e, portId: string | null) => callback(portId ?? ''));
     win.webContents.send('serial:choose-port', ports);
   });
 }
@@ -295,9 +367,13 @@ function setupSerial(win: BrowserWindow) {
 // ---- Updates -----------------------------------------------------------------------------------------------------
 
 function setupUpdates(win: BrowserWindow) {
+  // The latest state, kept for a page that loads (or reloads) after it was sent: a downloaded update stays offered.
+  let last: unknown = { kind: app.isPackaged ? 'idle' : 'unavailable' };
   const send = (state: unknown) => {
+    last = state;
     if (!win.isDestroyed()) win.webContents.send('update:state', state);
   };
+  ipcMain.handle('update:get', (e) => (e.sender === win.webContents ? last : null));
   let updater: AppUpdater | null = null;
   // Only a packaged build updates itself (and only the AppImage and the installer: electron-updater's targets).
   if (app.isPackaged) {
@@ -313,12 +389,17 @@ function setupUpdates(win: BrowserWindow) {
     updater.on('error', (e: Error) => send({ kind: 'error', message: e?.message ?? String(e) }));
     setTimeout(() => updater?.checkForUpdates().catch(() => {}), 5000);
   }
-  ipcMain.on('update:check', () => {
+  ipcMain.on('update:check', (e) => {
+    if (e.sender !== win.webContents) return;
+    // Already downloaded: nothing to check.
+    if ((last as { kind?: string }).kind === 'ready') return send(last);
     if (updater) updater.checkForUpdates().catch(() => {});
-    else send({ kind: 'none' });
+    else send({ kind: 'unavailable' });
   });
-  // Restarting mid-flight is the person's choice: the page asks first.
-  ipcMain.on('update:install', () => updater?.quitAndInstall());
+  // Restarting mid-flight is the person's choice: the page offers it only while disarmed.
+  ipcMain.on('update:install', (e) => {
+    if (e.sender === win.webContents) updater?.quitAndInstall();
+  });
 }
 
 // ---- Linux: the AppImage's launcher entry and icon -----------------------------------------------------------------
@@ -342,10 +423,10 @@ function integrateAppImage() {
       fs.mkdirSync(iconDir, { recursive: true });
       fs.writeFileSync(iconFile, icon);
     }
-    // A path needing Exec's two layers of escaping (quotes, backticks, $, backslashes) is left alone: rare, and a
-    // wrong entry is worse than none.
-    if (/["`$\\]/.test(appImage)) return;
-    const quoted = `"${appImage}"`;
+    // A path needing Exec's two layers of escaping (quotes, backticks, $, backslashes) or with a line break is left
+    // alone: rare, and a wrong entry is worse than none. % is doubled (a field code otherwise).
+    if (/["`$\\\r\n]/.test(appImage)) return;
+    const quoted = `"${appImage.replace(/%/g, '%%')}"`;
     const entry = [
       '[Desktop Entry]',
       'Type=Application',
@@ -398,7 +479,7 @@ function createWindow() {
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith(ORIGIN)) {
+    if (!isAppUrl(url)) {
       e.preventDefault();
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     }
@@ -406,10 +487,22 @@ function createWindow() {
   setupLinks(win);
   setupSerial(win);
   setupUpdates(win);
+  // The page reloading (Restore defaults, Ctrl+R), crashing or closing: its links and any open prompt go with it
+  // (the ports are freed, and no frames go to link IDs nobody holds).
+  win.webContents.on('did-start-navigation', (details: { isMainFrame?: boolean; isSameDocument?: boolean }) => {
+    if (details?.isMainFrame !== false && !details?.isSameDocument) {
+      closeAllLinks();
+      cancelSerialChoice();
+    }
+  });
+  win.webContents.on('render-process-gone', () => {
+    closeAllLinks();
+    cancelSerialChoice();
+  });
   void win.loadURL(`${ORIGIN}/`);
   win.on('closed', () => {
-    for (const l of links.values()) l.close();
-    links.clear();
+    closeAllLinks();
+    cancelSerialChoice();
   });
   return win;
 }
@@ -431,10 +524,14 @@ if (!app.requestSingleInstanceLock()) {
   void app.whenReady().then(() => {
     integrateAppImage();
     serveApp();
-    // The camera, microphone and the like stay off, as on the web (Permissions-Policy); geolocation and serial ask.
-    session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) =>
-      cb(['geolocation', 'serial', 'clipboard-sanitized-write', 'fullscreen'].includes(permission))
+    // One policy for permission requests and checks: the app's own page gets the permissions it uses, nothing else
+    // (camera and microphone stay off, as on the web). Serial devices: the RTK widget's Web Serial.
+    const ses = session.defaultSession;
+    ses.setPermissionRequestHandler((wc, permission, cb) =>
+      cb(ALLOWED_PERMISSIONS.has(permission) && isAppUrl(wc.getURL()))
     );
+    ses.setPermissionCheckHandler((_wc, permission, origin) => ALLOWED_PERMISSIONS.has(permission) && isAppUrl(origin));
+    ses.setDevicePermissionHandler((details) => details.deviceType === 'serial' && isAppUrl(details.origin));
     main = createWindow();
   });
   app.on('window-all-closed', () => app.quit());

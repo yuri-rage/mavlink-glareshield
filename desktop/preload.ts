@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('glareshieldDesktop', {
     choosePort: (portId: string | null) => ipcRenderer.send('serial:choose', portId),
   },
   update: {
+    getState: () => ipcRenderer.invoke('update:get'),
     onState: (listener: Listener<[unknown]>) => on('update:state', listener),
     check: () => ipcRenderer.send('update:check'),
     install: () => ipcRenderer.send('update:install'),

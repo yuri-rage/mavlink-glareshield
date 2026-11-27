@@ -9,7 +9,7 @@
 
 import { create } from 'zustand';
 
-import { desktopApi } from '../desktop/api';
+import { desktopApi, type UpdateState as DesktopUpdateState } from '../desktop/api';
 
 export interface BuildInfo {
   id: string;
@@ -46,10 +46,12 @@ export function newerDeploy(currentId: string, fetched: unknown): string | null 
 }
 
 interface UpdateState {
-  /** The newer deploy's build ID, once one is seen. */
+  /** The newer deploy's build ID (web), or the downloaded version (desktop), once one is seen. */
   available: string | null;
+  /** The desktop app's updater, as it last reported (null in a browser). */
+  desktop: DesktopUpdateState | null;
 }
-export const useUpdateStore = create<UpdateState>(() => ({ available: null }));
+export const useUpdateStore = create<UpdateState>(() => ({ available: null, desktop: null }));
 
 const CHECK_EVERY_MS = 10 * 60 * 1000;
 
@@ -85,9 +87,13 @@ export function startUpdateChecks(): void {
   const desktop = desktopApi();
   if (desktop) {
     started = true;
-    desktop.update.onState((st) => {
-      if (st.kind === 'ready') useUpdateStore.setState({ available: st.version });
-    });
+    const apply = (st: DesktopUpdateState | null) => {
+      if (!st) return;
+      useUpdateStore.setState({ desktop: st, ...(st.kind === 'ready' ? { available: st.version } : {}) });
+    };
+    desktop.update.onState(apply);
+    // What the updater said before this page loaded (a reload after a download: still offered).
+    void desktop.update.getState().then(apply);
     return;
   }
   if (BUILD.id === 'dev') return;
