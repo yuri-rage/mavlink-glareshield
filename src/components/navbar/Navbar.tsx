@@ -1024,7 +1024,18 @@ export const Navbar: React.FC = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 p-3">
             <div className="flex min-w-0 items-center gap-2.5">
-              {preArm.isReady && !vibeWarning ? (
+              {/* No heartbeat (not connected, or the link dropped): nothing is known now, so nothing shows as passed. */}
+              {!isHeartbeatActive ? (
+                <>
+                  <span className="mx-1.5 h-2 w-2 shrink-0 rounded-full bg-zinc-500" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-zinc-300">NO VEHICLE DATA</div>
+                    <div className="truncate text-[11px] text-zinc-400">
+                      The checks show once the vehicle&apos;s heartbeat arrives.
+                    </div>
+                  </div>
+                </>
+              ) : preArm.isReady && !vibeWarning ? (
                 <>
                   <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
                   <div className="min-w-0">
@@ -1068,11 +1079,16 @@ export const Navbar: React.FC = () => {
                 {
                   label: 'Pre-Arm Bit',
                   ok: !preArm.prearmBitPresent || preArm.prearmBitHealthy,
+                  detail: isHeartbeatActive ? undefined : '--',
                 },
                 {
                   label: 'Sensors',
                   ok: preArm.failedSubsystems.length === 0,
-                  detail: preArm.failedSubsystems.length > 0 ? preArm.failedSubsystems.join(', ') : 'OK',
+                  detail: !isHeartbeatActive
+                    ? '--'
+                    : preArm.failedSubsystems.length > 0
+                      ? preArm.failedSubsystems.join(', ')
+                      : 'OK',
                 },
                 {
                   label: 'EKF Nav',
@@ -1090,14 +1106,18 @@ export const Navbar: React.FC = () => {
                   className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 p-2.5"
                 >
                   <span className="font-medium text-zinc-300">{item.label}</span>
-                  <span
-                    className={`flex items-center gap-1.5 font-mono text-xs font-bold ${
-                      item.ok ? 'text-emerald-400' : 'text-rose-400'
-                    }`}
-                  >
-                    {item.ok ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                    {item.detail ?? (item.ok ? 'PASS' : 'FAIL')}
-                  </span>
+                  {isHeartbeatActive ? (
+                    <span
+                      className={`flex items-center gap-1.5 font-mono text-xs font-bold ${
+                        item.ok ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {item.ok ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                      {item.detail ?? (item.ok ? 'PASS' : 'FAIL')}
+                    </span>
+                  ) : (
+                    <span className="font-mono text-xs font-bold text-zinc-500">--</span>
+                  )}
                 </div>
               ))}
             </div>
@@ -1108,7 +1128,11 @@ export const Navbar: React.FC = () => {
             <div className="text-xs font-bold uppercase tracking-wider text-zinc-400">
               Active Pre-Arm & Safety Notices ({preArm.activePreArmErrors.length})
             </div>
-            {preArm.activePreArmErrors.length === 0 ? (
+            {!isHeartbeatActive && preArm.activePreArmErrors.length === 0 ? (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-400">
+                No vehicle data.
+              </div>
+            ) : preArm.activePreArmErrors.length === 0 ? (
               <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-3 text-xs text-emerald-300">
                 No Pre-Arm blockers reported by autopilot telemetry.
               </div>
