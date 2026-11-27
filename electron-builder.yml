@@ -6,14 +6,18 @@ copyright: Copyright © Yuri Rage
 directories:
   output: release
   buildResources: build
-# The page (dist/) and the bundled main process and preload (desktop/dist/, esbuild): no node_modules needed.
+# The page (dist/), the bundled main process and preload (desktop/dist/, esbuild), and the production dependencies:
+# only the native serial binding (@serialport/bindings-cpp). The web app's packages are dev dependencies: Vite has
+# already bundled them into dist/.
 files:
   - dist/**
   - desktop/dist/**
   - desktop/package.json
   - package.json
-  - '!node_modules/**'
 asar: true
+# Native modules use their prebuilt, Node-API binaries (portable across Electron versions and distros); building
+# them from source here would tie the Linux one to this machine's libraries, and needs a compiler on Windows.
+npmRebuild: false
 publish:
   provider: github
   owner: yuri-rage
@@ -31,7 +35,9 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  icon: public/logo-512.png
+  # Its own .ico: bitmap entries up to 128 px, PNG only at 256 (an icon converted from the PNG had every size
+  # PNG-compressed, and the Start menu showed a generic icon). Rebuilt from public/logo-512.png with icotool.
+  icon: build/icon.ico
   artifactName: Glareshield-Setup-${version}.${ext}
 nsis:
   # Per user, no admin rights needed; the person may choose where it goes.
