@@ -20,6 +20,7 @@ import { useUnitsStore, type AltitudeMode, type UnitSystem } from '../../store/u
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Modal } from '../ui/modal';
+import { QrCode } from '../ui/QrCode';
 import { AdsbSettings } from './AdsbSettings';
 import { RestoreDefaults } from './RestoreDefaults';
 import { TerrainSettings } from './TerrainSettings';
@@ -196,8 +197,8 @@ interface Props {
 
 /**
  * Pair another device with the bridge this one is paired with (its link has a token): the same link the bridge's QR
- * code holds. Over wss:// it opens the bridge first (that device's one-time certificate step), which then opens
- * Glareshield there, connected.
+ * code holds, as a QR code to scan and as text to copy or share. Over wss:// it opens the bridge first (that device's
+ * one-time certificate step), which then opens Glareshield there, connected.
  */
 const PairAnotherDevice: React.FC<{ url: string }> = ({ url }) => {
   const [copied, setCopied] = useState(false);
@@ -217,9 +218,10 @@ const PairAnotherDevice: React.FC<{ url: string }> = ({ url }) => {
         <Smartphone className="h-3.5 w-3.5 shrink-0" />
         Pair another device
       </div>
+      <QrCode text={link} title="Pairing QR code for this bridge" className="mx-auto h-44 w-44 rounded-md sm:mx-0" />
       <p className="text-[11px] leading-relaxed text-zinc-300">
-        Open this link on the other device to connect it to this bridge (it holds the pairing token: send it only to
-        yourself).{' '}
+        Scan this with the other device&apos;s camera, or open the link on it, to connect it to this bridge. It holds
+        the pairing token: show or send it only to yourself.{' '}
         {link.startsWith('https://') && !link.includes('#link=')
           ? 'It opens the bridge first: accept its certificate there, and Glareshield opens, connected.'
           : ''}

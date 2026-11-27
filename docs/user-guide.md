@@ -405,10 +405,10 @@ fields), **RTK / NTRIP** (corrections to the vehicle), and **Gimbal** controls o
 
 **Pairing with the bridge.** The Docker bridge only accepts devices that carry its pairing token. A device opened from
 the bridge's pairing QR code asks **Connect to this bridge?** and then keeps the link, token included. Once one device
-is paired, **Settings → Link → Pair another device** gives the link for the next one, with **Copy** and **Share** (send
-it only to yourself: it holds the token). If the Link tab says *"This bridge needs a pairing token"* or *"Wrong pairing
-token for this bridge"*, pair the device again; Glareshield stops retrying until then. See [Pairing
-Devices](connection-guide.md#pairing-devices-the-bridge-token).
+is paired, **Settings → Link → Pair another device** shows a QR code for the next one to scan, and the link with
+**Copy** and **Share** (show or send it only to yourself: it holds the token). If the Link tab says *"This bridge needs
+a pairing token"* or *"Wrong pairing token for this bridge"*, pair the device again; Glareshield stops retrying until
+then. See [Pairing Devices](connection-guide.md#pairing-devices-the-bridge-token).
 
 **Updates**: the build you're running is shown at the foot of Settings (e.g. `Glareshield 2026.11.25 · 55b37e4`).
 When a newer version has been deployed, an **Update** button appears in the navbar; it reloads into the new version

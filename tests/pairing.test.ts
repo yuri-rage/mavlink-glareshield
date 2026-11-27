@@ -73,6 +73,17 @@ check(
     `https://glareshield.yurirage.com/#link=${encodeURIComponent('ws://10.0.0.5:56781/?token=abc')}`
 );
 check('pair another device: none without a token', pairingUrl('wss://h:1/', 'https://a/') === null);
+{
+  const { qrPath } = await import('../src/components/ui/QrCode.tsx');
+  const { size, d } = qrPath(pairingUrl(wss, 'https://glareshield.yurirage.com/')!);
+  // Version 4 (33 modules) plus a 2-module border holds this link at ECC M; the three finder patterns are dark.
+  const squares = d.match(/h1v1h-1z/g)?.length ?? 0;
+  check(
+    'pair another device: a QR code of the link',
+    size === 37 && squares > 300 && d.startsWith('M2 2h1'),
+    `${size}, ${squares}`
+  );
+}
 
 // Opening the app from a pairing link.
 const run = async (h: string, answer: boolean, currentUrl: string | null = 'ws://localhost:56781') => {
