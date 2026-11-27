@@ -317,6 +317,9 @@ if (!app.requestSingleInstanceLock()) {
       main.focus();
     }
   });
+  // Windows ties the running window (taskbar button, its icon, pinning) to the installed Start-menu shortcut by this
+  // ID, which the installer gives the shortcut (electron-builder.yml appId); without it the two don't match.
+  if (process.platform === 'win32') app.setAppUserModelId('com.yurirage.glareshield');
   void app.whenReady().then(() => {
     integrateAppImage();
     serveApp();
