@@ -831,8 +831,8 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
       isOpen={isOpen}
       onClose={onClose}
       size="xl"
-      title={isEditing ? `Edit Custom Widget: ${initialWidget?.name}` : 'Create Custom Declarative Widget'}
-      description="Define a reusable, safe JSON widget bound to MAVLink telemetry fields, a parameter, or a flight command. The preview is live."
+      title={isEditing ? `Edit Custom Widget: ${initialWidget?.name}` : 'New Custom Widget'}
+      description="Values from the vehicle's telemetry, a parameter control, or a command button, alone or several in one card. The preview is live."
     >
       <form
         onSubmit={handleSaveAndPlace}
@@ -842,7 +842,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
           {/* Name & Display Type */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-zinc-300">Widget Name</label>
+              <label className="text-xs font-semibold text-zinc-300">Name</label>
               <Input
                 type="text"
                 required
@@ -854,7 +854,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-zinc-300">Display UI Type</label>
+              <label className="text-xs font-semibold text-zinc-300">Shows as</label>
               <select
                 value={isComposite ? 'composite' : displayType}
                 onChange={(e) => {
@@ -904,7 +904,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-1 sm:col-span-2">
-              <label className="text-xs font-semibold text-zinc-300">Description (Optional)</label>
+              <label className="text-xs font-semibold text-zinc-300">Description (optional)</label>
               <Input
                 type="text"
                 placeholder="Brief explanation of this widget"
@@ -915,17 +915,17 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-zinc-300">Accent Color</label>
+              <label className="text-xs font-semibold text-zinc-300">Accent color</label>
               <select
                 value={colorScheme}
                 onChange={(e) => setColorScheme(e.target.value as any)}
                 className="h-9 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-100"
               >
-                <option value="default">Sky Blue (Default)</option>
+                <option value="default">Sky blue (default)</option>
                 <option value="blue">Aviation Cyan-Blue</option>
-                <option value="green">Emerald Green</option>
-                <option value="amber">Amber Warning</option>
-                <option value="red">Crimson Red</option>
+                <option value="green">Emerald green</option>
+                <option value="amber">Amber</option>
+                <option value="red">Crimson red</option>
               </select>
             </div>
           </div>
@@ -944,7 +944,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
               <Section title={`Panel ${selected + 1}`}>
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-zinc-400">Panel Type</label>
+                    <label className="text-[11px] font-medium text-zinc-400">Panel type</label>
                     <select
                       value={displayType}
                       onChange={(e) => {
@@ -962,7 +962,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-zinc-400">Panel Title (Optional)</label>
+                    <label className="text-[11px] font-medium text-zinc-400">Panel title (optional)</label>
                     <Input
                       type="text"
                       maxLength={40}
@@ -988,7 +988,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                   </div>
                   {displayType === 'builtin' ? (
                     <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-zinc-400">Built-in Widget</label>
+                      <label className="text-[11px] font-medium text-zinc-400">Built-in widget</label>
                       <select
                         value={builtinId}
                         onChange={(e) => setBuiltinId(e.target.value)}
@@ -1005,7 +1005,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                     </div>
                   ) : (
                     <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-zinc-400">Accent Color</label>
+                      <label className="text-[11px] font-medium text-zinc-400">Accent color</label>
                       <select
                         value={panelColor ?? ''}
                         onChange={(e) =>
@@ -1014,11 +1014,11 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                         className={SELECT_CLASS}
                       >
                         <option value="">Same as the card</option>
-                        <option value="default">Sky Blue</option>
+                        <option value="default">Sky blue</option>
                         <option value="blue">Aviation Cyan-Blue</option>
-                        <option value="green">Emerald Green</option>
-                        <option value="amber">Amber Warning</option>
-                        <option value="red">Crimson Red</option>
+                        <option value="green">Emerald green</option>
+                        <option value="amber">Amber</option>
+                        <option value="red">Crimson red</option>
                       </select>
                     </div>
                   )}
@@ -1027,7 +1027,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                     displayType === 'compass-rose') && (
                     <div className="space-y-1 sm:col-span-2">
                       <label className="text-[11px] font-medium text-zinc-400">
-                        {displayType === 'text-display' ? 'Readout Label' : 'Caption (Optional)'}
+                        {displayType === 'text-display' ? 'Readout label' : 'Caption (optional)'}
                       </label>
                       <Input
                         type="text"
@@ -1057,7 +1057,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
             <div className="space-y-2.5 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-sky-400">Multi-Channel Bar / PWM Group</h4>
               <div className="space-y-1">
-                <label className="text-[11px] font-medium text-zinc-400">Telemetry Channel Group</label>
+                <label className="text-[11px] font-medium text-zinc-400">Telemetry channel group</label>
                 <select
                   value={multiBarGroup}
                   onChange={(e) => setMultiBarGroup(e.target.value as MultiBarGroupType)}
@@ -1163,7 +1163,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
 
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-zinc-400">Parameter ID (up to 16 chars)</label>
+                  <label className="text-[11px] font-medium text-zinc-400">Parameter ID (up to 16 characters)</label>
                   <Input
                     type="text"
                     maxLength={16}
@@ -1174,7 +1174,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-zinc-400">Common Parameter Presets</label>
+                  <label className="text-[11px] font-medium text-zinc-400">Common parameters</label>
                   <select
                     value=""
                     onChange={(e) => {
@@ -1268,7 +1268,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                   ? 'Gauge 1'
                   : displayType === 'value-list' || displayType === 'sparkline'
                     ? 'Value 1'
-                    : 'Telemetry Data Binding'
+                    : 'Telemetry value'
               }
             >
               <BindingEditor
@@ -1292,10 +1292,10 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
 
           {/* Slider range */}
           {displayType === 'slider-control' && (
-            <Section title="Slider Range & Unit">
+            <Section title="Slider range and unit">
               <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-zinc-400">Unit Label</label>
+                  <label className="text-[11px] font-medium text-zinc-400">Unit label</label>
                   <Input
                     type="text"
                     placeholder="µs, m/s"
@@ -1305,12 +1305,12 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                   />
                 </div>
                 <NumberField
-                  label="Min Value"
+                  label="Min value"
                   value={binding.min}
                   onChange={(v) => setBinding({ ...binding, min: v })}
                 />
                 <NumberField
-                  label="Max Value"
+                  label="Max value"
                   value={binding.max}
                   onChange={(v) => setBinding({ ...binding, max: v })}
                 />
@@ -1397,7 +1397,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
           {/* Additional values */}
           {isTelemetryWidget && extraLimit > 0 && (
             <Section
-              title={multiGauge ? 'More Gauges' : extraLimit === 1 ? 'Secondary Marker (Optional)' : 'More Values'}
+              title={multiGauge ? 'More gauges' : extraLimit === 1 ? 'Secondary marker (optional)' : 'More values'}
               right={
                 extrasUsed.length < extraLimit && (
                   <Button
@@ -1495,7 +1495,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
 
           {/* LED on-threshold */}
           {displayType === 'indicator-led' && (
-            <Section title="LED State">
+            <Section title="LED state">
               <div className="grid grid-cols-2 gap-2">
                 <NumberField
                   label="On when value is above"
@@ -1547,7 +1547,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
           {/* Toggle feedback */}
           {displayType === 'toggle-switch' && (
             <Section
-              title="Vehicle State Feedback"
+              title="Vehicle state feedback"
               right={
                 <label className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-300">
                   <input
@@ -1609,7 +1609,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
           {isActionWidget && (
             <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">MAVLink Command Trigger</h4>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400">MAVLink command</h4>
                 <label
                   className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-zinc-300"
                   title={irreversible ? `Always confirms: this command ${irreversible}` : undefined}
@@ -1621,13 +1621,13 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
                     onChange={(e) => setRequireConfirm(e.target.checked)}
                     className="rounded border-zinc-700 bg-zinc-900 accent-amber-500"
                   />
-                  {displayType === 'toggle-switch' ? 'Slide to Switch (confirms)' : 'Require Confirmation'}
+                  {displayType === 'toggle-switch' ? 'Slide to switch (confirms)' : 'Require confirmation'}
                 </label>
               </div>
 
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-zinc-400">Action Label</label>
+                  <label className="text-[11px] font-medium text-zinc-400">Button label</label>
                   <Input
                     type="text"
                     placeholder="e.g. Return to Home, Open Gripper"
@@ -1781,7 +1781,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
               className="gap-1.5 border-zinc-700 text-xs"
             >
               <Download className="h-3.5 w-3.5 text-sky-400" />
-              Export Widget JSON
+              Export .json
             </Button>
 
             <div className="flex items-center gap-2">
@@ -1805,7 +1805,7 @@ export const CustomWidgetCreatorModal: React.FC<CustomWidgetCreatorModalProps> =
 
         {/* Live preview */}
         <div className="min-w-0 space-y-1.5 lg:sticky lg:top-0">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Live Preview</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Live preview</div>
           {/* inert: preview controls must never send commands or parameter writes */}
           <div
             ref={(el) => el?.setAttribute('inert', '')}

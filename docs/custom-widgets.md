@@ -23,13 +23,13 @@ The quickest way to write a definition is to let the app write it for you.
 
 1. Connect to the vehicle, or to SITL. You can build widgets offline, but a live link lets the creator list the fields the vehicle is actually sending.
 2. Turn on **Edit Mode** (the pencil button in the dashboard header). Then choose **Add Widget → Build a custom widget**.
-3. Pick a **display type** and a **category**. Name the widget and, if you like, describe it.
+3. Pick what it **shows as** and a **category**. Name the widget and, if you like, describe it.
 4. Bind the value. Choose a message, then a field:
    - Fields the vehicle is sending now are marked **●**.
    - **Other field…** lets you type any field name the app decodes.
 5. Set the scaling, units, range and thresholds. The **live preview** updates as you type. It shows real telemetry but is inert: control widgets in the preview never send anything.
 6. Add more values if the display type takes them (**Add value**, **Add gauge** or **Add marker**).
-7. Choose **Save & Place** to add the widget to the current tab. Choose **Export Widget JSON** to download it as `<name>.widget.json`.
+7. Choose **Save & Place** to add the widget to the current tab. Choose **Export .json** to download it as `<name>.widget.json`.
 
 To change a widget later, enter Edit Mode and click the pencil on the widget's card. The same creator opens with its settings filled in.
 
@@ -37,7 +37,7 @@ To change a widget later, enter Edit Mode and click the pencil on the widget's c
 
 | To share | Do this | File |
 |---|---|---|
-| One widget | **Export Widget JSON** in the creator | `<name>.widget.json`: a single definition |
+| One widget | **Export .json** in the creator | `<name>.widget.json`: a single definition |
 | A whole layout | Edit Mode → **Profiles & Backup**: **Export Active Profile** | A profile: tabs, layout and every custom widget |
 
 **To import a widget,** open **Edit Mode → Add Widget** and choose **Upload a .json widget**. Select a `.json` file containing one definition. An **Import Preview** shows what the widget is:
@@ -423,7 +423,7 @@ logger, which ArduPilot reports in `SYS_STATUS.onboard_control_sensors_health` (
 }
 ```
 
-The creator has these under **LED State** (When off, Reads when on, Reads when off).
+The creator has these under **LED state** (When off, Reads when on, Reads when off).
 
 ---
 
@@ -701,14 +701,14 @@ How a composite card behaves:
 
 ### Building a composite in the creator
 
-1. In the creator, set **Display UI Type** to **Composite (several panels in one card)**. Whatever you had set up becomes panel 1. For a built-in widget, set the panel type to **Built-in Widget** and pick one.
+1. In the creator, set **Shows as** to **Composite (several panels in one card)**. Whatever you had set up becomes panel 1. For a built-in widget, set the panel type to **Built-in widget** and pick one.
 2. **Add panel** adds another, up to 12. Click a panel in the list to edit it: the settings below the list then apply to that panel (its type, title, width, accent color and everything else).
 3. Set each panel's width in the list, and reorder panels with the arrows. The preview shows the card as laid out.
-4. **Save & Place** adds the card full width. **Export Widget JSON** saves the whole composite as one file.
+4. **Save & Place** adds the card full width. **Export .json** saves the whole composite as one file.
 
 The card's name, description and accent color are at the top, as for any widget. A panel left on **Same as the card** uses the card's color. The list counts the values the card reads; past 32, the card can't be saved until some are removed.
 
-To turn a composite back into a single widget, choose **Single widget** in **Display UI Type**. The selected panel is kept, and the creator asks before dropping any others. This isn't offered while a built-in panel is selected: place a built-in widget from **Add Widget** instead.
+To turn a composite back into a single widget, choose **Single widget** in **Shows as**. The selected panel is kept, and the creator asks before dropping any others. This isn't offered while a built-in panel is selected: place a built-in widget from **Add Widget** instead.
 
 ---
 
