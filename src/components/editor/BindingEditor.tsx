@@ -46,8 +46,7 @@ export const NumberField: React.FC<{
   );
 };
 
-export const SELECT_CLASS =
-  'h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs font-mono text-zinc-200';
+export const SELECT_CLASS = 'h-8 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0 text-xs text-zinc-200';
 
 export interface BindingEditorProps {
   value: WidgetDataBinding;
@@ -111,7 +110,7 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
       )}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         <div className="min-w-0 space-y-1">
-          <label className="text-[11px] font-medium text-zinc-400">MAVLink Message</label>
+          <label className="text-[11px] font-medium text-zinc-400">MAVLink message</label>
           <select
             value={value.messageName}
             onChange={(e) => {
@@ -121,7 +120,7 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
               setCustomField(!first);
               onMessagePicked?.(msg);
             }}
-            className={SELECT_CLASS}
+            className={`${SELECT_CLASS} font-mono`}
           >
             {messages.map((m) => (
               <option key={m} value={m}>
@@ -163,7 +162,7 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
                 if (e.target.value === OTHER) setCustomField(true);
                 else set({ fieldName: e.target.value });
               }}
-              className={SELECT_CLASS}
+              className={`${SELECT_CLASS} font-mono`}
             >
               {value.fieldName && !fields.includes(value.fieldName) && (
                 <option value={value.fieldName}>{value.fieldName} (not received yet)</option>
@@ -200,7 +199,7 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
               set({ unitKind: e.target.value === 'none' ? undefined : (e.target.value as WidgetUnitKind) })
             }
             className={SELECT_CLASS}
-            title="Follow the speed / altitude units chosen in Link & Display Settings"
+            title="Follow the speed / altitude units chosen in Settings › Display"
           >
             <option value="none">Fixed label</option>
             <option value="speed">Speed (from m/s)</option>
@@ -210,7 +209,7 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
         </div>
         {(value.unitKind ?? 'none') === 'none' && (
           <div className="min-w-0 space-y-1">
-            <label className="text-[11px] font-medium text-zinc-400">Unit Label</label>
+            <label className="text-[11px] font-medium text-zinc-400">Unit label</label>
             <Input
               type="text"
               placeholder="V, %, °"
@@ -279,14 +278,14 @@ export const BindingEditor: React.FC<BindingEditorProps> = ({
       {showThresholds && (
         <div className="grid grid-cols-1 items-end gap-2 border-t border-zinc-800/80 pt-2 sm:grid-cols-3">
           <NumberField
-            label="Warning Threshold"
+            label="Warning threshold"
             labelClassName="text-amber-400/90"
             value={value.warnThreshold}
             placeholder="optional"
             onChange={(v) => set({ warnThreshold: v })}
           />
           <NumberField
-            label="Critical Threshold"
+            label="Critical threshold"
             labelClassName="text-red-400/90"
             value={value.critThreshold}
             placeholder="optional"

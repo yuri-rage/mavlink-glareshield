@@ -18,21 +18,21 @@ function panelKind(p: WidgetPanelDefinition): string {
 
 /** Display types in the order the creator offers them, with their names. */
 export const PANEL_TYPE_OPTIONS: { value: PanelDisplayType; label: string }[] = [
-  { value: 'stat-card', label: 'Stat Card (Digital readout)' },
-  { value: 'value-list', label: 'Value List (Several labeled readouts)' },
-  { value: 'gauge-linear', label: 'Linear Gauge (Horizontal bar)' },
-  { value: 'gauge-radial', label: 'Radial Gauge (Dial with needle)' },
-  { value: 'sparkline', label: 'Time-Series Chart (One or more values over time)' },
-  { value: 'compass-rose', label: 'Compass / Vector Rose (Heading / Wind / Bearing)' },
-  { value: 'multi-bar', label: 'Multi-Channel Bar / PWM Visualizer (RC / Servo / ESC / Vibe)' },
-  { value: 'param-control', label: 'Parameter Control (ArduPilot PARAM_SET)' },
-  { value: 'param-set', label: 'Parameter Set (pick parameters by name or BATT_*)' },
-  { value: 'indicator-led', label: 'LED Status Indicator (On/Off)' },
-  { value: 'action-button', label: 'Action Button (MAVLink Command)' },
-  { value: 'toggle-switch', label: 'Toggle Switch (Relay / Servo)' },
-  { value: 'slider-control', label: 'Slider Control (PWM / Speed)' },
-  { value: 'text-display', label: 'Text Output Display' },
-  { value: 'builtin', label: 'Built-in Widget (GPS, Battery, HUD, Map…)' },
+  { value: 'stat-card', label: 'Stat card (one big value)' },
+  { value: 'value-list', label: 'Value list (several readouts)' },
+  { value: 'gauge-linear', label: 'Linear gauge (bar)' },
+  { value: 'gauge-radial', label: 'Radial gauge (dial)' },
+  { value: 'sparkline', label: 'Chart (values over time)' },
+  { value: 'compass-rose', label: 'Compass rose (heading, wind, bearing)' },
+  { value: 'multi-bar', label: 'Bar group (RC, servo, ESC, vibration)' },
+  { value: 'param-control', label: 'Parameter control (one parameter)' },
+  { value: 'param-set', label: 'Parameter set (by name, or a prefix like BATT_*)' },
+  { value: 'indicator-led', label: 'LED (on or off)' },
+  { value: 'action-button', label: 'Command button (a MAVLink command)' },
+  { value: 'toggle-switch', label: 'Switch (relay or servo)' },
+  { value: 'slider-control', label: 'Slider (PWM or speed)' },
+  { value: 'text-display', label: 'Text' },
+  { value: 'builtin', label: 'Built-in widget (GPS, battery, HUD, map…)' },
 ];
 
 const shortTypeName = (t: PanelDisplayType) =>
