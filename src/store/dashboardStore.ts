@@ -191,7 +191,7 @@ const DEFAULT_PROFILE: DashboardProfile = {
       id: 'custom-attitude-tuning',
       name: 'Attitude Tuning',
       description:
-        "The rate and angle controllers' gains: Copter and Rover ATC_*, Plane RLL_ / PTCH_ / YAW_RATE_*. Only the vehicle's own are listed.",
+        "The controllers' gains: Copter rate and angle (ATC_RAT_*, ATC_ANG_*), Rover steering and speed (ATC_STR_*, ATC_SPEED_*, accel and turn limits), Plane RLL_ / PTCH_ / YAW_RATE_*. Only the vehicle's own are listed.",
       category: 'control',
       displayType: 'param-set',
       colorScheme: 'blue',
@@ -202,6 +202,13 @@ const DEFAULT_PROFILE: DashboardProfile = {
           'ATC_RAT_YAW_*',
           'ATC_ANG_*',
           'ATC_ACCEL_*',
+          // Rover: steering (rate PID, angle P, rate and accel limits) and speed (throttle PID, accel, braking)
+          'ATC_STR_*',
+          'ATC_SPEED_*',
+          'ATC_DECEL_MAX',
+          'ATC_TURN_MAX_G',
+          'ATC_BRAKE',
+          'ATC_STOP_SPEED',
           'RLL_RATE_*',
           'PTCH_RATE_*',
           'YAW_RATE_*',
@@ -219,7 +226,7 @@ const DEFAULT_PROFILE: DashboardProfile = {
       id: 'custom-navigation',
       name: 'Navigation',
       description:
-        'How it flies between waypoints: Copter WPNAV_*, LOIT_* and position controller gains; Plane NAVL1_*, TECS speed and height limits, WP_* and airspeeds.',
+        'How it moves between waypoints: Copter WPNAV_*, LOIT_* and position controller gains; Rover cruise speed and throttle, turn radius, WP_* (with pivot turns) and position controller; Plane NAVL1_*, TECS speed and height limits, WP_* and airspeeds.',
       category: 'control',
       displayType: 'param-set',
       colorScheme: 'green',
@@ -232,6 +239,13 @@ const DEFAULT_PROFILE: DashboardProfile = {
           'PSC_VELXY_*',
           'PSC_POSZ_P*',
           'PSC_VELZ_P*',
+          // Rover: cruise, turning and its position controller (PSC_POS_P, PSC_VEL_*; Copter's are PSC_POSXY / VELXY)
+          'CRUISE_SPEED',
+          'CRUISE_THROTTLE',
+          'TURN_RADIUS',
+          'PSC_POS_P',
+          'PSC_VEL_*',
+          'LOIT_RADIUS',
           'NAVL1_*',
           'WP_*',
           'TECS_CLMB_MAX*',
@@ -748,6 +762,71 @@ function sourceInstance(tab: DashboardTab, what: PaneSource): { tab: DashboardTa
 
 const newInstanceId = () => `w-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
+/**
+ * Earlier defaults of the stock widgets, for an update that changes one: a saved copy still exactly as it was shipped
+ * takes the new default; one its owner edited is left alone.
+ */
+const SUPERSEDED_DEFAULT_PARAMS: Record<string, string[][]> = {
+  // Before Rover's steering, speed and navigation families were added.
+  'custom-attitude-tuning': [
+    [
+      'ATC_RAT_RLL_*',
+      'ATC_RAT_PIT_*',
+      'ATC_RAT_YAW_*',
+      'ATC_ANG_*',
+      'ATC_ACCEL_*',
+      'RLL_RATE_*',
+      'PTCH_RATE_*',
+      'YAW_RATE_*',
+      '-*_SMAX',
+      '-*_PDMX',
+      '-*_NTF',
+      '-*_NEF',
+      '-*_FLT?',
+      '-*_D_FF',
+    ],
+  ],
+  'custom-navigation': [
+    [
+      'WPNAV_*',
+      'LOIT_SPEED*',
+      'LOIT_ACC_MAX*',
+      'PSC_POSXY_P*',
+      'PSC_VELXY_*',
+      'PSC_POSZ_P*',
+      'PSC_VELZ_P*',
+      'NAVL1_*',
+      'WP_*',
+      'TECS_CLMB_MAX*',
+      'TECS_SINK_*',
+      'TECS_TIME_CONST*',
+      'TECS_SPDWEIGHT*',
+      'TECS_PITCH_M*',
+      'AIRSPEED_CRUISE*',
+      'AIRSPEED_MIN*',
+      'AIRSPEED_MAX*',
+      '-*_SMAX',
+      '-*_PDMX',
+      '-*_NTF',
+      '-*_NEF',
+      '-*_FLT?',
+      '-*_D_FF',
+    ],
+  ],
+};
+
+/** A saved stock widget, updated to its current default if its owner never changed it. */
+export function updateStockWidget(w: CustomWidgetDefinition): CustomWidgetDefinition {
+  const old = SUPERSEDED_DEFAULT_PARAMS[w.id];
+  const current = DEFAULT_PROFILE.customWidgets.find((d) => d.id === w.id);
+  const params = w.paramSet?.params;
+  if (!old || !current?.paramSet || !params) return w;
+  const unchanged = old.some((o) => o.length === params.length && o.every((p, i) => p === params[i]));
+  return unchanged
+    ? { ...w, description: current.description, paramSet: { ...w.paramSet!, params: [...current.paramSet.params] } }
+    : w;
+}
+
 function loadInitialProfile(): DashboardProfile {
   try {
     if (typeof localStorage !== 'undefined') {
@@ -773,7 +852,9 @@ function loadInitialProfile(): DashboardProfile {
         if (parsed && Array.isArray(parsed.customWidgets)) {
           parsed.customWidgets = parsed.customWidgets
             .filter((w: unknown) => w && typeof w === 'object' && typeof (w as CustomWidgetDefinition).id === 'string')
-            .map((w: CustomWidgetDefinition) => sanitizeWidgetDefinition(w, { forceConfirmation: false }));
+            .map((w: CustomWidgetDefinition) =>
+              updateStockWidget(sanitizeWidgetDefinition(w, { forceConfirmation: false }))
+            );
         }
         return parsed;
       }
