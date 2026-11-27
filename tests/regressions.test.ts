@@ -4,7 +4,7 @@
  *  A. QGC .plan parsing against what QGroundControl actually writes for ArduPilot
  *     (src/FirmwarePlugin/APM/APM-MavCmdInfoCommon.json, src/MissionManager/LandingComplexItem.cc)
  *  B. RTCM fragmentation edge at exactly 720 bytes (AP_GPS::handle_gps_rtcm_fragment)
- *  C. Firmware-version polling must not turn into a repeating full parameter download
+ *  C. Firmware-version polling must not pull the parameter list
  *
  * Run: npx tsx tests/regressions.test.ts
  */
@@ -255,8 +255,8 @@ for (const [type, landCmd, opts, label] of [
   const versionReqs = sent.filter((m) => m.id === 76 && VERSION_CMDS.has(m.cmd));
   const late = versionReqs.filter((m) => m.t - t0 > 60000).length;
   check(
-    'silent vehicle: at most one PARAM_REQUEST_LIST in 2 minutes of version polling',
-    paramLists <= 1,
+    'silent vehicle: no PARAM_REQUEST_LIST from version polling (the full list only when asked)',
+    paramLists === 0,
     `${paramLists} sent`
   );
   check(
