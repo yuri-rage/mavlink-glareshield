@@ -13,6 +13,7 @@ import { getVehicleCategoryLabel } from '../../mavlink/messages';
 import { confirmLeavingLiveLink, startReplayFromBlob } from '../../mavlink/replay';
 import type { TlogMeta } from '../../mavlink/tlog';
 import { tlogRecorder } from '../../mavlink/tlogBoot';
+import { showNotice } from '../../store/confirmStore';
 import { useTlogStore } from '../../store/tlogStore';
 import { fmtBytes } from '../navbar/TlogSettings';
 import { ReplayFileButton } from './ReplayFileButton';
@@ -41,7 +42,7 @@ const Row: React.FC<{ log: TlogMeta; active: boolean; activeBytes: number }> = (
       const blob = await tlogRecorder.file(log.name);
       if (blob) await startReplayFromBlob(blob, log.name);
     } catch (e: any) {
-      window.alert(e?.message || 'Could not replay this log.');
+      void showNotice('Replay', e?.message || 'Could not replay this log.');
     } finally {
       setBusy(false);
     }

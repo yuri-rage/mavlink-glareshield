@@ -58,6 +58,7 @@ import {
 import { messageRateManager } from '../../mavlink/rateManager';
 import { TERRAIN_ATTRIBUTION } from '../../mavlink/terrain';
 import { onActiveVehicleChange } from '../../mavlink/vehicleRoster';
+import { askConfirm } from '../../store/confirmStore';
 import { planningVehicle, RADIUS_PARAMS, useLastVehicleStore } from '../../store/lastVehicleStore';
 import {
   isAnyDirty,
@@ -2725,8 +2726,17 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
               planning={planning}
               onTogglePlanning={
                 planning
-                  ? () => {
-                      if (!planDirty || window.confirm('Discard the unsaved drafts?')) stopPlanning();
+                  ? async () => {
+                      if (
+                        !planDirty ||
+                        (await askConfirm({
+                          title: 'Discard the drafts?',
+                          message: ['The mission, fence and rally drafts have unsaved changes.'],
+                          confirmLabel: 'Discard',
+                          danger: true,
+                        }))
+                      )
+                        stopPlanning();
                     }
                   : startPlanning
               }

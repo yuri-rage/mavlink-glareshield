@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { AlertCircle, ChevronDown, ChevronUp, Play, Radio, Square, Usb, Wifi } from 'lucide-react';
 
 import { NtripConfig, rtcmInjector, RtcmInjectorState } from '../../mavlink/rtcmInjector';
+import { showNotice } from '../../store/confirmStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -122,7 +123,7 @@ export const NtripWidget: React.FC = () => {
 
   const handleConnectNtrip = async () => {
     if (!ntripConfig.host || !ntripConfig.mountpoint) {
-      alert('Please enter both host and mountpoint for the NTRIP caster.');
+      void showNotice('NTRIP', 'Enter both the host and the mountpoint of the NTRIP caster.');
       return;
     }
     try {

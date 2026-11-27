@@ -29,6 +29,7 @@ import { BUILTIN_PANELS, builtinPanelId } from '../../lib/builtinWidgets';
 import { fuzzyRank } from '../../lib/fuzzy';
 import { sanitizeWidgetDefinition, VALID_DISPLAY_TYPES } from '../../lib/widgetValidation';
 import { MAV_CMD } from '../../mavlink/messages';
+import { showNotice } from '../../store/confirmStore';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { CustomWidgetDefinition } from '../../types/widget';
 import { Button } from '../ui/button';
@@ -411,7 +412,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
         const raw = JSON.parse(event.target?.result as string) as CustomWidgetDefinition;
         if (raw.id && raw.name && raw.displayType) {
           if (!VALID_DISPLAY_TYPES.has(raw.displayType)) {
-            alert(`Invalid custom widget displayType: ${raw.displayType}`);
+            void showNotice('Import widget', `Invalid custom widget displayType: ${raw.displayType}`);
             return;
           }
           const parsed = sanitizeWidgetDefinition(raw);
@@ -439,10 +440,10 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
           // sanitizeWidgetDefinition() above already forced confirmation on actions and parameter writes.
           setPendingImportWidget(parsed);
         } else {
-          alert('Invalid custom widget format: missing id, name, or displayType.');
+          void showNotice('Import widget', 'Invalid custom widget format: missing id, name, or displayType.');
         }
       } catch (err) {
-        alert('Failed to parse JSON file.');
+        void showNotice('Import widget', 'Failed to parse JSON file.');
       }
     };
     reader.readAsText(file);

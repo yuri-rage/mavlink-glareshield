@@ -30,6 +30,7 @@ import {
   waypointsToItems,
 } from '../../mavlink/missionFileWriter';
 import { rallyDraftToPoints } from '../../mavlink/rallyDraft';
+import { askConfirm } from '../../store/confirmStore';
 import { useMissionPlanStore } from '../../store/missionPlanStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import type { MissionWaypoint } from '../../store/telemetryStore';
@@ -100,17 +101,22 @@ export const MissionMenu: React.FC<MissionMenuProps> = ({
 
   const stem = () => `${missionFileStem(useTelemetryStore.getState().heartbeat.systemId)}${draft ? '-draft' : ''}`;
 
-  const savePlan = () => {
+  const savePlan = async () => {
     // A QGC .plan stores rally points as [lat, lon, alt] with no frame: loaded back, every one is relative to home.
     // Say so before saving one that isn't; the .waypoints export keeps the frame.
     const notRelative = rallyPoints.filter((r) => normalFrame(r.frame ?? 3) !== 3).map((r) => `R${r.seq + 1}`);
     if (
       notRelative.length > 0 &&
-      !window.confirm(
-        `A .plan file stores rally altitudes relative to home only. ${notRelative.join(', ')} ${
-          notRelative.length === 1 ? 'uses' : 'use'
-        } another altitude frame and would come back relative to home. Save the .plan anyway? (Rally points (.waypoints) keeps the frame.)`
-      )
+      !(await askConfirm({
+        title: 'Save the .plan?',
+        message: [
+          `A .plan file stores rally altitudes relative to home only. ${notRelative.join(', ')} ${
+            notRelative.length === 1 ? 'uses' : 'use'
+          } another altitude frame and would come back relative to home.`,
+          'Rally points (.waypoints) keeps the frame.',
+        ],
+        confirmLabel: 'Save .plan anyway',
+      }))
     ) {
       return;
     }
