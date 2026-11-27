@@ -9,7 +9,8 @@ With --token (over TLS, as the Docker bridge runs):
   3. the Origin check still applies;
   4. a browser tab opening the bridge (the certificate step) gets a plain page;
   5. /pair with a wrong or missing token is refused, and never shows the token;
-  6. /pair with the token redirects to the app with the link in the hash (never sent to the app's server);
+  6. /pair with the token redirects to the app with the link in the hash (never sent to the app's server); behind
+     a TLS reverse proxy (X-Forwarded-Proto: https) the link is wss:// on the proxy's host;
   7. the startup log carries the pairing link, and the QR's SVG copy is readable only by its owner.
 Without --token: no check (a bridge on loopback), and /pair says pairing is off.
 
@@ -129,9 +130,12 @@ async def ws_result(url, tls, origin=ORIGIN):
         return ("refused", e.response.status_code)
 
 
-def get(port, path, tls_ctx):
-    conn = http.client.HTTPSConnection("127.0.0.1", port, context=tls_ctx, timeout=3)
-    conn.request("GET", path, headers={"Host": f"192.168.1.50:{port}"})
+def get(port, path, tls_ctx, headers=None):
+    if tls_ctx is None:
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+    else:
+        conn = http.client.HTTPSConnection("127.0.0.1", port, context=tls_ctx, timeout=3)
+    conn.request("GET", path, headers=headers or {"Host": f"192.168.1.50:{port}"})
     r = conn.getresponse()
     return r.status, r.getheader("Location"), r.read().decode(errors="replace")
 
@@ -180,6 +184,22 @@ def main():
         check("pair.svg: owner-only (it holds the token)", stat.S_IMODE(os.stat(svg).st_mode) == 0o600)
     else:
         print("SKIP  pair.svg (segno not installed)")
+
+    # Behind a TLS reverse proxy (bridge without TLS; X-Forwarded-Proto https): /pair sends wss:// to the proxy host.
+    port = free_port()
+    with open(os.devnull, "w") as log:
+        proc = start(["--token", TOKEN], port, log)
+    try:
+        status, loc, _ = get(
+            port, f"/pair?token={TOKEN}", None, {"Host": "bridge.example.com", "X-Forwarded-Proto": "https"}
+        )
+        want = "https://glareshield.yurirage.com/#link=" + urllib.parse.quote(
+            f"wss://bridge.example.com/?token={TOKEN}", safe=""
+        )
+        check("behind a TLS proxy: /pair links wss:// on the proxy host", status == 302 and loc == want, loc)
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
 
     # Without a token: unchanged, and /pair says pairing is off.
     port = free_port()

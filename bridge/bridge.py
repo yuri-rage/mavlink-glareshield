@@ -345,12 +345,13 @@ class BridgeServer:
             return None
         return hmac.compare_digest(given.encode(), self.token.encode())
 
-    def ws_url(self, host: str) -> str:
-        return f"{'wss' if self.ssl_context else 'ws'}://{host}/?token={urllib.parse.quote(self.token or '')}"
+    def ws_url(self, host: str, secure: bool | None = None) -> str:
+        scheme = "wss" if (self.ssl_context is not None if secure is None else secure) else "ws"
+        return f"{scheme}://{host}/?token={urllib.parse.quote(self.token or '')}"
 
-    def app_link(self, host: str) -> str:
+    def app_link(self, host: str, secure: bool | None = None) -> str:
         """The app, told (in the hash: never sent to its server) which bridge to connect to."""
-        return f"{self.app_url}#link={urllib.parse.quote(self.ws_url(host), safe='')}"
+        return f"{self.app_url}#link={urllib.parse.quote(self.ws_url(host, secure), safe='')}"
 
     def pairing_url(self, host: str) -> str:
         """What the QR holds. Over TLS, the bridge's own /pair page first: opening it is the phone's one-time
@@ -1775,8 +1776,12 @@ class BridgeServer:
                     "Wrong or missing pairing token. Scan the QR code in the bridge's log again.\n",
                 )
             host = request.headers.get("Host") or f"{self.pair_host or self.host}:{self.port}"
+            # Behind a TLS reverse proxy the bridge itself runs without TLS: the browser reached it over https
+            # (X-Forwarded-Proto), so it connects with wss:// to the proxy's host.
+            forwarded = request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip().lower()
+            secure = self.ssl_context is not None or forwarded == "https"
             response = connection.respond(http.HTTPStatus.FOUND, "Paired. Opening Glareshield...\n")
-            response.headers["Location"] = self.app_link(host)
+            response.headers["Location"] = self.app_link(host, secure)
             response.headers["Cache-Control"] = "no-store"
             response.headers["Referrer-Policy"] = "no-referrer"
             return response
