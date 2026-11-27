@@ -66,6 +66,18 @@ function customSearchFields(cw: CustomWidgetDefinition): string[] {
   ];
 }
 
+/** The result Enter would place, while searching. */
+const ENTER_TARGET = 'ring-2 ring-inset ring-sky-400/70';
+
+const EnterHint: React.FC = () => (
+  <span
+    className="py-0.2 rounded border border-sky-500/50 bg-sky-950/80 px-1.5 font-mono text-[9px] text-sky-300"
+    title="Enter places this one"
+  >
+    Enter ↵
+  </span>
+);
+
 const BUILT_IN_CATALOG = [
   {
     id: 'built-in-glareshield',
@@ -367,10 +379,12 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
   // Fuzzy search over the catalog (names, descriptions, ids; a custom widget's panels and bound fields too).
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
-  // Each time it opens: an empty search, focused (type straight away; Enter places the best match).
+  // Each time it opens: an empty search over every category, focused (type straight away; Enter places the best
+  // match). A category picked last time would hide what's typed now.
   useEffect(() => {
     if (!isOpen) return;
     setQuery('');
+    setFilterCategory('all');
     const t = setTimeout(() => searchRef.current?.focus(), 0);
     return () => clearTimeout(t);
   }, [isOpen]);
@@ -461,18 +475,19 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
         .sort((p, q) => q.score - p.score || p.i - q.i)
         .map((x) => x.e);
   const nothingMatches = query.trim() !== '' && entries.length === 0;
-  /** Enter in the search box places the best match. */
+  /** While searching, the first result: what Enter places (shown with a ring). Nothing to place without a search. */
+  const enterTarget = query.trim() ? entries[0] : undefined;
   const placeBest = () => {
-    const e = entries[0];
+    const e = enterTarget;
     if (!e) return;
     if (e.kind === 'custom') handleAddBuiltIn(e.cw.id, e.cw.displayType === 'composite' ? 12 : 6);
     else handleAddBuiltIn(e.item.id, e.item.defaultSpan);
   };
 
-  const renderCustom = (cw: CustomWidgetDefinition) => (
+  const renderCustom = (cw: CustomWidgetDefinition, target: boolean) => (
     <div
       key={cw.id}
-      className="flex flex-col justify-between gap-2 rounded-xl border border-sky-950/60 bg-sky-950/10 p-3 transition-all hover:border-sky-500/40 sm:flex-row sm:items-start"
+      className={`flex flex-col justify-between gap-2 rounded-xl border border-sky-950/60 bg-sky-950/10 p-3 transition-all hover:border-sky-500/40 sm:flex-row sm:items-start ${target ? ENTER_TARGET : ''}`}
     >
       <div className="flex min-w-0 items-start gap-3">
         <div className="mt-0.5 rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-sky-400">
@@ -481,6 +496,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
         <div>
           <h4 className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-zinc-100">
             {cw.name}
+            {target && <EnterHint />}
             <span className="py-0.2 rounded border border-sky-800 bg-sky-950 px-1.5 text-[9px] uppercase text-sky-300">
               {cw.displayType}
             </span>
@@ -546,13 +562,13 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
     </div>
   );
 
-  const renderBuiltIn = (item: BuiltIn) => {
+  const renderBuiltIn = (item: BuiltIn, target: boolean) => {
     const Icon = item.icon;
     const isAlreadyOnTab = placedWidgetIdsOnTab.has(item.id);
     return (
       <div
         key={item.id}
-        className="flex flex-col justify-between gap-2 rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-3 transition-all hover:border-zinc-700 sm:flex-row sm:items-start"
+        className={`flex flex-col justify-between gap-2 rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-3 transition-all hover:border-zinc-700 sm:flex-row sm:items-start ${target ? ENTER_TARGET : ''}`}
       >
         <div className="flex min-w-0 items-start gap-3">
           <div className="mt-0.5 rounded-lg bg-zinc-800 p-2 text-zinc-300">
@@ -561,6 +577,7 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
           <div>
             <h4 className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-zinc-100">
               <span>{item.name}</span>
+              {target && <EnterHint />}
               {isAlreadyOnTab && (
                 <span className="py-0.2 inline-flex items-center gap-0.5 rounded border border-emerald-500/40 bg-emerald-950/80 px-1.5 font-sans text-[9px] uppercase text-emerald-400">
                   <Check className="h-2.5 w-2.5" /> On Tab
@@ -725,7 +742,9 @@ export const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
                   No widgets match “{query.trim()}”{filterCategory !== 'all' ? ` in ${filterCategory}` : ''}.
                 </p>
               )}
-              {entries.map((e) => (e.kind === 'custom' ? renderCustom(e.cw) : renderBuiltIn(e.item)))}
+              {entries.map((e) =>
+                e.kind === 'custom' ? renderCustom(e.cw, e === enterTarget) : renderBuiltIn(e.item, e === enterTarget)
+              )}
             </div>
           </>
         )}
