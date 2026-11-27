@@ -176,24 +176,30 @@ function panelMinHeight(
     case 'builtin':
       return widgetMinSize(p.widgetId ?? '').h;
     // In a pane a dial's minimum is 80 px (TelemetryPanels; 190 px is a Flow card's), with its readout ~81 measured;
-    // more than four side by side keep 240. A chart is 170.
+    // more than four side by side keep 240.
     case 'gauge-radial':
       return p.gauge?.layout === 'multiple' && n > 4 ? 240 : 84;
+    // The rose follows the pane's width: 220 px of card measured at its narrowest (220), 174 from 360 wide.
     case 'compass-rose':
-      return 190;
+      return 160;
+    // A chart with its legend, one line a value from three (the first two share one), at its 300 px minimum width
+    // (SPARKLINE_MIN_W): 259, 251, 277 px of card measured for one, two and three values.
     case 'sparkline':
-      return 170;
+      return 200 + 18 * Math.max(0, n - 2);
     case 'param-set':
       return 180;
+    // Measured 21 px a row and 66 of card around them.
     case 'value-list':
-      return 22 * n + 16;
+      return 21 * n + 8;
     // The bars come from the group, not the bindings: eight RC or servo channels, a few ESCs, cells or axes.
     case 'multi-bar':
       // Four bars measured 161 px with title and padding: 27 a bar keeps it just over.
       return 27 * multiBarCount(p.multiBarConfig?.group) + 16;
     // One bar per value only with layout 'multiple' (otherwise further values are markers on one bar).
     case 'gauge-linear':
-      return 40 * (p.gauge?.layout === 'multiple' ? n : 1) + 10;
+      // Measured: one bar 138 px of card (146 with markers for further values); with layout 'multiple', 61 a bar
+      // (182, 243, 365 for two, three, five).
+      return p.gauge?.layout === 'multiple' && n > 1 ? 61 * n : 86;
     case 'param-control':
       return 90;
     case 'slider-control':
@@ -223,8 +229,15 @@ export const CUSTOM_MIN_H_CAP = 360;
 
 /** Card header and content padding around a custom widget's panels (px). */
 const CARD_CHROME = 38 + 24;
-/** A composite card narrower than this stacks its panels in one column (CustomWidgetRenderer). */
-const COMPOSITE_STACK_PX = 360;
+/** A composite card's content narrower than 360 px stacks its panels in one column (CustomWidgetRenderer), and just
+ * above that three panels in a row wrap their titles: Vitals measured 648 px tall in a 360 px pane, 465 at 380-390,
+ * 416-426 from 400. */
+const COMPOSITE_ROWS_MIN_W = 400;
+/** A composite's card header and padding, and the gap between its rows (px): measured 54 and 8. */
+const COMPOSITE_CHROME = 56;
+const COMPOSITE_ROW_GAP = 8;
+/** Narrower, a sparkline's legend wraps a line a value (TimeSeriesChart). */
+const SPARKLINE_MIN_W = 300;
 
 /**
  * The smallest a custom widget may be (px), from its definition: a composite's panels in their rows (as wide as
@@ -233,7 +246,10 @@ const COMPOSITE_STACK_PX = 360;
 export function customWidgetMinSize(def: CustomWidgetDefinition, opts: { capped?: boolean } = {}): Size {
   const cap = opts.capped === false ? Infinity : CUSTOM_MIN_H_CAP;
   if (def.displayType !== 'composite')
-    return { w: 220, h: Math.min(cap, panelMinHeight(def as WidgetPanelDefinition) + CARD_CHROME) };
+    return {
+      w: def.displayType === 'sparkline' ? SPARKLINE_MIN_W : 220,
+      h: Math.min(cap, panelMinHeight(def as WidgetPanelDefinition) + CARD_CHROME),
+    };
   const panels = def.panels ?? [];
   if (panels.length === 0) return { w: 220, h: 140 };
   // Panels fill rows of twelve columns, left to right.
@@ -252,8 +268,8 @@ export function customWidgetMinSize(def: CustomWidgetDefinition, opts: { capped?
       multi = true;
     }
   }
-  const h = rows.reduce((a, b) => a + b, 0) + 10 * (rows.length - 1) + CARD_CHROME;
-  return { w: multi ? COMPOSITE_STACK_PX : 240, h: Math.min(cap, h) };
+  const h = rows.reduce((a, b) => a + b, 0) + COMPOSITE_ROW_GAP * (rows.length - 1) + COMPOSITE_CHROME;
+  return { w: multi ? COMPOSITE_ROWS_MIN_W : 240, h: Math.min(cap, h) };
 }
 
 /** The smallest a pane showing this widget may be (px): what it needs to stay readable and usable. */
