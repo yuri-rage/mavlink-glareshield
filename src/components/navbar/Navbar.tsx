@@ -154,17 +154,44 @@ const LinkPill: React.FC<{ active: boolean }> = ({ active }) => {
   );
 };
 
-const GpsPill: React.FC<{ active: boolean }> = ({ active }) => {
+/** A second GPS counts as present while its GPS2_RAW keeps coming. */
+const GPS2_STALE_MS = 5000;
+
+const GpsPill: React.FC<{ active: boolean; now: number }> = ({ active, now }) => {
   const fixType = useTelemetryStore((s) => s.gps.fixType);
   const fixLabel = useTelemetryStore((s) => s.gps.fixLabel);
   const satellites = useTelemetryStore((s) => s.gps.satellites);
+  const gps2 = useTelemetryStore((s) => s.gps2);
+  // A second receiver reporting: both, stacked in smaller type (the strip keeps its height).
+  const dual = active && gps2 !== null && now - (gps2.lastUpdate ?? 0) < GPS2_STALE_MS;
+  const best = dual ? Math.max(fixType, gps2!.fixType) : fixType;
   return (
-    <div className="flex shrink-0 items-center gap-1.5" title="GNSS Fix & Visible Satellites">
+    <div
+      className="flex shrink-0 items-center gap-1.5"
+      title={
+        dual
+          ? `GNSS 1: ${fixLabel}, ${satellites} satellites\nGNSS 2: ${gps2!.fixLabel}, ${gps2!.satellites} satellites`
+          : 'GNSS Fix & Visible Satellites'
+      }
+    >
       <Satellite
-        className={`h-3.5 w-3.5 shrink-0 ${!active ? 'text-zinc-500' : fixType >= 3 ? 'text-emerald-400' : 'text-amber-400'}`}
+        className={`h-3.5 w-3.5 shrink-0 ${!active ? 'text-zinc-500' : best >= 3 ? 'text-emerald-400' : 'text-amber-400'}`}
       />
       <span className="font-sans text-[10px] font-bold uppercase text-zinc-400 md:text-[11px]">GPS</span>
-      <span className="font-bold text-zinc-100">{active ? `${fixLabel} (${satellites})` : '--'}</span>
+      {dual ? (
+        <span className="flex flex-col text-[10px] font-bold leading-[1.15] md:text-[11px]">
+          <span className={fixType >= 3 ? 'text-zinc-100' : 'text-amber-300'}>
+            <span className="mr-1 text-zinc-500">1</span>
+            {fixLabel} ({satellites})
+          </span>
+          <span className={gps2!.fixType >= 3 ? 'text-zinc-100' : 'text-amber-300'}>
+            <span className="mr-1 text-zinc-500">2</span>
+            {gps2!.fixLabel} ({gps2!.satellites})
+          </span>
+        </span>
+      ) : (
+        <span className="font-bold text-zinc-100">{active ? `${fixLabel} (${satellites})` : '--'}</span>
+      )}
     </div>
   );
 };
@@ -940,7 +967,7 @@ export const Navbar: React.FC = () => {
 
             <span className="text-zinc-700">|</span>
 
-            <GpsPill active={isHeartbeatActive} />
+            <GpsPill active={isHeartbeatActive} now={nowMs} />
 
             <span className="text-zinc-700">|</span>
 
