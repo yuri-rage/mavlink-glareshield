@@ -9,7 +9,7 @@ import { AlertTriangle, Check, Copy, ExternalLink, Share2, Shield, Smartphone } 
 
 import { useAudioAlertsStore, type VoiceEngine } from '../../lib/audioAlerts';
 import { DOC_LINKS, REPO_URL, repoFile } from '../../lib/links';
-import { pairingUrl } from '../../lib/pairing';
+import { maskToken, pairingUrl } from '../../lib/pairing';
 import { BUILD, buildLabel, checkForUpdate, useUpdateStore } from '../../lib/updateCheck';
 import { getWssHost, isLoopbackWs, SERIAL_BAUD_RATES } from '../../mavlink/connection';
 import type { BandwidthProfile } from '../../mavlink/rateManager';
@@ -145,8 +145,24 @@ interface Props {
  */
 const PairAnotherDevice: React.FC<{ url: string }> = ({ url }) => {
   const [copied, setCopied] = useState(false);
+  // Hidden until asked for: the QR code and link carry the pairing token (screen sharing, someone looking on).
+  const [shown, setShown] = useState(false);
   const link = typeof window !== 'undefined' ? pairingUrl(url, window.location.href) : null;
   if (!link) return null;
+  if (!shown)
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setShown(true)}
+        className="gap-1.5 border-emerald-500/40 text-xs text-emerald-300 hover:bg-emerald-950/40"
+        title="Show the QR code and link that pair another device with this bridge (they hold its token)"
+      >
+        <Smartphone className="h-3.5 w-3.5" />
+        Pair another device…
+      </Button>
+    );
   const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
   const copy = async () => {
     try {
@@ -157,9 +173,18 @@ const PairAnotherDevice: React.FC<{ url: string }> = ({ url }) => {
   };
   return (
     <div className="space-y-1.5 rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-2.5 text-xs">
-      <div className="flex items-center gap-1.5 font-semibold text-emerald-300">
-        <Smartphone className="h-3.5 w-3.5 shrink-0" />
-        Pair another device
+      <div className="flex items-center justify-between gap-1.5 font-semibold text-emerald-300">
+        <span className="flex items-center gap-1.5">
+          <Smartphone className="h-3.5 w-3.5 shrink-0" />
+          Pair another device
+        </span>
+        <button
+          type="button"
+          onClick={() => setShown(false)}
+          className="rounded px-1.5 text-[11px] font-normal text-zinc-400 hover:text-zinc-200"
+        >
+          Hide
+        </button>
       </div>
       <QrCode text={link} title="Pairing QR code for this bridge" className="mx-auto h-44 w-44 rounded-md sm:mx-0" />
       <p className="text-[11px] leading-relaxed text-zinc-300">
@@ -235,6 +260,7 @@ export const SettingsDialog: React.FC<Props> = ({
   const connectPressedRef = useRef(false);
   // The link form: what's typed, applied by Connect.
   const [inputUrl, setInputUrl] = useState(url);
+  const [urlFocused, setUrlFocused] = useState(false);
   const [inputLinkKind, setInputLinkKind] = useState(linkKind);
   const [inputSerialBaud, setInputSerialBaud] = useState(serialBaud);
   const [serialPickerNotice, setSerialPickerNotice] = useState<string | null>(null);
@@ -406,9 +432,13 @@ export const SettingsDialog: React.FC<Props> = ({
               <div className="space-y-2">
                 <label className="block space-y-1.5">
                   <span className="text-xs font-medium text-zinc-300">WebSocket URL or host:port</span>
+                  {/* The pairing token stays masked until the field is being edited. */}
                   <Input
                     type="text"
-                    value={inputUrl}
+                    value={urlFocused ? inputUrl : maskToken(inputUrl)}
+                    data-no-autofocus
+                    onFocus={() => setUrlFocused(true)}
+                    onBlur={() => setUrlFocused(false)}
                     onChange={(e) => setInputUrl(e.target.value)}
                     placeholder="ws://localhost:56781"
                     className="font-mono text-xs"

@@ -67,7 +67,10 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
       // Only auto-focus initial element if focus is not already inside the dialog
       if (!dialog.contains(document.activeElement)) {
         const focusable = getFocusableElements();
-        const firstInput = focusable.find((el) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
+        // A field marked data-no-autofocus (one that shows a secret until focused) isn't focused on opening.
+        const firstInput = focusable.find(
+          (el) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) && !el.hasAttribute('data-no-autofocus')
+        );
         const target = firstInput || focusable[0];
         if (target) {
           target.focus();

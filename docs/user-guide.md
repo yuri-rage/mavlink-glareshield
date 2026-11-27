@@ -407,8 +407,10 @@ fields), **RTK / NTRIP** (corrections to the vehicle), and **Gimbal** controls o
 
 **Pairing with the bridge.** The Docker bridge only accepts devices that carry its pairing token. A device opened from
 the bridge's pairing QR code asks **Connect to this bridge?** and then keeps the link, token included. Once one device
-is paired, **Settings → Link → Pair another device** shows a QR code for the next one to scan, and the link with
-**Copy** and **Share** (show or send it only to yourself: it holds the token). If the Link tab says *"This bridge needs
+is paired, **Settings → Link → Pair another device…** shows a QR code for the next one to scan, and the link with
+**Copy** and **Share** (show or send it only to yourself: it holds the token). Both stay hidden until you press it, and
+the bridge address field shows the token as •••••• until you click into it, so opening Settings while sharing your
+screen doesn't show it. If the Link tab says *"This bridge needs
 a pairing token"* or *"Wrong pairing token for this bridge"*, pair the device again; Glareshield stops retrying until
 then. See [Pairing Devices](connection-guide.md#pairing-devices-the-bridge-token).
 

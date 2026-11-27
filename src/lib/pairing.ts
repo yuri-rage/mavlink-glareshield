@@ -106,3 +106,8 @@ export async function acceptPairingLink(d: PairingLinkDeps): Promise<string | nu
   d.use(link);
   return link;
 }
+
+/** The link with its pairing token hidden (for showing on screen, e.g. while screen sharing): ?token=•••• */
+export function maskToken(wsUrl: string): string {
+  return wsUrl.replace(/([?&]token=)[^&#]*/, (_m, k: string) => `${k}••••••`);
+}

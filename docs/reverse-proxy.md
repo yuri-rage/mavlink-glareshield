@@ -225,7 +225,7 @@ The names only resolve inside your network, but an access list keeps every servi
    wss://mav.home.example.com/?token=<token>
    ```
    Leave off the port: the proxy listens on 443. Don't use the QR code in the bridge's log here: it points at the bridge's own address, not the proxy.
-   For your other devices, use **Settings → Link → Pair another device** on this one: its link goes through the proxy (the bridge sees the proxy's `X-Forwarded-Proto: https` and sends them on with `wss://`).
+   For your other devices, use **Settings → Link → Pair another device…** on this one: its link goes through the proxy (the bridge sees the proxy's `X-Forwarded-Proto: https` and sends them on with `wss://`).
 3. Chrome and Edge may ask *"Allow Glareshield to connect to devices on your local network?"* the first time, because a public site is reaching a private address. Click **Allow**.
 
 For the HUD video:
