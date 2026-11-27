@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
 const STORAGE_KEY = 'mavlink_ntrip_config';
 
+// Keeps the password from showing as plain text in storage at a glance. It is not encryption: anyone with access to
+// this browser's storage can read it, and the field says so.
 function maskPassword(pwd: string): string {
   if (!pwd) return '';
   try {
@@ -351,7 +353,10 @@ export const NtripWidget: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold uppercase text-zinc-400">Password</label>
+                    <label className="flex items-center justify-between text-[10px] font-bold uppercase text-zinc-400">
+                      Password
+                      <span className="font-normal normal-case text-zinc-500">kept in this browser, not encrypted</span>
+                    </label>
                     <input
                       type="password"
                       disabled={isConnected || isConnecting}

@@ -611,10 +611,12 @@ export class RtcmInjector {
         // production build the request would carry the caster credentials to the site's host, and an SPA host answers
         // any unknown path with index.html (200), which would then be read as the RTCM stream.
         const devProxy = Boolean(import.meta.env?.DEV);
-        const proxyUrl =
-          `/api/ntrip-stream?host=${encodeURIComponent(host)}&port=${port}&mountpoint=${encodeURIComponent(mountpoint)}` +
-          (config.username ? `&username=${encodeURIComponent(config.username)}` : '') +
-          (config.password ? `&password=${encodeURIComponent(config.password)}` : '');
+        // The caster login goes in an Authorization header, not the query string (which lands in logs and history).
+        const proxyUrl = `/api/ntrip-stream?host=${encodeURIComponent(host)}&port=${port}&mountpoint=${encodeURIComponent(mountpoint)}`;
+        const proxyHeaders: Record<string, string> =
+          config.username || config.password
+            ? { Authorization: `Basic ${btoa(`${config.username || ''}:${config.password || ''}`)}` }
+            : {};
 
         let response: Response | null = null;
         let usedProxy = false;
@@ -623,6 +625,7 @@ export class RtcmInjector {
           try {
             this.ntripAbortController = new AbortController();
             response = await fetch(proxyUrl, {
+              headers: proxyHeaders,
               signal: this.ntripAbortController.signal,
             });
             if (response.ok && !(response.headers.get('content-type') ?? '').includes('text/html')) {

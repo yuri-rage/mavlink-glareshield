@@ -87,8 +87,6 @@ function ntripProxyPlugin() {
         const host = parsedUrl.searchParams.get('host') || '';
         const port = parseInt(parsedUrl.searchParams.get('port') || '2101', 10);
         const mountpoint = (parsedUrl.searchParams.get('mountpoint') || '').replace(/^\//, '');
-        const username = parsedUrl.searchParams.get('username') || '';
-        const password = parsedUrl.searchParams.get('password') || '';
         const sessionKey = `${host}:${port}/${mountpoint}`;
 
         // 3. Port allowlist check (prevent arbitrary port scanning / local intranet service relay)
@@ -152,11 +150,9 @@ function ntripProxyPlugin() {
           return;
         }
 
-        let authHeader = '';
-        if (username || password) {
-          const auth = Buffer.from(`${username}:${password}`).toString('base64');
-          authHeader = `Authorization: Basic ${auth}\r\n`;
-        }
+        // The caster login comes in the app's Authorization header (Basic), passed through as is.
+        const auth = String(req.headers['authorization'] ?? '');
+        const authHeader = /^Basic [A-Za-z0-9+/=]+$/.test(auth) ? `Authorization: ${auth}\r\n` : '';
 
         const socket = net.createConnection({ host, port }, () => {
           const reqStr = `GET /${mountpoint} HTTP/1.0\r\nUser-Agent: NTRIP MavlinkGlareshield/1.0\r\n${authHeader}\r\n`;
