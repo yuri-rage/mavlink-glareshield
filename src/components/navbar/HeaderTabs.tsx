@@ -10,9 +10,12 @@ import { LayoutGrid, Pencil } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { HeaderMenu, MenuItem } from '../ui/HeaderMenu';
 
+// Bordered, so they read as tabs up in the navbar; the open one lit.
 const pill = (active: boolean) =>
-  `whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
-    active ? 'bg-zinc-800 text-sky-400 ring-1 ring-zinc-700' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
+  `whitespace-nowrap rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
+    active
+      ? 'border-sky-700/70 bg-zinc-800 text-sky-300'
+      : 'border-zinc-700/80 bg-zinc-900/60 text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100'
   }`;
 
 export const HeaderTabs: React.FC = () => {
@@ -54,7 +57,10 @@ export const HeaderTabs: React.FC = () => {
   );
 
   return (
-    <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5">
+    // Never squeezed below the dropdown and the pencil: a crowded row wraps instead of hiding the tabs.
+    <div className="flex min-w-[9rem] flex-1 items-center justify-center gap-1.5">
+      {/* Where the tabs go, measured: they show here when they fit. Clipped (overflow) for the measuring copy, so the
+          dropdown lives outside it. */}
       <div ref={slotRef} className="relative flex min-w-0 flex-1 items-center justify-center overflow-hidden">
         {/* The natural width, measured out of sight. */}
         <div
@@ -68,7 +74,7 @@ export const HeaderTabs: React.FC = () => {
             </span>
           ))}
         </div>
-        {fits ? (
+        {fits && (
           <nav className="flex items-center gap-1" aria-label="Dashboard tabs">
             {tabs.map((t) => (
               <button
@@ -82,30 +88,31 @@ export const HeaderTabs: React.FC = () => {
               </button>
             ))}
           </nav>
-        ) : (
-          <HeaderMenu
-            alwaysLabel
-            icon={<LayoutGrid className="h-3.5 w-3.5 text-sky-400" />}
-            label={active?.title ?? 'Tabs'}
-            title="Dashboard tabs"
-            widthClass="w-56"
-          >
-            {(close) =>
-              tabs.map((t) => (
-                <MenuItem
-                  key={t.id}
-                  checked={t.id === active?.id}
-                  label={t.title}
-                  onClick={() => {
-                    setActiveTab(t.id);
-                    close();
-                  }}
-                />
-              ))
-            }
-          </HeaderMenu>
         )}
       </div>
+      {!fits && (
+        <HeaderMenu
+          alwaysLabel
+          icon={<LayoutGrid className="h-3.5 w-3.5 text-sky-400" />}
+          label={active?.title ?? 'Tabs'}
+          title="Dashboard tabs"
+          widthClass="w-56"
+        >
+          {(close) =>
+            tabs.map((t) => (
+              <MenuItem
+                key={t.id}
+                checked={t.id === active?.id}
+                label={t.title}
+                onClick={() => {
+                  setActiveTab(t.id);
+                  close();
+                }}
+              />
+            ))
+          }
+        </HeaderMenu>
+      )}
       {editButton}
     </div>
   );
