@@ -54,11 +54,15 @@ Choose either Mission Planner or the Docker bridge:
 
 ### 2. Connect in Glareshield
 
+**Docker bridge: pair each device.** `docker compose logs` shows a **pairing QR code**. Scan it with each phone or tablet: accept the certificate warning once, and Glareshield opens and asks to connect. On a laptop, open the link printed under the code. The bridge only accepts devices that carry its pairing token, so nothing else on your network can command the vehicle. More ways to pair, and how to set or change the token: [Pairing Devices](docs/connection-guide.md#pairing-devices-the-bridge-token).
+
+**Mission Planner, or entering the address yourself:**
+
 1. Open **[https://glareshield.yurirage.com](https://glareshield.yurirage.com)** in your browser.
 2. Click the connection pill (top right) or **Settings** to open the **Link** tab.
 3. Enter your bridge address:
    - **Same computer (Mission Planner)**: `ws://localhost:56781`
-   - **Local network (Docker)**: `wss://<bridge-ip>:56781/`
+   - **Local network (Docker)**: `wss://<bridge-ip>:56781/?token=<token>` (the link printed under the QR code)
 4. Click **Connect**.
 
 **USB serial, no bridge (Chrome / Edge, or Chrome on Android):** on the same tab choose **Link type → USB serial**, pick the baud rate, click **Connect**, and select your telemetry radio or flight controller. See [Direct USB Serial](docs/connection-guide.md#option-5-direct-usb-serial-no-bridge).
