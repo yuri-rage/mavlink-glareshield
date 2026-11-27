@@ -7,18 +7,19 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  CircleDashed,
   Clock,
   History,
   Home,
   Loader2,
   Moon,
+  Plug,
   RefreshCw,
   Satellite,
   Settings,
   Shield,
   ShieldAlert,
   Sun,
-  WifiOff,
   X,
   XCircle,
 } from 'lucide-react';
@@ -240,7 +241,7 @@ const HomePill: React.FC<{ active: boolean }> = ({ active }) => {
 };
 
 export const Navbar: React.FC = () => {
-  const { url, linkKind, serialBaud, status, stats, connect } = useConnectionStore();
+  const { url, linkKind, serialBaud, status, stats, connect, errorMessage } = useConnectionStore();
   const heartbeat = useTelemetryStore((state) => state.heartbeat);
   // Landed and VTOL state (EXTENDED_SYS_STATE), for the arm menu. Copter and Plane send it; Rover doesn't.
   const extendedState = useTelemetryStore((state) => state.extendedState);
@@ -449,57 +450,84 @@ export const Navbar: React.FC = () => {
         </Badge>
       );
     }
-    switch (status) {
-      case 'connected':
-        return (
-          <Badge
-            variant="success"
-            className="flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 font-sans text-xs font-semibold shadow-sm transition-colors hover:bg-emerald-950/80 sm:px-2.5"
-            onClick={() => openConnectModal()}
-            title={`Connected: ${linkKind === 'serial' ? `serial @ ${serialBaud} baud` : linkKind === 'udp' ? `UDP port ${useConnectionStore.getState().udpPort}` : linkKind === 'tcp' ? `TCP ${useConnectionStore.getState().tcpTarget}` : url} (click for Settings › Link)`}
-          >
-            <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-400" />
-            <span className="hidden md:inline">Connected</span>
-          </Badge>
-        );
-      case 'connecting':
-        return (
-          <Badge
-            variant="warning"
-            className="flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 font-sans text-xs font-semibold shadow-sm sm:px-2.5"
-            onClick={() => openConnectModal()}
-            title="Connecting to MAVLink endpoint (click for Link & Page Configuration)..."
-          >
-            <span className="h-2 w-2 shrink-0 animate-ping rounded-full bg-amber-400" />
-            <span className="hidden md:inline">Connecting...</span>
-          </Badge>
-        );
-      case 'error':
-        return (
-          <Badge
-            variant="destructive"
-            className="flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 font-sans text-xs font-semibold shadow-sm sm:px-2.5"
-            onClick={() => openConnectModal()}
-            title="Connection error (click for Link & Page Configuration)"
-          >
-            <WifiOff className="h-3.5 w-3.5 shrink-0" />
-            <span className="hidden md:inline">Link Error</span>
-          </Badge>
-        );
-      default:
-        return (
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => openConnectModal()}
-            className="flex h-7 items-center gap-1.5 rounded-lg bg-sky-500 px-2 font-sans text-xs font-semibold text-white shadow-sm hover:bg-sky-600 sm:px-2.5"
-            title="Connect to MAVLink endpoint & open Page Configuration"
-          >
-            <WifiOff className="h-3.5 w-3.5 shrink-0" />
-            <span>Connect</span>
-          </Button>
-        );
+    // What the link is doing, in one word, and the action when there's nothing to wait for. "Connected" only when a
+    // vehicle is heard: an open link (a bridge, a UDP port) with no vehicle on it is not a connection to one.
+    const linkName =
+      linkKind === 'serial'
+        ? `serial @ ${serialBaud} baud`
+        : linkKind === 'udp'
+          ? `UDP port ${useConnectionStore.getState().udpPort}`
+          : linkKind === 'tcp'
+            ? `TCP ${useConnectionStore.getState().tcpTarget}`
+            : url;
+    const pill = (opts: { tone: 'ok' | 'wait' | 'bad'; icon: React.ReactNode; label: string; title: string }) => (
+      <Badge
+        variant={opts.tone === 'ok' ? 'success' : opts.tone === 'wait' ? 'warning' : 'destructive'}
+        className="flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 font-sans text-xs font-semibold shadow-sm sm:px-2.5"
+        onClick={() => openConnectModal()}
+        title={`${opts.title} (click for Settings › Link)`}
+      >
+        {opts.icon}
+        <span className="hidden md:inline">{opts.label}</span>
+      </Badge>
+    );
+    if (status === 'connected') {
+      if (isHeartbeatActive)
+        return pill({
+          tone: 'ok',
+          icon: <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-400" />,
+          label: 'Connected',
+          title: `Connected to vehicle ${heartbeat.systemId} over ${linkName}`,
+        });
+      if (isLinkLost)
+        return pill({
+          tone: 'bad',
+          icon: <AlertTriangle className="h-3.5 w-3.5 shrink-0" />,
+          label: 'Vehicle lost',
+          title: `The link (${linkName}) is open, but the vehicle has gone silent`,
+        });
+      return pill({
+        tone: 'wait',
+        icon: <CircleDashed className="h-3.5 w-3.5 shrink-0" />,
+        label: 'No vehicle',
+        title: `The link (${linkName}) is open, but no vehicle is heard on it yet: is it powered and sending here?`,
+      });
     }
+    const retrying = mavlinkConnection.willRetry() && Boolean(errorMessage);
+    if (status === 'connecting' && !retrying)
+      return pill({
+        tone: 'wait',
+        icon: <span className="h-2 w-2 shrink-0 animate-ping rounded-full bg-amber-400" />,
+        label: 'Connecting…',
+        title: `Connecting over ${linkName}`,
+      });
+    if (retrying)
+      return pill({
+        tone: 'wait',
+        icon: <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin [animation-duration:2.5s]" />,
+        label: 'Retrying',
+        title: `Can't reach ${linkName}: ${errorMessage}. Trying again`,
+      });
+    if (status === 'error' || errorMessage)
+      return pill({
+        tone: 'bad',
+        icon: <AlertTriangle className="h-3.5 w-3.5 shrink-0" />,
+        label: 'Link error',
+        title: errorMessage ? `Not connected: ${errorMessage}` : 'Connection error',
+      });
+    // Not connected, and nothing will try by itself: the action.
+    return (
+      <Button
+        variant="default"
+        size="sm"
+        onClick={() => openConnectModal()}
+        className="flex h-7 items-center gap-1.5 rounded-lg bg-sky-500 px-2 font-sans text-xs font-semibold text-white shadow-sm hover:bg-sky-600 sm:px-2.5"
+        title={`Connect (${linkName}): opens Settings › Link`}
+      >
+        <Plug className="h-3.5 w-3.5 shrink-0" />
+        <span>Connect</span>
+      </Button>
+    );
   };
 
   const isHeartbeatActive =
