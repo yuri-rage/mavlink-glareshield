@@ -1,6 +1,6 @@
 // A parameter write confirmed by the vehicle's echo (src/lib/paramWrite.ts): the inline edit and the file compare's
 // writes report Saved only when the vehicle echoes the value, and say so when it keeps another or doesn't answer.
-import { writeParamVerified } from '../src/lib/paramWrite.ts';
+import { paramWriters, writeParamVerified } from '../src/lib/paramWrite.ts';
 
 const failures: string[] = [];
 const check = (name: string, ok: boolean, detail = '') => {
@@ -77,6 +77,29 @@ check('not sent (no link, replay): no-answer, no retry', r.outcome === 'no-answe
 l = link(() => null);
 r = await writeParamVerified(T, 'WPNAV_SPEED', 500, 4, { ...l.deps, stopped: () => l.sends() >= 1 });
 check('a stopped batch sends no second try', r.outcome === 'no-answer' && l.sends() === 1);
+
+// The widget's inline edits and batch writes stop on different signals: Stop writing (or a vehicle switch) during a
+// batch left the shared flag set, and every later inline edit answered "No answer" without sending a PARAM_SET.
+{
+  const flags = { unmounted: false, batchStopped: false };
+  const lk = link((_n, v) => [{ value: v }]);
+  const { timeoutMs, ...base } = lk.deps;
+  const w = paramWriters(
+    { ...base, timeoutMs },
+    { unmounted: () => flags.unmounted, batchStopped: () => flags.batchStopped }
+  );
+  flags.batchStopped = true; // Stop writing pressed mid-batch
+  const b = await w.batch(T, 'WPNAV_SPEED', 600, 4);
+  check('a stopped batch sends nothing more', b.outcome === 'no-answer' && lk.sends() === 0);
+  const i = await w.inline(T, 'WPNAV_SPEED', 700, 4);
+  check(
+    'after a stopped batch, an inline edit still goes out and is confirmed',
+    i.outcome === 'ok' && lk.sends() === 1
+  );
+  flags.unmounted = true;
+  const gone = await w.inline(T, 'WPNAV_SPEED', 800, 4);
+  check('the widget gone: an inline edit stops too', gone.outcome === 'no-answer' && lk.sends() === 1);
+}
 
 console.log(failures.length ? `\n${failures.length} param-write check(s) FAILED` : '\nAll param-write checks PASSED');
 if (failures.length) process.exit(1);

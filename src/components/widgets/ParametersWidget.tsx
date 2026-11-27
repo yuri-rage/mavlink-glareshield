@@ -18,7 +18,7 @@ import {
 
 import { downloadFile } from '../../lib/download';
 import { compareParams, filterEntries, type CompareResult, type WriteOutcome } from '../../lib/paramCompare';
-import { writeParamVerified } from '../../lib/paramWrite';
+import { paramWriters } from '../../lib/paramWrite';
 import { mavlinkConnection } from '../../mavlink/connection';
 import { getVehicleCategory } from '../../mavlink/messages';
 import { bitmaskSummary, valueLabel } from '../../mavlink/paramBits';
@@ -96,6 +96,7 @@ export const ParametersWidget: React.FC = () => {
   const [batchWriteStatus, setBatchWriteStatus] = useState<string | null>(null);
   const [isBatchWriting, setIsBatchWriting] = useState(false);
   const abortBatchRef = useRef<boolean>(false);
+  const unmountedRef = useRef<boolean>(false);
 
   const heartbeatType = useTelemetryStore((s) => s.heartbeat.type);
   const category = getVehicleCategory(heartbeatType);
@@ -125,8 +126,8 @@ export const ParametersWidget: React.FC = () => {
     const unsubscribe = paramManager.onStatusChange((st) => setParamStatus(st));
     return () => {
       unsubscribe();
-      // Gone (layout changed, widget removed) mid-batch: stop writing rather than carry on unseen.
-      abortBatchRef.current = true;
+      // Gone (layout changed, widget removed) mid-write: stop rather than carry on unseen.
+      unmountedRef.current = true;
     };
   }, []);
 
@@ -198,7 +199,7 @@ export const ParametersWidget: React.FC = () => {
       setInlineWrite({ id: paramId, state: 'writing' });
       // Saved only when the vehicle echoes the value back (as the file compare's writes): it may refuse or clamp
       // it, or not answer (a replay, or a link that dropped, doesn't send it at all).
-      const { outcome, echoed } = await writeOne(paramId, num);
+      const { outcome, echoed } = await writeOne(paramId, num, 'inline');
       setInlineWrite((cur) => (cur?.id === paramId ? { id: paramId, state: outcome, echoed } : cur));
       savedTimerRef.current = setTimeout(
         () => setInlineWrite((cur) => (cur?.id === paramId ? null : cur)),
@@ -243,21 +244,26 @@ export const ParametersWidget: React.FC = () => {
     setDiffModalOpen(true);
   };
 
-  /** Write one parameter to the active vehicle, confirmed by its echo (src/lib/paramWrite.ts). */
-  const writeOne = (name: string, value: number) => {
+  /**
+   * Write one parameter to the active vehicle, confirmed by its echo (src/lib/paramWrite.ts): an inline edit, or one
+   * of a batch (which Stop writing and a vehicle switch also stop; an inline edit after that still goes out).
+   */
+  const writeOne = (name: string, value: number, kind: 'inline' | 'batch') => {
     const hb = useTelemetryStore.getState().heartbeat;
-    return writeParamVerified(
-      { sysId: hb.systemId || 1, compId: hb.componentId || 1 },
-      name,
-      value,
-      parameters[name]?.type ?? 9,
+    const writers = paramWriters(
       {
         send: (p) => mavlinkConnection.send(p),
         onPacket: (l) => mavlinkConnection.onPacket(l),
         encoder,
         decode: decodePayload,
-        stopped: () => abortBatchRef.current,
-      }
+      },
+      { unmounted: () => unmountedRef.current, batchStopped: () => abortBatchRef.current }
+    );
+    return writers[kind](
+      { sysId: hb.systemId || 1, compId: hb.componentId || 1 },
+      name,
+      value,
+      parameters[name]?.type ?? 9
     );
   };
 
@@ -276,7 +282,7 @@ export const ParametersWidget: React.FC = () => {
       const e = todo[i];
       setBatchWriteStatus(`Writing ${i + 1}/${todo.length}: ${e.name} = ${formatParamValue(e.file)}…`);
       setWriteStates((prev) => ({ ...prev, [e.name]: { state: 'writing' } }));
-      const { outcome, echoed } = await writeOne(e.name, e.file);
+      const { outcome, echoed } = await writeOne(e.name, e.file, 'batch');
       outcomes[e.name] = outcome;
       setWriteStates((prev) => ({ ...prev, [e.name]: { state: outcome, echoed } }));
       await new Promise((r) => setTimeout(r, 40));
