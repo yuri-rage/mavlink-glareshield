@@ -65,6 +65,13 @@ function formatDurationClock(totalMs: number): string {
 
 // The telemetry strip's pills, each subscribed to its own slice: a packet re-renders the pill it changes, not the
 // whole navbar. `active`: a vehicle heartbeat is current.
+/** A strip label (BAT, GPS, LINK): folded to its icon alone when the strip is narrow (a phone). */
+const StripLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <span className="hidden font-sans text-[10px] font-bold uppercase text-zinc-400 @[34rem]:inline md:text-[11px]">
+    {children}
+  </span>
+);
+
 const BatteryPill: React.FC<{ active: boolean }> = ({ active }) => {
   const battery = useTelemetryStore((s) => s.battery);
   const shown = active && battery.voltage > 0;
@@ -83,11 +90,15 @@ const BatteryPill: React.FC<{ active: boolean }> = ({ active }) => {
                 : 'text-emerald-400'
         }`}
       />
-      <span className="font-sans text-[10px] font-bold uppercase text-zinc-400 md:text-[11px]">BAT</span>
+      <StripLabel>BAT</StripLabel>
       <span
-        className={`font-bold ${!shown ? 'text-zinc-500' : pct !== null && pct <= 15 ? 'text-red-300' : pct !== null && pct <= 25 ? 'text-amber-300' : 'text-zinc-100'}`}
+        className={`flex items-center font-bold ${!shown ? 'text-zinc-500' : pct !== null && pct <= 15 ? 'text-red-300' : pct !== null && pct <= 25 ? 'text-amber-300' : 'text-zinc-100'}`}
       >
-        {shown ? `${battery.voltage.toFixed(1)}V${pct !== null ? ` · ${pct}%` : ''}` : '--'}
+        {/* Fixed slots: a changing value doesn't move what follows. */}
+        <span className="inline-block min-w-[5ch] text-right">{shown ? `${battery.voltage.toFixed(1)}V` : '--'}</span>
+        <span className="inline-block text-right @[34rem]:min-w-[6.5ch]">
+          {shown && pct !== null ? `· ${pct}%` : ''}
+        </span>
       </span>
     </div>
   );
@@ -145,9 +156,9 @@ const LinkPill: React.FC<{ active: boolean }> = ({ active }) => {
       }
     >
       <SignalBars filled={linkBars(q)} className={tone} />
-      <span className="font-sans text-[10px] font-bold uppercase text-zinc-400 md:text-[11px]">LINK</span>
+      <StripLabel>LINK</StripLabel>
       <span
-        className={`font-bold ${level === 'poor' ? 'text-red-300' : level === 'fair' ? 'text-amber-300' : level ? 'text-zinc-100' : 'text-zinc-500'}`}
+        className={`inline-block min-w-[4ch] text-right font-bold ${level === 'poor' ? 'text-red-300' : level === 'fair' ? 'text-amber-300' : level ? 'text-zinc-100' : 'text-zinc-500'}`}
       >
         {q === null ? '--' : `${q.toFixed(0)}%`}
       </span>
@@ -178,9 +189,9 @@ const GpsPill: React.FC<{ active: boolean; now: number }> = ({ active, now }) =>
       <Satellite
         className={`h-3.5 w-3.5 shrink-0 ${!active ? 'text-zinc-500' : best >= 3 ? 'text-emerald-400' : 'text-amber-400'}`}
       />
-      <span className="font-sans text-[10px] font-bold uppercase text-zinc-400 md:text-[11px]">GPS</span>
+      <StripLabel>GPS</StripLabel>
       {dual ? (
-        <span className="flex flex-col text-[10px] font-bold leading-[1.15] md:text-[11px]">
+        <span className="flex flex-col text-[10px] font-bold leading-[1.15] @[34rem]:min-w-[16ch] md:text-[11px]">
           <span className={fixType >= 3 ? 'text-zinc-100' : 'text-amber-300'}>
             <span className="mr-1 text-zinc-500">1</span>
             {fixLabel} ({satellites})
@@ -191,7 +202,9 @@ const GpsPill: React.FC<{ active: boolean; now: number }> = ({ active, now }) =>
           </span>
         </span>
       ) : (
-        <span className="font-bold text-zinc-100">{active ? `${fixLabel} (${satellites})` : '--'}</span>
+        <span className="inline-block font-bold text-zinc-100 @[34rem]:min-w-[14ch]">
+          {active ? `${fixLabel} (${satellites})` : '--'}
+        </span>
       )}
     </div>
   );
@@ -206,9 +219,13 @@ const AltSpeedPill: React.FC<{ active: boolean; plane: boolean }> = ({ active, p
       <span className="font-sans text-[10px] font-bold uppercase text-zinc-400 md:text-[11px]">
         {altitudeMode.toUpperCase()}
       </span>
-      <span className="font-bold text-sky-300">{active ? formatAltitude(altM).full : '--'}</span>
+      <span className="inline-block min-w-[8ch] text-right font-bold text-sky-300">
+        {active ? formatAltitude(altM).full : '--'}
+      </span>
       <span className="text-zinc-600">·</span>
-      <span className="font-bold text-emerald-300">{active ? formatSpeed(speedMs).full : '--'}</span>
+      <span className="inline-block min-w-[9ch] text-right font-bold text-emerald-300">
+        {active ? formatSpeed(speedMs).full : '--'}
+      </span>
     </div>
   );
 };
@@ -229,7 +246,7 @@ const HomePill: React.FC<{ active: boolean }> = ({ active }) => {
     >
       <Home className={`h-3.5 w-3.5 shrink-0 ${home.source !== 'none' ? 'text-amber-400' : 'text-zinc-500'}`} />
       <span className="font-sans text-[10px] font-bold uppercase text-zinc-400 md:text-[11px]">HOME</span>
-      <span className="font-bold text-zinc-100">
+      <span className="inline-block min-w-[12ch] font-bold text-zinc-100">
         {active && home.distanceM !== null
           ? formatHomeVector(home.bearingDeg, home.distanceM)
           : home.source !== 'none'
@@ -945,14 +962,18 @@ export const Navbar: React.FC = () => {
         <TakeoverBanner />
 
         {/* Persistent Global Telemetry Status Strip (Health First, Battery, GPS, Alt/Spd, Home, Flight Time) */}
-        <div className="relative flex min-h-[30px] items-center overflow-hidden border-t border-zinc-800/80 bg-zinc-900/70 md:min-h-[34px]">
-          <div className="no-scrollbar flex w-full items-center gap-3 overflow-x-auto px-2.5 py-1 font-mono text-[11px] sm:gap-5 sm:px-6 md:text-[13px]">
+        {/* No sideways scrolling: as the strip narrows (its own width, a container query), the readouts drop in order
+            of need: flight time, then home, then altitude and speed, then link. Pre-arm, battery and GPS stay. */}
+        <div className="relative flex min-h-[30px] items-center overflow-hidden border-t border-zinc-800/80 bg-zinc-900/70 @container md:min-h-[34px]">
+          <div className="flex w-full items-center gap-2 overflow-hidden px-2 py-1 font-mono text-[11px] @[34rem]:gap-3 @[34rem]:px-2.5 sm:gap-5 sm:px-6 md:text-[13px]">
             {/* Pre-Arm & Subsystem Health Pill (Rank 3 - first on mobile for immediate visibility) */}
             <div className="relative shrink-0">
               <button
                 type="button"
                 onClick={() => setIsPreArmMenuOpen(true)}
-                className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-sans text-[10px] font-bold uppercase tracking-wider transition-colors md:text-[11px] ${
+                // A fixed width (its text varies: STANDBY, READY, CHECK (n), a pre-arm message): the readouts after it
+                // stay put. Long messages are cut; the dialog has them whole.
+                className={`inline-flex w-[6.5rem] items-center gap-1.5 rounded-md border px-2 py-0.5 font-sans text-[10px] font-bold uppercase tracking-wider transition-colors @[34rem]:w-[12.5rem] md:text-[11px] ${
                   !isHeartbeatActive
                     ? 'border-zinc-800 bg-zinc-900 text-zinc-500'
                     : preArm.isReady && !vibeWarning
@@ -963,55 +984,66 @@ export const Navbar: React.FC = () => {
               >
                 {!isHeartbeatActive ? (
                   <>
-                    <span className="h-1.5 w-1.5 rounded-full bg-zinc-500" />
-                    <span>PRE-ARM: STANDBY</span>
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-zinc-500" />
+                    <span className="hidden min-w-0 flex-1 truncate @[34rem]:inline">PRE-ARM: STANDBY</span>
+                    <span className="min-w-0 flex-1 truncate @[34rem]:hidden">STANDBY</span>
                   </>
                 ) : preArm.isReady && !vibeWarning ? (
                   <>
-                    <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-                    <span>{heartbeat.isArmed ? 'HEALTH OK' : 'PRE-ARM READY'}</span>
+                    <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-400" />
+                    <span className="hidden min-w-0 flex-1 truncate @[34rem]:inline">
+                      {heartbeat.isArmed ? 'HEALTH OK' : 'PRE-ARM READY'}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate @[34rem]:hidden">
+                      {heartbeat.isArmed ? 'OK' : 'READY'}
+                    </span>
                   </>
                 ) : (
                   <>
-                    <AlertTriangle className="h-3 w-3 text-amber-400" />
-                    <span>
-                      {preArm.activePreArmErrors[0]
-                        ? preArm.activePreArmErrors[0].slice(0, 28)
-                        : `PRE-ARM CHECK (${preArm.failedSubsystems.length + preArm.activePreArmErrors.length})`}
+                    <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400" />
+                    <span className="hidden min-w-0 flex-1 truncate @[34rem]:inline">
+                      {preArm.activePreArmErrors[0] ??
+                        `PRE-ARM CHECK (${preArm.failedSubsystems.length + preArm.activePreArmErrors.length})`}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate @[34rem]:hidden">
+                      CHECK {preArm.failedSubsystems.length + preArm.activePreArmErrors.length}
                     </span>
                   </>
                 )}
-                <ChevronDown className="h-3 w-3 opacity-60" />
+                <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
               </button>
             </div>
 
-            <span className="text-zinc-700">|</span>
-
-            <LinkPill active={isHeartbeatActive} />
-
-            <span className="text-zinc-700">|</span>
-
-            <BatteryPill active={isHeartbeatActive} />
-
-            <span className="text-zinc-700">|</span>
-
-            <GpsPill active={isHeartbeatActive} now={nowMs} />
-
-            <span className="text-zinc-700">|</span>
-
-            <AltSpeedPill active={isHeartbeatActive} plane={vehicleCategory === 'plane'} />
-
-            <span className="text-zinc-700">|</span>
-
-            <HomePill active={isHeartbeatActive} />
-
-            <span className="hidden text-zinc-700 sm:inline">|</span>
-
-            {/* Flight Time Pill */}
-            <div className="hidden shrink-0 items-center gap-1.5 sm:flex" title="Cumulative Armed Flight Time">
-              <Clock className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-              <span className="font-sans text-[10px] font-bold uppercase text-zinc-400 md:text-[11px]">FLT</span>
-              <span className="font-bold text-zinc-200">{formatDurationClock(totalArmedMs)}</span>
+            {/* Each readout with its divider; the widths at which they show are set from their measured widths. */}
+            <div className="hidden shrink-0 items-center gap-2 @[34rem]:gap-3 @[48rem]:flex sm:gap-5">
+              <span className="text-zinc-700">|</span>
+              <LinkPill active={isHeartbeatActive} />
+            </div>
+            <div className="flex shrink-0 items-center gap-2 @[34rem]:gap-3 sm:gap-5">
+              <span className="text-zinc-700">|</span>
+              <BatteryPill active={isHeartbeatActive} />
+            </div>
+            <div className="flex shrink-0 items-center gap-2 @[34rem]:gap-3 sm:gap-5">
+              <span className="text-zinc-700">|</span>
+              <GpsPill active={isHeartbeatActive} now={nowMs} />
+            </div>
+            <div className="hidden shrink-0 items-center gap-2 @[34rem]:gap-3 @[61rem]:flex sm:gap-5">
+              <span className="text-zinc-700">|</span>
+              <AltSpeedPill active={isHeartbeatActive} plane={vehicleCategory === 'plane'} />
+            </div>
+            <div className="hidden shrink-0 items-center gap-2 @[34rem]:gap-3 @[73.5rem]:flex sm:gap-5">
+              <span className="text-zinc-700">|</span>
+              <HomePill active={isHeartbeatActive} />
+            </div>
+            <div className="hidden shrink-0 items-center gap-2 @[34rem]:gap-3 @[82.5rem]:flex sm:gap-5">
+              <span className="text-zinc-700">|</span>
+              <div className="flex shrink-0 items-center gap-1.5" title="Cumulative Armed Flight Time">
+                <Clock className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+                <span className="font-sans text-[10px] font-bold uppercase text-zinc-400 md:text-[11px]">FLT</span>
+                <span className="inline-block min-w-[7ch] text-right font-bold text-zinc-200">
+                  {formatDurationClock(totalArmedMs)}
+                </span>
+              </div>
             </div>
           </div>
 
