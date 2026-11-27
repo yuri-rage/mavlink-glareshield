@@ -101,7 +101,8 @@ DETECTED_IP=""
 DETECTED_HOST=""
 ALL_IPS=""
 
-eval "$(python3 -c "
+# One value per line, read as data (never evaluated as shell: a hostname can't run code here).
+{ read -r DETECTED_IP; read -r DETECTED_HOST; read -r ALL_IPS; } < <(python3 -c "
 import socket, struct, fcntl, array
 ips = set()
 primary = ''
@@ -152,10 +153,22 @@ if not primary and ips:
     primary = sorted(list(ips))[0]
 
 all_ips_str = ','.join(sorted(list(ips)))
-print(f'DETECTED_IP=\"{primary}\"')
-print(f'DETECTED_HOST=\"{host}\"')
-print(f'ALL_IPS=\"{all_ips_str}\"')
-")"
+print(primary)
+print(host)
+print(all_ips_str)
+") || true  # nothing detected: the defaults below
+
+# Names that go into the certificate: a hostname or an IP, nothing else (a "/" would add subject fields, a ","
+# subjectAltName entries). An odd detected hostname is skipped; an odd CERT_CN is an error.
+valid_name() { [[ "$1" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$ ]]; }
+if [ -n "$DETECTED_HOST" ] && ! valid_name "$DETECTED_HOST"; then
+    echo "[TLS] Skipping hostname '$DETECTED_HOST' in the certificate (not a plain hostname)"
+    DETECTED_HOST=""
+fi
+if [ -n "$CERT_CN" ] && ! valid_name "$CERT_CN"; then
+    echo "[ERROR] CERT_CN='$CERT_CN' is not a hostname or IP address" >&2
+    exit 1
+fi
 
 if [ -z "$CERT_CN" ]; then
     CERT_CN="${DETECTED_IP:-${DETECTED_HOST:-localhost}}"
@@ -218,6 +231,9 @@ elif [ "$AUTO_TLS" = "true" ] || [ "$AUTO_TLS" = "1" ] || [ "$AUTO_TLS" = "yes" 
     if mkdir -p "$CERT_DIR" 2>/dev/null && [ -w "$CERT_DIR" ]; then
         cp "$RUN_CERT_DIR/cert.pem" "$CERT_DIR/cert.pem" 2>/dev/null || true
         cp "$RUN_CERT_DIR/key.pem" "$CERT_DIR/key.pem" 2>/dev/null || true
+        # The private key: readable by the owner of the certs folder (on the host, usually you) and no one else.
+        chmod 600 "$CERT_DIR/key.pem" 2>/dev/null || true
+        chown --reference="$CERT_DIR" "$CERT_DIR/key.pem" "$CERT_DIR/cert.pem" 2>/dev/null || true
         echo "[TLS] Certificate saved to $CERT_DIR for persistence"
     fi
 
@@ -257,6 +273,51 @@ if [ "$DISPLAY_HOST" = "0.0.0.0" ]; then
     DISPLAY_HOST="${DETECTED_IP:-localhost}"
 fi
 
+# Pairing token: every device needs it to connect (anyone else on the network could otherwise command the
+# vehicle). TOKEN empty: the one saved in $CERT_DIR/token, or a new one saved there. TOKEN=<passphrase>: that.
+# TOKEN=off: no token (anyone who can reach the port can connect).
+TOKEN="${TOKEN:-}"
+TOKEN_FILE="$CERT_DIR/token"
+TOKEN_NOTE=""
+case "${TOKEN,,}" in
+    off | false | no | none | 0)
+        TOKEN=""
+        TOKEN_NOTE="OFF (TOKEN=off): anyone who can reach port $PORT can connect"
+        ;;
+    "")
+        if [ -s "$TOKEN_FILE" ]; then
+            TOKEN="$(tr -d '[:space:]' < "$TOKEN_FILE")"
+            TOKEN_NOTE="from $TOKEN_FILE"
+        else
+            TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(16))')"
+            if (umask 077 && printf '%s\n' "$TOKEN" > "$TOKEN_FILE") 2>/dev/null; then
+                chown --reference="$CERT_DIR" "$TOKEN_FILE" 2>/dev/null || true
+                TOKEN_NOTE="new, saved in $TOKEN_FILE (delete it and restart to change it)"
+            else
+                TOKEN_NOTE="new, NOT saved ($CERT_DIR isn't writable): it changes on every restart"
+            fi
+        fi
+        ;;
+    *)
+        TOKEN_NOTE="from TOKEN"
+        if [ "${#TOKEN}" -lt 12 ]; then
+            echo "[WARN] TOKEN is under 12 characters: easy to guess for anyone on your network"
+        fi
+        ;;
+esac
+if [ -n "$TOKEN" ]; then
+    # To the bridge by environment, not the command line (where any process could read it).
+    export BRIDGE_TOKEN="$TOKEN"
+    ARGS+=("--pair-host" "$DISPLAY_HOST")
+    # The QR code as an image too. Created here (the bridge runs as an unprivileged user); owner-only: it holds
+    # the token.
+    if install -m 600 -o glareshield /dev/null "$CERT_DIR/pair.svg" 2>/dev/null; then
+        ARGS+=("--pair-svg" "$CERT_DIR/pair.svg")
+    fi
+else
+    unset BRIDGE_TOKEN
+fi
+
 echo "============================================================"
 echo " MAVLink Glareshield Bridge Container"
 echo " Mode:       $MODE ($TARGET)"
@@ -267,6 +328,10 @@ if [ "$USE_TLS" = "true" ]; then
 else
     echo " TLS Active: false"
     echo " Connect at: ws://$DISPLAY_HOST:$PORT/"
+fi
+echo " Token:      $TOKEN_NOTE"
+if [ -n "$TOKEN" ]; then
+    echo "             Pair each device with the QR code below (or the link under it)."
 fi
 echo "============================================================"
 

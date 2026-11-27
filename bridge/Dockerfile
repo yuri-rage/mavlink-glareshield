@@ -33,6 +33,7 @@ ENV HOST=0.0.0.0 \
     PORT=56781 \
     MODE=udp \
     TARGET=0.0.0.0:14550 \
+    TOKEN= \
     AUTO_TLS=false \
     CERT_DIR=/certs \
     PYTHONUNBUFFERED=1
