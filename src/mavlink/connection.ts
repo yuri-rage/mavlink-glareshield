@@ -1,3 +1,4 @@
+import { pairingCloseMessage } from '../lib/pairing';
 import { MavlinkEncoder } from './encoder';
 import { MavlinkPacket, MavlinkParser } from './parser';
 import { messageRateManager } from './rateManager';
@@ -381,9 +382,18 @@ export class MavlinkConnection {
         console.warn(`MAVLink ${transport.kind} link error:`, status.message);
         this.handleLinkLoss(this.isMixedContentBlocked() ? MIXED_CONTENT_MESSAGE : this.describeError(status.message));
         break;
-      case 'disconnected':
-        this.handleLinkLoss();
+      case 'disconnected': {
+        // The bridge refused this device's pairing token: retrying the same link can't succeed. Wait for the
+        // operator to pair (a new link, or Connect).
+        const pairing = pairingCloseMessage(status.code);
+        if (pairing) {
+          this.shouldReconnect = false;
+          this.handleLinkLoss(pairing);
+        } else {
+          this.handleLinkLoss();
+        }
         break;
+      }
       default:
         break;
     }

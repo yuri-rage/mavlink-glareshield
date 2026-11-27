@@ -6,7 +6,8 @@
 //     binary frame stream, so the bridge's JSON control messages never reach the MAVLink parser;
 //   - a socket factory that throws (e.g. a malformed URL) ends in an 'error' status instead of leaving the
 //     transport stuck in 'connecting';
-//   - the close event that follows a runtime error is reported as 'disconnected' with its close reason.
+//   - the close event that follows a runtime error is reported as 'disconnected' with its close reason;
+//   - a close reports its code (the bridge's 4001 / 4003 say this device's pairing token is missing or wrong).
 
 import type {
   FrameListener,
@@ -75,7 +76,11 @@ export class WebSocketTransport implements Transport, TextChannel {
     if (this.status.kind === 'disconnected') {
       return;
     }
-    this.updateStatus({ kind: 'disconnected', reason: event.reason || `WebSocket closed (${event.code})` });
+    this.updateStatus({
+      kind: 'disconnected',
+      reason: event.reason || `WebSocket closed (${event.code})`,
+      code: event.code,
+    });
   };
 
   constructor(id = 'websocket', options: WebSocketTransportOptions) {
@@ -150,7 +155,7 @@ export class WebSocketTransport implements Transport, TextChannel {
       const handleCloseBeforeOpen = (event: CloseEvent) => {
         cleanupConnectListeners();
         const reason = event.reason || `WebSocket closed before opening (${event.code})`;
-        this.updateStatus({ kind: 'disconnected', reason });
+        this.updateStatus({ kind: 'disconnected', reason, code: event.code });
         reject(new Error(reason));
       };
 
