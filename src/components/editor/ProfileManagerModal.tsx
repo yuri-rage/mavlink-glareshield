@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { AlertTriangle, Check, Copy, Download, Layers, RotateCcw, Upload } from 'lucide-react';
 
 import { downloadFile } from '../../lib/download';
 import { profileVehicleControls } from '../../lib/vehicleControls';
-import { askConfirm } from '../../store/confirmStore';
 import { parseProfileImport, useDashboardStore } from '../../store/dashboardStore';
 import { DashboardProfile } from '../../types/widget';
 import { Button } from '../ui/button';
@@ -93,21 +92,16 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
     }
   };
 
-  const handleReset = async () => {
-    if (
-      await askConfirm({
-        title: 'Reset the dashboard?',
-        message: [
-          'Your tabs, widgets and layouts go back to the defaults. Download the profile first to keep a copy.',
-          'Settings (link, units, alerts, traffic) are kept: Settings › Data › Restore defaults resets those too.',
-        ],
-        confirmLabel: 'Reset the dashboard',
-        danger: true,
-      })
-    ) {
-      resetToDefaults();
-      onClose();
-    }
+  // Resetting asks first, in place, with the choice to download the dashboard before it goes.
+  const [confirmReset, setConfirmReset] = useState(false);
+  useEffect(() => {
+    if (!isOpen) setConfirmReset(false);
+  }, [isOpen]);
+  const reset = (downloadFirst: boolean) => {
+    if (downloadFirst) handleDownload();
+    resetToDefaults();
+    setConfirmReset(false);
+    onClose();
   };
 
   return (
@@ -254,22 +248,62 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
           {importStatus && <p className="animate-pulse text-center text-xs font-bold text-sky-400">{importStatus}</p>}
         </div>
 
-        {/* Reset to Factory Defaults */}
-        <div className="flex items-center justify-between border-t border-zinc-800 pt-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleReset}
-            className="gap-1.5 text-xs text-red-400 hover:bg-red-950/30 hover:text-red-300"
+        {/* Reset the dashboard: confirmed here, with a download offered first. */}
+        {confirmReset ? (
+          <div
+            role="alertdialog"
+            aria-labelledby="reset-dashboard-title"
+            className="space-y-2.5 rounded-xl border border-red-500/40 bg-red-950/30 p-3"
           >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Reset the dashboard…
-          </Button>
+            <div id="reset-dashboard-title" className="flex items-center gap-1.5 text-sm font-semibold text-red-200">
+              <AlertTriangle className="h-4 w-4 text-red-400" />
+              Reset the dashboard?
+            </div>
+            <p className="text-xs leading-snug text-zinc-300">
+              Your tabs, widgets and layouts ({profile.tabs.length} tabs, {profile.customWidgets.length} custom widgets)
+              go back to the defaults. Settings (link, units, alerts, traffic) are kept: Settings › Data › Restore
+              defaults resets those too.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => reset(true)}
+                className="h-8 gap-1.5 bg-sky-500 text-xs font-semibold text-white hover:bg-sky-600"
+                autoFocus
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download, then reset
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => reset(false)}
+                className="h-8 text-xs font-semibold"
+              >
+                Reset without a copy
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmReset(false)} className="h-8 text-xs">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between border-t border-zinc-800 pt-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmReset(true)}
+              className="gap-1.5 text-xs text-red-400 hover:bg-red-950/30 hover:text-red-300"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Reset the dashboard…
+            </Button>
 
-          <Button variant="ghost" size="sm" onClick={onClose} className="text-xs">
-            Done
-          </Button>
-        </div>
+            <Button variant="ghost" size="sm" onClick={onClose} className="text-xs">
+              Done
+            </Button>
+          </div>
+        )}
       </div>
     </Modal>
   );
