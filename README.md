@@ -112,7 +112,7 @@ Pushes to `master` run `.github/workflows/ci.yml`: unit tests, bridge tests and 
 
 ## Custom Widgets
 
-Custom widgets are declarative JSON definitions, safe from arbitrary code execution. Build them in **Edit Mode → Add Widget → Build Custom Widget** (with a live preview), or import a `.widget.json` file. They can show one value or several, as stat cards, value lists, radial and linear gauges (including several gauges in one card, each with its own scale), time-series charts, compass roses, bar groups and LEDs. They can also send commands, switch relays and servos, and read and write parameters. Imported widgets always ask for confirmation before sending anything.
+Custom widgets are declarative JSON definitions, safe from arbitrary code execution. Build them in **Edit Mode → Add Widget → Build a custom widget** (with a live preview), or import a `.widget.json` file. They can show one value or several, as stat cards, value lists, radial and linear gauges (including several gauges in one card, each with its own scale), time-series charts, compass roses, bar groups and LEDs. They can also send commands, switch relays and servos, and read and write parameters. Imported widgets always ask for confirmation before sending anything.
 
 ```json
 {
