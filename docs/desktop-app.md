@@ -44,7 +44,7 @@ Open **Settings → Link** and choose the **Link type**:
 |---|---|---|
 | UDP | The port to listen on (14550) | SITL (`--serial1 udpclient:<this computer>:14550`), a companion computer or radio bridge sending here |
 | TCP | The vehicle's `host:port` (`127.0.0.1:5760`) | SITL's first port, a serial-to-TCP adapter |
-| USB serial | The baud rate (57600 for SiK radios) | A radio or flight controller plugged into this computer; **Connect** lists the ports |
+| USB serial | The port (from the list; ⟳ lists them again after plugging in) and the baud rate (57600 for SiK radios) | A radio or flight controller plugged into this computer |
 | WebSocket | The bridge's address | The Docker bridge or Mission Planner, as in the web app |
 
 Over UDP, Glareshield replies to whatever address last sent to it, as Mission Planner does. Only one copy of the app

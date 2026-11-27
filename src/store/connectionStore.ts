@@ -274,11 +274,13 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   },
 
   connect: () => {
+    set({ errorMessage: undefined });
     mavlinkConnection.setLink(linkOf(get()));
     mavlinkConnection.connect();
   },
 
   disconnect: () => {
+    set({ errorMessage: undefined });
     mavlinkConnection.disconnect();
   },
 
@@ -289,7 +291,12 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
 
 // Sync connection status from MavlinkConnection
 mavlinkConnection.onStatus((status, error) => {
-  useConnectionStore.setState({ status, errorMessage: error });
+  // A failed attempt is followed at once by 'disconnected' (and a retry's 'connecting'): its error stays shown until
+  // the link connects, or the person connects or disconnects themselves, instead of vanishing before it's read.
+  useConnectionStore.setState((s) => ({
+    status,
+    errorMessage: error ?? (status === 'connected' ? undefined : s.errorMessage),
+  }));
   if (status === 'connected') {
     messageRateManager.recalculateAndApply();
   }
