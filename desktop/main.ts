@@ -7,6 +7,7 @@
 // - USB serial is the page's own Web Serial; Electron has no device picker, so the page is asked to show one.
 // - Updates from GitHub Releases (AppImage, NSIS installer), when packaged.
 
+import { execFile } from 'node:child_process';
 import dgram from 'node:dgram';
 import fs from 'node:fs';
 import net from 'node:net';
@@ -165,14 +166,82 @@ function setupLinks(win: BrowserWindow) {
   });
 }
 
-// ---- Serial (the page's Web Serial; the picker is the page's) ----------------------------------------------------
+// ---- Serial (the page's Web Serial, with the port chosen in Settings) ----------------------------------------------
+//
+// Other ground stations list the ports in their connection settings; so does Glareshield: the main process lists them
+// (no native module: /sys/class/tty on Linux, the registry on Windows), the page shows a dropdown, and Connect says
+// which one before the page's navigator.serial.requestPort(), which is then answered here without a picker. A request
+// with no port chosen (the RTK widget's base station) still gets the page's own list.
+
+interface SerialListing {
+  /** The port's name as Electron reports it (ttyUSB0, COM3). */
+  name: string;
+  label: string;
+}
+
+function listSerialPorts(): Promise<SerialListing[]> {
+  if (process.platform === 'win32') {
+    return new Promise((resolve) => {
+      execFile('reg', ['query', 'HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM'], { windowsHide: true }, (err, out) => {
+        if (err) return resolve([]);
+        const ports: SerialListing[] = [];
+        for (const line of out.split(/\r?\n/)) {
+          const m = line.trim().match(/^(\S+)\s+REG_SZ\s+(COM\d+)$/);
+          if (m) ports.push({ name: m[2], label: `${m[2]} (${m[1].split('\\').pop()})` });
+        }
+        resolve(ports.sort((a, b) => parseInt(a.name.slice(3), 10) - parseInt(b.name.slice(3), 10)));
+      });
+    });
+  }
+  if (process.platform !== 'linux') return Promise.resolve([]);
+  const ports: SerialListing[] = [];
+  try {
+    // Friendly names from /dev/serial/by-id (usb-ArduPilot_Pixhawk6X_..., usb-Silicon_Labs_CP2102_...).
+    const byId = new Map<string, string>();
+    try {
+      for (const f of fs.readdirSync('/dev/serial/by-id')) {
+        byId.set(path.basename(fs.realpathSync(path.join('/dev/serial/by-id', f))), f);
+      }
+    } catch {
+      /* none plugged in */
+    }
+    for (const name of fs.readdirSync('/sys/class/tty')) {
+      // A real device behind it (not a virtual console or pseudo-terminal).
+      if (!fs.existsSync(path.join('/sys/class/tty', name, 'device'))) continue;
+      const id = byId.get(name);
+      const friendly = id
+        ?.replace(/^usb-/, '')
+        .replace(/-if\d+(-port\d+)?$/, '')
+        .replace(/_/g, ' ');
+      ports.push({ name, label: friendly ? `${name}: ${friendly}` : name });
+    }
+  } catch {
+    /* no sysfs */
+  }
+  // USB adapters and boards first; the built-in UARTs (ttyS*) last.
+  const rank = (n: string) => (/^ttyS\d/.test(n) ? 1 : 0);
+  return Promise.resolve(ports.sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name)));
+}
 
 function setupSerial(win: BrowserWindow) {
   const ses = win.webContents.session;
   ses.setPermissionCheckHandler((_wc, permission, origin) => permission === 'serial' && origin.startsWith(ORIGIN));
   ses.setDevicePermissionHandler((details) => details.deviceType === 'serial' && details.origin.startsWith(ORIGIN));
+  let preferred: string | null = null;
+  ipcMain.handle('serial:list', () => listSerialPorts());
+  ipcMain.on('serial:prefer', (_e, name: string | null) => {
+    preferred = name;
+  });
   ses.on('select-serial-port', (event, portList, _wc, callback) => {
     event.preventDefault();
+    if (preferred) {
+      const want = path.basename(preferred);
+      const port = portList.find((p) => path.basename(p.portName ?? '') === want);
+      preferred = null;
+      // Not there (unplugged since the list was made): no port; the page says so.
+      callback(port?.portId ?? '');
+      return;
+    }
     const ports = portList.map((p) => ({
       portId: p.portId,
       label: [p.displayName || p.portName, p.portName && p.displayName ? `(${p.portName})` : '']

@@ -25,8 +25,19 @@ export interface SerialPortChoice {
   label: string;
 }
 
+export interface SerialPortListing {
+  /** The port's name: ttyUSB0, COM3. */
+  name: string;
+  /** What to show: the name, and the device when known (ttyACM0: ArduPilot Pixhawk6X). */
+  label: string;
+}
+
 export interface DesktopSerialApi {
-  /** Electron has no serial picker of its own: the page shows one when a port is requested. */
+  /** This computer's serial ports, for the dropdown in Settings › Link. */
+  list(): Promise<SerialPortListing[]>;
+  /** The port the next navigator.serial.requestPort() should get, without a picker (null: ask). */
+  prefer(name: string | null): void;
+  /** A request with no port chosen (the RTK widget's base station): the page shows the list. */
   onChoosePort(listener: (ports: SerialPortChoice[]) => void): Unsubscribe;
   /** The page's answer: a port ID, or null (cancelled). */
   choosePort(portId: string | null): void;

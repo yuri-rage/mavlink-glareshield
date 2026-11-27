@@ -177,7 +177,17 @@ export class WebSerialTransport implements Transport {
         this.port = undefined;
       }
 
-      const message = error instanceof Error ? error.message : 'Unknown Web Serial error.';
+      const raw = error instanceof Error ? error.message : 'Unknown Web Serial error.';
+      // Chromium says only "Failed to open serial port": say what usually causes it.
+      const message = /Failed to open serial port/i.test(raw)
+        ? `Couldn't open the serial port: another program (Mission Planner, another tab or app) may be using it${
+            typeof navigator !== 'undefined' &&
+            /Linux/.test(navigator.userAgent) &&
+            !/Android/.test(navigator.userAgent)
+              ? ', or your user may need to be in the dialout (or uucp) group'
+              : ''
+          }.`
+        : raw;
       // A mid-connect disconnect already set the terminal status; don't
       // clobber 'disconnected' with 'error'.
       if (!this.intentionalDisconnect) {
