@@ -39,7 +39,8 @@ export const HeaderTabs: React.FC = () => {
     ro.observe(slot);
     ro.observe(measure);
     return () => ro.disconnect();
-  }, [tabs.length]);
+    // Edit Mode unmounts what's measured (this renders nothing there): measure again, on the new elements, after it.
+  }, [tabs.length, isEditing]);
 
   if (isEditing) return null;
 
