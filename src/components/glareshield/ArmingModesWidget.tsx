@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 
 import { AutoTakeoffSequence } from '../../lib/autoTakeoff';
+import { disarmRefused, offerForceDisarm } from '../../lib/forceDisarm';
 import { useConnectionParam } from '../../lib/useConnectionParam';
 import { useConfirmStep } from '../../lib/useWaypointNavigation';
 import { mavlinkConnection } from '../../mavlink/connection';
@@ -34,6 +35,7 @@ import {
   PLANE_MODE,
 } from '../../mavlink/messages';
 import { heartbeatLiveMs } from '../../mavlink/replayClock';
+import { askConfirm } from '../../store/confirmStore';
 import { useReplaying } from '../../store/replayStore';
 import { sendTrackedCommand, useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
@@ -108,13 +110,17 @@ export const ArmingModesWidget: React.FC = () => {
   const getFeedbackBadge = (key: string) => feedbackBadge(commandFeedback, key, nowMs, 'h-3.5 w-3.5');
   const getFeedbackRing = (key: string) => feedbackRing(commandFeedback, key, nowMs);
 
-  const handleArm = (arm: boolean) => {
-    const cmd = encoder.createArmDisarm(sysId, compId, arm);
-    void sendTrackedCommand(cmd, {
+  const forceDisarmDeps = { ask: askConfirm, send: sendTrackedCommand, encoder };
+
+  const handleArm = async (arm: boolean) => {
+    setSliderValue(0);
+    const target = { sysId, compId };
+    const ack = await sendTrackedCommand(encoder.createArmDisarm(target.sysId, target.compId, arm), {
       label: arm ? 'Arm Motors' : 'Disarm Motors',
       targetKey: 'arm',
     });
-    setSliderValue(0);
+    // Refused (the vehicle thinks it is flying): a forced disarm is the operator's to choose, confirmed.
+    if (!arm && disarmRefused(ack)) await offerForceDisarm(target.sysId, target.compId, forceDisarmDeps);
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLInputElement>) => {
@@ -141,9 +147,9 @@ export const ArmingModesWidget: React.FC = () => {
   const handleSliderRelease = () => {
     if (dragStartedFromLeft.current && sliderValue >= 90 && canCommand) {
       if (heartbeat.isArmed) {
-        handleArm(false);
+        void handleArm(false);
       } else {
-        handleArm(true);
+        void handleArm(true);
       }
     }
     dragStartedFromLeft.current = false;
@@ -233,6 +239,7 @@ export const ArmingModesWidget: React.FC = () => {
         onStep: setAutoSeqStep,
         onError: setAutoSeqError,
         onDone: () => setShowTakeoffPanel(false),
+        onDisarmRefused: () => void offerForceDisarm(hb.systemId || 1, hb.componentId || 1, forceDisarmDeps),
       }
     );
     autoSeqRef.current = seq;

@@ -4,11 +4,14 @@
 // Standing down never force-disarms. A GCS disarm without the force code is refused by ArduPilot while it thinks it
 // is flying (Copter: not land_complete; Plane: is_flying), so it disarms on the ground and is refused in the air;
 // refused or unanswered, the vehicle is told to hold (LOITER / QLOITER) instead. A forced disarm stops the motors
-// wherever the vehicle is.
+// wherever the vehicle is, so it is never sent on its own: a refused disarm is reported (onDisarmRefused), and the
+// widget offers the operator a forced one with a confirmation (src/lib/forceDisarm.ts), for a vehicle that has landed
+// without detecting it.
 
 import type { MavlinkEncoder } from '../mavlink/encoder';
 import { MAV_CMD } from '../mavlink/messages';
 import type { CommandAckInfo } from '../store/telemetryStore';
+import { disarmRefused } from './forceDisarm';
 
 export interface TakeoffPlan {
   /** The vehicle this sequence is for: fixed when it starts, so an abort reaches the vehicle it armed. */
@@ -35,6 +38,8 @@ export interface TakeoffDeps {
   onError: (text: string | null) => void;
   /** The sequence finished: the vehicle is taking off (or, fixed-wing, armed for launch). */
   onDone?: () => void;
+  /** A stand-down's disarm was refused (the hold is sent already): where the operator is offered a forced one. */
+  onDisarmRefused?: () => void;
 }
 
 /** ACCEPTED, or IN_PROGRESS (the final answer is still to come, and nothing refused it). */
@@ -169,7 +174,11 @@ export class AutoTakeoffSequence {
         targetKey: 'arm',
       });
       if (ack.result === 0 || ack.result === -2) return; // disarmed, or the link is down (a hold wouldn't go either)
-      await this.hold(`${reason}: Hold (won't disarm in flight)`);
+      // The hold goes out first (where the vehicle stays if nobody answers); then the operator is asked, without
+      // waiting for the hold's ACK.
+      const holding = this.hold(`${reason}: Hold (won't disarm in flight)`);
+      if (disarmRefused(ack)) this.deps.onDisarmRefused?.();
+      await holding;
     } catch {}
   }
 

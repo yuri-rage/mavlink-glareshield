@@ -39,7 +39,7 @@ function harness(planOver: Partial<TakeoffPlan> = {}, vehicleInit = { systemId: 
     createCommandLong: (sysId: number, _c: number, cmd: number) =>
       packet({ kind: cmd === MAV_CMD.NAV_TAKEOFF ? 'takeoff' : 'other', sysId }),
   } as any;
-  const state = { step: null as string | null, error: null as string | null, done: false };
+  const state = { step: null as string | null, error: null as string | null, done: false, refused: 0 };
   const plan: TakeoffPlan = {
     sysId: 1,
     compId: 1,
@@ -67,6 +67,7 @@ function harness(planOver: Partial<TakeoffPlan> = {}, vehicleInit = { systemId: 
     onStep: (t) => (state.step = t),
     onError: (t) => (state.error = t),
     onDone: () => (state.done = true),
+    onDisarmRefused: () => state.refused++,
   });
   const last = () => sent[sent.length - 1];
   /** Answer the newest command and let the sequence move on. */
@@ -111,6 +112,7 @@ const kinds = (sent: Sent[]) => sent.map((s) => s.kind + (s.kind === 'mode' ? `:
   await flush();
   check('abort after takeoff: nothing more sent', kinds(h.sent) === 'mode:4,arm,takeoff,disarm,mode:5', kinds(h.sent));
   check('abort after takeoff: never forced', noForce(h.sent));
+  check('abort after takeoff: the refused disarm is reported (force offered)', h.state.refused === 1);
   check('abort after takeoff: not reported done', !h.state.done && /aborted/.test(h.state.error ?? ''));
 }
 
@@ -166,6 +168,7 @@ const kinds = (sent: Sent[]) => sent.map((s) => s.kind + (s.kind === 'mode' ? `:
   await h.answer(FAILED);
   await h.answer(ACCEPTED);
   check('takeoff refused on the ground: disarm, nothing after', kinds(h.sent) === 'mode:4,arm,takeoff,disarm');
+  check('disarm accepted: no force offered', h.state.refused === 0);
 }
 
 // Arm ACK lost, but the heartbeat says armed: stood down all the same.
@@ -248,6 +251,41 @@ const kinds = (sent: Sent[]) => sent.map((s) => s.kind + (s.kind === 'mode' ? `:
   h.seq.abort();
   await flush();
   check('double abort: one hold', h.sent.filter((s) => s.kind === 'mode' && s.mode === 5).length === 1);
+}
+
+// The force disarm offered after a refusal: sent (with 21196) only on a yes, to the vehicle asked about.
+{
+  const { offerForceDisarm, disarmRefused, FORCE_DISARM_CONFIRM } = await import('../src/lib/forceDisarm.ts');
+  const sentForce: { sysId: number; force: boolean }[] = [];
+  const deps = (yes: boolean) => ({
+    ask: async () => yes,
+    send: async () => ({ command: 400, result: 0, resultText: 'ACCEPTED', time: 0 }),
+    encoder: {
+      createArmDisarm: (sysId: number, _c: number, _arm: boolean, force = false) => {
+        sentForce.push({ sysId, force });
+        return new Uint8Array();
+      },
+    } as any,
+  });
+  check('declined: nothing sent', (await offerForceDisarm(3, 1, deps(false))) === null && sentForce.length === 0);
+  await offerForceDisarm(3, 1, deps(true));
+  check(
+    'confirmed: forced disarm to vehicle 3',
+    sentForce.length === 1 && sentForce[0].force && sentForce[0].sysId === 3
+  );
+  check(
+    'the confirmation says the motors stop and it falls',
+    FORCE_DISARM_CONFIRM.danger === true && /fall/.test(FORCE_DISARM_CONFIRM.message.join(' '))
+  );
+  const ack = (result: number) => ({ command: 400, result, resultText: '', time: 0 });
+  check(
+    'refusals: FAILED, DENIED, TEMPORARILY_REJECTED',
+    [4, 2, 1].every((r) => disarmRefused(ack(r)))
+  );
+  check(
+    'not refusals: ACCEPTED, TIMEOUT, NOT_SENT',
+    [0, -1, -2].every((r) => !disarmRefused(ack(r)))
+  );
 }
 
 console.log(failures.length ? `\n${failures.length} auto-takeoff check(s) FAILED` : '\nAll auto-takeoff checks PASSED');
