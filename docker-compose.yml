@@ -23,6 +23,11 @@ services:
       - TARGET=0.0.0.0:14550
       # Automatically generate self-signed TLS certificates for wss:// (LAN IP auto-detected)
       - AUTO_TLS=true
+      # Pairing token: each device needs it to connect (see docs/connection-guide.md, "Pairing devices").
+      #   empty:              one is generated on first start and kept in ./certs/token
+      #   TOKEN=<passphrase>: your own (handy to type on a phone; 12+ characters)
+      #   TOKEN=off:          no token: anyone who can reach port 56781 can command the vehicle
+      - TOKEN=
       # Optional: Override certificate Common Name (defaults to auto-detected LAN IP / hostname)
       # - CERT_CN=192.168.1.69
       # Optional: Additional allowed origins (https://glareshield.yurirage.com and localhost are allowed by default)
