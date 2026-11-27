@@ -75,3 +75,30 @@ How it fits together:
 - `desktop/preload.ts` gives the page a small API (`src/desktop/api.ts`) and nothing else of Electron or Node.
 - On the page, `src/mavlink/transport/nativeLinkTransport.ts` is the UDP/TCP transport, alongside WebSocket and Web
   Serial.
+
+### Signing the Windows installer
+
+Unsigned, the installer and app show "Unknown publisher", and SmartScreen stops the first run. The release workflow
+signs both with [Azure Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/) (formerly Trusted
+Signing) once it's set up. Until then, it builds unsigned. One-time setup in Azure:
+
+1. **A paid subscription.** Pay-as-you-go is fine; free, trial and sponsored subscriptions aren't accepted. Register
+   the `Microsoft.CodeSigning` resource provider on it.
+2. **An Artifact Signing account** (Basic tier, $9.99/month at the time of writing). Note its region's endpoint, e.g.
+   `https://eus.codesigning.azure.net/`.
+3. **Identity validation, Public trust.** Individual developers are accepted in the USA and Canada and verify with a
+   government ID; it can take several business days. The validated name becomes the publisher name Windows shows, so
+   it's public.
+4. **A certificate profile**, Public Trust, on that validated identity.
+5. **An app registration** (Microsoft Entra ID) with a client secret, given the **Artifact Signing Certificate
+   Profile Signer** role on the signing account.
+
+Then, in the GitHub repository (Settings → Secrets and variables → Actions):
+
+| Secrets | Variables |
+|---|---|
+| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` (the app registration) | `AZURE_SIGN_ENDPOINT`, `AZURE_SIGN_ACCOUNT` (the signing account's name), `AZURE_SIGN_PROFILE` (the certificate profile's name), `AZURE_SIGN_PUBLISHER` (the certificate's subject name, exactly as validated) |
+
+The next build is signed: the workflow's log says so, or notes that the build is unsigned. A new publisher still
+builds SmartScreen reputation over its first downloads, so early users may still see a warning, now naming the
+publisher.

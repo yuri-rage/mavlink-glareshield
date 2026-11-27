@@ -5,8 +5,13 @@
 # - Run it by hand (Actions → Desktop release → Run workflow), or a pull request that touches the desktop app: both
 #   are built and kept as workflow artifacts, nothing is published. For trying a build before tagging.
 #
-# macOS isn't built: it needs a paid Apple Developer ID. Windows builds are unsigned for now (SmartScreen warns on
-# first run).
+# macOS isn't built: it needs a paid Apple Developer ID.
+#
+# Windows signing (Azure Artifact Signing, formerly Trusted Signing) is on once it's configured, off (unsigned) until
+# then: repository secrets AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET (an app registration with the
+# "Artifact Signing Certificate Profile Signer" role) and repository variables AZURE_SIGN_ENDPOINT (e.g.
+# https://eus.codesigning.azure.net/), AZURE_SIGN_ACCOUNT, AZURE_SIGN_PROFILE and AZURE_SIGN_PUBLISHER (the
+# certificate's subject name, exactly). See docs/desktop-app.md.
 
 name: Desktop release
 
@@ -52,6 +57,25 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Windows signing (when configured)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        env:
+          HAS_SECRET: ${{ secrets.AZURE_CLIENT_SECRET != '' }}
+          ENDPOINT: ${{ vars.AZURE_SIGN_ENDPOINT }}
+          ACCOUNT: ${{ vars.AZURE_SIGN_ACCOUNT }}
+          PROFILE: ${{ vars.AZURE_SIGN_PROFILE }}
+          PUBLISHER: ${{ vars.AZURE_SIGN_PUBLISHER }}
+        run: |
+          if [ "$HAS_SECRET" = "true" ] && [ -n "$ENDPOINT" ] && [ -n "$ACCOUNT" ] && [ -n "$PROFILE" ] && [ -n "$PUBLISHER" ]; then
+            {
+              echo "SIGN_ARGS=-c.win.azureSignOptions.endpoint=$ENDPOINT -c.win.azureSignOptions.codeSigningAccountName=$ACCOUNT -c.win.azureSignOptions.certificateProfileName=$PROFILE -c.win.azureSignOptions.publisherName=\"$PUBLISHER\""
+            } >> "$GITHUB_ENV"
+            echo "Signing with Azure Artifact Signing ($ACCOUNT / $PROFILE)"
+          else
+            echo "::notice::Windows signing isn't configured: this build is unsigned."
+          fi
+
       - name: Version from the tag
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -59,13 +83,22 @@ jobs:
 
       - name: Build and publish (tag)
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build && npm run desktop:compile && npx electron-builder ${{ matrix.target }} --publish always
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: npm run build && npm run desktop:compile && eval npx electron-builder ${{ matrix.target }} $SIGN_ARGS --publish always
 
-      - name: Build only (manual run)
+      - name: Build only (manual run, pull request)
         if: "!startsWith(github.ref, 'refs/tags/v')"
-        run: npm run desktop:dist -- ${{ matrix.target }}
+        shell: bash
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: npm run build && npm run desktop:compile && eval npx electron-builder ${{ matrix.target }} $SIGN_ARGS --publish never
 
       - name: Keep the build
         if: "!startsWith(github.ref, 'refs/tags/v')"
