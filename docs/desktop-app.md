@@ -28,6 +28,7 @@ chmod +x Glareshield-*.AppImage
 
 - Some distributions need FUSE 2 for AppImages (Ubuntu 22.04 and later: `sudo apt install libfuse2`).
 - On NixOS, use `appimage-run`.
+- On first run, it adds itself to your app launcher (`~/.local/share/applications/glareshield.desktop` and its icon), which is also where Wayland desktops get the window's icon. The entry follows the AppImage if you move it; delete those two files to remove it.
 - For USB serial, your user must be allowed to open serial ports. On most distributions that means the `dialout` group
   (`uucp` on Arch): `sudo usermod -aG dialout $USER`, then log out and back in.
 

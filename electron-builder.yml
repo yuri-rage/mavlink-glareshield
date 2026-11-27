@@ -22,6 +22,8 @@ publish:
 linux:
   target: AppImage
   category: Science
+  # The window's app ID, the launcher entry and the icon are all "glareshield" (matching desktopName).
+  executableName: glareshield
   syncDesktopName: true
   icon: public/logo-512.png
   artifactName: Glareshield-${version}-${arch}.AppImage
