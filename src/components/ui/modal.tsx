@@ -13,6 +13,8 @@ interface ModalProps {
   children: React.ReactNode;
   /** 'xl' widens the dialog for side-by-side layouts (e.g. an editor with a live preview). */
   size?: 'md' | 'xl';
+  /** 'top': held near the top instead of centered, so a dialog whose height changes (tabs) doesn't jump. */
+  anchor?: 'center' | 'top';
 }
 
 /**
@@ -23,7 +25,7 @@ interface ModalProps {
 const openModals: symbol[] = [];
 const isTopmost = (token: symbol) => openModals[openModals.length - 1] === token;
 
-export function Modal({ isOpen, onClose, title, description, children, size = 'md' }: ModalProps) {
+export function Modal({ isOpen, onClose, title, description, children, size = 'md', anchor = 'center' }: ModalProps) {
   const dialogRef = React.useRef<HTMLDivElement | null>(null);
   const tokenRef = React.useRef<symbol>(Symbol('modal'));
   /** How many modals were already open when this one opened (its stacking level). */
@@ -137,7 +139,7 @@ export function Modal({ isOpen, onClose, title, description, children, size = 'm
 
   const content = (
     <div
-      className="animate-in fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm duration-200"
+      className={`animate-in fade-in fixed inset-0 z-50 flex justify-center bg-black/75 p-4 backdrop-blur-sm duration-200 ${anchor === 'top' ? 'items-start pt-[6vh]' : 'items-center'}`}
       style={depth > 0 ? { zIndex: 50 + depth * 10 } : undefined}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
