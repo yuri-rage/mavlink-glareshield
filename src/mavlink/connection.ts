@@ -182,6 +182,9 @@ export class MavlinkConnection {
   public checkLinkSilence(now = Date.now()) {
     // A paused replay is silent by design.
     if (this.replay || this.status !== 'connected' || !this.transport) return;
+    // A UDP listener (desktop app) has no connection to go stale: reopening it changes nothing, and it would only
+    // flash errors while waiting for a vehicle to boot. Losing the vehicle is the heartbeat watchdog's to report.
+    if (this.link.kind === 'udp') return;
     if (now - this.lastRxAt <= this.silenceTimeoutMs) return;
     const seconds = Math.round((now - this.lastRxAt) / 1000);
     this.silenceTimeoutMs = Math.min(LINK_SILENCE_TIMEOUT_MAX_MS, this.silenceTimeoutMs * 2);
