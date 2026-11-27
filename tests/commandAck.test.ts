@@ -95,5 +95,49 @@ ack(154, 205, 4);
 const g = await toGimbal;
 check('…and the gimbal ACK the gimbal command', g.result === 4);
 
+// Two vehicles, and the active one switched: a command sent to the other (the takeoff sequence standing it down)
+// still gets its answer, and the active vehicle's feedback is left alone.
+{
+  const { switchToVehicle } = await import('../src/mavlink/vehicleRoster.ts');
+  const heartbeat = (sys: number) => {
+    const hb = new Uint8Array(9);
+    hb[4] = 2; // quadrotor
+    hb[5] = 3; // ArduPilot
+    hb[8] = 3;
+    for (const pkt of parser.parse(new MavlinkEncoder(sys, 1).packV2(0, hb)))
+      useTelemetryStore.getState().processPacket(pkt);
+  };
+  heartbeat(1);
+  heartbeat(2);
+  switchToVehicle(2);
+  heartbeat(2);
+  const disarm = sendTrackedCommand(gcs.createCommandLong(1, 1, 400, [0, 0, 0, 0, 0, 0, 0]), {
+    label: 'Auto-Takeoff Stopped: Safety Disarm',
+    targetKey: 'arm',
+  });
+  ack(1, 400, 0, 255, 190); // from vehicle 1, no longer active
+  const answered = await settled(disarm);
+  check('an inactive vehicle answers a command sent to it: answered', answered);
+  check('…ACCEPTED', answered && (await disarm).result === 0);
+  const fb = useTelemetryStore.getState().commandFeedback;
+  check(
+    'its toast is finished (accepted), not left pending',
+    fb?.label === 'Auto-Takeoff Stopped: Safety Disarm' && fb?.status === 'accepted',
+    `${fb?.label}: ${fb?.status}`
+  );
+  // A command to the active vehicle sent since: an ACK from the other vehicle doesn't touch its toast.
+  const other = sendTrackedCommand(gcs.createCommandLong(1, 1, 400, [0, 0, 0, 0, 0, 0, 0]), { label: 'Disarm 1' });
+  const mine = sendTrackedCommand(gcs.createCommandLong(2, 1, 176, [1, 4, 0, 0, 0, 0, 0]), { label: 'Loiter on 2' });
+  ack(1, 400, 0, 255, 190);
+  check(
+    "the inactive vehicle's ACK leaves the active vehicle's toast alone",
+    useTelemetryStore.getState().commandFeedback?.label === 'Loiter on 2' &&
+      useTelemetryStore.getState().commandFeedback?.status === 'pending',
+    `${useTelemetryStore.getState().commandFeedback?.label}: ${useTelemetryStore.getState().commandFeedback?.status}`
+  );
+  void other;
+  void mine;
+}
+
 console.log(failures.length ? `\n${failures.length} command-ACK check(s) FAILED` : '\nAll command-ACK checks PASSED');
 process.exit(failures.length ? 1 : 0);

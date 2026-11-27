@@ -1097,6 +1097,36 @@ export const useTelemetryStore = create<TelemetryState>()(
             };
           }
 
+          // A vehicle that is no longer active answering a command sent to it (the takeoff sequence standing it down
+          // after a switch): whoever sent it gets the answer, rather than a timeout and a needless follow-up. The
+          // feedback, toasts and messages stay the active vehicle's.
+          if (packet.messageId === MAVLINK_MSG_ID.COMMAND_ACK && active !== null && packet.systemId !== active) {
+            const gcsSys = mavlinkConnection.getEncoder().getSystemId();
+            if (data.target_system !== 0 && data.target_system !== gcsSys) return state;
+            const list = pendingCommands.get(data.command);
+            const at = list ? matchPendingAck(list, packet) : -1;
+            if (list && at >= 0 && data.result !== 5) {
+              const done = list.splice(at, 1)[0];
+              clearTimeout(done.timer);
+              if (list.length === 0) pendingCommands.delete(data.command);
+              const resultText = COMMAND_ACK_RESULTS[data.result] ?? `CODE_${data.result}`;
+              done.resolve?.({ command: data.command, result: data.result, resultText, time: now });
+              // Its own toast (shown when it was sent) is finished, not left pending; another command's is left alone.
+              if (state.commandFeedback?.id === done.id) {
+                return {
+                  commandFeedback: {
+                    ...state.commandFeedback,
+                    status: data.result === 0 ? 'accepted' : 'denied',
+                    result: data.result,
+                    resultText,
+                    time: now,
+                  },
+                };
+              }
+            }
+            return state;
+          }
+
           // For all other messages: once a vehicle is active, only its packets.
           if (active !== null && packet.systemId !== active) {
             return state;
