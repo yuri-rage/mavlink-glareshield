@@ -427,9 +427,50 @@ const J = JSON.stringify;
   } as any);
   check(
     'a composite with panels side by side: wide enough not to stack, two rows tall',
-    twoUp.w === 360 && twoUp.h >= 70 + 130 + 40,
+    twoUp.w === 400 && twoUp.h >= 70 + 130 + 40,
     J(twoUp)
   );
+  // Each estimate a little over what the panel measured in a pane in Chromium (the smallest pane height at which
+  // nothing in it is clipped, at the widget's minimum width): under, a layout is chosen whose pane then scrolls; far
+  // over, the compact layout or the stacked list shows where the window's layout would have fit.
+  {
+    const b = { messageName: 'SYS_STATUS', fieldName: 'voltage_battery' };
+    const one = (displayType: string, extra: object = {}, k = 1) =>
+      customWidgetMinSize(
+        {
+          id: 'm',
+          name: 'm',
+          category: 'telemetry',
+          displayType,
+          binding: b,
+          bindings: Array(k - 1).fill(b),
+          ...extra,
+        } as any,
+        { capped: false }
+      );
+    const measured: [string, ReturnType<typeof one>, number][] = [
+      ['value list x1', one('value-list'), 87],
+      ['value list x3', one('value-list', {}, 3), 129],
+      ['value list x6', one('value-list', {}, 6), 192],
+      ['linear gauge', one('gauge-linear'), 138],
+      ['linear gauge, markers x3', one('gauge-linear', {}, 3), 146],
+      ['linear gauges x2', one('gauge-linear', { gauge: { layout: 'multiple' } }, 2), 182],
+      ['linear gauges x3', one('gauge-linear', { gauge: { layout: 'multiple' } }, 3), 243],
+      ['linear gauges x5', one('gauge-linear', { gauge: { layout: 'multiple' } }, 5), 365],
+      ['sparkline x1', one('sparkline'), 259],
+      ['sparkline x2', one('sparkline', {}, 2), 251],
+      ['sparkline x3', one('sparkline', {}, 3), 277],
+      ['compass rose', one('compass-rose'), 220],
+    ];
+    for (const [name, est, h] of measured)
+      check(`${name}: just over its measured ${h} px`, est.h >= h && est.h <= h + 12, J(est));
+    check('a sparkline: wide enough for its legend', one('sparkline').w === 300);
+    const { useDashboardStore } = await import('../src/store/dashboardStore.ts');
+    const vitals = useDashboardStore.getState().profile.customWidgets.find((d: any) => d.id === 'custom-vitals')!;
+    const v = customWidgetMinSize(vitals, { capped: false });
+    // 416-426 px measured from 400 px wide; narrower its three-across titles wrap (465), and under 360 it stacks.
+    check('Vitals: just over its measured 426 px, at 400 px wide', v.w === 400 && v.h >= 426 && v.h <= 438, J(v));
+  }
   const withHud = customWidgetMinSize({
     id: 'z',
     name: 'z',
