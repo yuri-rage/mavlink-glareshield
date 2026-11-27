@@ -213,6 +213,55 @@ function setupUpdates(win: BrowserWindow) {
   ipcMain.on('update:install', () => updater?.quitAndInstall());
 }
 
+// ---- Linux: the AppImage's launcher entry and icon -----------------------------------------------------------------
+
+/**
+ * A bare AppImage installs nothing, and on Wayland a window's icon comes only from an installed .desktop entry
+ * matching the app's ID (glareshield): without one the window and taskbar show a generic icon, and no launcher lists
+ * the app. So the AppImage installs its own entry and icon in the user's data folder, pointing at wherever the
+ * AppImage is now; rewritten only when that changes (it was moved, or a new version brought a new icon).
+ */
+function integrateAppImage() {
+  const appImage = process.env.APPIMAGE;
+  if (process.platform !== 'linux' || !appImage) return;
+  try {
+    const home = process.env.HOME ?? '';
+    const data = process.env.XDG_DATA_HOME || path.join(home, '.local', 'share');
+    const iconDir = path.join(data, 'icons', 'hicolor', '512x512', 'apps');
+    const iconFile = path.join(iconDir, 'glareshield.png');
+    const icon = fs.readFileSync(path.join(DIST, 'logo-512.png'));
+    if (!fs.existsSync(iconFile) || !fs.readFileSync(iconFile).equals(icon)) {
+      fs.mkdirSync(iconDir, { recursive: true });
+      fs.writeFileSync(iconFile, icon);
+    }
+    // A path needing Exec's two layers of escaping (quotes, backticks, $, backslashes) is left alone: rare, and a
+    // wrong entry is worse than none.
+    if (/["`$\\]/.test(appImage)) return;
+    const quoted = `"${appImage}"`;
+    const entry = [
+      '[Desktop Entry]',
+      'Type=Application',
+      'Name=Glareshield',
+      'Comment=ArduPilot ground control',
+      `Exec=${quoted} %U`,
+      `TryExec=${appImage}`,
+      'Icon=glareshield',
+      'StartupWMClass=glareshield',
+      'Terminal=false',
+      'Categories=Science;',
+      '',
+    ].join('\n');
+    const appsDir = path.join(data, 'applications');
+    const entryFile = path.join(appsDir, 'glareshield.desktop');
+    if (!fs.existsSync(entryFile) || fs.readFileSync(entryFile, 'utf8') !== entry) {
+      fs.mkdirSync(appsDir, { recursive: true });
+      fs.writeFileSync(entryFile, entry);
+    }
+  } catch (e) {
+    console.warn('[desktop] Could not install the launcher entry:', e);
+  }
+}
+
 // ---- Window ------------------------------------------------------------------------------------------------------
 
 function createWindow() {
@@ -233,6 +282,8 @@ function createWindow() {
       additionalArguments: [`--glareshield-version=${app.getVersion()}`],
     },
   });
+  // The window is "Glareshield", not the page's title (written for a browser tab).
+  win.on('page-title-updated', (e) => e.preventDefault());
   // Links out (docs, GitHub) open in the browser; the window stays on the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url);
@@ -267,6 +318,7 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
   void app.whenReady().then(() => {
+    integrateAppImage();
     serveApp();
     // The camera, microphone and the like stay off, as on the web (Permissions-Policy); geolocation and serial ask.
     session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) =>
