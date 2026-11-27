@@ -44,6 +44,7 @@ import { useUnitsStore } from '../../store/unitsStore';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Modal } from '../ui/modal';
+import { HeaderTabs } from './HeaderTabs';
 // Loaded with the app, not on demand: Settings holds the link controls, so it must open offline or after a redeploy
 // (when a lazily fetched chunk can fail to load), and it's small (~7 kB gzipped).
 import { ReplayBar } from './ReplayBar';
@@ -797,6 +798,9 @@ export const Navbar: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* The dashboard's tabs and the Edit Mode button (a dropdown when they don't fit). */}
+          <HeaderTabs />
 
           {/* Right: Telemetry Rate, Theme, Settings Gear & Connection Status */}
           <div className="ml-auto flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
