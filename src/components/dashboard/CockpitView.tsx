@@ -30,8 +30,15 @@ import {
   type DropZone,
   type Size,
 } from '../../lib/cockpitLayout';
+import { isRebindable, tileEditHandlers } from '../../lib/tileRebind';
 import { editTarget, layoutOf, otherLayouts, useDashboardStore, type DashboardState } from '../../store/dashboardStore';
-import type { CockpitNode, CustomWidgetDefinition, DashboardTab, PlacedWidget } from '../../types/widget';
+import type {
+  CockpitNode,
+  CustomWidgetDefinition,
+  DashboardTab,
+  PlacedWidget,
+  WidgetPanelDefinition,
+} from '../../types/widget';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { HeaderMenu, MenuItem, MenuSection } from '../ui/HeaderMenu';
 import { HeaderSlotContext, PaneContext } from './paneContext';
@@ -460,6 +467,8 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({
     if (!dragging) setZone(null);
   }, [dragging]);
   const dropping = zone && dragging && dragging !== id;
+  const hasTiles =
+    !!customDef && (isRebindable(customDef as WidgetPanelDefinition) || !!customDef.panels?.some(isRebindable));
 
   return (
     <div
@@ -548,16 +557,18 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({
           ) : null}
         </span>
       </div>
-      {/* The body drags the pane too (the bar's controls stay clickable). */}
+      {/* The body drags the pane too (the bar's controls stay clickable); a click on one of its value tiles changes
+          that value (a drag never clicks). */}
       <div
         draggable
         onDragStart={startDrag}
         onDragEnd={() => setDragging(null)}
+        {...tileEditHandlers}
         className="flex flex-1 cursor-grab items-center justify-center px-2 text-center text-[10px] text-zinc-400 active:cursor-grabbing"
       >
         {dragging && dragging !== id
           ? 'Drop on an edge to put it there, in the middle to swap'
-          : `Drag to move${stacked ? '' : ' · dividers resize'} · min ${min.w}×${min.h}`}
+          : `Drag to move${stacked ? '' : ' · dividers resize'}${hasTiles ? ' · click a value to change it' : ''} · min ${min.w}×${min.h}`}
       </div>
       {/* Where it would go, over the whole pane (what's highlighted is what the drop hits). */}
       {dropping && (

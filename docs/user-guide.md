@@ -130,7 +130,7 @@ actions below the drags):
 - **Add beside…**: pick where (a side of this pane, or along a whole edge of the tab), then the widget: a new one or
   one hidden on the tab.
 - **Replace…**: swap the pane with another, or show a different widget in it.
-- **Edit custom widget** (custom widgets): open the custom widget editor.
+- **Edit custom widget** (custom widgets): open the custom widget editor. To change just one tile's value, click the tile (or right-click it, in or out of Edit Mode): see [Custom widgets](custom-widgets.md#creating-a-widget-in-the-app).
 - **Pin above the panes** (the quick-actions bar): full width, on top.
 - **Hide**: take the widget out of the layout. It stays on the tab, listed under **Not shown in this layout**, with
   **Show** to bring it back.

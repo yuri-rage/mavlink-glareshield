@@ -6,12 +6,13 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
+import { isRebindable, openTileMenu } from '../../lib/tileRebind';
 import { valueSampler } from '../../lib/valueSampler';
 import type { AlertState, BindingReading, UnitSystem } from '../../lib/widgetValues';
 import { messageRateManager } from '../../mavlink/rateManager';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore } from '../../store/unitsStore';
-import type { CustomWidgetDefinition, WidgetDataBinding } from '../../types/widget';
+import type { CustomWidgetDefinition, WidgetDataBinding, WidgetPanelDefinition } from '../../types/widget';
 import { useInPane } from '../dashboard/paneContext';
 import { Badge } from '../ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -34,6 +35,24 @@ valueSampler.setStateGetter(() => useTelemetryStore.getState());
 
 /** Below this content width a composite card reflows: small panels two to a row, the others full width. */
 const STACK_BELOW_PX = 360;
+
+/**
+ * A tile showing one value (a composite's panel, or a single-value widget): marked for the Edit Mode overlays to find
+ * (tileAt), and its right-click (or a long press on touch) offers to change the value.
+ */
+function rebindProps(def: CustomWidgetDefinition, panelIndex: number | null) {
+  const target = panelIndex === null ? (def.displayType === 'composite' ? undefined : def) : def.panels?.[panelIndex];
+  if (!isRebindable(target as WidgetPanelDefinition | undefined)) return {};
+  return {
+    'data-rebind-widget': def.id,
+    'data-rebind-panel': panelIndex === null ? '' : String(panelIndex),
+    onContextMenu: (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openTileMenu(e.clientX, e.clientY, { widgetId: def.id, panelIndex });
+    },
+  };
+}
 
 interface CustomWidgetRendererProps {
   definition: CustomWidgetDefinition;
@@ -192,6 +211,7 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
                 <section
                   key={`${i}-${p.def.displayType}`}
                   style={{ gridColumn: `span ${span} / span ${span}` }}
+                  {...rebindProps(definition, i)}
                   // A size container: a panel's values scale with its own width (TelemetryPanels).
                   className={`flex min-w-0 flex-col rounded-lg border bg-zinc-900/30 ${inPane ? 'p-2' : 'p-2.5'} transition-colors @container ${
                     p.alert === 'crit'
@@ -227,7 +247,10 @@ export const CustomWidgetRenderer: React.FC<CustomWidgetRendererProps> = ({ defi
       ) : (
         // In a pane, content taller than the pane scrolls inside the card. Centering uses my-auto on a wrapper, not
         // justify-center, which would push overflowing content's top out of reach.
-        <CardContent className={`flex min-h-0 flex-1 flex-col p-3 sm:p-4 ${inPane ? 'overflow-y-auto' : ''}`}>
+        <CardContent
+          className={`flex min-h-0 flex-1 flex-col p-3 sm:p-4 ${inPane ? 'overflow-y-auto' : ''}`}
+          {...rebindProps(definition, null)}
+        >
           <div
             className={`flex flex-col space-y-3 ${panelFills(definition.displayType) ? 'min-h-0 flex-1' : 'my-auto'}`}
           >

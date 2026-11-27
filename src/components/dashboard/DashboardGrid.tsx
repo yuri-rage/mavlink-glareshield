@@ -31,6 +31,7 @@ import {
   widgetMinSize,
   type CockpitVariant,
 } from '../../lib/cockpitLayout';
+import { tileEditHandlers } from '../../lib/tileRebind';
 import { editTarget, layoutOf, otherLayouts, useDashboardStore } from '../../store/dashboardStore';
 import { CONTENT_WIDTH_CLASS, useLayoutStore } from '../../store/layoutStore';
 import { CockpitLayout, CustomWidgetDefinition, DashboardTab, PlacedWidget } from '../../types/widget';
@@ -998,7 +999,8 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
                   {isEditing && (
                     <div
                       className="pointer-events-auto absolute inset-0 z-20 flex cursor-grab select-none items-center justify-center rounded-xl active:cursor-grabbing"
-                      title="Drag to reorder widget — its controls are locked while editing"
+                      title="Drag to reorder widget — its controls are locked while editing (click a value tile to change it)"
+                      {...tileEditHandlers}
                     >
                       {isDropTarget && (
                         <span className="flex items-center gap-1.5 rounded-lg border border-sky-400 bg-sky-950/95 px-3 py-1.5 font-mono text-[11px] font-bold text-sky-200 shadow-lg">
