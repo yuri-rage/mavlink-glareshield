@@ -1720,18 +1720,24 @@ export const useTelemetryStore = create<TelemetryState>()(
             }
 
             case MAVLINK_MSG_ID.COMMAND_ACK: {
+              // An ACK for another ground station's command (a GCS with another system ID on this link): not ours.
+              const gcsSys = mavlinkConnection.getEncoder().getSystemId();
+              if (data.target_system !== 0 && data.target_system !== gcsSys) return state;
               let matchedPending: PendingCommand | undefined;
               const pendingList = pendingCommands.get(data.command);
+              // Only the component the command went to answers it: a gimbal or camera ACKing the same command ID
+              // isn't the autopilot's answer.
+              const at = pendingList ? matchPendingAck(pendingList, packet) : -1;
               // MAV_RESULT_IN_PROGRESS is not the answer: the command stays pending (with a longer wait) until the
               // final ACCEPTED / FAILED / … ACK arrives.
               const inProgress = data.result === 5;
-              if (pendingList && pendingList.length > 0) {
+              if (pendingList && at >= 0) {
                 if (inProgress) {
-                  matchedPending = pendingList[0];
+                  matchedPending = pendingList[at];
                   clearTimeout(matchedPending.timer);
                   matchedPending.timer = setTimeout(matchedPending.onTimeout, IN_PROGRESS_TIMEOUT_MS);
                 } else {
-                  matchedPending = pendingList.shift()!;
+                  matchedPending = pendingList.splice(at, 1)[0];
                   clearTimeout(matchedPending.timer);
                   if (pendingList.length === 0) {
                     pendingCommands.delete(data.command);
@@ -1774,7 +1780,10 @@ export const useTelemetryStore = create<TelemetryState>()(
                     }
                   : null;
 
-              const shouldUpdateFeedback = !isHousekeeping || Boolean(matchedPending?.label);
+              // Another component answering a command ID we're still waiting on (a gimbal): the operator's feedback
+              // stays on the pending command.
+              const foreign = !matchedPending && Boolean(pendingList?.length);
+              const shouldUpdateFeedback = !foreign && (!isHousekeeping || Boolean(matchedPending?.label));
               const updatedFeedback: CommandFeedbackInfo | undefined = shouldUpdateFeedback
                 ? {
                     id: matchedPending?.id ?? nextPendingId++,
@@ -1821,6 +1830,9 @@ interface PendingCommand {
   label?: string;
   targetKey?: string;
   sentAt: number;
+  /** Who the command went to (its target_system / target_component; 0: any). Only their ACK answers it. */
+  targetSys: number;
+  targetComp: number;
   timer: any;
   /** What happens when no final ACK arrives; re-armed (longer) after a MAV_RESULT_IN_PROGRESS ACK. */
   onTimeout: () => void;
@@ -1831,11 +1843,25 @@ const IN_PROGRESS_TIMEOUT_MS = 30_000;
 let nextPendingId = 1;
 const pendingCommands = new Map<number, PendingCommand[]>();
 let lastRecentExplanatoryStatus: { text: string; time: number } | null = null;
-let pendingSendMeta: {
-  label?: string;
-  targetKey?: string;
-  resolve?: (ack: CommandAckInfo) => void;
-} | null = null;
+/**
+ * What sendTrackedCommand knows of a packet it sends (label, where its feedback shows, who waits on its ACK), for the
+ * send listener below, which sees the same packet. Keyed by the packet: nothing lingers for another send to pick up.
+ */
+const trackedSendMeta = new WeakMap<
+  Uint8Array,
+  { label?: string; targetKey?: string; resolve?: (ack: CommandAckInfo) => void }
+>();
+
+/** The pending command an ACK answers: the first one sent to the component that answered (0: to any). */
+export function matchPendingAck<T extends { targetSys: number; targetComp: number }>(
+  list: T[],
+  from: { systemId: number; componentId: number }
+): number {
+  return list.findIndex(
+    (p) =>
+      (p.targetSys === 0 || p.targetSys === from.systemId) && (p.targetComp === 0 || p.targetComp === from.componentId)
+  );
+}
 
 /** Settle every command still waiting for its ACK as not sent (the link went, or the vehicle was switched). */
 function settlePendingCommands(now: number) {
@@ -2076,20 +2102,14 @@ export function sendTrackedCommand(
     }
     const cmdName = getMavCmdName(cmdId);
 
-    pendingSendMeta = {
-      label: meta?.label,
-      targetKey: meta?.targetKey,
-      resolve,
-    };
+    trackedSendMeta.set(packet, { label: meta?.label, targetKey: meta?.targetKey, resolve });
     let sent = false;
     try {
       sent = mavlinkConnection.send(packet);
     } catch {
       sent = false;
     } finally {
-      if (!sent) {
-        pendingSendMeta = null;
-      }
+      if (!sent) trackedSendMeta.delete(packet);
     }
 
     if (!sent) {
@@ -2132,8 +2152,11 @@ mavlinkConnection.onSend((data) => {
       const cmdId = b0 | (b1 << 8);
       const cmdName = getMavCmdName(cmdId);
       const entryId = nextPendingId++;
-      const meta = pendingSendMeta;
-      pendingSendMeta = null;
+      const meta = trackedSendMeta.get(data);
+      trackedSendMeta.delete(data);
+      // target_system / target_component: payload bytes 30 and 31 (COMMAND_LONG and COMMAND_INT alike).
+      const targetSys = payloadLen > 30 && data.length > 40 ? data[40] : 0;
+      const targetComp = payloadLen > 31 && data.length > 41 ? data[41] : 0;
 
       const isHousekeeping =
         cmdId === MAV_CMD.SET_MESSAGE_INTERVAL ||
@@ -2219,6 +2242,8 @@ mavlinkConnection.onSend((data) => {
         label: meta?.label,
         targetKey: meta?.targetKey,
         sentAt: sentNow,
+        targetSys,
+        targetComp,
         timer,
         onTimeout,
         resolve: meta?.resolve,
