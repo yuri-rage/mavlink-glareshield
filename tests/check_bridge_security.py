@@ -10,7 +10,11 @@ Starts the mock bridge on a spare local port and checks that:
   3. a localhost Origin is still accepted (control);
   4. the bridge's NTRIP client cannot be pointed at an arbitrary local port and used as a TCP relay
      (the same class of issue that was fixed in the Vite dev proxy);
-  5. the NTRIP mountpoint cannot inject extra lines into the caster request.
+  5. the NTRIP mountpoint cannot inject extra lines into the caster request;
+  6. a malformed text command (bad port, wrong JSON type) is ignored without ending the session;
+  7. only one well-formed NMEA GGA sentence reaches the caster (no raw bytes or extra lines through ntrip_gga),
+     and the request names the caster (Host header);
+  8. a caster whose response header never ends is cut off, not buffered without limit.
 
 Usage:
     pip install websockets
@@ -84,6 +88,58 @@ class Listener:
 
     def close(self):
         self.stop = True
+        self.sock.close()
+
+
+class Caster:
+    """A local NTRIP caster on port 2101: answers ICY 200 OK (or an endless header) and records what it is sent."""
+
+    def __init__(self, endless_header=False):
+        self.received = b""
+        self.endless = endless_header
+        self.sock = socket.socket()
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # The previous check's connection to 2101 may take a moment to close.
+        for attempt in range(30):
+            try:
+                self.sock.bind(("127.0.0.1", 2101))
+                break
+            except OSError:
+                if attempt == 29:
+                    raise
+                time.sleep(0.1)
+        self.sock.listen()
+        self.sock.settimeout(0.2)
+        self.stop = False
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        while not self.stop:
+            try:
+                c, _ = self.sock.accept()
+            except OSError:
+                continue
+            c.settimeout(0.2)
+            with contextlib.suppress(OSError):
+                if self.endless:
+                    while not self.stop:
+                        c.sendall(b"X-Pad: " + b"a" * 1000 + b"\r\n")
+                        time.sleep(0.01)
+                else:
+                    c.sendall(b"ICY 200 OK\r\n")
+                    while not self.stop:
+                        try:
+                            data = c.recv(4096)
+                        except TimeoutError:
+                            continue
+                        if not data:
+                            break
+                        self.received += data
+            c.close()
+
+    def close(self):
+        self.stop = True
+        time.sleep(0.3)
         self.sock.close()
 
 
@@ -191,6 +247,77 @@ async def main(url):
         not injected,
         "injected header reached the caster" if injected else "",
     )
+
+    # 6: malformed text commands are ignored; the session stays up and still answers
+    async with websockets.connect(url, origin=cast(Any, "http://localhost:3000"), open_timeout=3) as ws:
+        for bad in (
+            json.dumps({"type": "ntrip_connect", "host": "x", "port": "abc", "mountpoint": "m"}),
+            json.dumps({"type": "ntrip_connect", "host": "x", "port": None, "mountpoint": "m"}),
+            json.dumps(["ntrip_connect"]),
+            json.dumps("ntrip_connect"),
+            json.dumps({"type": "ntrip_gga", "gga": {"not": "a string"}}),
+            "not json at all",
+        ):
+            await ws.send(bad)
+        alive = True
+        try:
+            for _ in range(20):
+                await asyncio.wait_for(ws.recv(), 2)
+        except Exception as e:  # noqa: BLE001
+            alive = False
+            detail = f"{type(e).__name__}: {e}"
+        check("malformed text commands are ignored; the session stays up", alive, "" if alive else detail)
+
+    # 7: GGA forwarding and the Host header
+    try:
+        caster = Caster()
+    except OSError:
+        print("SKIP  NTRIP GGA / Host checks (port 2101 is in use on this machine)")
+        caster = None
+    if caster:
+        valid = "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47"
+        async with websockets.connect(url, origin=cast(Any, "http://localhost:3000"), open_timeout=3) as ws:
+            await ws.send(json.dumps({"type": "ntrip_connect", "host": "127.0.0.1", "port": 2101, "mountpoint": "MP"}))
+            for _ in range(20):
+                raw = await asyncio.wait_for(ws.recv(), 3)
+                if not isinstance(raw, str):
+                    continue  # mock telemetry
+                m = json.loads(raw)
+                if isinstance(m, dict) and m.get("status") == "streaming":
+                    break
+            for gga in (
+                "$GPGGA,1\r\nGET /admin HTTP/1.0\r\n",  # an extra request line
+                "\x00\x01raw bytes",
+                "$GPGGA," + "9" * 500,  # over the length cap
+                f"{valid}\r\n",  # the app's own (with its CRLF)
+            ):
+                await ws.send(json.dumps({"type": "ntrip_gga", "gga": gga}))
+            await asyncio.sleep(0.5)
+            await ws.send(json.dumps({"type": "ntrip_disconnect"}))
+        caster.close()
+        request, _, after = caster.received.partition(b"\r\n\r\n")
+        check("the caster request carries a Host header", b"\r\nHost: 127.0.0.1:2101" in request, repr(request[:120]))
+        check(
+            "only the well-formed GGA reaches the caster, once, CRLF-terminated",
+            after == f"{valid}\r\n".encode(),
+            repr(after[:120]),
+        )
+
+    # 8: an endless response header is cut off
+    try:
+        caster = Caster(endless_header=True)
+    except OSError:
+        caster = None
+    if caster:
+        t0 = time.monotonic()
+        replies = await ntrip_attempt(url, {"host": "127.0.0.1", "port": 2101, "mountpoint": "MP"}, seconds=4)
+        caster.close()
+        errs = [m for m in replies if m.get("type") == "ntrip_error"]
+        check(
+            "an endless caster header is cut off with an error",
+            bool(errs) and "header" in errs[0].get("message", ""),
+            f"{errs[:1]} after {time.monotonic() - t0:.1f} s",
+        )
 
     sys.path.insert(0, os.path.join(REPO, "bridge"))
     from bridge import BridgeServer

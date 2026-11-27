@@ -38,6 +38,12 @@ DEFAULT_ALLOWED_ORIGINS: list[Any] = [
     None,
 ]
 
+# NTRIP relay limits: a caster's response header, and how long to wait for a connection and that header.
+NTRIP_MAX_HEADER = 8192
+NTRIP_TIMEOUT_S = 10.0
+# What the page may send on to the caster: one NMEA GGA sentence (as the Vite dev proxy checks it).
+NMEA_GGA_RE = re.compile(r"\$G[A-Z]{4},[ -~]{1,120}")
+
 # Message IDs
 MSG_HEARTBEAT = 0
 MAV_TYPE_GCS = 6
@@ -330,24 +336,34 @@ class BridgeServer:
             print(f"[WS] Client disconnected. Active: {len(self.clients)}")
 
     async def handle_text_command(self, session: ClientSession, message: str) -> None:
+        """A JSON command from the page. Anything malformed is ignored: it never ends the client's session."""
         try:
             cmd = json.loads(message)
-        except Exception:  # noqa: BLE001
+        except ValueError:
             return
-
+        if not isinstance(cmd, dict):
+            return
         cmd_type = cmd.get("type")
-        if cmd_type == "ntrip_connect":
-            await self.start_ntrip_stream(session, cmd)
-        elif cmd_type == "ntrip_disconnect":
-            await session.stop_ntrip()
-        elif cmd_type == "ntrip_gga":
-            await self.send_ntrip_gga(session, cmd.get("gga", ""))
+        try:
+            if cmd_type == "ntrip_connect":
+                await self.start_ntrip_stream(session, cmd)
+            elif cmd_type == "ntrip_disconnect":
+                await session.stop_ntrip()
+            elif cmd_type == "ntrip_gga":
+                await self.send_ntrip_gga(session, cmd.get("gga", ""))
+        except websockets.exceptions.ConnectionClosed:
+            raise
+        except Exception as e:  # noqa: BLE001
+            print(f"[WS] Ignored a malformed {cmd_type!r} command: {e}")
 
     async def start_ntrip_stream(self, session: ClientSession, cmd: dict[str, Any]) -> None:
         await session.stop_ntrip()
         websocket = session.websocket
         host = str(cmd.get("host", "")).strip()
-        port = int(cmd.get("port", 2101))
+        try:
+            port = int(cmd.get("port", 2101))
+        except (TypeError, ValueError):
+            port = -1
         mountpoint = str(cmd.get("mountpoint", "")).strip().lstrip("/")
         username = str(cmd.get("username", "")).strip()
         password = str(cmd.get("password", "")).strip()
@@ -370,19 +386,34 @@ class BridgeServer:
             token = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
             auth_header = f"Authorization: Basic {token}\r\n"
 
-        req = f"GET /{mountpoint} HTTP/1.0\r\nUser-Agent: NTRIP MavlinkGlareshield/1.0\r\n{auth_header}\r\n"
+        req = (
+            f"GET /{mountpoint} HTTP/1.0\r\nHost: {host}:{port}\r\n"
+            f"User-Agent: NTRIP MavlinkGlareshield/1.0\r\n{auth_header}\r\n"
+        )
 
         try:
-            reader, writer = await asyncio.open_connection(host, port)
+            reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), NTRIP_TIMEOUT_S)
             session.ntrip_writer = writer
             writer.write(req.encode("latin1"))
             await writer.drain()
 
             resp_buf = bytearray()
             header_parsed = False
+            # A caster answers with a short header: one that never ends, or never comes, is not a caster.
+            header_deadline = time.monotonic() + NTRIP_TIMEOUT_S
 
             while not header_parsed:
-                chunk = await reader.read(512)
+                if len(resp_buf) > NTRIP_MAX_HEADER:
+                    msg = f"Caster response header over {NTRIP_MAX_HEADER} bytes"
+                    raise ConnectionError(msg)
+                remaining = header_deadline - time.monotonic()
+                if remaining <= 0:
+                    msg = f"No response from the caster in {NTRIP_TIMEOUT_S:.0f} s"
+                    raise ConnectionError(msg)
+                try:
+                    chunk = await asyncio.wait_for(reader.read(512), remaining)
+                except TimeoutError:
+                    continue
                 if not chunk:
                     msg = "Caster closed connection before response"
                     raise ConnectionError(msg)
@@ -448,6 +479,8 @@ class BridgeServer:
             session.ntrip_task = asyncio.create_task(ntrip_read_loop())
 
         except Exception as e:  # noqa: BLE001
+            if isinstance(e, TimeoutError):
+                e = ConnectionError(f"No answer from {host}:{port} in {NTRIP_TIMEOUT_S:.0f} s")
             if session.ntrip_writer:
                 try:
                     session.ntrip_writer.close()
@@ -456,10 +489,16 @@ class BridgeServer:
                 session.ntrip_writer = None
             await websocket.send(json.dumps({"type": "ntrip_error", "message": str(e)}))
 
-    async def send_ntrip_gga(self, session: ClientSession, gga: str) -> None:
-        if session.ntrip_writer and gga:
+    async def send_ntrip_gga(self, session: ClientSession, gga: Any) -> None:
+        """Forward the vehicle's position to the caster: one NMEA GGA sentence, nothing else."""
+        if not session.ntrip_writer or not isinstance(gga, str):
+            return
+        sentence = gga.strip()
+        if not NMEA_GGA_RE.fullmatch(sentence):
+            return
+        if session.ntrip_writer:
             try:
-                session.ntrip_writer.write(gga.encode("ascii"))
+                session.ntrip_writer.write(f"{sentence}\r\n".encode("ascii"))
                 await session.ntrip_writer.drain()
             except Exception:  # noqa: BLE001, S110
                 pass
