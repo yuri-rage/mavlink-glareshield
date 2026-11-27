@@ -144,9 +144,6 @@ interface Props {
  * code holds, as a QR code to scan and as text to copy or share. Over wss:// it opens the bridge first (that device's
  * one-time certificate step), which then opens Glareshield there, connected.
  */
-/** The desktop app's chosen serial port (by name: ttyUSB0, COM3). */
-const SERIAL_PORT_NAME_KEY = 'mavlink_glareshield_serial_port_name';
-
 const PairAnotherDevice: React.FC<{ url: string }> = ({ url }) => {
   const [copied, setCopied] = useState(false);
   // Hidden until asked for: the QR code and link carry the pairing token (screen sharing, someone looking on).
@@ -237,6 +234,8 @@ export const SettingsDialog: React.FC<Props> = ({
     tcpTarget,
     setUdpPort,
     setTcpTarget,
+    serialPath,
+    setSerialPath,
     status,
     errorMessage,
     setUrl,
@@ -277,20 +276,15 @@ export const SettingsDialog: React.FC<Props> = ({
   const [inputTcpTarget, setInputTcpTarget] = useState(tcpTarget);
   // The desktop app lists the serial ports here, as other ground stations do, instead of a picker on Connect.
   const [serialPorts, setSerialPorts] = useState<SerialPortListing[] | null>(null);
-  const [serialPortName, setSerialPortName] = useState<string>(() => {
-    try {
-      return localStorage.getItem(SERIAL_PORT_NAME_KEY) ?? '';
-    } catch {
-      return '';
-    }
-  });
+  // The chosen port's path (/dev/ttyACM0, COM5); applied by Connect.
+  const [serialPortName, setSerialPortName] = useState<string>(serialPath);
   const refreshSerialPorts = () => {
     void desktopApi()
       ?.serial.list()
       .then((ports) => {
         setSerialPorts(ports);
         // Nothing chosen yet, or the chosen port is gone: the first one listed (a USB device before built-in UARTs).
-        setSerialPortName((cur) => (ports.some((p) => p.name === cur) ? cur : (ports[0]?.name ?? '')));
+        setSerialPortName((cur) => (ports.some((p) => p.path === cur) ? cur : (ports[0]?.path ?? '')));
       });
   };
   useEffect(() => {
@@ -310,6 +304,7 @@ export const SettingsDialog: React.FC<Props> = ({
     setInputSerialBaud(serialBaud);
     setInputUdpPort(String(udpPort));
     setInputTcpTarget(tcpTarget);
+    setSerialPortName(serialPath);
     setSerialPickerNotice(null);
     setInputGcsSysId(String(gcsSystemId));
     // Only on opening: the form isn't reset while it's being edited.
@@ -329,28 +324,22 @@ export const SettingsDialog: React.FC<Props> = ({
     connectPressedRef.current = false;
     if (tab !== 'link' && !pressed) return;
     if (status === 'connected') return;
-    if (inputLinkKind === 'serial') {
-      // The desktop app: the port chosen in the list goes to the request, which then needs no picker.
-      const desk = desktop ? desktopApi() : null;
-      if (desk) {
-        if (!serialPortName) {
-          setSerialPickerNotice('Choose a serial port first (plug the radio or flight controller in, then ⟳).');
-          return;
-        }
-        desk.serial.prefer(serialPortName);
-        try {
-          localStorage.setItem(SERIAL_PORT_NAME_KEY, serialPortName);
-        } catch {}
+    if (inputLinkKind === 'serial' && desktop) {
+      // The desktop app opens the port chosen in the list itself, by path.
+      if (!serialPortName) {
+        setSerialPickerNotice('Choose a serial port first (plug the radio or flight controller in, then ⟳).');
+        return;
       }
-      // The device request needs the user gesture, so it must be the first thing awaited here.
+      setSerialPickerNotice(null);
+      setSerialPath(serialPortName);
+      setSerialBaud(inputSerialBaud);
+    } else if (inputLinkKind === 'serial') {
+      // The device picker needs the user gesture, so it must be the first thing awaited here.
       const picked = await requestSerialDevice();
       if (!picked) {
         setSerialPickerNotice(
-          desk
-            ? `${serialPortName} couldn't be opened: it may have been unplugged. Refresh the list and try again.`
-            : 'No device selected. Choose the telemetry radio or flight controller in the browser prompt.'
+          'No device selected. Choose the telemetry radio or flight controller in the browser prompt.'
         );
-        if (desk) refreshSerialPorts();
         return;
       }
       setSerialPickerNotice(null);
@@ -470,7 +459,7 @@ export const SettingsDialog: React.FC<Props> = ({
                           {serialPorts === null && <option value="">Listing…</option>}
                           {serialPorts?.length === 0 && <option value="">No serial ports found</option>}
                           {serialPorts?.map((p) => (
-                            <option key={p.name} value={p.name}>
+                            <option key={p.path} value={p.path}>
                               {p.label}
                             </option>
                           ))}

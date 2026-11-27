@@ -19,6 +19,7 @@ const STORAGE_KEY_LINK_KIND = 'mavlink_glareshield_link_kind';
 const STORAGE_KEY_SERIAL_BAUD = 'mavlink_glareshield_serial_baud';
 const STORAGE_KEY_UDP_PORT = 'mavlink_glareshield_udp_port';
 const STORAGE_KEY_TCP_TARGET = 'mavlink_glareshield_tcp_target';
+const STORAGE_KEY_SERIAL_PATH = 'mavlink_glareshield_serial_path';
 
 /** The desktop app's UDP link listens here by default (where ArduPilot, SITL and most radios' bridges send). */
 export const DEFAULT_UDP_PORT = 14550;
@@ -123,16 +124,28 @@ export function buildLinkConfig(
   linkKind: LinkKind,
   url: string,
   serialBaud: number,
-  native: { udpPort: number; tcpTarget: string } = { udpPort: DEFAULT_UDP_PORT, tcpTarget: DEFAULT_TCP_TARGET }
+  native: { udpPort: number; tcpTarget: string; serialPath?: string } = {
+    udpPort: DEFAULT_UDP_PORT,
+    tcpTarget: DEFAULT_TCP_TARGET,
+  }
 ): LinkConfig {
-  if (linkKind === 'serial') return { kind: 'serial', baudRate: serialBaud };
+  if (linkKind === 'serial')
+    return native.serialPath
+      ? { kind: 'serial', baudRate: serialBaud, path: native.serialPath }
+      : { kind: 'serial', baudRate: serialBaud };
   if (linkKind === 'udp') return { kind: 'udp', port: native.udpPort };
   if (linkKind === 'tcp') return { kind: 'tcp', ...parseTcpTarget(native.tcpTarget) };
   return { kind: 'websocket', url };
 }
 
-const linkOf = (s: { linkKind: LinkKind; url: string; serialBaud: number; udpPort: number; tcpTarget: string }) =>
-  buildLinkConfig(s.linkKind, s.url, s.serialBaud, s);
+const linkOf = (s: {
+  linkKind: LinkKind;
+  url: string;
+  serialBaud: number;
+  udpPort: number;
+  tcpTarget: string;
+  serialPath: string;
+}) => buildLinkConfig(s.linkKind, s.url, s.serialBaud, s);
 
 export function normalizeWsUrl(input: string): string {
   let url = input.trim();
@@ -152,6 +165,8 @@ interface ConnectionState {
   udpPort: number;
   /** The desktop app's TCP link: host:port. */
   tcpTarget: string;
+  /** The desktop app's serial port, by path (/dev/ttyACM0, COM5); empty in a browser. */
+  serialPath: string;
   status: ConnectionStatus;
   errorMessage?: string;
   bandwidthProfile: BandwidthProfile;
@@ -163,6 +178,7 @@ interface ConnectionState {
   setSerialBaud: (baud: number) => void;
   setUdpPort: (port: number) => void;
   setTcpTarget: (target: string) => void;
+  setSerialPath: (path: string) => void;
   setBandwidthProfile: (profile: BandwidthProfile) => void;
   setGcsSystemId: (sysId: number) => void;
   connect: () => void;
@@ -178,11 +194,13 @@ const initialSerialBaud = getStoredSerialBaud();
 const initialUdpPort =
   parseInt(getStoredString(STORAGE_KEY_UDP_PORT, String(DEFAULT_UDP_PORT)), 10) || DEFAULT_UDP_PORT;
 const initialTcpTarget = getStoredString(STORAGE_KEY_TCP_TARGET, DEFAULT_TCP_TARGET);
+const initialSerialPath = getStoredString(STORAGE_KEY_SERIAL_PATH, '');
 mavlinkConnection.setUrl(initialUrl);
 mavlinkConnection.setLink(
   buildLinkConfig(initialLinkKind, initialUrl, initialSerialBaud, {
     udpPort: initialUdpPort,
     tcpTarget: initialTcpTarget,
+    serialPath: initialSerialPath,
   })
 );
 messageRateManager.setProfile(initialProfile);
@@ -194,6 +212,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   serialBaud: initialSerialBaud,
   udpPort: initialUdpPort,
   tcpTarget: initialTcpTarget,
+  serialPath: initialSerialPath,
   status: 'disconnected',
   errorMessage: undefined,
   bandwidthProfile: initialProfile,
@@ -243,6 +262,12 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     const udpPort = Math.round(port) > 0 && Math.round(port) < 65536 ? Math.round(port) : DEFAULT_UDP_PORT;
     storeValue(STORAGE_KEY_UDP_PORT, String(udpPort));
     set({ udpPort });
+    mavlinkConnection.setLink(linkOf(get()));
+  },
+
+  setSerialPath: (serialPath: string) => {
+    storeValue(STORAGE_KEY_SERIAL_PATH, serialPath);
+    set({ serialPath });
     mavlinkConnection.setLink(linkOf(get()));
   },
 

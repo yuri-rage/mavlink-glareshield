@@ -88,7 +88,8 @@ function fakeApi(opts: { fail?: string; delayMs?: number } = {}) {
 
 // Opening fails (port in use): an error status with the message, and the promise rejects.
 {
-  const f = fakeApi({ fail: 'UDP port 14550: bind EADDRINUSE' });
+  // As Electron reports a main-process error: its IPC prefix is dropped from what the person sees.
+  const f = fakeApi({ fail: "Error invoking remote method 'link:open': Error: UDP port 14550: bind EADDRINUSE" });
   const t = new NativeLinkTransport(f.api, { kind: 'udp', port: 14550 });
   let last: any = null;
   t.onStatus((s) => (last = s));
@@ -96,7 +97,11 @@ function fakeApi(opts: { fail?: string; delayMs?: number } = {}) {
     () => null,
     (e: Error) => e.message
   );
-  check('a failed open: error status and rejection', last?.kind === 'error' && /EADDRINUSE/.test(err ?? ''), err ?? '');
+  check(
+    'a failed open: error status and rejection, without the IPC prefix',
+    last?.kind === 'error' && last.message === 'UDP port 14550: bind EADDRINUSE' && /EADDRINUSE/.test(err ?? ''),
+    last?.message
+  );
 }
 
 // Disconnected while still opening: what opened is closed at once, and the transport stays disconnected.

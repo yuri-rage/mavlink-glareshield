@@ -27,25 +27,15 @@
     "test:review": "npm run test:mock && npm run test:bridge-security && npm run test:bridge-udp && npm run test:bridge-transport && npm run test:bridge-pairing && npm run test:follow",
     "format": "prettier --write . && ruff format && ruff check --fix",
     "format:check": "prettier --check . && ruff format --check && ruff check",
-    "desktop:compile": "tsc -p desktop --noEmit && esbuild desktop/main.ts --bundle --platform=node --format=cjs --external:electron --outfile=desktop/dist/main.js --log-level=warning && esbuild desktop/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=desktop/dist/preload.js --log-level=warning",
+    "desktop:compile": "tsc -p desktop --noEmit && esbuild desktop/main.ts --bundle --platform=node --format=cjs --external:electron --external:@serialport/bindings-cpp --outfile=desktop/dist/main.js --log-level=warning && esbuild desktop/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=desktop/dist/preload.js --log-level=warning",
     "desktop": "npm run build && npm run desktop:compile && electron .",
     "desktop:dist": "npm run build && npm run desktop:compile && electron-builder --publish never"
   },
   "dependencies": {
-    "@diffusionstudio/vits-web": "^1.0.3",
-    "clsx": "^2.1.1",
-    "leaflet": "^1.9.4",
-    "lucide-react": "^0.475.0",
-    "onnxruntime-web": "1.18.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-resizable-panels": "4.21.0",
-    "sql.js": "^1.13.0",
-    "tailwind-merge": "^2.6.0",
-    "uqr": "0.1.3",
-    "zustand": "^4.5.5"
+    "@serialport/bindings-cpp": "13.0.1"
   },
   "devDependencies": {
+    "@diffusionstudio/vits-web": "^1.0.3",
     "@ianvs/prettier-plugin-sort-imports": "4.7.1",
     "@tailwindcss/container-queries": "0.1.1",
     "@types/leaflet": "^1.9.14",
@@ -55,16 +45,27 @@
     "@types/sql.js": "^1.16.1",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
+    "clsx": "^2.1.1",
     "electron": "45.3.2",
     "electron-builder": "26.18.0",
     "electron-updater": "6.8.11",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.475.0",
+    "onnxruntime-web": "1.18.0",
     "postcss": "^8.4.49",
     "prettier": "3.10.1",
     "prettier-plugin-tailwindcss": "0.8.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-resizable-panels": "4.21.0",
+    "sql.js": "^1.13.0",
+    "tailwind-merge": "^2.6.0",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.23.15",
     "typescript": "^5.6.3",
-    "vite": "^6.4.5"
+    "uqr": "0.1.3",
+    "vite": "^6.4.5",
+    "zustand": "^4.5.5"
   },
   "desktopName": "glareshield.desktop"
 }

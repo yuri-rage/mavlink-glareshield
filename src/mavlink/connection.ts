@@ -43,9 +43,10 @@ export type SendCallback = (data: Uint8Array) => void;
  */
 export type LinkConfig =
   | { kind: 'websocket'; url: string }
-  | { kind: 'serial'; baudRate: number }
+  // The desktop app opens the port by its path (main process); a browser by Web Serial / WebUSB.
+  | { kind: 'serial'; baudRate: number; path?: string }
   // The desktop app only (src/desktop/api.ts): UDP (listen for the vehicle) or a TCP client.
-  | NativeLinkConfig;
+  | Exclude<NativeLinkConfig, { kind: 'serial' }>;
 
 export const DEFAULT_SERIAL_BAUD = 57600;
 export const SERIAL_BAUD_RATES = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 500000, 921600] as const;
@@ -329,6 +330,12 @@ export class MavlinkConnection {
       if (!desktop) throw new Error('UDP and TCP links need the Glareshield desktop app.');
       return new NativeLinkTransport(desktop.link, link);
     }
+    // The desktop app opens serial ports itself, by path: found again after a replug or restart.
+    const desktop = desktopApi();
+    if (desktop) {
+      if (!link.path) throw new Error('Choose a serial port in Settings › Link.');
+      return new NativeLinkTransport(desktop.link, { kind: 'serial', path: link.path, baudRate: link.baudRate });
+    }
     const api = getSerialApi();
     if (api === 'web-serial') {
       const port = await resolveSerialPort();
@@ -606,7 +613,7 @@ export class MavlinkConnection {
 
 function sameLink(a: LinkConfig, b: LinkConfig): boolean {
   if (a.kind === 'websocket' && b.kind === 'websocket') return a.url === b.url;
-  if (a.kind === 'serial' && b.kind === 'serial') return a.baudRate === b.baudRate;
+  if (a.kind === 'serial' && b.kind === 'serial') return a.baudRate === b.baudRate && a.path === b.path;
   if (a.kind === 'udp' && b.kind === 'udp') return a.port === b.port;
   if (a.kind === 'tcp' && b.kind === 'tcp') return a.host === b.host && a.port === b.port;
   return false;

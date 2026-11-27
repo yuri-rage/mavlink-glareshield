@@ -7,7 +7,6 @@
 // - USB serial is the page's own Web Serial; Electron has no device picker, so the page is asked to show one.
 // - Updates from GitHub Releases (AppImage, NSIS installer), when packaged.
 
-import { execFile } from 'node:child_process';
 import dgram from 'node:dgram';
 import fs from 'node:fs';
 import net from 'node:net';
@@ -150,6 +149,46 @@ function openLink(win: BrowserWindow, config: any): Promise<string> {
     });
   }
 
+  if (config?.kind === 'serial') {
+    const portPath = String(config.path || '');
+    const baudRate = Number(config.baudRate) || 57600;
+    if (!portPath) return Promise.reject(new Error('No serial port chosen'));
+    return openSerial(portPath, baudRate).then(({ port }) => {
+      let open = true;
+      // One write at a time, in order (the binding's writes are promises).
+      let writing: Promise<unknown> = Promise.resolve();
+      const fail = (e: unknown) => {
+        if (!open) return;
+        open = false;
+        void port.close().catch(() => {});
+        emitClosed(`Serial ${portPath}: ${e instanceof Error ? e.message : String(e)}`);
+      };
+      void (async () => {
+        const buf = Buffer.alloc(4096);
+        while (open) {
+          try {
+            const { bytesRead } = await port.read(buf, 0, buf.length);
+            if (bytesRead > 0) emitData(new Uint8Array(buf.subarray(0, bytesRead)));
+          } catch (e) {
+            // Closed by us (canceled read), or the device went away (unplugged).
+            if (open) fail(e);
+            return;
+          }
+        }
+      })();
+      links.set(id, {
+        send: (data) => {
+          if (open) writing = writing.then(() => port.write(Buffer.from(data))).catch(fail);
+        },
+        close: () => {
+          open = false;
+          void port.close().catch(() => {});
+        },
+      });
+      return id;
+    });
+  }
+
   return Promise.reject(new Error('Unknown link kind'));
 }
 
@@ -166,82 +205,82 @@ function setupLinks(win: BrowserWindow) {
   });
 }
 
-// ---- Serial (the page's Web Serial, with the port chosen in Settings) ----------------------------------------------
+// ---- Serial (opened here by path, as UDP and TCP; the page's Web Serial only for the RTK widget) -----------------
 //
-// Other ground stations list the ports in their connection settings; so does Glareshield: the main process lists them
-// (no native module: /sys/class/tty on Linux, the registry on Windows), the page shows a dropdown, and Connect says
-// which one before the page's navigator.serial.requestPort(), which is then answered here without a picker. A request
-// with no port chosen (the RTK widget's base station) still gets the page's own list.
+// The link's serial port is opened in this process with @serialport/bindings-cpp (prebuilt for Linux and Windows),
+// by its path (/dev/ttyACM0, COM5): after a replug or a restart it is found again by name, as in other ground
+// stations. Settings › Link lists the ports in a dropdown. The page's own Web Serial (navigator.serial) is still used
+// by the RTK widget's base station; Electron has no picker for it, so the page shows the list.
 
 interface SerialListing {
-  /** The port's name as Electron reports it (ttyUSB0, COM3). */
-  name: string;
+  /** The port's path: /dev/ttyACM0, COM5. */
+  path: string;
   label: string;
 }
 
-function listSerialPorts(): Promise<SerialListing[]> {
-  if (process.platform === 'win32') {
-    return new Promise((resolve) => {
-      execFile('reg', ['query', 'HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM'], { windowsHide: true }, (err, out) => {
-        if (err) return resolve([]);
-        const ports: SerialListing[] = [];
-        for (const line of out.split(/\r?\n/)) {
-          const m = line.trim().match(/^(\S+)\s+REG_SZ\s+(COM\d+)$/);
-          if (m) ports.push({ name: m[2], label: `${m[2]} (${m[1].split('\\').pop()})` });
-        }
-        resolve(ports.sort((a, b) => parseInt(a.name.slice(3), 10) - parseInt(b.name.slice(3), 10)));
-      });
-    });
-  }
-  if (process.platform !== 'linux') return Promise.resolve([]);
-  const ports: SerialListing[] = [];
+type Bindings = typeof import('@serialport/bindings-cpp');
+let bindingsModule: Bindings | null = null;
+function bindings(): Bindings {
   try {
-    // Friendly names from /dev/serial/by-id (usb-ArduPilot_Pixhawk6X_..., usb-Silicon_Labs_CP2102_...).
-    const byId = new Map<string, string>();
-    try {
-      for (const f of fs.readdirSync('/dev/serial/by-id')) {
-        byId.set(path.basename(fs.realpathSync(path.join('/dev/serial/by-id', f))), f);
-      }
-    } catch {
-      /* none plugged in */
-    }
-    for (const name of fs.readdirSync('/sys/class/tty')) {
-      // A real device behind it (not a virtual console or pseudo-terminal).
-      if (!fs.existsSync(path.join('/sys/class/tty', name, 'device'))) continue;
-      const id = byId.get(name);
-      const friendly = id
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    bindingsModule ??= require('@serialport/bindings-cpp') as Bindings;
+  } catch (e) {
+    // The native module itself didn't load (a missing system library): not a port problem.
+    throw new Error(`Serial ports are unavailable: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return bindingsModule;
+}
+
+async function listSerialPorts(): Promise<SerialListing[]> {
+  const ports = await bindings().autoDetect().list();
+  const rank = (p: string) => (/ttyS\d/.test(p) ? 1 : 0); // built-in UARTs after USB devices
+  return ports
+    .map((p) => {
+      const name = process.platform === 'win32' ? p.path : path.basename(p.path);
+      // Linux: the /dev/serial/by-id name (usb-ArduPilot_Pixhawk6X_..._if00); elsewhere the manufacturer.
+      const byId = p.pnpId
         ?.replace(/^usb-/, '')
         .replace(/-if\d+(-port\d+)?$/, '')
         .replace(/_/g, ' ');
-      ports.push({ name, label: friendly ? `${name}: ${friendly}` : name });
+      const what = process.platform === 'linux' ? byId : p.manufacturer;
+      return { path: p.path, label: what ? `${name}: ${what}` : name };
+    })
+    .sort((a, b) => rank(a.path) - rank(b.path) || a.path.localeCompare(b.path, undefined, { numeric: true }));
+}
+
+/** Open a serial port; a refusal says what usually causes it. */
+async function openSerial(portPath: string, baudRate: number) {
+  const b = bindings();
+  try {
+    const port = await b.autoDetect().open({ path: portPath, baudRate });
+    return { port };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/permission denied|EACCES/i.test(msg) && process.platform === 'linux') {
+      throw new Error(
+        `${portPath}: permission denied. Add your user to the dialout (or uucp) group, then log in again.`
+      );
     }
-  } catch {
-    /* no sysfs */
+    if (/access denied|busy|EBUSY|resource busy/i.test(msg)) {
+      throw new Error(
+        `${portPath} is in use by another program (Mission Planner, another app). Close it and connect again.`
+      );
+    }
+    if (/no such file|ENOENT|file not found|cannot find the file/i.test(msg)) {
+      throw new Error(`${portPath} isn't there: plug the radio or flight controller in, or refresh the port list.`);
+    }
+    throw new Error(`${portPath}: ${msg}`);
   }
-  // USB adapters and boards first; the built-in UARTs (ttyS*) last.
-  const rank = (n: string) => (/^ttyS\d/.test(n) ? 1 : 0);
-  return Promise.resolve(ports.sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name)));
 }
 
 function setupSerial(win: BrowserWindow) {
+  ipcMain.handle('serial:list', () => listSerialPorts());
+  // The RTK widget's Web Serial: allowed for this app, with the page's own list as the picker.
   const ses = win.webContents.session;
   ses.setPermissionCheckHandler((_wc, permission, origin) => permission === 'serial' && origin.startsWith(ORIGIN));
   ses.setDevicePermissionHandler((details) => details.deviceType === 'serial' && details.origin.startsWith(ORIGIN));
-  let preferred: string | null = null;
-  ipcMain.handle('serial:list', () => listSerialPorts());
-  ipcMain.on('serial:prefer', (_e, name: string | null) => {
-    preferred = name;
-  });
   ses.on('select-serial-port', (event, portList, _wc, callback) => {
     event.preventDefault();
-    if (preferred) {
-      const want = path.basename(preferred);
-      const port = portList.find((p) => path.basename(p.portName ?? '') === want);
-      preferred = null;
-      // Not there (unplugged since the list was made): no port; the page says so.
-      callback(port?.portId ?? '');
-      return;
-    }
     const ports = portList.map((p) => ({
       portId: p.portId,
       label: [p.displayName || p.portName, p.portName && p.displayName ? `(${p.portName})` : '']
