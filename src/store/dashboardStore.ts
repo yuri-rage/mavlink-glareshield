@@ -629,6 +629,46 @@ const STORAGE_KEY = 'mavlink_glareshield_profile_v1';
  * A tab made consistent: its mode one of the two, and its Cockpit layout (if any) referring only to its own widgets,
  * each once (lib/cockpitLayout.ts). Applied to every tab that's loaded, imported, or loses a widget.
  */
+const isObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * A profile from an import (a file, or pasted JSON), cleaned the way a saved one is when it loads: only tabs,
+ * placed widgets and custom widgets that are objects with their IDs (`{"tabs":[null]}` crashed the import
+ * preview), each custom widget sanitized (actions and parameter writes confirmed), each tab reconciled. Null: not a
+ * profile (no tabs left).
+ */
+export function parseProfileImport(json: string): DashboardProfile | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  if (!isObject(raw) || !Array.isArray(raw.tabs)) return null;
+  const tabs = raw.tabs
+    .filter((t: unknown): t is Record<string, any> => isObject(t) && typeof t.id === 'string')
+    .map((t) =>
+      reconcileTab({
+        ...(t as DashboardTab),
+        title: typeof t.title === 'string' ? t.title : 'Tab',
+        widgets: (Array.isArray(t.widgets) ? t.widgets : []).filter(
+          (w: unknown) => isObject(w) && typeof w.instanceId === 'string' && typeof w.widgetId === 'string'
+        ),
+      })
+    );
+  if (tabs.length === 0) return null;
+  const customWidgets = (Array.isArray(raw.customWidgets) ? raw.customWidgets : [])
+    .filter((w: unknown) => isObject(w) && typeof w.id === 'string')
+    .map((w: CustomWidgetDefinition) => sanitizeWidgetDefinition(w));
+  return {
+    version: typeof raw.version === 'string' ? raw.version : '1.0.0',
+    name: typeof raw.name === 'string' ? raw.name : 'Imported profile',
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date().toISOString(),
+    tabs,
+    customWidgets,
+  };
+}
+
 export function reconcileTab(tab: DashboardTab): DashboardTab {
   const widgets = Array.isArray(tab.widgets) ? tab.widgets : [];
   const mode = tab.mode === 'cockpit' ? 'cockpit' : undefined;
@@ -1252,14 +1292,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   importProfileJson: (jsonStr: string) => {
     try {
-      const parsed = JSON.parse(jsonStr) as DashboardProfile;
-      if (parsed && Array.isArray(parsed.tabs)) {
-        // Enforce confirmation and validate any imported custom widget actions and param controls for safety
-        if (Array.isArray(parsed.customWidgets)) {
-          parsed.customWidgets = parsed.customWidgets.map((w) => sanitizeWidgetDefinition(w));
-        }
-        // Cockpit layouts: only the tab's own widgets, each once, bounded (as when loading).
-        parsed.tabs = parsed.tabs.map((t) => reconcileTab(t));
+      // Cleaned, custom widgets sanitized (confirmation enforced), tabs reconciled: parseProfileImport.
+      const parsed = parseProfileImport(jsonStr);
+      if (parsed) {
         saveProfileToStorage(parsed);
         set({
           profile: parsed,
