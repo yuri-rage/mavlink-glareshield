@@ -9,6 +9,8 @@
 
 import { create } from 'zustand';
 
+import { desktopApi } from '../desktop/api';
+
 export interface BuildInfo {
   id: string;
   sha: string | null;
@@ -77,7 +79,18 @@ let started = false;
 
 /** Start checking (production builds only; once). */
 export function startUpdateChecks(): void {
-  if (started || BUILD.id === 'dev' || typeof window === 'undefined') return;
+  if (started || typeof window === 'undefined') return;
+  // The desktop app updates itself (electron-updater, from GitHub Releases): a version downloaded and ready to
+  // restart into is "available". Its page is bundled, so there's no deploy to poll for.
+  const desktop = desktopApi();
+  if (desktop) {
+    started = true;
+    desktop.update.onState((st) => {
+      if (st.kind === 'ready') useUpdateStore.setState({ available: st.version });
+    });
+    return;
+  }
+  if (BUILD.id === 'dev') return;
   started = true;
   setInterval(() => void checkForUpdate(), CHECK_EVERY_MS);
   document.addEventListener('visibilitychange', () => {

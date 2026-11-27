@@ -1,0 +1,40 @@
+# The desktop app (desktop/): Linux AppImage and a Windows installer (NSIS), both able to update themselves from
+# GitHub Releases. macOS is not built (it needs a paid Apple Developer ID to run without warnings).
+appId: com.yurirage.glareshield
+productName: Glareshield
+copyright: Copyright © Yuri Rage
+directories:
+  output: release
+  buildResources: build
+# The page (dist/) and the bundled main process and preload (desktop/dist/, esbuild): no node_modules needed.
+files:
+  - dist/**
+  - desktop/dist/**
+  - desktop/package.json
+  - package.json
+  - '!node_modules/**'
+asar: true
+publish:
+  provider: github
+  owner: yuri-rage
+  repo: mavlink-glareshield
+  releaseType: release
+linux:
+  target: AppImage
+  category: Science
+  syncDesktopName: true
+  icon: public/logo-512.png
+  artifactName: Glareshield-${version}-${arch}.AppImage
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: public/logo-512.png
+  artifactName: Glareshield-Setup-${version}.${ext}
+nsis:
+  # Per user, no admin rights needed; the person may choose where it goes.
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Glareshield

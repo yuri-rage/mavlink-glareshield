@@ -38,3 +38,7 @@ certs/
 *.pem
 
 TODO*
+
+# Desktop app (Electron) build output
+desktop/dist
+release

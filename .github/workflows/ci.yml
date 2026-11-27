@@ -130,6 +130,9 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+      - name: Desktop app main process (typecheck and bundle)
+        run: npm run desktop:compile
+
       - name: Upload dist artifact
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
