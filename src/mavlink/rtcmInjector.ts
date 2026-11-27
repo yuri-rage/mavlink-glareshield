@@ -314,6 +314,10 @@ export class RtcmInjector {
   private ntripAbortController: AbortController | null = null;
   private ggaIntervalTimer: any = null;
   private unsubBridgeText: (() => void) | null = null;
+  /** The link's status while NTRIP runs through the bridge (which ends the caster session when the link drops). */
+  private unsubBridgeStatus: (() => void) | null = null;
+  /** The caster the bridge was told to reach, to ask again once a dropped link is back. Null: not via the bridge. */
+  private bridgeConfig: NtripConfig | null = null;
 
   constructor() {
     this.startRateMeter();
@@ -338,6 +342,11 @@ export class RtcmInjector {
       clearInterval(this.rateTimer);
       this.rateTimer = null;
     }
+  }
+
+  /** The state now (onStateChange tells of each change). */
+  public getState(): RtcmInjectorState {
+    return this.state;
   }
 
   public onStateChange(listener: (state: RtcmInjectorState) => void): () => void {
@@ -709,13 +718,34 @@ export class RtcmInjector {
 
   public async connectViaBridge(config: NtripConfig) {
     this.updateState({ status: 'connecting', source: 'ntrip', error: null });
+    this.bridgeConfig = config;
+
+    // The bridge ends the caster session when its link drops: say so, and ask again once the link is back (RTK
+    // corrections should outlast a Wi-Fi blip). Disconnect stops this.
+    this.unsubBridgeStatus?.();
+    this.unsubBridgeStatus = mavlinkConnection.onStatus((status) => {
+      if (!this.bridgeConfig) return;
+      if (status === 'disconnected' || status === 'error') {
+        if (this.state.status !== 'connecting' || this.state.error === null) {
+          this.updateState({
+            status: 'connecting',
+            source: 'ntrip',
+            dataRateBps: 0,
+            packetRateHz: 0,
+            error: 'Link to the bridge lost: NTRIP resumes when it is back',
+          });
+        }
+      } else if (status === 'connected') {
+        this.sendBridgeConnect(this.bridgeConfig);
+      }
+    });
 
     this.unsubBridgeText = mavlinkConnection.onText((msgStr) => {
       try {
         const msg = JSON.parse(msgStr);
         if (msg.type === 'ntrip_status') {
           if (msg.status === 'streaming') {
-            this.updateState({ status: 'streaming', source: 'ntrip' });
+            this.updateState({ status: 'streaming', source: 'ntrip', error: null });
           } else if (msg.status === 'disconnected') {
             this.updateState({ status: 'disconnected', source: 'none' });
           }
@@ -733,18 +763,8 @@ export class RtcmInjector {
       } catch {}
     });
 
-    const sent = mavlinkConnection.sendText(
-      JSON.stringify({
-        type: 'ntrip_connect',
-        host: config.host.trim(),
-        port: config.port || 2101,
-        mountpoint: config.mountpoint.trim().replace(/^\//, ''),
-        username: config.username || '',
-        password: config.password || '',
-      })
-    );
-
-    if (!sent) {
+    if (!this.sendBridgeConnect(config)) {
+      this.stopBridgeWatch();
       throw new Error('Bridge is not connected. Start the bridge using python3 bridge/bridge.py.');
     }
 
@@ -755,6 +775,26 @@ export class RtcmInjector {
         mavlinkConnection.sendText(JSON.stringify({ type: 'ntrip_gga', gga }));
       });
     }
+  }
+
+  /** Ask the bridge to stream from the caster. False: no link to the bridge. */
+  private sendBridgeConnect(config: NtripConfig): boolean {
+    return mavlinkConnection.sendText(
+      JSON.stringify({
+        type: 'ntrip_connect',
+        host: config.host.trim(),
+        port: config.port || 2101,
+        mountpoint: config.mountpoint.trim().replace(/^\//, ''),
+        username: config.username || '',
+        password: config.password || '',
+      })
+    );
+  }
+
+  private stopBridgeWatch() {
+    this.unsubBridgeStatus?.();
+    this.unsubBridgeStatus = null;
+    this.bridgeConfig = null;
   }
 
   private startGgaLoop(sendFn: (ggaSentence: string) => void) {
@@ -797,7 +837,9 @@ export class RtcmInjector {
       this.unsubBridgeText();
       this.unsubBridgeText = null;
     }
-    mavlinkConnection.sendText(JSON.stringify({ type: 'ntrip_disconnect' }));
+    // Only a stream through the bridge is the bridge's to stop (not a serial base station, or a direct caster).
+    if (this.bridgeConfig) mavlinkConnection.sendText(JSON.stringify({ type: 'ntrip_disconnect' }));
+    this.stopBridgeWatch();
 
     if (this.serialPort) {
       this.isSerialReading = false;
