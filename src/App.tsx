@@ -1,10 +1,12 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 
 import { DashboardGrid } from './components/dashboard/DashboardGrid';
+import { SerialPortPicker } from './components/desktop/SerialPortPicker';
 import { EditToolbar } from './components/editor/EditToolbar';
 import { Navbar } from './components/navbar/Navbar';
 import { VehicleSwitchDialog } from './components/navbar/VehiclePicker';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
+import { isDesktop } from './desktop/api';
 import { useAudioAlertListener } from './lib/audioAlerts';
 import { acceptPairingLink } from './lib/pairing';
 import { askConfirm } from './store/confirmStore';
@@ -80,6 +82,7 @@ export const App: React.FC = () => {
 
       {/* In-app confirmations that mustn't block the page (and the vehicle heartbeat) while they're open */}
       <ConfirmDialog />
+      {isDesktop() && <SerialPortPicker />}
 
       {/* Edit Mode Toolbar (populates just below the top bar when edit mode is active) */}
       <EditToolbar

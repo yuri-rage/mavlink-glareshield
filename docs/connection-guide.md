@@ -380,6 +380,8 @@ For remote internet access, use a **Named Cloudflare Tunnel** protected by **Clo
 
 ## Option 5: Direct USB Serial (No Bridge)
 
+> The [desktop app](desktop-app.md) (Linux, Windows) connects directly too: over USB serial, and over UDP or TCP, which a browser can't open.
+
 Chromium browsers can open a USB serial device themselves, so a telemetry radio or a flight controller's USB port can connect to Glareshield with no bridge, no certificates, and no mixed-content restrictions (the link never leaves the browser).
 
 1. Plug in the telemetry radio or flight controller.

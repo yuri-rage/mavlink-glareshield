@@ -36,6 +36,8 @@ Designed to remove the "glare" from more fully featured GCS applications and foc
 
 Glareshield is deployed and ready to use at **[https://glareshield.yurirage.com](https://glareshield.yurirage.com)**. No installation or build steps are required for the web application.
 
+Or install the **desktop app** for Linux (AppImage) or Windows from the [latest release](https://github.com/yuri-rage/mavlink-glareshield/releases/latest). It connects to the vehicle directly over UDP, TCP or USB serial, with no bridge needed. See [The Desktop App](docs/desktop-app.md).
+
 ### 1. Start a Telemetry Bridge
 
 Choose either Mission Planner or the Docker bridge:
