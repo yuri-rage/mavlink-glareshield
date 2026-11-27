@@ -1033,9 +1033,9 @@ export const useTelemetryStore = create<TelemetryState>()(
                       encoder.createRequestMessage(packet.systemId, packet.componentId, MAVLINK_MSG_ID.HOME_POSITION)
                     );
                   }
-                  if (versionPollAttempts === 3) {
-                    mavlinkConnection.send(encoder.createParamRequestList(packet.systemId, packet.componentId));
-                  }
+                  // No PARAM_REQUEST_LIST here (ArduPilot sends its banner on one): it would pull every parameter
+                  // (1,000+ PARAM_VALUE, seconds of a SiK link) unasked, outside paramManager. AUTOPILOT_VERSION
+                  // and DO_SEND_BANNER are what current ArduPilot answers.
                 }
               }
             } else {
