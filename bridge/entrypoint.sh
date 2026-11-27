@@ -230,9 +230,9 @@ elif [ "$AUTO_TLS" = "true" ] || [ "$AUTO_TLS" = "1" ] || [ "$AUTO_TLS" = "yes" 
     # Persist to mounted volume without modifying host permissions
     if mkdir -p "$CERT_DIR" 2>/dev/null && [ -w "$CERT_DIR" ]; then
         cp "$RUN_CERT_DIR/cert.pem" "$CERT_DIR/cert.pem" 2>/dev/null || true
-        cp "$RUN_CERT_DIR/key.pem" "$CERT_DIR/key.pem" 2>/dev/null || true
-        # The private key: readable by the owner of the certs folder (on the host, usually you) and no one else.
-        chmod 600 "$CERT_DIR/key.pem" 2>/dev/null || true
+        # The private key: readable by the owner of the certs folder (on the host, usually you) and no one else,
+        # created that way (install -m), never briefly with wider permissions.
+        install -m 600 "$RUN_CERT_DIR/key.pem" "$CERT_DIR/key.pem" 2>/dev/null || true
         chown --reference="$CERT_DIR" "$CERT_DIR/key.pem" "$CERT_DIR/cert.pem" 2>/dev/null || true
         echo "[TLS] Certificate saved to $CERT_DIR for persistence"
     fi
