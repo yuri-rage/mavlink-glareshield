@@ -100,6 +100,9 @@ jobs:
       - name: Run bridge transport checks
         run: python3 tests/check_bridge_transport.py
 
+      - name: Run bridge pairing-token checks
+        run: python3 tests/check_bridge_pairing.py
+
       - name: Run mock bridge checks
         run: python3 tests/check_mock_bridge.py
 

@@ -17,14 +17,17 @@ import asyncio
 import base64
 import concurrent.futures
 import contextlib
+import hmac
 import http
 import json
 import math
+import os
 import re
 import socket
 import ssl
 import struct
 import time
+import urllib.parse
 from typing import Any, cast
 
 import websockets
@@ -39,6 +42,12 @@ DEFAULT_ALLOWED_ORIGINS: list[Any] = [
     re.compile(r"^https?://tauri\.localhost(:\d+)?$"),
     None,
 ]
+
+# Where a pairing QR sends the phone once the bridge has checked its token.
+DEFAULT_APP_URL = "https://glareshield.yurirage.com/"
+# WebSocket close codes the app reads (a refused handshake's HTTP status never reaches a page's JavaScript).
+CLOSE_TOKEN_MISSING = 4001
+CLOSE_TOKEN_WRONG = 4003
 
 # Messages queued for one WebSocket client before its oldest are dropped (it isn't keeping up).
 CLIENT_QUEUE_MAX = 1000
@@ -255,6 +264,10 @@ class BridgeServer:
         target: str,
         allowed_origins: list[Any] | None = None,
         ssl_context: ssl.SSLContext | None = None,
+        token: str | None = None,
+        pair_host: str | None = None,
+        pair_svg: str | None = None,
+        app_url: str = DEFAULT_APP_URL,
     ):
         self.host = host
         self.port = port
@@ -262,6 +275,11 @@ class BridgeServer:
         self.target = target
         self.allowed_origins = allowed_origins if allowed_origins is not None else DEFAULT_ALLOWED_ORIGINS
         self.ssl_context = ssl_context
+        # The shared pairing token: a WebSocket needs ?token=<it>. None: no check (a bridge on loopback).
+        self.token = token or None
+        self.pair_host = pair_host
+        self.pair_svg = pair_svg
+        self.app_url = app_url
         self.clients: set[Any] = set()
         self.client_sessions: dict[Any, ClientSession] = {}
         self.encoder = MavlinkV2Encoder(sysid=1, compid=1)
@@ -318,7 +336,38 @@ class BridgeServer:
     async def broadcast(self, data: bytes):
         self.queue_broadcast(data)
 
+    def token_ok(self, path: str) -> bool | None:
+        """True: the path's ?token= matches. False: wrong. None: missing. Always True with no token set."""
+        if self.token is None:
+            return True
+        given = urllib.parse.parse_qs(urllib.parse.urlsplit(path).query).get("token", [None])[0]
+        if given is None:
+            return None
+        return hmac.compare_digest(given.encode(), self.token.encode())
+
+    def ws_url(self, host: str) -> str:
+        return f"{'wss' if self.ssl_context else 'ws'}://{host}/?token={urllib.parse.quote(self.token or '')}"
+
+    def app_link(self, host: str) -> str:
+        """The app, told (in the hash: never sent to its server) which bridge to connect to."""
+        return f"{self.app_url}#link={urllib.parse.quote(self.ws_url(host), safe='')}"
+
+    def pairing_url(self, host: str) -> str:
+        """What the QR holds. Over TLS, the bridge's own /pair page first: opening it is the phone's one-time
+        acceptance of the self-signed certificate, and the bridge checks the token there before sending it on."""
+        if self.ssl_context:
+            return f"https://{host}/pair?token={urllib.parse.quote(self.token or '')}"
+        return self.app_link(host)
+
     async def ws_handler(self, websocket):
+        # The token before anything else: nothing is sent to or relayed from a client without it.
+        ok = self.token_ok(websocket.request.path)
+        if not ok:
+            code = CLOSE_TOKEN_MISSING if ok is None else CLOSE_TOKEN_WRONG
+            reason = "pairing token required" if ok is None else "wrong pairing token"
+            print(f"[SECURITY] Closed WebSocket from {websocket.remote_address}: {reason}")
+            await websocket.close(code, reason)
+            return
         session = ClientSession(websocket)
         session.sender = asyncio.create_task(session.send_loop())
         self.client_sessions[websocket] = session
@@ -1689,7 +1738,56 @@ class BridgeServer:
         except OSError as e:  # pyserial's SerialException is an OSError
             self.note_write_error("SERIAL", e)
 
+    def print_pairing(self) -> None:
+        """The QR code (and URL) a phone or laptop scans to pair, and an SVG copy when asked for one."""
+        host = f"{self.pair_host or guess_lan_ip() or self.host}:{self.port}"
+        url = self.pairing_url(host)
+        print("------------------------------------------------------------")
+        print(" Pair a device: scan this QR code, or open the link below.")
+        try:
+            import segno  # pyright: ignore[reportMissingImports]
+
+            qr = segno.make(url, error="m")
+            qr.terminal(compact=True)
+            if self.pair_svg:
+                try:
+                    qr.save(self.pair_svg, scale=8, border=2)
+                    os.chmod(self.pair_svg, 0o600)  # it holds the token
+                    print(f" (also saved as {self.pair_svg})")
+                except OSError as e:
+                    print(f" (could not save {self.pair_svg}: {e})")
+        except ImportError:
+            print(" (pip install segno to show a QR code here)")
+        print(f" {url}")
+        print(f" Or in Glareshield's Link settings: {self.ws_url(host)}")
+        print("------------------------------------------------------------")
+
+    def plain_http(self, connection: Any, request: Any) -> Any:
+        """A browser tab opening the bridge (no WebSocket upgrade): the certificate page and /pair."""
+        path = urllib.parse.urlsplit(request.path).path
+        if path == "/pair":
+            if self.token is None:
+                return connection.respond(http.HTTPStatus.NOT_FOUND, "Pairing is off: this bridge needs no token.\n")
+            if not self.token_ok(request.path):
+                print("[SECURITY] /pair with a wrong or missing token")
+                return connection.respond(
+                    http.HTTPStatus.FORBIDDEN,
+                    "Wrong or missing pairing token. Scan the QR code in the bridge's log again.\n",
+                )
+            host = request.headers.get("Host") or f"{self.pair_host or self.host}:{self.port}"
+            response = connection.respond(http.HTTPStatus.FOUND, "Paired. Opening Glareshield...\n")
+            response.headers["Location"] = self.app_link(host)
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            return response
+        return connection.respond(
+            http.HTTPStatus.OK,
+            "Glareshield bridge: this browser now trusts its certificate. You can close this tab.\n",
+        )
+
     def process_request(self, connection: Any, request: Any) -> Any:
+        if "upgrade" not in request.headers.get("Connection", "").lower():
+            return self.plain_http(connection, request)
         origin = request.headers.get("Origin")
         if not self.allowed_origins or "*" in self.allowed_origins:
             return None
@@ -1721,6 +1819,8 @@ class BridgeServer:
         )
         print("============================================================")
         print(f" MAVLink Glareshield Bridge running on {proto}://{self.host}:{self.port}")
+        if self.token:
+            self.print_pairing()
         print(f" Mode: {self.mode.upper()} {f'-> {self.target}' if self.target else ''}")
         print("============================================================")
 
@@ -1733,6 +1833,17 @@ class BridgeServer:
             await self.setup_tcp()
         elif self.mode == "serial":
             await self.setup_serial()
+
+
+def guess_lan_ip() -> str | None:
+    """This machine's address on the network the default route uses (no packet is sent)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))
+            ip = s.getsockname()[0]
+            return None if ip.startswith("127.") else ip
+    except OSError:
+        return None
 
 
 def main():
@@ -1765,6 +1876,15 @@ def main():
         type=str,
         help="Path to SSL private key (.key) to serve over wss://",
     )
+    parser.add_argument(
+        "--token",
+        default=os.environ.get("BRIDGE_TOKEN") or None,
+        help="Pairing token every WebSocket must carry as ?token= (default: $BRIDGE_TOKEN; none: no check). "
+        "Prints a pairing QR code at startup.",
+    )
+    parser.add_argument("--pair-host", help="The address devices reach the bridge at, for the pairing QR")
+    parser.add_argument("--pair-svg", help="Also save the pairing QR code as this SVG file")
+    parser.add_argument("--app-url", default=DEFAULT_APP_URL, help=f"Where pairing opens the app ({DEFAULT_APP_URL})")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--mock", action="store_true", help="Run simulated ArduPilot mock telemetry")
     group.add_argument("--udp", type=str, help="Connect to UDP MAVLink target (e.g. 127.0.0.1:14550)")
@@ -1810,6 +1930,10 @@ def main():
         target,
         allowed_origins=allowed_origins,
         ssl_context=ssl_context,
+        token=args.token,
+        pair_host=args.pair_host,
+        pair_svg=args.pair_svg,
+        app_url=args.app_url,
     )
     try:
         asyncio.run(server.run())
