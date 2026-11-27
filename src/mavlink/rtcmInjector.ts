@@ -1,3 +1,4 @@
+import { desktopApi } from '../desktop/api';
 import { useConnectionStore } from '../store/connectionStore';
 import { useTelemetryStore } from '../store/telemetryStore';
 import { mavlinkConnection } from './connection';
@@ -641,7 +642,14 @@ export class RtcmInjector {
         // If local proxy endpoint is not available or returned non-ok (e.g. standalone production build):
         // Try via the companion bridge WebSocket connection if active
         if (!response || !response.ok) {
-          if (mavlinkConnection.getStatus() === 'connected') {
+          // Through the bridge only when the link is the bridge's WebSocket (its text channel carries NTRIP).
+          const viaWs = mavlinkConnection.getLink().kind === 'websocket';
+          if (mavlinkConnection.getStatus() === 'connected' && !viaWs && desktopApi()) {
+            throw new Error(
+              'NTRIP needs the bridge for now: connect over WebSocket to it, or use a USB RTK base station (Serial). The desktop app reaching the caster directly is planned.'
+            );
+          }
+          if (mavlinkConnection.getStatus() === 'connected' && viaWs) {
             console.log('[NTRIP] Local Vite proxy unavailable, connecting to caster via MAVLink bridge proxy...');
             await this.connectViaBridge(config);
             return;
