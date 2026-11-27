@@ -239,7 +239,7 @@ The phone is paired: Glareshield keeps the link, token included, in that browser
 ### Other Ways to Pair
 
 - **A laptop or desktop**: open the link printed under the QR code, or paste the *"Or in Glareshield's Link settings"* link into **Settings → Link** and click **Connect**. Over `wss://`, open `https://<bridge-ip>:56781` once first to accept the certificate.
-- **From a device that is already paired**: **Settings → Link → Pair another device** shows a QR code of the same link the bridge's QR code holds: scan it with the other device's camera. Or **Copy** or **Share** the link, send it to yourself (it carries the token), and open it on the other device. No terminal needed.
+- **From a device that is already paired**: **Settings → Link → Pair another device…** shows a QR code of the same link the bridge's QR code holds: scan it with the other device's camera. Or **Copy** or **Share** the link, send it to yourself (it carries the token), and open it on the other device. No terminal needed.
 - **The QR code as an image**: `./certs/pair.svg`, to open on another screen or print. Keep it to yourself: it holds the token. Without access to the bridge machine's files: `docker compose cp bridge:/certs/pair.svg .`
 - **A headless bridge set up from a phone**: set `TOKEN=<passphrase>` in `docker-compose.yml`, open `https://<bridge-ip>:56781` on the phone to accept the certificate, then enter `wss://<bridge-ip>:56781/?token=<passphrase>` in **Settings → Link**.
 

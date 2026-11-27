@@ -38,7 +38,7 @@ class FakeWebSocket {
 }
 (globalThis as any).WebSocket = FakeWebSocket;
 
-const { linkFromHash, pairingUrl, acceptPairingLink, pairingCloseMessage, tokenOf } =
+const { linkFromHash, pairingUrl, acceptPairingLink, pairingCloseMessage, tokenOf, maskToken } =
   await import('../src/lib/pairing.ts');
 const { MavlinkConnection } = await import('../src/mavlink/connection.ts');
 
@@ -59,6 +59,12 @@ const hash = `#link=${encodeURIComponent(wss)}`;
 check('#link: the bridge link', linkFromHash(hash) === wss, String(linkFromHash(hash)));
 check('#link: only ws:// or wss://', linkFromHash(`#link=${encodeURIComponent('javascript:alert(1)')}`) === null);
 check('#link: junk is ignored', linkFromHash('#link=%%%') === null && linkFromHash('#other=1') === null);
+check(
+  'a link shown on screen hides its token',
+  maskToken(wss) === 'wss://192.168.1.50:56781/?token=••••••' &&
+    maskToken('ws://h:1/?a=1&token=abc&b=2') === 'ws://h:1/?a=1&token=••••••&b=2' &&
+    maskToken('ws://h:1/') === 'ws://h:1/'
+);
 check('token of a link', tokenOf(wss) === 'nzZwtJNtd2u8lZSFFGoDRQ' && tokenOf('wss://h:1/') === null);
 
 // The link another device scans: like the bridge's own QR code.
