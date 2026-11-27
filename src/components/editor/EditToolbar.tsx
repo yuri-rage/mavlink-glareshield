@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-import { Check, Pencil, Plus, Sliders } from 'lucide-react';
+import { Check, LayoutTemplate, Pencil, Plus, Sliders, Trash2 } from 'lucide-react';
 
 import {
   COCKPIT_PRESETS,
@@ -12,6 +12,7 @@ import {
 } from '../../lib/cockpitLayout';
 import { COCKPIT_VARIANTS, editTarget, layoutOf, useDashboardStore } from '../../store/dashboardStore';
 import { Button } from '../ui/button';
+import { HeaderMenu, MenuItem, MenuSection } from '../ui/HeaderMenu';
 
 interface EditToolbarProps {
   onOpenWidgetModal: () => void;
@@ -67,6 +68,12 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({ onOpenWidgetModal, onO
           {cockpit && variants.length > 1 && (
             <strong className="text-sky-300"> ({VARIANT_INFO[editing].name.toLowerCase()} layout)</strong>
           )}{' '}
+          {cockpit && editing === 'compact' && compactPreview !== 'off' && (
+            <span className="text-sky-300/80">
+              {' '}
+              · preview {COMPACT_PREVIEWS.find((p) => p.id === compactPreview)?.label}
+            </span>
+          )}{' '}
           {cockpit
             ? `(${shown} shown${activeTab.widgets.length > shown ? `, ${activeTab.widgets.length - shown} hidden` : ''})`
             : `(${activeTab?.widgets.length || 0} widgets)`}
@@ -76,9 +83,9 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({ onOpenWidgetModal, onO
       <div className="ml-auto flex flex-wrap items-center gap-2">
         {/* The tab's layout: Flow (a scrolling grid) or Cockpit (panes filling the window). */}
         {activeTab && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <div
-              className="grid grid-cols-2 gap-0.5 rounded-md border border-zinc-700 bg-zinc-900 p-0.5"
+              className="grid shrink-0 grid-cols-2 gap-0.5 rounded-md border border-zinc-700 bg-zinc-900 p-0.5"
               role="radiogroup"
               aria-label="Tab layout"
             >
@@ -106,7 +113,7 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({ onOpenWidgetModal, onO
                 edited. */}
             {cockpit && variants.length > 1 && (
               <div
-                className="flex gap-0.5 rounded-md border border-sky-700/60 bg-zinc-900 p-0.5"
+                className="flex shrink-0 gap-0.5 rounded-md border border-sky-700/60 bg-zinc-900 p-0.5"
                 role="radiogroup"
                 aria-label="Layout being edited"
               >
@@ -127,80 +134,99 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({ onOpenWidgetModal, onO
                 ))}
               </div>
             )}
-            {cockpit &&
-              (['wide', 'compact'] as const)
-                .filter((v) => !layoutOf(activeTab, v))
-                .map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => addLayout(activeTab.id, v)}
-                    className="h-7 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-[11px] font-semibold text-zinc-300 hover:text-white"
-                    title={`A ${VARIANT_INFO[v].name.toLowerCase()} layout of this tab, ${VARIANT_INFO[v].when}; it starts as a copy of the standard one`}
-                  >
-                    + {VARIANT_INFO[v].name}
-                  </button>
-                ))}
-            {cockpit && editing === 'compact' && (
-              <select
-                value={compactPreview}
-                onChange={(e) => setCompactPreview(e.target.value as CompactPreviewId)}
-                className="h-7 rounded-md border border-sky-700/60 bg-zinc-900 px-1.5 text-[11px] font-semibold text-sky-300"
-                aria-label="Preview the compact layout at"
-                title="Edit the compact layout in a frame the size of a laptop's browser window (when this window is larger)"
+            {/* Presets, the tab's other layouts and the compact preview: one menu, not a row of controls. */}
+            {cockpit && (
+              <HeaderMenu
+                alwaysLabel
+                icon={<LayoutTemplate className="h-3.5 w-3.5" />}
+                label="Layout"
+                title="Presets, wide and compact layouts, compact preview"
+                widthClass="w-72"
               >
-                {COMPACT_PREVIEWS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    Preview: {p.label}
-                  </option>
-                ))}
-                <option value="off">Preview: off (this window)</option>
-              </select>
+                {(close) => (
+                  <>
+                    <MenuSection label="Lay this tab out as" first />
+                    {COCKPIT_PRESETS.map((p) => (
+                      <MenuItem
+                        key={p.id}
+                        label={p.name}
+                        onClick={() => {
+                          applyCockpitPreset(activeTab.id, p.id as CockpitPresetId);
+                          close();
+                        }}
+                      />
+                    ))}
+                    <MenuSection label="Other layouts of this tab" />
+                    {(['wide', 'compact'] as const).map((v) =>
+                      layoutOf(activeTab, v) ? null : (
+                        <MenuItem
+                          key={v}
+                          icon={<Plus className="h-3.5 w-3.5" />}
+                          label={`Add a ${VARIANT_INFO[v].name.toLowerCase()} layout`}
+                          detail={v === 'wide' ? 'ultrawide' : 'laptop'}
+                          onClick={() => {
+                            addLayout(activeTab.id, v);
+                            close();
+                          }}
+                        />
+                      )
+                    )}
+                    {editing !== 'standard' && (
+                      <MenuItem
+                        danger
+                        icon={<Trash2 className="h-3.5 w-3.5" />}
+                        label={`Remove the ${VARIANT_INFO[editing].name.toLowerCase()} layout…`}
+                        onClick={() => {
+                          setConfirmRemove(true);
+                          close();
+                        }}
+                      />
+                    )}
+                    {variants.length > 1 && editing === 'standard' && (
+                      <div className="px-2.5 py-1 text-[10px] text-zinc-500">
+                        To remove a layout, switch to it first.
+                      </div>
+                    )}
+                    {editing === 'compact' && (
+                      <>
+                        <MenuSection label="Preview the compact layout at" />
+                        {[
+                          ...COMPACT_PREVIEWS.map((p) => ({ id: p.id, label: p.label })),
+                          { id: 'off', label: 'Off (this window)' },
+                        ].map((p) => (
+                          <MenuItem
+                            key={p.id}
+                            checked={compactPreview === p.id}
+                            label={p.label}
+                            onClick={() => {
+                              setCompactPreview(p.id as CompactPreviewId);
+                              close();
+                            }}
+                          />
+                        ))}
+                      </>
+                    )}
+                  </>
+                )}
+              </HeaderMenu>
             )}
-            {cockpit &&
-              editing !== 'standard' &&
-              (confirmRemove ? (
-                <span className="flex items-center gap-1 rounded border border-red-500/40 bg-red-950/90 px-1.5 py-0.5 text-[10px] text-red-200">
-                  Remove the {VARIANT_INFO[editing].name.toLowerCase()} layout?
-                  <button
-                    type="button"
-                    onClick={() => {
-                      removeLayout(activeTab.id, editing);
-                      setConfirmRemove(false);
-                    }}
-                    className="rounded bg-red-600 px-1 font-bold text-white"
-                  >
-                    Remove
-                  </button>
-                  <button type="button" onClick={() => setConfirmRemove(false)} className="rounded bg-zinc-800 px-1">
-                    No
-                  </button>
-                </span>
-              ) : (
+            {cockpit && editing !== 'standard' && confirmRemove && (
+              <span className="flex items-center gap-1 rounded border border-red-500/40 bg-red-950/90 px-1.5 py-0.5 text-[10px] text-red-200">
+                Remove the {VARIANT_INFO[editing].name.toLowerCase()} layout? Its widgets stay on the tab.
                 <button
                   type="button"
-                  onClick={() => setConfirmRemove(true)}
-                  className="h-7 rounded-md px-1.5 text-[11px] text-zinc-400 hover:text-red-300"
-                  title={`Remove the ${VARIANT_INFO[editing].name.toLowerCase()} layout (its widgets stay on the tab)`}
+                  onClick={() => {
+                    removeLayout(activeTab.id, editing);
+                    setConfirmRemove(false);
+                  }}
+                  className="rounded bg-red-600 px-1 font-bold text-white"
                 >
-                  Remove {VARIANT_INFO[editing].name.toLowerCase()}
+                  Remove
                 </button>
-              ))}
-            {cockpit && (
-              <select
-                value=""
-                onChange={(e) => e.target.value && applyCockpitPreset(activeTab.id, e.target.value as CockpitPresetId)}
-                className="h-7 rounded-md border border-zinc-700 bg-zinc-900 px-1.5 text-[11px] font-semibold text-zinc-300"
-                aria-label="Apply a layout preset"
-                title="Lay the tab out as a preset (the tab's widgets are reused; missing ones added)"
-              >
-                <option value="">Preset…</option>
-                {COCKPIT_PRESETS.map((p) => (
-                  <option key={p.id} value={p.id} title={p.description}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+                <button type="button" onClick={() => setConfirmRemove(false)} className="rounded bg-zinc-800 px-1">
+                  No
+                </button>
+              </span>
             )}
           </div>
         )}

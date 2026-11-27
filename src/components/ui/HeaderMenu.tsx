@@ -20,6 +20,8 @@ interface HeaderMenuProps {
   extra?: React.ReactNode;
   /** Just the icon, smaller (a pane's bar): no label or chevron. */
   iconOnly?: boolean;
+  /** The label at every width (otherwise only on wide screens). */
+  alwaysLabel?: boolean;
 }
 
 export const HeaderMenu: React.FC<HeaderMenuProps> = ({
@@ -30,6 +32,7 @@ export const HeaderMenu: React.FC<HeaderMenuProps> = ({
   widthClass = 'w-64',
   extra,
   iconOnly = false,
+  alwaysLabel = false,
 }) => {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -129,7 +132,7 @@ export const HeaderMenu: React.FC<HeaderMenuProps> = ({
         {icon}
         {!iconOnly && (
           <>
-            <span className="hidden text-[11px] xl:inline">{label}</span>
+            <span className={cn('text-[11px]', !alwaysLabel && 'hidden xl:inline')}>{label}</span>
             <ChevronDown className={cn('h-3 w-3 text-zinc-500 transition-transform', open && 'rotate-180')} />
           </>
         )}
