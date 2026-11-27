@@ -96,9 +96,12 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
   const handleReset = async () => {
     if (
       await askConfirm({
-        title: 'Reset to defaults?',
-        message: ['Your layout and widgets go back to the defaults.'],
-        confirmLabel: 'Reset',
+        title: 'Reset the dashboard?',
+        message: [
+          'Your tabs, widgets and layouts go back to the defaults. Download the profile first to keep a copy.',
+          'Settings (link, units, alerts, traffic) are kept: Settings › Data › Restore defaults resets those too.',
+        ],
+        confirmLabel: 'Reset the dashboard',
         danger: true,
       })
     ) {
@@ -111,8 +114,8 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Layout Profile & Backup Manager"
-      description="Export your customized tabs, widgets, and layout configuration or import an existing profile."
+      title="Profiles & Backup"
+      description="Save this dashboard (its tabs, widgets and layouts) to a file, or load one."
     >
       <div className="space-y-4">
         {/* Export / Download Section */}
@@ -260,7 +263,7 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
             className="gap-1.5 text-xs text-red-400 hover:bg-red-950/30 hover:text-red-300"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            Reset to Default Layout
+            Reset the dashboard…
           </Button>
 
           <Button variant="ghost" size="sm" onClick={onClose} className="text-xs">

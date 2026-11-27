@@ -246,7 +246,7 @@ export const EditToolbar: React.FC<EditToolbarProps> = ({ onOpenWidgetModal, onO
           size="sm"
           onClick={onOpenProfileModal}
           className="h-7 gap-1.5 border-zinc-700 bg-zinc-900/80 px-2.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800"
-          title="Profiles, Backup & Export"
+          title="Profiles & Backup: save this dashboard to a file, load one, or reset it"
         >
           <Sliders className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Profiles & Backup</span>

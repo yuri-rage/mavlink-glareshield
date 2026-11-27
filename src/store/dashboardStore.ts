@@ -36,7 +36,7 @@ import { CockpitLayout, CustomWidgetDefinition, DashboardProfile, DashboardTab, 
  *   over the full parameter list; on ultrawides each a full-height column, on laptops PID tuning beside the parameter
  *   list.
  * - Mobile (Flow): Arm & Modes, HUD, map, Vitals and messages in a phone's order.
- * Saved profiles are kept: this is what a first start, or Reset to Default Layout, gives.
+ * Saved profiles are kept: this is what a first start, or Reset the dashboard, gives.
  */
 const DEFAULT_PROFILE: DashboardProfile = {
   version: '1.0.0',
