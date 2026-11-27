@@ -106,6 +106,7 @@ import { useMissionTerrain } from './useMissionTerrain';
 import { useOtherVehiclesLayer } from './useOtherVehiclesLayer';
 import { useProfileLink } from './useProfileLink';
 import { useTrafficLayer } from './useTrafficLayer';
+import { wpPinHtml } from './wpPin';
 
 function renderVehicleSvg(type: number): string {
   const cat = getVehicleCategory(type);
@@ -403,6 +404,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
   /** The trail, drawn in chunks (see TRAIL_CHUNK): only the last one changes as points arrive. */
   const trailChunksRef = useRef<L.Polyline[]>([]);
   const missionPolylineRef = useRef<L.Polyline | null>(null);
+  const missionHomeLegRef = useRef<L.Polyline | null>(null);
   const missionMarkersRef = useRef<L.Marker[]>([]);
   const missionRadiiRef = useRef<L.Circle[]>([]);
   const fenceLayersRef = useRef<L.Layer[]>([]);
@@ -1196,11 +1198,19 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
     // Mission polyline - Mission Planner bright electric yellow mission path
     const missionPoly = L.polyline([], {
       color: '#ffff00',
-      weight: 4,
+      weight: 3,
       opacity: 1.0,
       pane: 'missionLinesPane',
     }).addTo(map);
     missionPolylineRef.current = missionPoly;
+    // Home to the first waypoint, dashed: the vehicle's way onto the mission, not a leg of it.
+    missionHomeLegRef.current = L.polyline([], {
+      color: '#ffff00',
+      weight: 2.5,
+      opacity: 1.0,
+      dashArray: '7, 6',
+      pane: 'missionLinesPane',
+    }).addTo(map);
 
     mapInstanceRef.current = map;
     setMapReady(true);
@@ -2267,11 +2277,14 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       frame: w.frame ?? 3,
       param1: w.param1 ?? 0,
     }));
-    missionPolylineRef.current.setLatLngs(
-      joinLegs(missionPathLegs(pathItems, routeIndices(pathItems, vehicleSplines), vehicleSplines))
-    );
+    const legs = missionPathLegs(pathItems, routeIndices(pathItems, vehicleSplines), vehicleSplines);
+    // The leg from home (item 0) is drawn on its own, dashed.
+    const homeLeg = legs[0]?.from === 0 ? legs[0] : null;
+    missionPolylineRef.current.setLatLngs(joinLegs(homeLeg ? legs.slice(1) : legs));
+    missionHomeLegRef.current?.setLatLngs(homeLeg ? homeLeg.latLngs : []);
     // While planning the vehicle's mission stays visible for comparison, dimmed and not clickable.
     missionPolylineRef.current.setStyle({ opacity: planning ? 0.35 : 1 });
+    missionHomeLegRef.current?.setStyle({ opacity: planning ? 0.35 : 1 });
 
     // Waypoint radii, as in planning (the connected vehicle's rules, else the last one's). Not while planning: the
     // draft draws its own, and both would clutter the map.
@@ -2294,23 +2307,13 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       const textColor = isHome ? '#14532d' : '#15803d';
       const label = isHome ? 'H' : wp.seq.toString();
 
+      const pin = wpPinHtml({ label, fill: pinColor, text: textColor });
       const wpIcon = L.divIcon({
         className: 'wp-marker',
-        html: `
-          <div style="filter: drop-shadow(0 3px 6px rgba(0,0,0,0.85)); width: 26px; height: 36px; display: flex; align-items: center; justify-content: center;">
-            <svg width="26" height="36" viewBox="0 0 26 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <!-- Sharply Tapered Needle Pin Shape pointing directly downward at bottom tip -->
-              <path d="M 13 35 L 4.2 14.5 A 9.5 9.5 0 1 1 21.8 14.5 Z" fill="${pinColor}" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
-              <!-- High-contrast White Inner Badge -->
-              <circle cx="13" cy="11.5" r="7.5" fill="#ffffff" />
-              <!-- Number / Home Label -->
-              <text x="13" y="15" font-size="${label.length > 2 ? '8.5' : '10.5'}" font-weight="900" font-family="ui-monospace, monospace, sans-serif" text-anchor="middle" fill="${textColor}">${label}</text>
-            </svg>
-          </div>
-        `,
-        iconSize: [26, 36],
-        iconAnchor: [13, 35],
-        popupAnchor: [0, -33],
+        html: pin.html,
+        iconSize: [pin.w, pin.h],
+        iconAnchor: [pin.w / 2, pin.h - 1],
+        popupAnchor: [0, -(pin.h - 3)],
       });
 
       const m = L.marker([wp.lat, wp.lon], {
