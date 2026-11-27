@@ -312,7 +312,7 @@ export const SettingsDialog: React.FC<Props> = ({
       <form onSubmit={handleConnect} className="space-y-4">
         {/* Stuck at the dialog's scroll edge (its 24 px padding), across its full width: nothing scrolls into view above it. */}
         <div
-          className="sticky -top-6 z-10 -mx-6 flex gap-1 overflow-x-auto border-b border-zinc-800 bg-zinc-950 px-6 pb-2 pt-2"
+          className="sticky -top-6 z-10 -mx-6 flex flex-wrap gap-1 border-b border-zinc-800 bg-zinc-950 px-6 pb-2 pt-2"
           role="tablist"
           aria-label="Settings sections"
         >

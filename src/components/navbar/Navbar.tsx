@@ -1022,15 +1022,15 @@ export const Navbar: React.FC = () => {
         description="Autopilot pre-flight checks, sensor health, and active arming blockers."
       >
         <div className="space-y-4">
-          <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-            <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
+            <div className="flex min-w-0 flex-1 basis-56 items-center gap-2.5">
               {/* No heartbeat (not connected, or the link dropped): nothing is known now, so nothing shows as passed. */}
               {!isHeartbeatActive ? (
                 <>
                   <span className="mx-1.5 h-2 w-2 shrink-0 rounded-full bg-zinc-500" />
                   <div className="min-w-0">
                     <div className="text-xs font-bold text-zinc-300">NO VEHICLE DATA</div>
-                    <div className="truncate text-[11px] text-zinc-400">
+                    <div className="text-[11px] leading-snug text-zinc-400">
                       The checks show once the vehicle&apos;s heartbeat arrives.
                     </div>
                   </div>
@@ -1042,7 +1042,7 @@ export const Navbar: React.FC = () => {
                     <div className="text-xs font-bold text-emerald-300">
                       {heartbeat.isArmed ? 'VEHICLE ARMED (HEALTHY)' : 'PRE-ARM CHECKS PASSED'}
                     </div>
-                    <div className="truncate text-[11px] text-zinc-400">
+                    <div className="text-[11px] leading-snug text-zinc-400">
                       All required onboard sensors and safety checks report normal.
                     </div>
                   </div>
@@ -1052,7 +1052,7 @@ export const Navbar: React.FC = () => {
                   <AlertTriangle className="h-5 w-5 shrink-0 text-amber-400" />
                   <div className="min-w-0">
                     <div className="text-xs font-bold text-amber-300">PRE-ARM CHECKS FAILING</div>
-                    <div className="truncate text-[11px] text-zinc-400">
+                    <div className="text-[11px] leading-snug text-zinc-400">
                       Vehicle cannot be armed until blockers below are resolved.
                     </div>
                   </div>
