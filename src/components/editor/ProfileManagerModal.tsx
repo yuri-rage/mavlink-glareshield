@@ -4,6 +4,7 @@ import { AlertTriangle, Check, Copy, Download, Layers, RotateCcw, Upload } from 
 
 import { downloadFile } from '../../lib/download';
 import { profileVehicleControls } from '../../lib/vehicleControls';
+import { askConfirm } from '../../store/confirmStore';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { DashboardProfile } from '../../types/widget';
 import { Button } from '../ui/button';
@@ -90,8 +91,15 @@ export const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({ isOpen
     }
   };
 
-  const handleReset = () => {
-    if (confirm('Are you sure you want to reset your layout and widgets to default?')) {
+  const handleReset = async () => {
+    if (
+      await askConfirm({
+        title: 'Reset to defaults?',
+        message: ['Your layout and widgets go back to the defaults.'],
+        confirmLabel: 'Reset',
+        danger: true,
+      })
+    ) {
       resetToDefaults();
       onClose();
     }

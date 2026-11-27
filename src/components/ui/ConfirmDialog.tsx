@@ -18,13 +18,16 @@ export const ConfirmDialog: React.FC = () => {
             </p>
           ))}
           <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="outline" size="sm" onClick={() => answerConfirm(false)} autoFocus>
-              Cancel
-            </Button>
+            {open.cancelLabel !== null && (
+              <Button type="button" variant="outline" size="sm" onClick={() => answerConfirm(false)} autoFocus>
+                {open.cancelLabel ?? 'Cancel'}
+              </Button>
+            )}
             <Button
               type="button"
               size="sm"
               onClick={() => answerConfirm(true)}
+              autoFocus={open.cancelLabel === null}
               className={
                 open.danger ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-sky-600 text-white hover:bg-sky-500'
               }

@@ -9,6 +9,8 @@ export interface ConfirmRequest {
   /** Paragraphs of the question. */
   message: string[];
   confirmLabel: string;
+  /** The cancel button's label; null for a notice with only the confirm button. */
+  cancelLabel?: string | null;
   /** Styles the confirm button as a warning (an armed vehicle, something that can't be undone). */
   danger?: boolean;
 }
@@ -29,6 +31,11 @@ export function askConfirm(req: ConfirmRequest): Promise<boolean> {
     useConfirmStore.getState().open?.resolve(false);
     useConfirmStore.setState({ open: { ...req, resolve } });
   });
+}
+
+/** Tell the operator something, without blocking the page (in place of window.alert()). Resolves when dismissed. */
+export function showNotice(title: string, ...message: string[]): Promise<void> {
+  return askConfirm({ title, message, confirmLabel: 'OK', cancelLabel: null }).then(() => {});
 }
 
 /** Answer the open question (the dialog's buttons). */
