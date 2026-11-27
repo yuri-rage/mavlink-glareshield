@@ -6,6 +6,8 @@ Transport checks for bridge/bridge.py.
      streaming, a second client keeps receiving while the first is stalled.
   2. A UDP port the bridge can't bind stops it with an error (it used to run on, accepting the app and relaying
      nothing).
+  3. Over --serial, bytes go both ways: the app's packets reach the port (they were dropped: the WebSocket handler
+     only forwarded when self.transport was set, which serial never sets), and the vehicle's reach the app.
 
 Usage:
     pip install websockets
@@ -16,11 +18,13 @@ Exits 0 if every check passes, 1 otherwise.
 
 import asyncio
 import os
+import select
 import socket
 import subprocess
 import sys
 import threading
 import time
+import tty
 from typing import Any, cast
 
 try:
@@ -85,6 +89,34 @@ class Vehicle:
     def close(self):
         self.stop = True
         self.sock.close()
+
+
+async def serial_round_trip(ws_port, master_fd):
+    url = f"ws://127.0.0.1:{ws_port}"
+    # A MAVLink v2 HEARTBEAT, as the app would send it (the bridge relays bytes; it doesn't need to parse them).
+    outbound = bytes.fromhex("fd09000000ff00000000000000000000060803000000") + b"\x12\x34"
+    inbound = bytes.fromhex("fd0900000a01010000000000000002030451030000") + b"\x56\x78"
+    async with websockets.connect(url, origin=ORIGIN, open_timeout=3) as ws:
+        await asyncio.sleep(0.5)
+        await ws.send(outbound)
+        got = b""
+        end = time.monotonic() + 3
+        while time.monotonic() < end and outbound not in got:
+            r, _, _ = select.select([master_fd], [], [], 0.1)
+            if r:
+                got += os.read(master_fd, 4096)
+        check("serial: the app's packet reaches the port", outbound in got, f"{len(got)} bytes read")
+        os.write(master_fd, inbound)
+        seen = b""
+        end = time.monotonic() + 3
+        while time.monotonic() < end and inbound not in seen:
+            try:
+                m = await asyncio.wait_for(ws.recv(), max(0.05, end - time.monotonic()))
+            except TimeoutError:
+                break
+            if isinstance(m, bytes):
+                seen += m
+        check("serial: the vehicle's packet reaches the app", inbound in seen, f"{len(seen)} bytes received")
 
 
 async def slow_client_check(ws_port):
@@ -161,6 +193,36 @@ def main():
         check("UDP port in use: the bridge stops with an error", False, "still running after 10 s")
     finally:
         holder.close()
+
+    # 3. Serial, both ways, through a pseudo-terminal standing in for the radio
+    master_fd, slave_fd = os.openpty()
+    tty.setraw(master_fd)
+    tty.setraw(slave_fd)
+    ws_port = free_port()
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            BRIDGE,
+            "--serial",
+            f"{os.ttyname(slave_fd)}:57600",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(ws_port),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        if not wait_for_port(ws_port, proc):
+            check("bridge (serial) started", False)
+        else:
+            asyncio.run(serial_round_trip(ws_port, master_fd))
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+        os.close(master_fd)
+        os.close(slave_fd)
 
     print(f"\n{len(failures)} bridge transport check(s) FAILED" if failures else "\nAll bridge transport checks PASSED")
     sys.exit(1 if failures else 0)

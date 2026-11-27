@@ -94,9 +94,10 @@ class Listener:
 class Caster:
     """A local NTRIP caster on port 2101: answers ICY 200 OK (or an endless header) and records what it is sent."""
 
-    def __init__(self, endless_header=False):
+    def __init__(self, endless_header=False, close_after_ok=False):
         self.received = b""
         self.endless = endless_header
+        self.close_after_ok = close_after_ok
         self.sock = socket.socket()
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         # The previous check's connection to 2101 may take a moment to close.
@@ -125,6 +126,9 @@ class Caster:
                     while not self.stop:
                         c.sendall(b"X-Pad: " + b"a" * 1000 + b"\r\n")
                         time.sleep(0.01)
+                elif self.close_after_ok:
+                    c.sendall(b"ICY 200 OK\r\n\r\n" + b"\xd3\x00\x00")
+                    time.sleep(0.3)
                 else:
                     c.sendall(b"ICY 200 OK\r\n")
                     while not self.stop:
@@ -317,6 +321,38 @@ async def main(url):
             "an endless caster header is cut off with an error",
             bool(errs) and "header" in errs[0].get("message", ""),
             f"{errs[:1]} after {time.monotonic() - t0:.1f} s",
+        )
+
+    # 9: the caster ends the stream: the app hears "disconnected" (the read loop used to cancel itself in
+    # stop_ntrip, skipping the writer cleanup and that status), and a new stream starts cleanly after it
+    try:
+        caster = Caster(close_after_ok=True)
+    except OSError:
+        caster = None
+    if caster:
+        statuses = []
+        async with websockets.connect(url, origin=cast(Any, "http://localhost:3000"), open_timeout=3) as ws:
+            for _attempt in range(2):
+                await ws.send(
+                    json.dumps({"type": "ntrip_connect", "host": "127.0.0.1", "port": 2101, "mountpoint": "MP"})
+                )
+                end = time.monotonic() + 3
+                while time.monotonic() < end:
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), max(0.05, end - time.monotonic()))
+                    except TimeoutError:
+                        break
+                    if isinstance(raw, str):
+                        m = json.loads(raw)
+                        if isinstance(m, dict) and m.get("type") == "ntrip_status":
+                            statuses.append(m.get("status"))
+                            if m.get("status") == "disconnected":
+                                break
+        caster.close()
+        check(
+            "caster closes: the app hears disconnected, and a second stream starts and ends the same way",
+            statuses == ["streaming", "disconnected", "streaming", "disconnected"],
+            str(statuses),
         )
 
     sys.path.insert(0, os.path.join(REPO, "bridge"))
