@@ -6,6 +6,7 @@ import React from 'react';
 import { DEFAULT_THRESHOLDS, type TrafficThresholds } from '../../mavlink/adsb';
 import { useAdsbSettingsStore } from '../../store/adsbSettingsStore';
 import { useUnitsStore } from '../../store/unitsStore';
+import { Segmented } from './Segmented';
 
 const M_PER_FT = 0.3048;
 
@@ -61,36 +62,6 @@ const Field: React.FC<{
   </label>
 );
 
-const Toggle: React.FC<{
-  label: string;
-  on: boolean;
-  onChange: (on: boolean) => void;
-  onText: string;
-  offText: string;
-}> = ({ label, on, onChange, onText, offText }) => (
-  <div className="flex items-center justify-between gap-2 text-[11px] text-zinc-400">
-    <span>{label}</span>
-    <div
-      className="grid grid-cols-2 gap-0.5 rounded-md border border-zinc-800 bg-zinc-900 p-0.5"
-      role="radiogroup"
-      aria-label={label}
-    >
-      {[true, false].map((v) => (
-        <button
-          key={String(v)}
-          type="button"
-          role="radio"
-          aria-checked={on === v}
-          onClick={() => onChange(v)}
-          className={`rounded px-2 py-0.5 text-[11px] ${on === v ? 'bg-sky-500/20 font-medium text-sky-300' : 'text-zinc-400 hover:text-zinc-200'}`}
-        >
-          {v ? onText : offText}
-        </button>
-      ))}
-    </div>
-  </div>
-);
-
 export const AdsbSettings: React.FC = () => {
   const { showOnMap, warnings, thresholds, setShowOnMap, setWarnings, setThresholds, resetThresholds } =
     useAdsbSettingsStore();
@@ -108,10 +79,25 @@ export const AdsbSettings: React.FC = () => {
     thresholds.alertRangeM > thresholds.cautionRangeM || thresholds.alertVerticalM > thresholds.cautionVerticalM;
 
   return (
-    <div className="space-y-2">
-      <label className="text-xs font-medium text-zinc-300">ADS-B Traffic</label>
-      <Toggle label="Aircraft on the map" on={showOnMap} onChange={setShowOnMap} onText="Show" offText="Hide" />
-      <Toggle label="Warnings (banner and voice)" on={warnings} onChange={setWarnings} onText="On" offText="Off" />
+    <div className="space-y-4">
+      <Segmented<boolean>
+        label="ADS-B aircraft on the map"
+        value={showOnMap}
+        onChange={setShowOnMap}
+        options={[
+          { value: true, label: 'Show' },
+          { value: false, label: 'Hide', hint: "Hiding aircraft doesn't silence warnings." },
+        ]}
+      />
+      <Segmented<boolean>
+        label="Traffic warnings"
+        value={warnings}
+        onChange={setWarnings}
+        options={[
+          { value: true, label: 'On', hint: 'A banner and a spoken alert for aircraft within the limits below.' },
+          { value: false, label: 'Off' },
+        ]}
+      />
       <div className="space-y-1 rounded-lg border border-zinc-800 bg-zinc-900/50 p-2">
         <div className="text-[10px] font-bold uppercase tracking-wider text-amber-300">Caution: within both</div>
         <Field
@@ -164,9 +150,9 @@ export const AdsbSettings: React.FC = () => {
       </div>
       <div className="flex items-start justify-between gap-2 text-[10px] leading-snug text-zinc-500">
         <span>
-          Hiding aircraft doesn&apos;t silence warnings. Smaller values are raised to the least: ranges {h.fromM(50)}{' '}
-          {h.unit}, heights {v.fromM(10)} {v.unit}, the predicted pass {h.fromM(10)} {h.unit}, the look-ahead 5 s. The
-          vehicle forwards only traffic within ADSB_LIST_RADIUS (Copter 2 km, Plane 10 km by default).
+          Smaller values are raised to the least: ranges {h.fromM(50)} {h.unit}, heights {v.fromM(10)} {v.unit}, the
+          predicted pass {h.fromM(10)} {h.unit}, the look-ahead 5 s. The vehicle forwards only traffic within
+          ADSB_LIST_RADIUS (Copter 2 km, Plane 10 km by default).
           {odd && <span className="text-amber-300"> The alert limits are wider than the caution limits.</span>}
         </span>
         <button
