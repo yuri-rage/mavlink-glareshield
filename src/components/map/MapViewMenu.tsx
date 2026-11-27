@@ -8,7 +8,7 @@ import { Eraser, HardDrive, Layers, Maximize2, Plane } from 'lucide-react';
 import { useAdsbSettingsStore } from '../../store/adsbSettingsStore';
 import { useOfflineMapStore } from '../../store/offlineMapStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
-import { HeaderMenu, MenuItem, MenuSection } from './HeaderMenu';
+import { HeaderMenu, MenuItem, MenuSection } from '../ui/HeaderMenu';
 
 /** Built-in imagery, your own tile source, or an imported (MBTiles) set by its area id. */
 export type MapLayerType = 'satellite' | 'street' | 'custom' | `import:${string}`;

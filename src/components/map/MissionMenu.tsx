@@ -34,7 +34,7 @@ import { askConfirm } from '../../store/confirmStore';
 import { useMissionPlanStore } from '../../store/missionPlanStore';
 import { useTelemetryStore } from '../../store/telemetryStore';
 import type { MissionWaypoint } from '../../store/telemetryStore';
-import { HeaderMenu, MenuItem, MenuSection } from './HeaderMenu';
+import { HeaderMenu, MenuItem, MenuSection } from '../ui/HeaderMenu';
 
 /** The draft as mission waypoints, for the file writers. */
 function draftWaypoints(draft: MissionDraft): MissionWaypoint[] {

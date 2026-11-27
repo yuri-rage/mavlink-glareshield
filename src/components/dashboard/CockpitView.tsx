@@ -6,7 +6,19 @@
 import React, { Fragment, useEffect, useState } from 'react';
 import { Group, Panel, Separator, useGroupRef } from 'react-resizable-panels';
 
-import { EyeOff, GripVertical, Lock, Pin, PinOff, Sliders, Trash2 } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  ChevronLeft,
+  EyeOff,
+  GripVertical,
+  Lock,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  Plus,
+  Sliders,
+  Trash2,
+} from 'lucide-react';
 
 import { BUILTIN_PANELS } from '../../lib/builtinWidgets';
 import {
@@ -21,6 +33,7 @@ import {
 import { editTarget, layoutOf, otherLayouts, useDashboardStore, type DashboardState } from '../../store/dashboardStore';
 import type { CockpitNode, CustomWidgetDefinition, DashboardTab, PlacedWidget } from '../../types/widget';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
+import { HeaderMenu, MenuItem, MenuSection } from '../ui/HeaderMenu';
 import { HeaderSlotContext, PaneContext } from './paneContext';
 
 interface Props {
@@ -266,6 +279,137 @@ function shownInOthers(s: DashboardState, tabId: string, instanceId: string): nu
 /** "both layouts" (this and one other), "all 3 layouts". */
 const layoutsText = (others: number) => (others === 1 ? 'both layouts' : `all ${others + 1} layouts`);
 
+type PickItem = { value: string; name: string };
+const SIDES: [Side, string][] = [
+  ['left', 'Left'],
+  ['right', 'Right'],
+  ['top', 'Above'],
+  ['bottom', 'Below'],
+];
+
+/**
+ * A pane's menu in Edit mode: Add beside (where, then which widget), Replace (swap with another pane, or show another
+ * widget here), and the pane's own actions. Mounted when the menu opens, so it starts at the top level each time.
+ */
+const PaneMenuBody: React.FC<{
+  close: () => void;
+  hidden: PickItem[];
+  catalog: PickItem[];
+  others: PickItem[];
+  onAdd: (where: 'pane' | 'edge', side: Side, value: string) => void;
+  onSwap: (instanceId: string) => void;
+  onShowInstead: (value: string) => void;
+  onEditCustom?: () => void;
+  onPin?: () => void;
+  onHide: () => void;
+  onDelete: () => void;
+}> = (p) => {
+  const [view, setView] = useState<'main' | 'add' | 'replace'>('main');
+  const [where, setWhere] = useState<{ at: 'pane' | 'edge'; side: Side }>({ at: 'pane', side: 'right' });
+  const done = (f: () => void) => () => {
+    f();
+    p.close();
+  };
+  const back = (label: string) => (
+    <button
+      type="button"
+      onClick={() => setView('main')}
+      className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-[11px] font-bold text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+    >
+      <ChevronLeft className="h-3.5 w-3.5" />
+      {label}
+    </button>
+  );
+  const widgets = (pick: (value: string) => void) => (
+    <>
+      {p.hidden.length > 0 && <MenuSection label="Hidden on this tab" />}
+      {p.hidden.map((w) => (
+        <MenuItem key={w.value} label={w.name} onClick={done(() => pick(w.value))} />
+      ))}
+      <MenuSection label="New" />
+      {p.catalog.map((w) => (
+        <MenuItem key={w.value} label={w.name} onClick={done(() => pick(w.value))} />
+      ))}
+    </>
+  );
+  const chip = (active: boolean) =>
+    `rounded px-1.5 py-0.5 text-[10px] font-bold ${active ? 'bg-sky-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`;
+
+  if (view === 'add')
+    return (
+      <>
+        {back('Add beside')}
+        <div className="space-y-1 px-2 pb-1">
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="w-full text-[10px] text-zinc-500">This pane</span>
+            {SIDES.map(([side, label]) => (
+              <button
+                key={side}
+                type="button"
+                className={chip(where.at === 'pane' && where.side === side)}
+                onClick={() => setWhere({ at: 'pane', side })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="w-full text-[10px] text-zinc-500">Whole tab</span>
+            {SIDES.map(([side, label]) => (
+              <button
+                key={side}
+                type="button"
+                className={chip(where.at === 'edge' && where.side === side)}
+                onClick={() => setWhere({ at: 'edge', side })}
+                title={EDGES.find(([s]) => s === side)?.[1].replace(/:$/, '')}
+              >
+                {label === 'Above' ? 'Top' : label === 'Below' ? 'Bottom' : label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {widgets((v) => p.onAdd(where.at, where.side, v))}
+      </>
+    );
+  if (view === 'replace')
+    return (
+      <>
+        {back('Replace')}
+        {p.others.length > 0 && <MenuSection label="Swap places with" first />}
+        {p.others.map((o) => (
+          <MenuItem key={o.value} label={o.name} onClick={done(() => p.onSwap(o.value))} />
+        ))}
+        <MenuSection label="Show here instead" first={p.others.length === 0} />
+        <div className="px-2.5 pb-1 text-[10px] text-zinc-500">This one stays on the tab, hidden.</div>
+        {widgets(p.onShowInstead)}
+      </>
+    );
+  return (
+    <>
+      <MenuItem icon={<Plus className="h-3.5 w-3.5" />} label="Add beside…" detail="›" onClick={() => setView('add')} />
+      <MenuItem
+        icon={<ArrowLeftRight className="h-3.5 w-3.5" />}
+        label="Replace…"
+        detail="›"
+        onClick={() => setView('replace')}
+      />
+      {p.onEditCustom && (
+        <MenuItem
+          icon={<Sliders className="h-3.5 w-3.5 text-amber-400" />}
+          label="Edit custom widget"
+          onClick={done(p.onEditCustom)}
+        />
+      )}
+      {p.onPin && (
+        <MenuItem icon={<Pin className="h-3.5 w-3.5" />} label="Pin above the panes" onClick={done(p.onPin)} />
+      )}
+      <div className="my-1 border-t border-zinc-800" />
+      <MenuItem icon={<EyeOff className="h-3.5 w-3.5" />} label="Hide (stays on the tab)" onClick={done(p.onHide)} />
+      <MenuItem danger icon={<Trash2 className="h-3.5 w-3.5" />} label="Delete…" onClick={done(p.onDelete)} />
+    </>
+  );
+};
+
 export const PaneEditOverlay: React.FC<OverlayProps> = ({
   tab,
   placed,
@@ -306,28 +450,6 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({
   const nameOf = (instanceId: string) => titleOf(tab.widgets.find((w) => w.instanceId === instanceId)?.widgetId ?? '');
   // Sources: "w:<widgetId>" a new widget of that type, "i:<instanceId>" a hidden one of this tab's.
   const source = (v: string) => (v.startsWith('i:') ? { instanceId: v.slice(2) } : { widgetId: v.slice(2) });
-  const sourceOptions = (prefix: string) => (
-    <>
-      {hidden.map((w) => (
-        <option key={w.instanceId} value={`${prefix}i:${w.instanceId}`}>
-          {titleOf(w.widgetId)} (hidden)
-        </option>
-      ))}
-      {catalog.map((c) => (
-        <option key={c.id} value={`${prefix}w:${c.id}`}>
-          {c.name}
-        </option>
-      ))}
-    </>
-  );
-  const SIDES = [
-    ['left', 'To its left:'],
-    ['right', 'To its right:'],
-    ['top', 'Above it:'],
-    ['bottom', 'Below it:'],
-  ] as const;
-  const selectClass =
-    'h-6 w-[4.75rem] rounded border border-zinc-700 bg-zinc-950 px-1 text-[10px] font-semibold text-zinc-300';
   const startDrag = (e: React.DragEvent) => {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData(PANE_DRAG_TYPE, id);
@@ -376,87 +498,35 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({
           <span className="hidden truncate @xs:inline">{title}</span>
         </span>
         <span className="flex shrink-0 items-center gap-0.5">
-          <select
-            value=""
-            className={selectClass}
-            aria-label={`Add a widget beside ${title}`}
-            title="Add a widget on a side of this one"
-            onChange={(e) => {
-              const v = e.target.value;
-              const bar = v.indexOf('|');
-              if (bar <= 0) return;
-              const where = v.slice(0, bar);
-              if (where.startsWith('edge-'))
-                addAtEdgeInCockpit(tab.id, where.slice(5) as Side, source(v.slice(bar + 1)));
-              else splitInCockpit(tab.id, id, where as Side, source(v.slice(bar + 1)));
-            }}
-          >
-            <option value="">Add…</option>
-            {SIDES.map(([side, label]) => (
-              <optgroup key={side} label={label}>
-                {sourceOptions(`${side}|`)}
-              </optgroup>
-            ))}
-            {EDGES.map(([side, label]) => (
-              <optgroup key={`edge-${side}`} label={label}>
-                {sourceOptions(`edge-${side}|`)}
-              </optgroup>
-            ))}
-          </select>
-          <select
-            value=""
-            className={selectClass}
-            aria-label={`Replace ${title}`}
-            title="Swap with another pane, or show another widget here (this one stays on the tab, hidden)"
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v.startsWith('swap:')) moveInCockpit(tab.id, id, v.slice(5), 'center');
-              else if (v) replaceInCockpit(tab.id, id, source(v));
-            }}
-          >
-            <option value="">Replace…</option>
-            {others.length > 0 && (
-              <optgroup label="Swap places with:">
-                {others.map((o) => (
-                  <option key={o} value={`swap:${o}`}>
-                    {nameOf(o)}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            <optgroup label="Show instead:">{sourceOptions('')}</optgroup>
-          </select>
-          {customDef && onEditCustomWidget && (
-            <button
-              type="button"
-              onClick={() => onEditCustomWidget(customDef)}
-              className="rounded p-1 text-amber-400 hover:bg-zinc-800 hover:text-amber-300"
-              title="Edit this custom widget (its definition, wherever it's used)"
-              aria-label={`Edit ${title}`}
+          {confirmDelete ? null : (
+            <HeaderMenu
+              iconOnly
+              icon={<MoreHorizontal className="h-3.5 w-3.5" />}
+              label={`Arrange ${title}`}
+              title="Add beside, replace, hide or delete"
+              widthClass="w-64"
             >
-              <Sliders className="h-3 w-3" />
-            </button>
+              {(close) => (
+                <PaneMenuBody
+                  close={close}
+                  hidden={hidden.map((w) => ({ value: `i:${w.instanceId}`, name: titleOf(w.widgetId) }))}
+                  catalog={catalog.map((c) => ({ value: `w:${c.id}`, name: c.name }))}
+                  others={others.map((o) => ({ value: o, name: nameOf(o) }))}
+                  onAdd={(where, side, v) =>
+                    where === 'edge'
+                      ? addAtEdgeInCockpit(tab.id, side, source(v))
+                      : splitInCockpit(tab.id, id, side, source(v))
+                  }
+                  onSwap={(other) => moveInCockpit(tab.id, id, other, 'center')}
+                  onShowInstead={(v) => replaceInCockpit(tab.id, id, source(v))}
+                  onEditCustom={customDef && onEditCustomWidget ? () => onEditCustomWidget(customDef) : undefined}
+                  onPin={canPin ? () => pinInCockpit(tab.id, id) : undefined}
+                  onHide={() => unplaceFromCockpit(tab.id, id)}
+                  onDelete={() => setConfirmDelete(true)}
+                />
+              )}
+            </HeaderMenu>
           )}
-          {canPin && (
-            <button
-              type="button"
-              onClick={() => pinInCockpit(tab.id, id)}
-              className="rounded p-1 text-amber-400 hover:bg-zinc-800 hover:text-amber-300"
-              title="Pin above the panes: full width, on top"
-              aria-label={`Pin ${title} above the panes`}
-            >
-              <Pin className="h-3 w-3" />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => unplaceFromCockpit(tab.id, id)}
-            className="rounded p-1 text-zinc-300 hover:bg-zinc-800 hover:text-white"
-            title="Hide: take it out of the layout (it stays on the tab)"
-            aria-label={`Hide ${title}`}
-          >
-            <EyeOff className="h-3 w-3" />
-          </button>
           {confirmDelete ? (
             <span className="flex items-center gap-0.5 rounded border border-red-500/40 bg-red-950/90 px-0.5 text-[10px] text-red-200">
               <button
@@ -475,17 +545,7 @@ export const PaneEditOverlay: React.FC<OverlayProps> = ({
                 No
               </button>
             </span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(true)}
-              className="rounded p-1 text-red-400 hover:bg-zinc-800 hover:text-red-300"
-              title="Delete it from the tab"
-              aria-label={`Delete ${title}`}
-            >
-              <Trash2 className="h-3 w-3" />
-            </button>
-          )}
+          ) : null}
         </span>
       </div>
       {/* The body drags the pane too (the bar's controls stay clickable). */}
