@@ -36,13 +36,16 @@ jobs:
           pip install -r bridge/requirements.txt pymavlink "ruff>=0.8.0,<1.0.0"
 
       - name: Run Ruff Linter
-        run: ruff check bridge/ tests/check_bridge_security.py tests/check_bridge_udp_target.py tests/check_mock_bridge.py
+        run: ruff check bridge/ tests/check_bridge_security.py tests/check_bridge_udp_target.py tests/check_bridge_transport.py tests/check_mock_bridge.py
 
       - name: Run Bridge Security Checks
         run: python3 tests/check_bridge_security.py
 
       - name: Run Bridge UDP Reply-Target Checks
         run: python3 tests/check_bridge_udp_target.py
+
+      - name: Run Bridge Transport Checks
+        run: python3 tests/check_bridge_transport.py
 
   docker:
     name: Build & Push Multi-Arch Image

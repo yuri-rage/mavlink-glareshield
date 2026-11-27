@@ -97,6 +97,15 @@ jobs:
       - name: Run bridge UDP reply-target checks
         run: python3 tests/check_bridge_udp_target.py
 
+      - name: Run bridge transport checks
+        run: python3 tests/check_bridge_transport.py
+
+      - name: Run mock bridge checks
+        run: python3 tests/check_mock_bridge.py
+
+      - name: Run follow-loop simulation
+        run: python3 tests/follow_sim.py
+
   build:
     name: Build
     runs-on: ubuntu-latest

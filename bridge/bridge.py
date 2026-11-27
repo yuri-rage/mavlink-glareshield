@@ -15,6 +15,8 @@ Usage:
 import argparse
 import asyncio
 import base64
+import concurrent.futures
+import contextlib
 import http
 import json
 import math
@@ -37,6 +39,9 @@ DEFAULT_ALLOWED_ORIGINS: list[Any] = [
     re.compile(r"^https?://tauri\.localhost(:\d+)?$"),
     None,
 ]
+
+# Messages queued for one WebSocket client before its oldest are dropped (it isn't keeping up).
+CLIENT_QUEUE_MAX = 1000
 
 # NTRIP relay limits: a caster's response header, and how long to wait for a connection and that header.
 NTRIP_MAX_HEADER = 8192
@@ -198,6 +203,27 @@ class ClientSession:
         self.websocket = websocket
         self.ntrip_writer: asyncio.StreamWriter | None = None
         self.ntrip_task: asyncio.Task[None] | None = None
+        # Telemetry to this client, sent by its own task: a slow client (a phone on weak Wi-Fi) falls behind on its
+        # own, dropping its oldest data, and never holds up the vehicle link or the other clients.
+        self.outbox: asyncio.Queue[bytes] = asyncio.Queue(maxsize=CLIENT_QUEUE_MAX)
+        self.dropped = 0
+        self.sender: asyncio.Task[None] | None = None
+
+    def enqueue(self, data: bytes) -> None:
+        if self.outbox.full():
+            self.outbox.get_nowait()
+            self.dropped += 1
+            if self.dropped == 1 or self.dropped % 1000 == 0:
+                print(
+                    f"[WS] Client {self.websocket.remote_address} is falling behind: {self.dropped} message(s) dropped"
+                )
+        self.outbox.put_nowait(data)
+
+    async def send_loop(self) -> None:
+        with contextlib.suppress(websockets.exceptions.ConnectionClosed):
+            while True:
+                data = await self.outbox.get()
+                await self.websocket.send(data)
 
     async def stop_ntrip(self) -> None:
         if self.ntrip_task:
@@ -241,6 +267,7 @@ class BridgeServer:
         self.encoder = MavlinkV2Encoder(sysid=1, compid=1)
         self.transport = None
         self.serial_conn = None
+        self.serial_writer = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="serial-write")
         self.udp_target = None
         # UDP vehicle endpoints (address -> last time a packet arrived from it). An address is
         # added when it sends an autopilot HEARTBEAT (see is_vehicle_heartbeat) and dropped after
@@ -283,22 +310,17 @@ class BridgeServer:
         self.mock_mission_upload_type = 0
         self.mock_mission_items: list[bytes] = []
 
+    def queue_broadcast(self, data: bytes) -> None:
+        """Queue data for every client; never waits (each client's own task sends it)."""
+        for session in list(self.client_sessions.values()):
+            session.enqueue(data)
+
     async def broadcast(self, data: bytes):
-        if not self.clients:
-            return
-        dead = []
-        for client in list(self.clients):
-            try:
-                await client.send(data)
-            except websockets.exceptions.ConnectionClosed:
-                dead.append(client)
-            except Exception:  # noqa: BLE001
-                dead.append(client)
-        for d in dead:
-            self.clients.discard(d)
+        self.queue_broadcast(data)
 
     async def ws_handler(self, websocket):
         session = ClientSession(websocket)
+        session.sender = asyncio.create_task(session.send_loop())
         self.client_sessions[websocket] = session
         self.clients.add(websocket)
         print(f"[WS] Client connected from {websocket.remote_address}. Active: {len(self.clients)}")
@@ -330,6 +352,8 @@ class BridgeServer:
         except websockets.exceptions.ConnectionClosed:
             pass
         finally:
+            if session.sender:
+                session.sender.cancel()
             await session.stop_ntrip()
             self.client_sessions.pop(websocket, None)
             self.clients.discard(websocket)
@@ -519,10 +543,8 @@ class BridgeServer:
             except OSError as e:
                 self.note_write_error("TCP", e)
         elif self.mode == "serial" and self.serial_conn:
-            try:
-                self.serial_conn.write(data)
-            except OSError as e:  # pyserial's SerialException is an OSError
-                self.note_write_error("SERIAL", e)
+            # A blocking write (a radio's flow control) would stall the event loop: on the writer thread instead.
+            self.serial_writer.submit(self.serial_write, self.serial_conn, data)
 
     def note_write_error(self, kind: str, e: OSError):
         """A failed write to the vehicle: logged once per kind of error, not once per packet."""
@@ -1547,7 +1569,7 @@ class BridgeServer:
                         f"[UDP] Ingesting telemetry from {addr[0]}:{addr[1]} ({len(data)} bytes). Forwarding to {len(self.server.clients)} web clients."
                     )
                 self.server.update_udp_target(data, addr)
-                asyncio.create_task(self.server.broadcast(data))
+                self.server.queue_broadcast(data)
 
             def error_received(self, exc):
                 print(f"[UDP] Error: {exc}")
@@ -1576,7 +1598,8 @@ class BridgeServer:
                     return
                 except OSError as ex:
                     print(f"[UDP ERROR] Could not connect to {target_ip}:{target_port}: {ex}")
-                    return
+                    # Without a vehicle link the bridge would accept the app and relay nothing: stop, loudly.
+                    raise SystemExit(1) from ex
 
             print("============================================================")
             print(f"[UDP ERROR] Could not bind to 0.0.0.0:{target_port}: {e}")
@@ -1592,6 +1615,8 @@ class BridgeServer:
             print("      (and connect Glareshield to ws://localhost:56782, as Mission Planner uses 56781)")
             print("   3. Or disconnect/close Mission Planner so bridge.py can bind to port 14550.")
             print("============================================================")
+            # Without a vehicle link the bridge would accept the app and relay nothing: stop, loudly.
+            raise SystemExit(1) from e
 
     async def setup_tcp(self):
         parts = self.target.split(":")
@@ -1599,6 +1624,7 @@ class BridgeServer:
         tcp_port = int(parts[1]) if len(parts) > 1 else 5760
         print(f"[TCP] Connecting to {tcp_ip}:{tcp_port}...")
         while True:
+            writer = None
             try:
                 reader, writer = await asyncio.open_connection(tcp_ip, tcp_port)
                 self.transport = writer
@@ -1612,8 +1638,12 @@ class BridgeServer:
                 print("[TCP] Connection closed by the vehicle, reconnecting in 2s...")
             except Exception as e:  # noqa: BLE001
                 print(f"[TCP] Connection failed ({e}), retrying in 2s...")
-            # Don't keep writing into a closed connection while reconnecting.
+            # Don't keep writing into a closed connection while reconnecting; close it (it isn't reused).
             self.transport = None
+            if writer is not None:
+                writer.close()
+                with contextlib.suppress(Exception):
+                    await writer.wait_closed()
             await asyncio.sleep(2)
 
     @staticmethod
@@ -1633,19 +1663,31 @@ class BridgeServer:
         port, baud = self.parse_serial_target(self.target)
         loop = asyncio.get_running_loop()
         while True:
+            ser = None
             try:
                 print(f"[SERIAL] Opening {port} at {baud} baud...")
-                ser = serial.Serial(port, baud, timeout=0.1)
+                # Opening (and reading) can block: off the event loop, which keeps the WebSocket clients served.
+                ser = await loop.run_in_executor(None, lambda: serial.Serial(port, baud, timeout=0.1))
                 self.serial_conn = ser
                 print(f"[SERIAL] Connected to {port} at {baud} baud")
                 while True:
                     data = await loop.run_in_executor(None, ser.read, 1024)
                     if data:
-                        await self.broadcast(data)
+                        self.queue_broadcast(data)
             except Exception as e:  # noqa: BLE001
                 self.serial_conn = None
+                if ser is not None:
+                    with contextlib.suppress(Exception):
+                        ser.close()
                 print(f"[SERIAL] Connection error ({e}), retrying in 2s...")
                 await asyncio.sleep(2)
+
+    def serial_write(self, ser: Any, data: bytes) -> None:
+        """On the serial writer thread (one, so writes keep their order)."""
+        try:
+            ser.write(data)
+        except OSError as e:  # pyserial's SerialException is an OSError
+            self.note_write_error("SERIAL", e)
 
     def process_request(self, connection: Any, request: Any) -> Any:
         origin = request.headers.get("Origin")
