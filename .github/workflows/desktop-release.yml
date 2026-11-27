@@ -38,9 +38,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            platform: linux
             target: --linux
             artifact: release/*.AppImage
           - os: windows-latest
+            platform: windows
             target: --win
             artifact: release/*.exe
     runs-on: ${{ matrix.os }}
@@ -104,7 +106,8 @@ jobs:
         if: "!startsWith(github.ref, 'refs/tags/v')"
         uses: actions/upload-artifact@v4
         with:
-          name: glareshield-${{ matrix.os }}
+          # By platform, not runner: the AppImage runs on any x86_64 Linux, not only Ubuntu.
+          name: glareshield-${{ matrix.platform }}
           retention-days: 14
           path: ${{ matrix.artifact }}
           if-no-files-found: error
