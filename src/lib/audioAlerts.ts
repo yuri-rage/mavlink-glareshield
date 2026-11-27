@@ -725,6 +725,30 @@ export function decideWaypointCallout(i: WaypointCalloutInput): number | null {
   return i.prevSeq;
 }
 
+export type BatteryWarned = 'none' | 'low' | 'critical';
+
+/**
+ * The battery callout for a reading: which level to announce (null: none) and the level now warned of. 15% or less is
+ * critical (0% included), 25% or less low; above 30% re-arms. `remaining` < 0 is unknown (MAVLink's -1: no capacity
+ * set, or nothing reported yet) and says nothing.
+ */
+export function decideBatteryCallout(
+  remaining: number,
+  warned: BatteryWarned
+): { speak: 'low' | 'critical' | null; warned: BatteryWarned } {
+  if (!(remaining >= 0)) return { speak: null, warned };
+  if (remaining <= 15)
+    return warned === 'critical' ? { speak: null, warned } : { speak: 'critical', warned: 'critical' };
+  if (remaining <= 25) return warned === 'none' ? { speak: 'low', warned: 'low' } : { speak: null, warned };
+  if (remaining > 30) return { speak: null, warned: 'none' };
+  return { speak: null, warned };
+}
+
+/** The level already warned of when a replay seeks to this reading: the jump itself isn't announced. */
+export function batteryWarnedAt(remaining: number): BatteryWarned {
+  return remaining >= 0 && remaining <= 15 ? 'critical' : remaining >= 0 && remaining <= 25 ? 'low' : 'none';
+}
+
 /** Autopilot status texts that mean the mission has finished (Rover: "Mission Complete"; Copter / Plane: "Mission complete, changing mode to RTL"). */
 export function isMissionCompleteText(text: string): boolean {
   return /\bmission\s+complete\b/i.test(text);
@@ -805,7 +829,7 @@ export function useAudioAlertListener() {
   const prevModeRef = useRef<string>(heartbeat.modeName);
   const prevArmedRef = useRef<boolean>(heartbeat.isArmed);
   const prevLinkLostRef = useRef<boolean>(false);
-  const batteryWarnedRef = useRef<'none' | 'low' | 'critical'>('none');
+  const batteryWarnedRef = useRef<BatteryWarned>('none');
   const lastReachedAt = useTelemetryStore((state) => state.lastReachedAt);
   const missionItemReachedSeen = useTelemetryStore((state) => state.missionItemReachedSeen);
   const manualWaypointJump = useTelemetryStore((state) => state.manualWaypointJump);
@@ -852,7 +876,7 @@ export function useAudioAlertListener() {
         lastAnnouncedReachedAtRef.current = st.lastReachedAt;
         lastSpokenWpRef.current = null;
         const r = st.battery.remaining;
-        batteryWarnedRef.current = r > 0 && r <= 15 ? 'critical' : r > 0 && r <= 25 ? 'low' : 'none';
+        batteryWarnedRef.current = batteryWarnedAt(r);
         prevLinkLostRef.current = false;
       }),
     []
@@ -973,27 +997,22 @@ export function useAudioAlertListener() {
     soundEnabled,
     voiceEnabled,
     waypointAnnounceEnabled,
+    finalMissionSeq,
   ]);
 
   // Battery threshold callouts (25% Low, 15% Critical)
   useEffect(() => {
-    if (heartbeat.lastHeartbeatTime === 0 || battery.voltage <= 0 || battery.remaining <= 0) {
-      return;
-    }
-    if (battery.remaining <= 15 && batteryWarnedRef.current !== 'critical') {
-      batteryWarnedRef.current = 'critical';
-      if (soundEnabled) {
-        playAlertChime(1);
-        speakCallout(`Critical battery, ${Math.round(battery.remaining)} percent`, true);
-      }
-    } else if (battery.remaining <= 25 && battery.remaining > 15 && batteryWarnedRef.current === 'none') {
-      batteryWarnedRef.current = 'low';
-      if (soundEnabled) {
-        playAlertChime(3);
-        speakCallout(`Low battery, ${Math.round(battery.remaining)} percent`);
-      }
-    } else if (battery.remaining > 30) {
-      batteryWarnedRef.current = 'none';
+    if (heartbeat.lastHeartbeatTime === 0 || battery.voltage <= 0) return;
+    const { speak, warned } = decideBatteryCallout(battery.remaining, batteryWarnedRef.current);
+    batteryWarnedRef.current = warned;
+    if (!speak || !soundEnabled) return;
+    const pct = Math.round(battery.remaining);
+    if (speak === 'critical') {
+      playAlertChime(1);
+      speakCallout(`Critical battery, ${pct} percent`, true);
+    } else {
+      playAlertChime(3);
+      speakCallout(`Low battery, ${pct} percent`);
     }
   }, [battery.remaining, battery.voltage, heartbeat.lastHeartbeatTime, soundEnabled]);
 
