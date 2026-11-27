@@ -50,6 +50,14 @@ export function linkHost(wsUrl: string): string {
   }
 }
 
+/** The hosted web app: where a pairing link sends a phone when this page isn't on the web (the desktop app). */
+export const WEB_APP_URL = 'https://glareshield.yurirage.com/';
+
+/** The app address a pairing link should open on another device: this page's, or the hosted app's if it's not http(s). */
+export function pairingAppUrl(href: string): string {
+  return /^https?:/.test(href) ? href : WEB_APP_URL;
+}
+
 /**
  * What another device scans to pair with the bridge this link reaches (as the bridge's own QR code does): over
  * wss://, the bridge's /pair page (its certificate step); over ws://, straight to this app with the link.
