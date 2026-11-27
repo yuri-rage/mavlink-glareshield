@@ -216,9 +216,14 @@ export function parseQgcPlanJson(
           for (const transect of rawItem.transects) {
             if (Array.isArray(transect)) {
               for (const pt of transect) {
-                const lat = pt.lat ?? pt[0];
-                const lon = pt.lon ?? pt[1];
-                const alt = pt.alt ?? 30;
+                const lat = pt?.lat ?? pt?.[0];
+                const lon = pt?.lon ?? pt?.[1];
+                const alt = pt?.alt ?? pt?.[2] ?? 30;
+                if (!isLatLon([lat, lon]) || !Number.isFinite(alt)) {
+                  throw new PlanFileError(
+                    `A ${rawItem.complexItemType || 'survey'} transect point has no valid position. Fix it in QGroundControl and save the plan again.`
+                  );
+                }
                 flat.push({ command: 16, frame: 3, autoContinue: true, params: [0, 0, 0, null, lat, lon, alt] });
               }
             }
@@ -370,8 +375,15 @@ export function parseQgcPlanJson(
       }
 
       // Breach return point, [lat, lon, alt]
+      // [0, 0, 0] (or none) is QGC's "not set"; anything else must be a real position.
       const br = obj.geoFence.breachReturn;
-      if (Array.isArray(br) && br.length >= 2 && (br[0] !== 0 || br[1] !== 0)) {
+      const brUnset = br == null || (Array.isArray(br) && br.length >= 2 && br[0] === 0 && br[1] === 0);
+      if (!brUnset && (!isLatLon(br) || (br[2] != null && !Number.isFinite(br[2])))) {
+        throw new PlanFileError(
+          'The fence breach return point has no valid position. Fix the fence and save the plan again.'
+        );
+      }
+      if (!brUnset) {
         fenceItems.push({
           seq: fenceSeq++,
           command: 5000,
@@ -399,6 +411,12 @@ export function parseQgcPlanJson(
       const rallyItems: MissionItemIntData[] = [];
       for (let i = 0; i < obj.rallyPoints.points.length; i++) {
         const pt = obj.rallyPoints.points[i];
+        // A rally point without a position would be (0, 0): somewhere a vehicle on RTL might head for.
+        if (!isLatLon(pt) || (pt[2] != null && !Number.isFinite(pt[2]))) {
+          throw new PlanFileError(
+            `Rally point ${i + 1} has no valid position. Fix the rally points and save the plan again.`
+          );
+        }
         rallyItems.push({
           seq: i,
           command: 5100,

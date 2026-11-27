@@ -14,7 +14,7 @@ const plan = (over: any) =>
     version: 1,
     mission: { items: [], plannedHomePosition: [35, -106, 1600], ...(over.mission ?? {}) },
     geoFence: { version: 2, polygons: [], circles: [], ...(over.geoFence ?? {}) },
-    rallyPoints: { version: 2, points: [] },
+    rallyPoints: { version: 2, points: [], ...(over.rallyPoints ?? {}) },
   });
 const refused = (json: string, pattern: RegExp) => {
   try {
@@ -119,6 +119,48 @@ check(
   'a waypoint at (0, 0): refused',
   refused(plan({ mission: { items: [wp(16, 0, 0)] } }), /invalid coordinates/) === 'ok'
 );
+
+// Rally points, the fence's breach return and survey transects: a real position each, or the plan is refused.
+check(
+  'a rally point with no position: refused, numbered',
+  refused(
+    plan({
+      rallyPoints: {
+        points: [
+          [35, -106, 50],
+          [null, null, 50],
+        ],
+      },
+    }),
+    /Rally point 2/
+  ) === 'ok'
+);
+check(
+  'a rally point at (0, 0): refused',
+  refused(plan({ rallyPoints: { points: [[0, 0, 50]] } }), /Rally point 1/) === 'ok'
+);
+r = parseQgcPlanJson(plan({ rallyPoints: { points: [[35, -106, 50]] } }));
+check('a real rally point loads', !!r?.sections?.some((sec: any) => sec.type === 'rally' && sec.items.length === 1));
+check(
+  'a breach return of nulls: refused',
+  refused(
+    plan({ geoFence: { polygons: [{ inclusion: true, polygon: ring }], breachReturn: [null, null, 0] } }),
+    /breach return/
+  ) === 'ok'
+);
+r = parseQgcPlanJson(plan({ geoFence: { polygons: [{ inclusion: true, polygon: ring }], breachReturn: [0, 0, 0] } }));
+check(
+  'a breach return of [0, 0, 0] (QGC: not set) is skipped, the fence loads',
+  !!r?.sections?.some((sec: any) => sec.type === 'fence' && !sec.items.some((it: any) => it.command === 5000))
+);
+const survey = (pts: any[]) => ({ type: 'ComplexItem', complexItemType: 'survey', transects: [pts] });
+check(
+  'a survey transect point with no position: refused',
+  refused(plan({ mission: { items: [survey([[35, -106, 30], null])] } }), /transect point/) === 'ok'
+);
+r = parseQgcPlanJson(plan({ mission: { items: [survey([[35, -106, 30], { lat: 35.001, lon: -106, alt: 40 }])] } }));
+// Home is item 0, then the two transect points.
+check('a survey with real transect points loads', (r?.items.length ?? 0) === 3);
 
 console.log(failures.length ? `\n${failures.length} plan check(s) FAILED` : '\nAll plan checks PASSED');
 if (failures.length) process.exit(1);
