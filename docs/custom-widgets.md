@@ -38,7 +38,7 @@ To change a widget later, enter Edit Mode and click the pencil on the widget's c
 | To share | Do this | File |
 |---|---|---|
 | One widget | **Export Widget JSON** in the creator | `<name>.widget.json`: a single definition |
-| A whole layout | The **Layout Profile & Backup Manager**: **Export Active Profile** | A profile: tabs, layout and every custom widget |
+| A whole layout | Edit Mode → **Profiles & Backup**: **Export Active Profile** | A profile: tabs, layout and every custom widget |
 
 **To import a widget,** open **Edit Mode → Add Widget** and choose **Upload .json Widget**. Select a `.json` file containing one definition. An **Import Preview** shows what the widget is:
 

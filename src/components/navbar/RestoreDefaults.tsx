@@ -50,7 +50,8 @@ export const RestoreDefaults: React.FC = () => {
         <div className="min-w-0">
           <div className="text-xs font-semibold text-zinc-200">Restore defaults</div>
           <div className="mt-0.5 text-[11px] text-zinc-500">
-            Reset every setting and the dashboard to how they were on first visit.
+            Every setting and the dashboard, as on first visit. (The dashboard alone: Edit Mode › Profiles &amp;
+            Backup.)
           </div>
         </div>
         <Button
