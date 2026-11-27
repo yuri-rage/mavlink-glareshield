@@ -127,6 +127,16 @@ export function parseQgcWplText(text: string): MissionItemIntData[] {
  * Parses a QGroundControl Plan JSON format.
  * Expands ComplexItems (e.g. Survey, Corridor Scan) and validates that no waypoint defaults to (0, 0).
  */
+/** A .plan the parser understood but won't load as it stands: shown to the operator, never taken for "not a plan". */
+export class PlanFileError extends Error {}
+
+/** [lat, lon(, alt)] with a real position: finite numbers, not the (0, 0) a missing value defaults to. */
+function isLatLon(p: unknown): p is number[] {
+  return (
+    Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]) && !(p[0] === 0 && p[1] === 0)
+  );
+}
+
 export function parseQgcPlanJson(
   jsonStr: string
 ): { type: MissionFileType; items: MissionItemIntData[]; sections?: PlanSectionData[] } | null {
@@ -144,6 +154,12 @@ export function parseQgcPlanJson(
         const frame = rel ? 3 : 0;
         const ap = rawItem.landingApproachCoordinate ?? rawItem.loiterCoordinate;
         const ld = rawItem.landCoordinate;
+        // A pattern without its approach or touchdown point would fly to (0, 0), or not parse at all.
+        if (!isLatLon(ap) || !isLatLon(ld)) {
+          throw new PlanFileError(
+            `Landing pattern (${rawItem.complexItemType}) has no ${!isLatLon(ap) ? 'approach' : 'land'} coordinate. Fix it in QGroundControl and save the plan again.`
+          );
+        }
         const out: any[] = [{ command: 189, frame: 2, autoContinue: true, params: [0, 0, 0, 0, 0, 0, 0] }];
         if (rawItem.stopTakingPhotos !== false) {
           out.push({ command: 206, frame: 2, autoContinue: true, params: [0, 0, 0, 0, 0, 0, 0] });
@@ -209,7 +225,7 @@ export function parseQgcPlanJson(
           }
           if (flat.length > 0) return flat;
         }
-        throw new Error(
+        throw new PlanFileError(
           `Complex item "${rawItem.complexItemType || 'survey'}" contains no expandable waypoints. Export individual waypoints from QGroundControl before uploading.`
         );
       }
@@ -255,7 +271,7 @@ export function parseQgcPlanJson(
 
           // Never default coordinates to (0, 0) for commands that have a location!
           if ((cmd === 16 || cmd === 82) && x === 0 && y === 0) {
-            throw new Error(
+            throw new PlanFileError(
               `Waypoint ${seq} (command ${cmd}) has invalid coordinates (0, 0) [Gulf of Guinea]. Upload rejected for vehicle safety.`
             );
           }
@@ -294,10 +310,16 @@ export function parseQgcPlanJson(
       let fenceSeq = 0;
 
       if (Array.isArray(obj.geoFence.polygons)) {
-        for (const poly of obj.geoFence.polygons) {
+        for (const [pi, poly] of obj.geoFence.polygons.entries()) {
           const inclusion = poly.inclusion !== false;
           const cmd = inclusion ? 5001 : 5002;
           const coords = poly.polygon || [];
+          // A vertex missing (or at 0, 0) would draw the fence through the Gulf of Guinea.
+          if (coords.length < 3 || !coords.every(isLatLon)) {
+            throw new PlanFileError(
+              `Fence polygon ${pi + 1} has ${coords.length < 3 ? 'fewer than 3 vertices' : 'a vertex without a valid position'}. Fix the fence and save the plan again.`
+            );
+          }
           for (const pt of coords) {
             fenceItems.push({
               seq: fenceSeq++,
@@ -314,7 +336,7 @@ export function parseQgcPlanJson(
       }
 
       if (Array.isArray(obj.geoFence.circles)) {
-        for (const circ of obj.geoFence.circles) {
+        for (const [ci, circ] of obj.geoFence.circles.entries()) {
           const inclusion = circ.inclusion !== false;
           const cmd = inclusion ? 5003 : 5004;
           // Correctly read circle radius from circ.circle.radius (fallback to circ.radius)
@@ -325,13 +347,22 @@ export function parseQgcPlanJson(
                 ? circ.radius
                 : 50;
 
+          // A circle without its center would sit at (0, 0): an inclusion circle there breaches the moment the
+          // fence is enabled.
+          const center = circ.circle?.center;
+          if (!isLatLon(center) || !(radius > 0)) {
+            throw new PlanFileError(
+              `Fence circle ${ci + 1} has ${!isLatLon(center) ? 'no valid center' : 'no valid radius'}. Fix the fence and save the plan again.`
+            );
+          }
+
           fenceItems.push({
             seq: fenceSeq++,
             command: cmd,
             frame: 0,
             param1: radius,
-            x: circ.circle?.center?.[0] ?? 0,
-            y: circ.circle?.center?.[1] ?? 0,
+            x: center[0],
+            y: center[1],
             z: 0,
             mission_type: 1,
           });
@@ -407,9 +438,7 @@ export function parseQgcPlanJson(
       sections,
     };
   } catch (err: any) {
-    if (err?.message?.includes('invalid coordinates') || err?.message?.includes('Complex item')) {
-      throw err;
-    }
+    if (err instanceof PlanFileError) throw err;
     // Not valid JSON
   }
   return null;
