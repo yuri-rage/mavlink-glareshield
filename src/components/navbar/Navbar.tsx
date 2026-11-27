@@ -66,24 +66,26 @@ function formatDurationClock(totalMs: number): string {
 const BatteryPill: React.FC<{ active: boolean }> = ({ active }) => {
   const battery = useTelemetryStore((s) => s.battery);
   const shown = active && battery.voltage > 0;
+  // Remaining % unknown (no capacity set): the voltage alone, not a red 0%.
+  const pct = battery.remaining >= 0 ? battery.remaining : null;
   return (
     <div className="flex shrink-0 items-center gap-1.5" title="Pack Voltage & Remaining Capacity">
       <BatteryCharging
         className={`h-3.5 w-3.5 shrink-0 ${
           !shown
             ? 'text-zinc-500'
-            : battery.remaining <= 15
+            : pct !== null && pct <= 15
               ? 'animate-pulse text-red-400'
-              : battery.remaining <= 25
+              : pct !== null && pct <= 25
                 ? 'text-amber-400'
                 : 'text-emerald-400'
         }`}
       />
       <span className="font-sans text-[10px] font-bold uppercase text-zinc-400 md:text-[11px]">BAT</span>
       <span
-        className={`font-bold ${!shown ? 'text-zinc-500' : battery.remaining <= 15 ? 'text-red-300' : battery.remaining <= 25 ? 'text-amber-300' : 'text-zinc-100'}`}
+        className={`font-bold ${!shown ? 'text-zinc-500' : pct !== null && pct <= 15 ? 'text-red-300' : pct !== null && pct <= 25 ? 'text-amber-300' : 'text-zinc-100'}`}
       >
-        {shown ? `${battery.voltage.toFixed(1)}V · ${battery.remaining}%` : '--'}
+        {shown ? `${battery.voltage.toFixed(1)}V${pct !== null ? ` · ${pct}%` : ''}` : '--'}
       </span>
     </div>
   );

@@ -814,7 +814,8 @@ export const useTelemetryStore = create<TelemetryState>()(
     battery: {
       voltage: 0,
       current: 0,
-      remaining: 0,
+      // -1: unknown (as MAVLink reports it), apart from a real 0%.
+      remaining: -1,
       consumedMah: 0,
       cellVoltages: [],
     },
@@ -2041,6 +2042,8 @@ mavlinkConnection.onStatus((status) => {
       // state would otherwise make a fixed-wing plane look like a VTOL; an 8-ESC vehicle's count would stick).
       extendedState: { landedState: 0, vtolState: 0, lastUpdate: 0 },
       batteries: {},
+      // The next vehicle's pack: a remaining % it doesn't report must not be the last vehicle's.
+      battery: initialVehicleState.battery,
       esc: {
         voltage: escZeros(),
         current: escZeros(),

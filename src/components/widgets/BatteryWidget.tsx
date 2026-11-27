@@ -49,7 +49,7 @@ export const BatteryWidget: React.FC = () => {
     !(battery.cellVoltages.length === 1 && battery.cellVoltages[0] > 4.55);
 
   const getPctColor = (pct: number) => {
-    if (!hasLink) return 'text-zinc-500 bg-zinc-900 border-zinc-800';
+    if (!hasLink || pct < 0) return 'text-zinc-500 bg-zinc-900 border-zinc-800';
     if (pct <= 20) return 'text-red-400 bg-red-950/40 border-red-800';
     if (pct <= 40) return 'text-amber-400 bg-amber-950/40 border-amber-800';
     return 'text-emerald-400 bg-emerald-950/40 border-emerald-800';
