@@ -80,6 +80,14 @@ function isMapTileRequest(url) {
   );
 }
 
+// Tile writes come in bursts (a map pan); their trims run one after another, each seeing the cache as the last
+// left it, rather than overlapping on the same keys.
+let tileTrim = Promise.resolve();
+function queueTileTrim(cache) {
+  tileTrim = tileTrim.then(() => trimTileCache(cache)).catch(() => {});
+  return tileTrim;
+}
+
 async function trimTileCache(cache) {
   const keys = await cache.keys();
   if (keys.length > MAX_CACHED_TILES) {
@@ -120,13 +128,29 @@ self.addEventListener('fetch', (event) => {
             // Only cache valid CORS / same-origin responses; never cache opaque responses
             // to avoid Chrome inflating quota to ~7MB per opaque tile.
             if (res && res.ok && res.type !== 'opaque') {
-              cache.put(req, res.clone()).then(() => trimTileCache(cache));
+              cache.put(req, res.clone()).then(() => queueTileTrim(cache));
             }
             return res;
           })
           // Offline with nothing cached: a network error, not undefined (which respondWith rejects as a TypeError).
           .catch(() => cached || Response.error());
         return cached || networkFetch;
+      })
+    );
+    return;
+  }
+
+  // The build's bundles (/assets/, content-hashed, served immutable): cache-first. A name never changes content, so
+  // the network adds only delay (on a slow cellular link, a lazily loaded widget waited on it). This deploy's shell
+  // cache has them from install; one missing is fetched and kept.
+  if (url.origin === self.location.origin && url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.open(SHELL_CACHE).then(async (cache) => {
+        const cached = await cache.match(req);
+        if (cached) return cached;
+        const res = await fetch(req);
+        if (res && res.ok && res.type === 'basic') cache.put(req, res.clone());
+        return res;
       })
     );
     return;
