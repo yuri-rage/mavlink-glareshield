@@ -10,12 +10,11 @@ import { LayoutGrid, Pencil } from 'lucide-react';
 import { useDashboardStore } from '../../store/dashboardStore';
 import { HeaderMenu, MenuItem } from '../ui/HeaderMenu';
 
-// Bordered, so they read as tabs up in the navbar; the open one lit.
+// One bordered group (a segmented control, as Flow / Cockpit in Edit Mode), the open tab filled.
+const GROUP = 'flex items-center gap-0.5 rounded-lg border border-zinc-700 bg-zinc-900/70 p-0.5';
 const pill = (active: boolean) =>
-  `whitespace-nowrap rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
-    active
-      ? 'border-sky-700/70 bg-zinc-800 text-sky-300'
-      : 'border-zinc-700/80 bg-zinc-900/60 text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100'
+  `whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+    active ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
   }`;
 
 export const HeaderTabs: React.FC = () => {
@@ -66,7 +65,7 @@ export const HeaderTabs: React.FC = () => {
         <div
           ref={measureRef}
           aria-hidden="true"
-          className="pointer-events-none invisible absolute left-0 top-0 flex w-max items-center gap-1"
+          className={`pointer-events-none invisible absolute left-0 top-0 w-max ${GROUP}`}
         >
           {tabs.map((t) => (
             <span key={t.id} className={pill(false)}>
@@ -75,7 +74,7 @@ export const HeaderTabs: React.FC = () => {
           ))}
         </div>
         {fits && (
-          <nav className="flex items-center gap-1" aria-label="Dashboard tabs">
+          <nav className={GROUP} aria-label="Dashboard tabs">
             {tabs.map((t) => (
               <button
                 key={t.id}
