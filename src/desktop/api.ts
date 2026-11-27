@@ -7,7 +7,9 @@ export type Unsubscribe = () => void;
 /** A link the desktop opens for the page: UDP (listen for the vehicle, as Mission Planner does) or a TCP client. */
 export type NativeLinkConfig =
   | { kind: 'udp'; /** Local port to listen on (14550 by default). */ port: number }
-  | { kind: 'tcp'; host: string; port: number };
+  | { kind: 'tcp'; host: string; port: number }
+  /** A serial port, opened by the desktop by its path (/dev/ttyACM0, COM5): found again after a replug or restart. */
+  | { kind: 'serial'; path: string; baudRate: number };
 
 export interface DesktopLinkApi {
   /** Opens the link; resolves with its ID, or rejects with a message (port in use, connection refused). */
@@ -26,18 +28,16 @@ export interface SerialPortChoice {
 }
 
 export interface SerialPortListing {
-  /** The port's name: ttyUSB0, COM3. */
-  name: string;
-  /** What to show: the name, and the device when known (ttyACM0: ArduPilot Pixhawk6X). */
+  /** The port's path: /dev/ttyACM0, COM5. */
+  path: string;
+  /** What to show: its name, and the device when known (ttyACM0: ArduPilot Pixhawk6X, COM5: Silicon Labs). */
   label: string;
 }
 
 export interface DesktopSerialApi {
   /** This computer's serial ports, for the dropdown in Settings › Link. */
   list(): Promise<SerialPortListing[]>;
-  /** The port the next navigator.serial.requestPort() should get, without a picker (null: ask). */
-  prefer(name: string | null): void;
-  /** A request with no port chosen (the RTK widget's base station): the page shows the list. */
+  /** The RTK widget's base station uses the page's Web Serial: Electron has no picker, so the page shows the list. */
   onChoosePort(listener: (ports: SerialPortChoice[]) => void): Unsubscribe;
   /** The page's answer: a port ID, or null (cancelled). */
   choosePort(portId: string | null): void;

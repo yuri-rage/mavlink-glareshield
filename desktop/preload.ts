@@ -40,7 +40,6 @@ contextBridge.exposeInMainWorld('glareshieldDesktop', {
   },
   serial: {
     list: () => ipcRenderer.invoke('serial:list'),
-    prefer: (name: string | null) => ipcRenderer.send('serial:prefer', name),
     onChoosePort: (listener: Listener<[unknown]>) => on('serial:choose-port', listener),
     choosePort: (portId: string | null) => ipcRenderer.send('serial:choose', portId),
   },

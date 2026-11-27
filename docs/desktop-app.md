@@ -44,7 +44,7 @@ Open **Settings → Link** and choose the **Link type**:
 |---|---|---|
 | UDP | The port to listen on (14550) | SITL (`--serial1 udpclient:<this computer>:14550`), a companion computer or radio bridge sending here |
 | TCP | The vehicle's `host:port` (`127.0.0.1:5760`) | SITL's first port, a serial-to-TCP adapter |
-| USB serial | The port (from the list; ⟳ lists them again after plugging in) and the baud rate (57600 for SiK radios) | A radio or flight controller plugged into this computer |
+| USB serial | The port (from the list; ⟳ lists them again after plugging in) and the baud rate (57600 for SiK radios) | A radio or flight controller plugged into this computer. Opened by its name (`COM5`, `/dev/ttyACM0`), so it reconnects by itself after a replug or when the app starts again |
 | WebSocket | The bridge's address | The Docker bridge or Mission Planner, as in the web app |
 
 Over UDP, Glareshield replies to whatever address last sent to it, as Mission Planner does. Only one copy of the app
@@ -72,7 +72,8 @@ How it fits together:
 
 - `desktop/main.ts` (Electron's main process) serves the built web app (`dist/`) from `app://glareshield/`, with the
   web deploy's Content-Security-Policy, so the service worker and offline map tiles work as on the web. It also opens
-  the UDP and TCP links, hands the serial port list to the page, and runs the updater.
+  the UDP, TCP and serial links (serial with the prebuilt `@serialport/bindings-cpp`, the app's only runtime
+  dependency), lists the serial ports, and runs the updater.
 - `desktop/preload.ts` gives the page a small API (`src/desktop/api.ts`) and nothing else of Electron or Node.
 - On the page, `src/mavlink/transport/nativeLinkTransport.ts` is the UDP/TCP transport, alongside WebSocket and Web
   Serial.

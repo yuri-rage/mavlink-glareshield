@@ -1,4 +1,4 @@
-// UDP and TCP links, opened by the desktop app's main process (desktop/main.ts) for the page: a browser can't open
+// UDP, TCP and serial links, opened by the desktop app's main process (desktop/main.ts) for the page: a browser can't open
 // either. Bytes come and go over its IPC bridge (src/desktop/api.ts); this is the Transport face of that.
 
 import type { DesktopLinkApi, NativeLinkConfig } from '../../desktop/api';
@@ -6,7 +6,7 @@ import type { FrameListener, StatusListener, Transport, TransportStatus, Unsubsc
 
 export class NativeLinkTransport implements Transport {
   readonly id: string;
-  readonly kind: 'udp' | 'tcp';
+  readonly kind: 'udp' | 'tcp' | 'native-serial';
 
   private status: TransportStatus = { kind: 'idle' };
   private readonly frameListeners = new Set<FrameListener>();
@@ -18,8 +18,13 @@ export class NativeLinkTransport implements Transport {
     private readonly api: DesktopLinkApi,
     private readonly config: NativeLinkConfig
   ) {
-    this.kind = config.kind;
-    this.id = config.kind === 'udp' ? `udp:${config.port}` : `tcp:${config.host}:${config.port}`;
+    this.kind = config.kind === 'serial' ? 'native-serial' : config.kind;
+    this.id =
+      config.kind === 'udp'
+        ? `udp:${config.port}`
+        : config.kind === 'tcp'
+          ? `tcp:${config.host}:${config.port}`
+          : `serial:${config.path}`;
   }
 
   getStatus(): TransportStatus {
@@ -33,7 +38,11 @@ export class NativeLinkTransport implements Transport {
     try {
       id = await this.api.open(this.config);
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      // Electron wraps a main-process error: "Error invoking remote method 'link:open': Error: <the message>".
+      const message = (e instanceof Error ? e.message : String(e)).replace(
+        /^Error invoking remote method '[^']+': (Error: )?/,
+        ''
+      );
       this.updateStatus({ kind: 'error', message });
       throw new Error(message);
     }

@@ -16,7 +16,9 @@ export type TransportKind =
   | 'replay'
   // UDP and TCP, opened by the desktop app (src/desktop/api.ts): a browser can't.
   | 'udp'
-  | 'tcp';
+  | 'tcp'
+  // A serial port opened by the desktop app by path (a browser uses Web Serial).
+  | 'native-serial';
 
 export type TransportStatus =
   | { kind: 'idle' }
