@@ -28,12 +28,16 @@ on:
       - 'package.json'
       - 'package-lock.json'
 
+# Read-only by default; only the tag's release job may write (publish to the release).
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  # A pull request or manual run: build and keep the artifacts (read-only token).
   build:
-    strategy:
+    if: "!startsWith(github.ref, 'refs/tags/v')"
+    name: build (${{ matrix.platform }})
+    strategy: &matrix
       fail-fast: false
       matrix:
         include:
@@ -46,7 +50,9 @@ jobs:
             target: --win
             artifact: release/*.exe
     runs-on: ${{ matrix.os }}
-    steps:
+    permissions:
+      contents: read
+    steps: &steps
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -59,48 +65,41 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Windows signing (when configured)
-        if: matrix.os == 'windows-latest'
-        shell: bash
-        env:
-          HAS_SECRET: ${{ secrets.AZURE_CLIENT_SECRET != '' }}
-          ENDPOINT: ${{ vars.AZURE_SIGN_ENDPOINT }}
-          ACCOUNT: ${{ vars.AZURE_SIGN_ACCOUNT }}
-          PROFILE: ${{ vars.AZURE_SIGN_PROFILE }}
-          PUBLISHER: ${{ vars.AZURE_SIGN_PUBLISHER }}
-        run: |
-          if [ "$HAS_SECRET" = "true" ] && [ -n "$ENDPOINT" ] && [ -n "$ACCOUNT" ] && [ -n "$PROFILE" ] && [ -n "$PUBLISHER" ]; then
-            {
-              echo "SIGN_ARGS=-c.win.azureSignOptions.endpoint=$ENDPOINT -c.win.azureSignOptions.codeSigningAccountName=$ACCOUNT -c.win.azureSignOptions.certificateProfileName=$PROFILE -c.win.azureSignOptions.publisherName=\"$PUBLISHER\""
-            } >> "$GITHUB_ENV"
-            echo "Signing with Azure Artifact Signing ($ACCOUNT / $PROFILE)"
-          else
-            echo "::notice::Windows signing isn't configured: this build is unsigned."
-          fi
-
       - name: Version from the tag
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
 
-      - name: Build and publish (tag)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Build (and publish, for a tag)
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.GITHUB_TOKEN || '' }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-        run: npm run build && npm run desktop:compile && eval npx electron-builder ${{ matrix.target }} $SIGN_ARGS --publish always
-
-      - name: Build only (manual run, pull request)
-        if: "!startsWith(github.ref, 'refs/tags/v')"
-        shell: bash
-        env:
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-        run: npm run build && npm run desktop:compile && eval npx electron-builder ${{ matrix.target }} $SIGN_ARGS --publish never
+          SIGN_ENDPOINT: ${{ vars.AZURE_SIGN_ENDPOINT }}
+          SIGN_ACCOUNT: ${{ vars.AZURE_SIGN_ACCOUNT }}
+          SIGN_PROFILE: ${{ vars.AZURE_SIGN_PROFILE }}
+          SIGN_PUBLISHER: ${{ vars.AZURE_SIGN_PUBLISHER }}
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          # Arguments as an array: values with spaces or quotes (the publisher name) pass through intact.
+          args=(${{ matrix.target }})
+          if [ "${{ matrix.platform }}" = windows ]; then
+            if [ -n "$AZURE_CLIENT_SECRET" ] && [ -n "$SIGN_ENDPOINT" ] && [ -n "$SIGN_ACCOUNT" ] && [ -n "$SIGN_PROFILE" ] && [ -n "$SIGN_PUBLISHER" ]; then
+              args+=("-c.win.azureSignOptions.endpoint=$SIGN_ENDPOINT"
+                     "-c.win.azureSignOptions.codeSigningAccountName=$SIGN_ACCOUNT"
+                     "-c.win.azureSignOptions.certificateProfileName=$SIGN_PROFILE"
+                     "-c.win.azureSignOptions.publisherName=$SIGN_PUBLISHER")
+              echo "Signing with Azure Artifact Signing ($SIGN_ACCOUNT / $SIGN_PROFILE)"
+            else
+              echo "::notice::Windows signing isn't configured: this build is unsigned."
+            fi
+          fi
+          if [ "$IS_TAG" = true ]; then args+=(--publish always); else args+=(--publish never); fi
+          npm run build
+          npm run desktop:compile
+          npx electron-builder "${args[@]}"
 
       - name: Keep the build
         if: "!startsWith(github.ref, 'refs/tags/v')"
@@ -111,3 +110,13 @@ jobs:
           retention-days: 14
           path: ${{ matrix.artifact }}
           if-no-files-found: error
+
+  # A version tag: build and publish to its release (the only job that may write).
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    name: release (${{ matrix.platform }})
+    strategy: *matrix
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps: *steps
