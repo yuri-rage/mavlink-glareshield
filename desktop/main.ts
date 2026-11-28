@@ -99,13 +99,24 @@ function serveApp() {
 
 interface Link {
   send(data: Uint8Array): void;
-  close(): void;
+  /** Resolves once the OS has released the socket or port (a reconnect can then open it again at once). */
+  close(): Promise<void>;
 }
 const links = new Map<string, Link>();
 let nextLinkId = 1;
+/**
+ * Bumped when every link is closed (the page reloaded, crashed or closed): an open still under way then (a serial port
+ * opening, a TCP connect, a UDP bind) finishes into an older generation, and closes what it opened instead of keeping
+ * it for a page that no longer knows its ID.
+ */
+let linkGeneration = 0;
+
+/** Packets waiting for a serial port: past this a port that stops draining drops new ones (as bridge.py). */
+const SERIAL_QUEUE_MAX = 500;
 
 function openLink(win: BrowserWindow, config: any): Promise<string> {
   const id = `link-${nextLinkId++}`;
+  const generation = linkGeneration;
   const emitData = (data: Uint8Array) => {
     if (!win.isDestroyed()) win.webContents.send('link:data', id, data);
   };
@@ -114,11 +125,20 @@ function openLink(win: BrowserWindow, config: any): Promise<string> {
     links.delete(id);
     if (!win.isDestroyed()) win.webContents.send('link:closed', id, reason);
   };
+  /** Keep the opened link, unless the page that asked for it is gone: then close it. */
+  const keep = async (link: Link): Promise<string> => {
+    if (generation !== linkGeneration || win.isDestroyed()) {
+      await link.close();
+      throw new Error('The page reloaded before the link opened');
+    }
+    links.set(id, link);
+    return id;
+  };
 
   if (config?.kind === 'udp') {
     const port = Number(config.port);
     if (!(port > 0 && port < 65536)) return Promise.reject(new Error(`Not a UDP port: ${config.port}`));
-    return new Promise((resolve, reject) => {
+    return new Promise<Link>((resolve, reject) => {
       // Not shared (no reuseAddr): another program on the port (Mission Planner) is a clear "in use", rather than the
       // two splitting the traffic.
       const sock = dgram.createSocket({ type: 'udp4' });
@@ -134,55 +154,68 @@ function openLink(win: BrowserWindow, config: any): Promise<string> {
       });
       const targets = () => {
         const now = Date.now();
-        const live = [...vehicles.values()].filter((v) => now - v.at < UDP_VEHICLE_TIMEOUT_MS);
-        return live.length ? live : lastSender ? [lastSender] : [];
+        // Gone quiet: forgotten (endpoints that come and go don't pile up).
+        for (const [k, v] of vehicles) if (now - v.at >= UDP_VEHICLE_TIMEOUT_MS) vehicles.delete(k);
+        return vehicles.size ? [...vehicles.values()] : lastSender ? [lastSender] : [];
       };
-      sock.once('error', (e: NodeJS.ErrnoException) =>
+      let closing: Promise<void> | null = null;
+      const close = () =>
+        (closing ??= new Promise<void>((res) => {
+          try {
+            sock.close(() => res());
+          } catch {
+            res(); // already closed
+          }
+        }));
+      sock.once('error', (e: NodeJS.ErrnoException) => {
+        void close();
         reject(
           new Error(
             e.code === 'EADDRINUSE'
               ? `UDP port ${port} is in use by another program (Mission Planner, MAVProxy, another Glareshield).`
               : `UDP port ${port}: ${e.message}`
           )
-        )
-      );
+        );
+      });
       sock.bind(port, '0.0.0.0', () => {
         sock.removeAllListeners('error');
         sock.on('error', (e) => {
           emitClosed(`UDP error: ${e.message}`);
-          sock.close();
+          void close();
         });
-        links.set(id, {
+        resolve({
           send: (data) => {
             // A failed send (network unreachable for a moment) is dropped, not the end of the link.
             for (const t of targets()) sock.send(data, t.port, t.address, () => {});
           },
-          close: () => sock.close(),
+          close,
         });
-        resolve(id);
       });
-    });
+    }).then(keep);
   }
 
   if (config?.kind === 'tcp') {
     const port = Number(config.port);
     const host = String(config.host || '');
     if (!host || !(port > 0 && port < 65536)) return Promise.reject(new Error(`Not a TCP address: ${host}:${port}`));
-    return new Promise((resolve, reject) => {
+    return new Promise<Link>((resolve, reject) => {
       const sock = net.createConnection({ host, port });
       sock.setNoDelay(true);
       sock.setTimeout(10_000);
       let open = false;
+      const closed = new Promise<void>((res) => sock.once('close', () => res()));
       sock.once('connect', () => {
         open = true;
         sock.setTimeout(0);
-        links.set(id, {
+        resolve({
           send: (data) => {
             if (!sock.destroyed) sock.write(data);
           },
-          close: () => sock.destroy(),
+          close: () => {
+            sock.destroy();
+            return closed;
+          },
         });
-        resolve(id);
       });
       sock.once('timeout', () => sock.destroy(new Error('no answer in 10 s')));
       sock.on('data', (d: Buffer) => emitData(new Uint8Array(d)));
@@ -191,56 +224,68 @@ function openLink(win: BrowserWindow, config: any): Promise<string> {
         else emitClosed(`TCP error: ${e.message}`);
       });
       sock.on('close', () => emitClosed('The vehicle closed the TCP connection'));
-    });
+    }).then(keep);
   }
 
   if (config?.kind === 'serial') {
     const portPath = String(config.path || '');
-    const baudRate = Number(config.baudRate) || 57600;
+    const baudRate = Number(config.baudRate);
     if (!portPath) return Promise.reject(new Error('No serial port chosen'));
-    return openSerial(portPath, baudRate).then(({ port }) => {
-      let open = true;
-      // One write at a time, in order (the binding's writes are promises).
-      let writing: Promise<unknown> = Promise.resolve();
-      const fail = (e: unknown) => {
-        if (!open) return;
-        open = false;
-        void port.close().catch(() => {});
-        emitClosed(`Serial ${portPath}: ${e instanceof Error ? e.message : String(e)}`);
-      };
-      void (async () => {
-        const buf = Buffer.alloc(4096);
-        while (open) {
-          try {
-            const { bytesRead } = await port.read(buf, 0, buf.length);
-            if (bytesRead > 0) emitData(new Uint8Array(buf.subarray(0, bytesRead)));
-          } catch (e) {
-            // Closed by us (canceled read), or the device went away (unplugged).
-            if (open) fail(e);
-            return;
-          }
-        }
-      })();
-      links.set(id, {
-        send: (data) => {
-          if (open) writing = writing.then(() => port.write(Buffer.from(data))).catch(fail);
-        },
-        close: () => {
+    if (!(Number.isFinite(baudRate) && baudRate > 0))
+      return Promise.reject(new Error(`Not a baud rate: ${config.baudRate}`));
+    return openSerial(portPath, Math.round(baudRate))
+      .then(({ port }): Link => {
+        let open = true;
+        // One write at a time, in order (the binding's writes are promises), and a bounded queue.
+        let writing: Promise<unknown> = Promise.resolve();
+        let queued = 0;
+        let closing: Promise<void> | null = null;
+        const close = () => {
           open = false;
-          void port.close().catch(() => {});
-        },
-      });
-      return id;
-    });
+          return (closing ??= port.close().catch(() => {}));
+        };
+        const fail = (e: unknown) => {
+          if (!open) return;
+          void close();
+          emitClosed(`Serial ${portPath}: ${e instanceof Error ? e.message : String(e)}`);
+        };
+        void (async () => {
+          const buf = Buffer.alloc(4096);
+          while (open) {
+            try {
+              const { bytesRead } = await port.read(buf, 0, buf.length);
+              if (bytesRead > 0) emitData(new Uint8Array(buf.subarray(0, bytesRead)));
+            } catch (e) {
+              // Closed by us (canceled read), or the device went away (unplugged).
+              if (open) fail(e);
+              return;
+            }
+          }
+        })();
+        return {
+          send: (data) => {
+            if (!open || queued >= SERIAL_QUEUE_MAX) return;
+            queued++;
+            writing = writing
+              .then(() => (open ? port.write(Buffer.from(data)) : undefined))
+              .catch(fail)
+              .finally(() => queued--);
+          },
+          close,
+        };
+      })
+      .then(keep);
   }
 
   return Promise.reject(new Error('Unknown link kind'));
 }
 
 /** Close every link (the page reloaded, crashed or closed: none of its links are wanted any more). */
-function closeAllLinks() {
-  for (const l of links.values()) l.close();
+function closeAllLinks(): Promise<void> {
+  linkGeneration++;
+  const closing = [...links.values()].map((l) => l.close());
   links.clear();
+  return Promise.all(closing).then(() => {});
 }
 
 function setupLinks(win: BrowserWindow) {
@@ -253,11 +298,12 @@ function setupLinks(win: BrowserWindow) {
     if (!fromWin(e) || typeof id !== 'string' || !(data instanceof Uint8Array)) return;
     links.get(id)?.send(data);
   });
-  ipcMain.handle('link:close', (e, id: unknown) => {
+  // Answers once the port or socket is released, so the page's reconnect (it waits for this) can open it again.
+  ipcMain.handle('link:close', async (e, id: unknown) => {
     if (!fromWin(e) || typeof id !== 'string') return;
     const l = links.get(id);
     links.delete(id);
-    l?.close();
+    await l?.close();
   });
 }
 
@@ -491,17 +537,17 @@ function createWindow() {
   // (the ports are freed, and no frames go to link IDs nobody holds).
   win.webContents.on('did-start-navigation', (details: { isMainFrame?: boolean; isSameDocument?: boolean }) => {
     if (details?.isMainFrame !== false && !details?.isSameDocument) {
-      closeAllLinks();
+      void closeAllLinks();
       cancelSerialChoice();
     }
   });
   win.webContents.on('render-process-gone', () => {
-    closeAllLinks();
+    void closeAllLinks();
     cancelSerialChoice();
   });
   void win.loadURL(`${ORIGIN}/`);
   win.on('closed', () => {
-    closeAllLinks();
+    void closeAllLinks();
     cancelSerialChoice();
   });
   return win;
