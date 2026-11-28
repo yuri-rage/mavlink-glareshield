@@ -87,9 +87,34 @@ export interface DesktopUpdateApi {
   install(): void;
 }
 
+export interface DesktopWindowApi {
+  /** This window has no system title bar: the page draws its auto-hiding one (components/desktop/TitleBar.tsx). */
+  frameless: boolean;
+  minimize(): void;
+  toggleMaximize(): void;
+  close(): void;
+  isMaximized(): Promise<boolean>;
+  onMaximized(listener: (maximized: boolean) => void): Unsubscribe;
+}
+
+/** The desktop app's own settings (kept by the main process: some apply before the page exists). */
+export interface DesktopSettings {
+  frameless: boolean;
+}
+
+export interface DesktopSettingsApi {
+  get(): Promise<DesktopSettings | null>;
+  /** Takes effect when the app restarts (a window's frame can't change while it's open). */
+  setFrameless(on: boolean): Promise<void>;
+  /** Restart the app (to apply a setting that needs it). */
+  relaunch(): void;
+}
+
 export interface DesktopApi {
   /** The desktop app's version (package.json). */
   version: string;
+  window: DesktopWindowApi;
+  settings: DesktopSettingsApi;
   platform: 'linux' | 'win32' | 'darwin' | string;
   link: DesktopLinkApi;
   ntrip: DesktopNtripApi;

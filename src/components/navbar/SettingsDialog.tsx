@@ -18,6 +18,7 @@ import type { BandwidthProfile } from '../../mavlink/rateManager';
 import { getSerialApi, requestSerialDevice } from '../../mavlink/transport';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useLayoutStore, type ContentWidth } from '../../store/layoutStore';
+import { useTelemetryStore } from '../../store/telemetryStore';
 import { useUnitsStore, type AltitudeMode, type UnitSystem } from '../../store/unitsStore';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -61,6 +62,56 @@ function desktopUpdateText(st: ReturnType<typeof useUpdateStore.getState>['deskt
       return null;
   }
 }
+
+/** Desktop only: the window's title bar, the system's or an auto-hiding one (applies when the app restarts). */
+const TitleBarSetting: React.FC = () => {
+  const desk = desktopApi();
+  // A restart drops the link for a few seconds: as Update, it waits while the vehicle is armed.
+  const armed = useTelemetryStore((s) => s.heartbeat.isArmed);
+  const running = desk?.window.frameless ?? false;
+  const [chosen, setChosen] = useState<boolean>(running);
+  useEffect(() => {
+    void desk?.settings.get().then((s) => s && setChosen(s.frameless));
+  }, [desk]);
+  if (!desk) return null;
+  const choose = (on: boolean) => {
+    setChosen(on);
+    void desk.settings.setFrameless(on);
+  };
+  return (
+    <div className="space-y-1.5">
+      <Segmented<boolean>
+        label="Title bar"
+        value={chosen}
+        onChange={choose}
+        options={[
+          { value: false, label: 'Standard', hint: "The system's title bar, always shown." },
+          {
+            value: true,
+            label: 'Auto-hide',
+            hint: 'No title bar until the pointer reaches the top edge of the window; then it slides down over the top of the app (nothing moves) with minimize, maximize and close.',
+          },
+        ]}
+      />
+      {chosen !== running && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/30 bg-amber-950/30 px-2.5 py-1.5 text-[11px] text-amber-200">
+          <span>Applies when the app restarts.</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-6 text-[11px]"
+            onClick={() => desk.settings.relaunch()}
+            disabled={armed}
+            title={armed ? 'A restart drops the link for a few seconds: disarm first' : undefined}
+          >
+            {armed ? 'Restart after landing' : 'Restart now'}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const AboutPanel: React.FC = () => {
   const available = useUpdateStore((s) => s.available);
@@ -756,6 +807,7 @@ export const SettingsDialog: React.FC<Props> = ({
 
         {tab === 'display' && (
           <div className="space-y-4" role="tabpanel" aria-label="Display">
+            <TitleBarSetting />
             <Segmented<UnitSystem>
               label="Speed and distance"
               value={unitSystem}

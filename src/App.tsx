@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useEffect, useState } from 'react';
 
 import { DashboardGrid } from './components/dashboard/DashboardGrid';
 import { SerialPortPicker } from './components/desktop/SerialPortPicker';
+import { TitleBar } from './components/desktop/TitleBar';
 import { EditToolbar } from './components/editor/EditToolbar';
 import { Navbar } from './components/navbar/Navbar';
 import { VehicleSwitchDialog } from './components/navbar/VehiclePicker';
@@ -103,6 +104,8 @@ export const App: React.FC = () => {
       {/* In-app confirmations that mustn't block the page (and the vehicle heartbeat) while they're open */}
       <ConfirmDialog />
       {isDesktop() && <SerialPortPicker />}
+      {/* A frameless desktop window: its auto-hiding title bar, over the top of the app */}
+      {isDesktop() && <TitleBar />}
 
       {/* Edit Mode Toolbar (populates just below the top bar when edit mode is active) */}
       <EditToolbar

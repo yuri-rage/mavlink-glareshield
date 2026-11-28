@@ -405,7 +405,7 @@ fields), **RTK / NTRIP** (corrections to the vehicle), and **Gimbal** controls o
 | Tab | What's there |
 | :--- | :--- |
 | Link | WebSocket or USB serial, the bridge address, GCS system ID, telemetry rate; Connect / Disconnect; **Pair another device** (when the bridge has a pairing token) |
-| Display | Speed and distance units, altitude reference (AGL / MSL), theme (Dark cockpit / Daylight), content width |
+| Display | Speed and distance units, altitude reference (AGL / MSL), theme (Dark cockpit / Daylight), content width. In the desktop app, the title bar (Standard or Auto-hide) |
 | Alerts | Chimes, voice callouts (a neural voice, or the device's own), waypoint announcements. The neural voice downloads once (about 80 MB with its runtime) and then works offline |
 | Traffic & terrain | ADS-B display, warnings and limits; terrain data and planning clearance |
 | Data | Telemetry log recording; replay a .tlog file; Restore defaults |

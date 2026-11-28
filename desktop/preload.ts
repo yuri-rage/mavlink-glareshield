@@ -30,6 +30,19 @@ const args = Object.fromEntries(
 
 contextBridge.exposeInMainWorld('glareshieldDesktop', {
   version: args['glareshield-version'] ?? '',
+  window: {
+    frameless: args['glareshield-frameless'] === '1',
+    minimize: () => ipcRenderer.send('window:minimize'),
+    toggleMaximize: () => ipcRenderer.send('window:toggle-maximize'),
+    close: () => ipcRenderer.send('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+    onMaximized: (listener: Listener<[boolean]>) => on('window:maximized', listener),
+  },
+  settings: {
+    get: () => ipcRenderer.invoke('settings:get'),
+    setFrameless: (on: boolean) => ipcRenderer.invoke('settings:set-frameless', on),
+    relaunch: () => ipcRenderer.send('app:relaunch'),
+  },
   platform: process.platform,
   link: {
     open: (config: unknown) => ipcRenderer.invoke('link:open', config),

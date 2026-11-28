@@ -52,6 +52,14 @@ Open **Settings → Link** and choose the **Link type**:
 Over UDP, Glareshield replies to whatever address last sent to it, as Mission Planner does. Only one copy of the app
 runs at a time: opening it again brings the open window forward, so two copies never compete for the UDP port.
 
+## Title bar
+
+Settings → Display → **Title bar**: **Standard** (the system's) or **Auto-hide**. With Auto-hide the window has no
+title bar until the pointer reaches its top edge; then a slim one slides down over the top of the app (the app doesn't
+move or resize) with the window's minimize, maximize and close, and you can drag the window by it. It slides away once
+the pointer moves below it. The change applies when the app restarts (**Restart now**, which waits while the vehicle is
+armed).
+
 ## Updates
 
 The app checks for a newer release when it starts and downloads it in the background. When it's ready, an **Update**
