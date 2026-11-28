@@ -31,8 +31,11 @@ export interface DesktopNtripRequest {
 }
 
 export interface DesktopNtripApi {
-  /** Connects and logs in; resolves with the stream's ID once the caster accepts, or rejects with why not. */
-  open(request: DesktopNtripRequest): Promise<string>;
+  /**
+   * Connects and logs in for the stream `id` (the page's choice: listen on it first, as the caster's first RTCM can
+   * arrive before this resolves); resolves once the caster accepts, or rejects with why not.
+   */
+  open(id: string, request: DesktopNtripRequest): Promise<void>;
   /** The vehicle's position for the caster (one NMEA GGA sentence). */
   sendGga(id: string, sentence: string): void;
   close(id: string): Promise<void>;

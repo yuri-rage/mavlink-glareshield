@@ -11,6 +11,8 @@ const listeners = { data: new Map<string, (d: Uint8Array) => void>(), closed: ne
 let refuse: string | null = null;
 let answer: (() => void) | null = null;
 let hold = false;
+let early: Uint8Array | null = null;
+const lastId = () => opened[opened.length - 1].id as string;
 (globalThis as any).window ??= globalThis;
 (globalThis as any).addEventListener ??= () => {};
 Object.assign((globalThis as any).window, {
@@ -18,11 +20,12 @@ Object.assign((globalThis as any).window, {
     version: '0.3.0',
     platform: 'linux',
     ntrip: {
-      open: async (request: any) => {
-        opened.push(request);
+      // As the desktop does: the caster's first RTCM can reach the page before the open is answered.
+      open: async (id: string, request: any) => {
+        opened.push({ id, ...request });
         if (refuse) throw new Error(`Error invoking remote method 'ntrip:open': Error: ${refuse}`);
+        if (early) listeners.data.get(id)?.(early);
         if (hold) await new Promise<void>((r) => (answer = r));
-        return `ntrip-${opened.length}`;
       },
       sendGga: (_id: string, s: string) => gga.push(s),
       close: async (id: string) => void closed.push(id),
@@ -69,10 +72,11 @@ check(
 );
 check('…streaming once it accepted', st().status === 'streaming' && st().source === 'ntrip', st().status);
 check('…GGA sent right away', gga.length === 1 && /^\$GPGGA,/.test(gga[0]), gga[0]);
-listeners.data.get('ntrip-1')?.(Uint8Array.of(0xd3, 0, 1));
+listeners.data.get(lastId())?.(Uint8Array.of(0xd3, 0, 1));
 check('RTCM from the desktop is injected', injected.length === 1 && injected[0][0] === 0xd3);
 
-listeners.closed.get('ntrip-1')?.('The caster closed the stream');
+const firstId = lastId();
+listeners.closed.get(firstId)?.('The caster closed the stream');
 await tick();
 await tick();
 check(
@@ -89,7 +93,7 @@ await rtcmInjector.connectNtrip(config);
 await rtcmInjector.disconnect();
 check(
   'Disconnect closes the desktop stream',
-  closed.includes('ntrip-2') && st().status === 'disconnected',
+  closed.includes(lastId()) && st().status === 'disconnected',
   closed.join()
 );
 check('…and stops listening', listeners.data.size === 0 && listeners.closed.size === 0);
@@ -113,12 +117,25 @@ await pending;
 await tick();
 check(
   'disconnected mid-answer: the late stream is closed',
-  closed.includes(`ntrip-${opened.length}`) && st().status === 'disconnected',
+  closed.includes(lastId()) && st().status === 'disconnected',
   `${closed.join()} ${st().status}`
 );
 hold = false;
 
 // The WebSocket protocol (a caster behind a WebSocket proxy) still goes there, not to the desktop's client.
+// RTCM that arrives before the open is answered (it came with the caster's "200 OK"): injected, not missed.
+injected.length = 0;
+early = Uint8Array.of(0xd3, 0, 2);
+await rtcmInjector.connectNtrip(config);
+early = null;
+check(
+  'RTCM before the open is answered: injected',
+  injected.length === 1 && injected[0][2] === 2,
+  `${injected.length}`
+);
+check('…each stream its own ID', new Set(opened.map((o) => o.id)).size === opened.length);
+await rtcmInjector.disconnect();
+
 const before = opened.length;
 (globalThis as any).WebSocket = class {
   static OPEN = 1;

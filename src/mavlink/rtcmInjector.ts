@@ -321,6 +321,7 @@ export class RtcmInjector {
   private bridgeConfig: NtripConfig | null = null;
   /** The desktop app's caster stream (its ID), and the listeners on it. */
   private desktopNtrip: { id: string; unsubscribe: () => void } | null = null;
+  private desktopStreamSeq = 0;
   /** Which connection is current: each disconnect moves it on, so a stream that ends late can't tear down a newer one. */
   private generation = 0;
 
@@ -739,29 +740,17 @@ export class RtcmInjector {
     }
   }
 
-  /** The desktop app connects to the caster and streams its RTCM here; GGA goes back the same way. */
+  /**
+   * The desktop app connects to the caster and streams its RTCM here; GGA goes back the same way. The stream's ID is
+   * chosen here and listened on before it's opened: the caster's first RTCM often arrives with its "200 OK", before
+   * the open is answered.
+   */
   private async connectViaDesktop(config: NtripConfig, gen: number) {
     const desk = desktopApi()!;
-    let id: string;
-    try {
-      id = await desk.ntrip.open({
-        host: config.host.trim(),
-        port: config.port || 2101,
-        mountpoint: config.mountpoint.trim().replace(/^\//, ''),
-        username: config.username,
-        password: config.password,
-      });
-    } catch (err: any) {
-      // Electron wraps the main process's error: "Error invoking remote method 'ntrip:open': Error: <why>".
-      throw new Error(String(err?.message ?? err).replace(/^Error invoking remote method '[^']*': (Error: )?/, ''));
-    }
-    // Disconnected (or connected again) while the caster was answering: this stream isn't wanted.
-    if (gen !== this.generation) {
-      void desk.ntrip.close(id);
-      return;
-    }
+    const id = `ntrip-${++this.desktopStreamSeq}-${Date.now().toString(36)}`;
     const offData = desk.ntrip.onData(id, (data) => this.processRawStream(data));
     const offClosed = desk.ntrip.onClosed(id, (reason) => void this.streamEnded(gen, reason));
+    // Known before the open is answered, so a Disconnect meanwhile closes it (the desktop closes it once it connects).
     this.desktopNtrip = {
       id,
       unsubscribe: () => {
@@ -769,6 +758,26 @@ export class RtcmInjector {
         offClosed();
       },
     };
+    try {
+      await desk.ntrip.open(id, {
+        host: config.host.trim(),
+        port: config.port || 2101,
+        mountpoint: config.mountpoint.trim().replace(/^\//, ''),
+        username: config.username,
+        password: config.password,
+      });
+    } catch (err: any) {
+      if (this.desktopNtrip?.id === id) {
+        this.desktopNtrip.unsubscribe();
+        this.desktopNtrip = null;
+      }
+      // Disconnected meanwhile: not an error to show.
+      if (gen !== this.generation) return;
+      // Electron wraps the main process's error: "Error invoking remote method 'ntrip:open': Error: <why>".
+      throw new Error(String(err?.message ?? err).replace(/^Error invoking remote method '[^']*': (Error: )?/, ''));
+    }
+    // Disconnected (or connected again) while the caster was answering: that closed it.
+    if (gen !== this.generation) return;
     // The caster has accepted: it streams from here.
     this.updateState({ status: 'streaming', source: 'ntrip', error: null });
     if (config.sendGga) this.startGgaLoop((gga) => desk.ntrip.sendGga(id, gga));

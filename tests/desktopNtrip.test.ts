@@ -6,6 +6,7 @@ import net from 'node:net';
 export {};
 
 const { checkNtripRequest, connectNtrip, parseCasterHeader, requestText } = await import('../desktop/ntripClient.ts');
+const { NtripStreams } = await import('../desktop/ntripStreams.ts');
 
 const failures: string[] = [];
 const check = (name: string, ok: boolean, detail = '') => {
@@ -181,6 +182,87 @@ check(
   why.startsWith(`Caster 127.0.0.1:${deadPort}: connect ECONNREFUSED`),
   why
 );
+
+// ---- The main process's streams (desktop/ntripStreams.ts): what reaches the page, by the page's ID ----------------
+{
+  const sent: [string, string, any][] = [];
+  const streams = new NtripStreams((channel, id, value) => sent.push([channel, id, value]));
+  const data = (id: string) =>
+    Buffer.concat(sent.filter(([c, i]) => c === 'ntrip:data' && i === id).map(([, , v]) => Buffer.from(v)));
+
+  // The caster's first RTCM in the same packet as its acceptance (as real casters send it): passed on, not dropped.
+  const c = await caster((sock) => sock.write(Buffer.concat([Buffer.from('ICY 200 OK\r\n\r\n'), RTCM])));
+  await streams.open('s1', req(c.port));
+  await sleep(50);
+  check(
+    'streams: the RTCM in the acceptance packet reaches the page',
+    data('s1').equals(RTCM),
+    data('s1').toString('hex')
+  );
+  c.sockets[0].write(RTCM);
+  await sleep(50);
+  check('…and what follows', data('s1').length === RTCM.length * 2);
+  let why = await streams.open('s1', req(c.port)).then(
+    () => 'opened',
+    (e) => e.message
+  );
+  check('streams: an ID in use is refused', why === 'Stream s1 is already open', why);
+  why = await streams.open('../x', req(c.port)).then(
+    () => 'opened',
+    (e) => e.message
+  );
+  check('streams: a malformed ID is refused', why === 'Not a stream ID', why);
+  why = await streams.open('s2', { host: 'h', port: 2101, mountpoint: '' }).then(
+    () => 'opened',
+    (e) => e.message
+  );
+  check(
+    'streams: a bad request is refused, nothing kept',
+    why === 'Missing host or mountpoint' && streams.size === 1,
+    why
+  );
+  c.sockets[0].end();
+  await sleep(50);
+  check(
+    'streams: the caster ending it is reported by ID, then forgotten',
+    sent.some(([ch, i, v]) => ch === 'ntrip:closed' && i === 's1' && v === 'The caster closed the stream') &&
+      streams.size === 0
+  );
+  await c.close();
+
+  // Closed by the page while the caster is still answering: closed once it connects, nothing sent for it.
+  const slow = await caster((sock) =>
+    setTimeout(() => sock.write(Buffer.concat([Buffer.from('ICY 200 OK\r\n'), RTCM])), 150)
+  );
+  const opening = streams.open('s3', req(slow.port)).then(
+    () => 'opened',
+    (e) => e.message
+  );
+  await sleep(20);
+  await streams.close('s3');
+  why = await opening;
+  await sleep(50);
+  check(
+    'streams: closed while connecting: the open fails, the socket goes',
+    why === 'Closed before the caster answered' && slow.sockets[0].destroyed,
+    why
+  );
+  check('…and none of its data reaches the page', data('s3').length === 0);
+  // A reload (every stream) while connecting: the same.
+  const opening2 = streams.open('s4', req(slow.port)).then(
+    () => 'opened',
+    (e) => e.message
+  );
+  await sleep(20);
+  await streams.closeAll();
+  why = await opening2;
+  check(
+    'streams: a reload while connecting closes it too',
+    why === 'Closed before the caster answered' && streams.size === 0,
+    why
+  );
+  await slow.close();
+}
 
 console.log(
   failures.length ? `\n${failures.length} desktop NTRIP check(s) FAILED` : '\nAll desktop NTRIP checks PASSED'
