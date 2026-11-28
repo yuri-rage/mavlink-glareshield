@@ -15,7 +15,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { app, BrowserWindow, net as electronNet, ipcMain, protocol, session, shell } from 'electron';
+import { app, BrowserWindow, net as electronNet, ipcMain, protocol, screen, session, shell } from 'electron';
 import type { AppUpdater, ProgressInfo, UpdateInfo } from 'electron-updater';
 
 import { ensureCert, lanAddresses } from './bridgeCert';
@@ -639,11 +639,44 @@ function setupWindow(win: BrowserWindow) {
   ipcMain.handle('settings:set-frameless', (e, on: unknown) => {
     if (fromWin(e) && typeof on === 'boolean') settings().set({ frameless: on });
   });
+  if (frameless(win)) watchTopEdge(win);
   ipcMain.on('app:relaunch', (e) => {
     if (!fromWin(e)) return;
     app.relaunch();
     app.quit();
   });
+}
+
+/** This window was made without a frame (its auto-hiding title bar is the page's). */
+const framelessWindows = new WeakSet<BrowserWindow>();
+const frameless = (win: BrowserWindow) => framelessWindows.has(win);
+
+/** How close to the window's top edge (px) the cursor brings the auto-hiding title bar down. */
+const TOP_EDGE_PX = 8;
+
+/**
+ * Tells the page when the cursor reaches the window's top edge, so the auto-hiding title bar comes down (TitleBar.tsx).
+ * The page can't always see that itself: on Windows a frameless window keeps a resize border just inside its top
+ * edge, where the system takes the pointer and the page gets no events; a maximized one may also start above the
+ * screen. So the cursor's screen position is compared with the window's visible top edge (clamped to its display's
+ * work area), a few times a second while the window is shown.
+ */
+function watchTopEdge(win: BrowserWindow) {
+  let atTop = false;
+  const timer = setInterval(() => {
+    if (win.isDestroyed()) {
+      clearInterval(timer);
+      return;
+    }
+    if (!win.isVisible() || win.isMinimized()) return;
+    const b = win.getBounds();
+    const c = screen.getCursorScreenPoint();
+    const top = Math.max(b.y, screen.getDisplayMatching(b).workArea.y);
+    const now = c.x >= b.x && c.x < b.x + b.width && c.y >= top - 2 && c.y <= top + TOP_EDGE_PX;
+    if (now && !atTop) win.webContents.send('window:pointer-at-top');
+    atTop = now;
+  }, 100);
+  win.on('closed', () => clearInterval(timer));
 }
 
 function createWindow() {
@@ -683,6 +716,7 @@ function createWindow() {
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     }
   });
+  if (frameless) framelessWindows.add(win);
   setupWindow(win);
   setupLinks(win);
   setupNtrip(win);

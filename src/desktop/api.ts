@@ -95,6 +95,11 @@ export interface DesktopWindowApi {
   close(): void;
   isMaximized(): Promise<boolean>;
   onMaximized(listener: (maximized: boolean) => void): Unsubscribe;
+  /**
+   * The cursor reached the window's top edge, as the main process sees it on screen (the page may not: on Windows the
+   * system keeps a resize border there and the page gets no pointer events).
+   */
+  onPointerAtTop(listener: () => void): Unsubscribe;
 }
 
 /** The desktop app as a bridge for phones and tablets (desktop/bridgeServer.ts). */
