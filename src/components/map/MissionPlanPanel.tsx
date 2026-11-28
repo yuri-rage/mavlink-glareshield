@@ -619,7 +619,7 @@ export const MissionPlanPanel: React.FC<MissionPlanPanelProps> = ({
 
   return (
     <div
-      className={`${shell} z-[450] flex flex-col overflow-hidden rounded-lg border border-amber-500/40 bg-zinc-950/95 shadow-xl backdrop-blur-md`}
+      className={`${shell} z-[450] flex flex-col overflow-hidden rounded-lg border border-amber-500/40 bg-zinc-950/95 shadow-xl`}
       role="region"
       aria-label="Mission draft editor"
     >

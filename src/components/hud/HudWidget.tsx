@@ -1117,8 +1117,8 @@ export const HudWidget: React.FC = () => {
                   cameraStatus.state === 'error'
                     ? 'bg-red-400'
                     : cameraStatus.state === 'live'
-                      ? 'animate-pulse bg-emerald-400'
-                      : 'animate-pulse bg-amber-400'
+                      ? 'gs-blink bg-emerald-400'
+                      : 'gs-blink bg-amber-400'
                 )}
               />
               {cameraStatus.state === 'error' ? 'CAM ERR' : cameraStatus.state === 'live' ? 'CAM' : 'CAM …'}

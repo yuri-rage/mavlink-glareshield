@@ -77,7 +77,7 @@ export const MissionProfileStrip: React.FC<{
   return (
     <div
       style={style}
-      className="pointer-events-auto absolute z-[445] rounded-lg border border-zinc-700 bg-zinc-950/95 shadow-xl backdrop-blur-md"
+      className="pointer-events-auto absolute z-[445] rounded-lg border border-zinc-700 bg-zinc-950/95 shadow-xl"
     >
       <div className="flex items-center gap-2 border-b border-zinc-800 px-2 py-1 text-[10px]">
         <Mountain className="h-3.5 w-3.5 text-amber-400" />

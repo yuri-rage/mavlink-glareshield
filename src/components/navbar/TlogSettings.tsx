@@ -116,7 +116,7 @@ export const TlogIndicator: React.FC<{ onClick: () => void }> = ({ onClick }) =>
         rec ? 'border-red-500/40 bg-red-950/40 text-red-300' : 'border-amber-500/50 bg-amber-950/40 text-amber-300'
       }`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${rec ? 'animate-pulse bg-red-500' : 'bg-amber-400'}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${rec ? 'gs-blink bg-red-500' : 'bg-amber-400'}`} />
       {rec ? 'REC' : 'LOG ⚠'}
     </button>
   );
