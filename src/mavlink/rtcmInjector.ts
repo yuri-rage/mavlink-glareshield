@@ -510,15 +510,20 @@ export class RtcmInjector {
       this.updateState({ status: 'connected', source: 'serial' });
 
       // Start reader loop. A non-fatal read error (framing, parity, an overrun) gives the port a new readable and the
-      // loop carries on; a fatal one (unplugged) leaves none, and the stream has ended.
+      // loop carries on; a fatal one (unplugged) leaves none, and the stream has ended. So does a clean end (done):
+      // taking a new reader on that closed stream would read done at once, over and over.
       (async () => {
-        while (port.readable && this.isSerialReading) {
+        let ended = false;
+        while (port.readable && this.isSerialReading && !ended) {
           const reader = port.readable.getReader();
           this.serialReader = reader;
           try {
             while (this.isSerialReading) {
               const { value, done } = await reader.read();
-              if (done) break;
+              if (done) {
+                ended = true;
+                break;
+              }
               if (value && value.length > 0) {
                 this.processRawStream(value);
               }
