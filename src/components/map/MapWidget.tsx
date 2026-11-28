@@ -46,7 +46,7 @@ import {
 import { ParsedMissionFile, parseDroppedMissionFile } from '../../mavlink/missionFileParser';
 import { groupFencePolygons, missionManager, MissionManagerStatus } from '../../mavlink/missionManager';
 import { fliesSplines, joinLegs, missionPathLegs, routeIndices, type PathItem } from '../../mavlink/missionPath';
-import { terrainChecked } from '../../mavlink/missionProfile';
+import { profileMode } from '../../mavlink/missionProfile';
 import {
   checkRallyReadBack,
   rallyDraftFromItems,
@@ -2930,7 +2930,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
                   </button>
                 ))}
               </div>
-              {terrainChecked(getVehicleCategory(heartbeat.type)) && terrainOn && (
+              {profileMode(getVehicleCategory(heartbeat.type)) !== null && terrainOn && (
                 <ProfileToggle
                   disabledReason={planLayout === 'sheet' ? 'The profile needs a wider map (maximize it)' : undefined}
                 />
@@ -3043,7 +3043,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           planLayout === 'side' &&
           planLayer === 'mission' &&
           terrainOn &&
-          terrainChecked(getVehicleCategory(heartbeat.type)) && (
+          profileMode(getVehicleCategory(heartbeat.type)) !== null && (
             // Along the bottom, left of the side panel (264 px wide, 8 px in).
             <MissionProfileStrip
               style={{ left: 8, right: 280, bottom: 8 }}

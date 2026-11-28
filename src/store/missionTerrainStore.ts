@@ -6,8 +6,10 @@ import { create } from 'zustand';
 import type { MissionProfile, TerrainIssue } from '../mavlink/missionProfile';
 
 interface MissionTerrainState {
-  /** Null when not computed: not planning, not an aircraft, terrain off, or nothing to draw. */
+  /** Null when not computed: not planning, a vehicle without a profile (sub, tracker), terrain off, or nothing to draw. */
   profile: MissionProfile | null;
+  /** An aircraft's altitude over the terrain, or a ground vehicle's elevation along its route (missionProfile.ts). */
+  mode: 'altitude' | 'elevation';
   issues: TerrainIssue[];
   /** Elevation tiles for the route are being fetched. */
   loading: boolean;
@@ -32,6 +34,7 @@ try {
 
 export const useMissionTerrainStore = create<MissionTerrainState>((set) => ({
   profile: null,
+  mode: 'altitude',
   issues: [],
   loading: false,
   showProfile: shown,

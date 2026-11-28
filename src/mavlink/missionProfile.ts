@@ -28,6 +28,48 @@ export function terrainChecked(category: VehicleCategory): boolean {
   return category === 'copter' || category === 'plane' || category === 'generic';
 }
 
+/**
+ * What the profile strip shows for a vehicle: an aircraft's planned altitude over the terrain (checked for clearance),
+ * a ground vehicle's elevation along its route (the ground it drives on: climbs and descents, nothing to check), or
+ * nothing (sub, tracker).
+ */
+export function profileMode(category: VehicleCategory): 'altitude' | 'elevation' | null {
+  if (terrainChecked(category)) return 'altitude';
+  return category === 'rover' ? 'elevation' : null;
+}
+
+/**
+ * The profile as the ground's elevation along the route, for a ground vehicle: no planned altitude (a rover's
+ * waypoint altitude isn't flown), nothing checked, and the items marked on the ground beneath them.
+ */
+export function elevationProfile(p: MissionProfile): MissionProfile {
+  const points = p.points.map((q) => ({ ...q, alt: null, checked: false }));
+  const groundAt = (dist: number): number | null => {
+    let best: ProfilePoint | null = null;
+    for (const q of points)
+      if (q.terrain !== null && (!best || Math.abs(q.dist - dist) < Math.abs(best.dist - dist))) best = q;
+    return best?.terrain ?? null;
+  };
+  return { ...p, points, marks: p.marks.map((m) => ({ ...m, alt: groundAt(m.dist) })) };
+}
+
+/** Total climb and descent along the profile's terrain (m), skipping stretches without data. */
+export function elevationChange(points: ProfilePoint[]): { climb: number; descent: number } {
+  let climb = 0;
+  let descent = 0;
+  let last: number | null = null;
+  for (const q of points) {
+    if (q.terrain === null) continue;
+    if (last !== null) {
+      const d = q.terrain - last;
+      if (d > 0) climb += d;
+      else descent -= d;
+    }
+    last = q.terrain;
+  }
+  return { climb, descent };
+}
+
 export interface ProfilePoint {
   /** Distance along the route (m). */
   dist: number;
