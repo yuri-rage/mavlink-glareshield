@@ -18,7 +18,13 @@ start='<!-- release-notes:start -->'
 end='<!-- release-notes:end -->'
 hint='**Windows:** the installer is not code-signed yet, so SmartScreen may stop it. Choose **More info → Run anyway**.'
 
-generated=$(gh api "repos/$repo/releases/generate-notes" -f tag_name="$tag" -q .body)
+# The base is the previous version, named rather than left to GitHub's guess (its latest earlier release, which for a
+# hotfix on an older line, v0.2.2 after v0.3.0, isn't the version before it). None for the first release.
+prev=$(gh release list --repo "$repo" --limit 200 --json tagName -q '.[].tagName' |
+  { grep -E '^v[0-9]' || true; echo "$tag"; } | sort -uV | grep -B1 -xF "$tag" | head -n1)
+base=()
+[ "$prev" = "$tag" ] || base=(-f previous_tag_name="$prev")
+generated=$(gh api "repos/$repo/releases/generate-notes" -f tag_name="$tag" "${base[@]}" -q .body)
 
 # "* Title by @user in https://github.com/o/r/pull/N" → "- Title (#N)"; the compare link kept; the rest dropped.
 changes=$(printf '%s\n' "$generated" | sed -nE 's#^\* (.*) by @[^ ]+ in https://github\.com/[^ ]+/pull/([0-9]+)$#- \1 (\#\2)#p')
@@ -53,7 +59,8 @@ else
   [ -z "$rest_after" ] || rest_after=$'\n\n'"$rest_after"
 fi
 notes="$rest_before$block$rest_after"
-# Trim leading and trailing blank lines left by a dropped hint.
-notes=$(printf '%s\n' "$notes" | sed -e '/./,$!d' | sed -e ':a' -e '/^\n*$/{$d;N;ba' -e '}')
+# Trim leading blank lines left by a dropped hint (the command substitution drops trailing ones). Portable sed only:
+# this also runs by hand, on macOS too.
+notes=$(printf '%s\n' "$notes" | sed -e '/./,$!d')
 gh release edit "$tag" --repo "$repo" --notes "$notes" >/dev/null
 echo "Notes written to $tag ($count changes)."
