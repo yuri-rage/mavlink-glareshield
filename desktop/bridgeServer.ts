@@ -169,6 +169,9 @@ export class BridgeServer {
     this.clients.add(ws);
     this.hooks.onClients(this.clients.size);
     const json = (m: object) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(m));
+    // Which ntrip_connect is current: a newer one, or a disconnect, makes one still connecting moot (its cancellation is
+    // no error to report).
+    const attempt = { n: 0 };
     // This client's NTRIP through the bridge (one stream at a time, as bridge.py).
     const ntrip = new NtripStreams((channel, _id, value) => {
       if (channel === 'ntrip:data')
@@ -180,7 +183,7 @@ export class BridgeServer {
         const buf = Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data as ArrayBuffer);
         this.hooks.toVehicle(new Uint8Array(buf));
       } else {
-        void this.textCommand(String(data), ntrip, json);
+        void this.textCommand(String(data), ntrip, attempt, json);
       }
     });
     ws.on('close', () => {
@@ -192,7 +195,7 @@ export class BridgeServer {
   }
 
   /** A JSON command from a client's page (bridge.py handle_text_command); anything malformed is ignored. */
-  private async textCommand(text: string, ntrip: NtripStreams, json: (m: object) => void) {
+  private async textCommand(text: string, ntrip: NtripStreams, attempt: { n: number }, json: (m: object) => void) {
     let cmd: any;
     try {
       cmd = JSON.parse(text);
@@ -201,6 +204,7 @@ export class BridgeServer {
     }
     if (!cmd || typeof cmd !== 'object') return;
     if (cmd.type === 'ntrip_connect') {
+      const mine = ++attempt.n;
       const wasActive = ntrip.size > 0;
       await ntrip.closeAll();
       if (wasActive) json({ type: 'ntrip_status', status: 'disconnected' });
@@ -212,11 +216,13 @@ export class BridgeServer {
       }
       try {
         await ntrip.open('n', { ...cmd, port });
-        json({ type: 'ntrip_status', status: 'streaming' });
+        if (mine === attempt.n) json({ type: 'ntrip_status', status: 'streaming' });
       } catch (e: any) {
-        json({ type: 'ntrip_error', message: String(e?.message ?? e) });
+        // Superseded while connecting (a newer connect, or a disconnect): it was canceled, not refused.
+        if (mine === attempt.n) json({ type: 'ntrip_error', message: String(e?.message ?? e) });
       }
     } else if (cmd.type === 'ntrip_disconnect') {
+      attempt.n++;
       const wasActive = ntrip.size > 0;
       await ntrip.closeAll();
       if (wasActive) json({ type: 'ntrip_status', status: 'disconnected' });

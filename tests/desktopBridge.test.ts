@@ -169,6 +169,42 @@ if (casterUp) {
     'NTRIP disconnect: said so',
     a.texts.some((m) => m.type === 'ntrip_status' && m.status === 'disconnected')
   );
+  // A caster slow to answer: a disconnect, or a second connect, while the first is still connecting is no error.
+  const slow = net.createServer((s) =>
+    s.once('data', () => setTimeout(() => !s.destroyed && s.write(Buffer.from('ICY 200 OK\r\n')), 300))
+  );
+  slow.on('connection', (s) => s.on('error', () => {}));
+  if (
+    await new Promise<boolean>(
+      (res) => (slow.once('error', () => res(false)), slow.listen(2102, '127.0.0.1', () => res(true)))
+    )
+  ) {
+    a.texts.length = 0;
+    a.ws.send(JSON.stringify({ type: 'ntrip_connect', host: '127.0.0.1', port: 2102, mountpoint: 'M' }));
+    await sleep(50);
+    a.ws.send(JSON.stringify({ type: 'ntrip_disconnect' }));
+    await sleep(500);
+    check(
+      'NTRIP: disconnected while connecting: no error after it',
+      !a.texts.some((m) => m.type === 'ntrip_error'),
+      JSON.stringify(a.texts)
+    );
+    a.texts.length = 0;
+    a.ws.send(JSON.stringify({ type: 'ntrip_connect', host: '127.0.0.1', port: 2102, mountpoint: 'M' }));
+    await sleep(50);
+    a.ws.send(JSON.stringify({ type: 'ntrip_connect', host: '127.0.0.1', port: 2102, mountpoint: 'M' }));
+    await sleep(600);
+    check(
+      'NTRIP: connected again while connecting: the second streams, no error for the first',
+      !a.texts.some((m) => m.type === 'ntrip_error') && a.texts.filter((m) => m.status === 'streaming').length === 1,
+      JSON.stringify(a.texts)
+    );
+    a.ws.send(JSON.stringify({ type: 'ntrip_disconnect' }));
+    await sleep(100);
+    slow.close();
+  } else {
+    console.log('SKIP  NTRIP cancellation (port 2102 is taken here)');
+  }
   caster.close();
 } else {
   console.log('SKIP  NTRIP through the bridge (port 2101 is taken here)');
