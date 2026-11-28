@@ -1,5 +1,6 @@
-// The mission's altitude profile, along the bottom of the map while planning (aircraft, terrain data on): distance
-// along the route against altitude above sea level. Terrain as a filled area with the clearance as a faint line above
+// The mission's profile, along the bottom of the map while planning (terrain data on): distance along the route
+// against height above sea level. For a ground vehicle (rover, boat) it's the elevation along the route only: the
+// ground with its total climb and descent, the items marked on it, nothing checked. For an aircraft, as follows. Terrain as a filled area with the clearance as a faint line above
 // it, the planned route over it (red where it is within the clearance or below the terrain), the route's items
 // marked. Hover for distance, planned altitude, terrain and height above it there; the point is marked on the map too
 // (and pointing at the route on the map marks it here); click to bring it into view on the map.
@@ -8,6 +9,7 @@ import React, { useMemo } from 'react';
 
 import { Mountain, X } from 'lucide-react';
 
+import { elevationChange } from '../../mavlink/missionProfile';
 import { useMissionPlanStore } from '../../store/missionPlanStore';
 import { useMissionTerrainStore } from '../../store/missionTerrainStore';
 import { useTerrainStore } from '../../store/terrainStore';
@@ -22,6 +24,7 @@ export const MissionProfileStrip: React.FC<{
   onShowPoint?: (lat: number, lon: number) => void;
 }> = ({ style, onShowPoint }) => {
   const profile = useMissionTerrainStore((s) => s.profile);
+  const elevation = useMissionTerrainStore((s) => s.mode === 'elevation');
   const loading = useMissionTerrainStore((s) => s.loading);
   const issues = useMissionTerrainStore((s) => s.issues);
   const clearance = useTerrainStore((s) => s.clearanceM);
@@ -72,6 +75,7 @@ export const MissionProfileStrip: React.FC<{
   }, [profile, clearance, W]);
 
   const p = hover !== null && profile ? profile.points[hover] : null;
+  const change = useMemo(() => (elevation && profile ? elevationChange(profile.points) : null), [elevation, profile]);
   const minAgl = issues.length ? Math.min(...issues.map((i) => i.minAgl)) : null;
 
   return (
@@ -81,8 +85,13 @@ export const MissionProfileStrip: React.FC<{
     >
       <div className="flex items-center gap-2 border-b border-zinc-800 px-2 py-1 text-[10px]">
         <Mountain className="h-3.5 w-3.5 text-amber-400" />
-        <span className="font-bold uppercase tracking-wider text-zinc-300">Profile</span>
+        <span className="font-bold uppercase tracking-wider text-zinc-300">{elevation ? 'Elevation' : 'Profile'}</span>
         {profile && <span className="font-mono text-zinc-500">{formatDistance(profile.length).full}</span>}
+        {change && (
+          <span className="font-mono text-zinc-400" title="Total climb and descent along the route">
+            ↑ {formatAltitude(change.climb).full} ↓ {formatAltitude(change.descent).full}
+          </span>
+        )}
         {loading && <span className="animate-pulse text-sky-300">loading terrain…</span>}
         {minAgl !== null && (
           <span className="font-mono text-red-300">
@@ -92,12 +101,12 @@ export const MissionProfileStrip: React.FC<{
             at lowest
           </span>
         )}
-        {profile?.homeFrom === 'terrain' && (
+        {!elevation && profile?.homeFrom === 'terrain' && (
           <span className="text-amber-300" title="The mission's home has no altitude: the terrain there is used">
             home altitude from terrain
           </span>
         )}
-        {profile?.homeFrom === 'unknown' && (
+        {!elevation && profile?.homeFrom === 'unknown' && (
           <span
             className="text-amber-300"
             title="Relative altitudes are above home: connect to a vehicle, or give the mission a home"
@@ -106,11 +115,15 @@ export const MissionProfileStrip: React.FC<{
           </span>
         )}
         <span className="ml-auto min-w-0 truncate font-mono text-zinc-400">
-          {p
-            ? `${formatDistance(p.dist).full} · ${p.alt !== null ? formatAltitude(p.alt).full : '?'} MSL · terrain ${p.terrain !== null ? formatAltitude(p.terrain).full : '?'}${
-                p.alt !== null && p.terrain !== null ? ` · ${formatAltitude(p.alt - p.terrain).full} above` : ''
-              }`
-            : `clearance ${formatAltitude(clearance).full}`}
+          {p && elevation
+            ? `${formatDistance(p.dist).full} · elevation ${p.terrain !== null ? formatAltitude(p.terrain).full : '?'}`
+            : p
+              ? `${formatDistance(p.dist).full} · ${p.alt !== null ? formatAltitude(p.alt).full : '?'} MSL · terrain ${p.terrain !== null ? formatAltitude(p.terrain).full : '?'}${
+                  p.alt !== null && p.terrain !== null ? ` · ${formatAltitude(p.alt - p.terrain).full} above` : ''
+                }`
+              : elevation
+                ? ''
+                : `clearance ${formatAltitude(clearance).full}`}
         </span>
         <button
           type="button"
@@ -164,7 +177,7 @@ export const MissionProfileStrip: React.FC<{
               </g>
             ))}
             <path d={chart.terrainPath} fill="#78716c" fillOpacity={0.45} stroke="#a8a29e" strokeWidth={1} />
-            {clearance > 0 && (
+            {!elevation && clearance > 0 && (
               <path
                 d={chart.clearPath}
                 fill="none"
@@ -229,7 +242,9 @@ export const ProfileToggle: React.FC<{ disabledReason?: string }> = ({ disabledR
       type="button"
       aria-pressed={shown}
       disabled={Boolean(disabledReason)}
-      title={disabledReason ?? 'Altitude profile over the terrain'}
+      title={
+        disabledReason ?? 'Profile along the route: altitude over the terrain, or the elevation for a ground vehicle'
+      }
       onClick={() => useMissionTerrainStore.getState().setShowProfile(!shown)}
       className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[11px] font-bold shadow-md disabled:opacity-40 ${
         shown

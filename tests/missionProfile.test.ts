@@ -203,5 +203,50 @@ check(
     !mp.terrainChecked('tracker')
 );
 
+// Ground vehicles: the elevation along the route, nothing checked.
+check(
+  'profile mode: aircraft get altitude, a rover elevation, sub and tracker nothing',
+  mp.profileMode('copter') === 'altitude' &&
+    mp.profileMode('generic') === 'altitude' &&
+    mp.profileMode('rover') === 'elevation' &&
+    mp.profileMode('sub') === null &&
+    mp.profileMode('tracker') === null
+);
+{
+  const pt = (dist: number, terrain: number | null, alt: number | null = 100) => ({
+    dist,
+    lat: 0,
+    lon: 0,
+    alt,
+    terrain,
+    leg: 0,
+    checked: true,
+  });
+  const base = {
+    points: [pt(0, 10), pt(20, 14), pt(40, null), pt(60, 11), pt(80, 16)],
+    marks: [
+      { item: 0, dist: 0, alt: 100 },
+      { item: 1, dist: 78, alt: 100 },
+    ],
+    length: 80,
+    homeMsl: 10,
+    homeFrom: 'mission' as const,
+  };
+  const e = mp.elevationProfile(base);
+  check(
+    'elevation: no planned altitude, nothing checked',
+    e.points.every((q) => q.alt === null && !q.checked)
+  );
+  check(
+    'elevation: items marked on the ground beneath them',
+    e.marks[0].alt === 10 && e.marks[1].alt === 16,
+    JSON.stringify(e.marks)
+  );
+  check('elevation: the input is left alone', base.points[0].alt === 100 && base.marks[0].alt === 100);
+  const c = mp.elevationChange(base.points);
+  // 10 → 14 (+4), [no data], 14 → 11 (-3), 11 → 16 (+5).
+  check('elevation: climb and descent, gaps skipped', c.climb === 9 && c.descent === 3, JSON.stringify(c));
+}
+
 console.log(failures.length ? `\n${failures.length} profile check(s) FAILED` : '\nAll profile checks PASSED');
 process.exit(failures.length ? 1 : 0);

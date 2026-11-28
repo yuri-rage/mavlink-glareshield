@@ -1,12 +1,12 @@
 // Keeps the mission draft's terrain profile and clearance issues current while planning (store/missionTerrainStore):
-// fetches the elevation tiles along the route, then computes from them. Only for aircraft (terrainChecked) with
-// terrain data on. Recomputed a moment after the draft, the clearance or the vehicle's home changes.
+// fetches the elevation tiles along the route, then computes from them, with terrain data on. Aircraft get their
+// altitude over the terrain, checked for clearance; ground vehicles the elevation along the route (profileMode). Recomputed a moment after the draft, the clearance or the vehicle's home changes.
 
 import { useEffect } from 'react';
 
 import { getVehicleCategory } from '../../mavlink/messages';
 import { fliesSplines, missionPathLegs, routeIndices, type PathItem } from '../../mavlink/missionPath';
-import { missionProfile, terrainChecked, terrainIssues } from '../../mavlink/missionProfile';
+import { elevationProfile, missionProfile, profileMode, terrainIssues } from '../../mavlink/missionProfile';
 import { terrainService } from '../../mavlink/terrainBoot';
 import { useMissionPlanStore } from '../../store/missionPlanStore';
 import { useMissionTerrainStore } from '../../store/missionTerrainStore';
@@ -28,7 +28,8 @@ export function useMissionTerrain() {
 
   useEffect(() => {
     const category = getVehicleCategory(vehicleType);
-    if (!active || !enabled || !terrainChecked(category)) {
+    const mode = profileMode(category);
+    if (!active || !enabled || !mode) {
       useMissionTerrainStore.setState({ profile: null, issues: [], loading: false });
       return;
     }
@@ -63,11 +64,11 @@ export function useMissionTerrain() {
       // Heights in the warnings in the user's units, whole feet or meters; above zero is at least 1 (never "0 ft below").
       const whole = (v: number) => (v > 0 ? Math.max(1, Math.round(v)) : Math.round(v));
       const fmt = (m: number) => (imperial ? `${whole(m * 3.28084)} ft` : `${whole(m)} m`);
-      useMissionTerrainStore.setState({
-        profile,
-        issues: terrainIssues(profile, legs, clearanceM, fmt),
-        loading: false,
-      });
+      useMissionTerrainStore.setState(
+        mode === 'elevation'
+          ? { profile: elevationProfile(profile), mode, issues: [], loading: false }
+          : { profile, mode, issues: terrainIssues(profile, legs, clearanceM, fmt), loading: false }
+      );
     }, DEBOUNCE_MS);
     return () => {
       cancelled = true;
