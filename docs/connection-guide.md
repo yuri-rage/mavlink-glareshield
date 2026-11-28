@@ -397,7 +397,7 @@ Glareshield remembers the device: automatic reconnects after a cable blip, and l
 | Firefox, Safari, iOS | Not available | Use the bridge over WebSocket |
 
 Limitations:
-- **NTRIP via the bridge** needs the bridge's WebSocket side channel, so it is not available on a serial link. A USB RTK base station (RTK widget → serial) still works alongside a serial telemetry link.
+- **NTRIP via the bridge** needs the bridge's WebSocket side channel, so it is not available on a serial link in the web app (the desktop app reaches the caster itself, on any link). A USB RTK base station (RTK widget → serial) still works alongside a serial telemetry link.
 - One program at a time can own a serial port. Close Mission Planner (or any other app or tab) that has the port open first.
 - On Android, some devices ship a driver that permanently claims the board's USB interface; there is no way around that from a web page, so use the bridge there.
 

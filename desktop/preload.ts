@@ -38,6 +38,13 @@ contextBridge.exposeInMainWorld('glareshieldDesktop', {
     onData: (id: string, listener: (data: Uint8Array) => void) => onFor('link:data', id, listener),
     onClosed: (id: string, listener: (reason: string) => void) => onFor('link:closed', id, listener),
   },
+  ntrip: {
+    open: (request: unknown) => ipcRenderer.invoke('ntrip:open', request),
+    sendGga: (id: string, sentence: string) => ipcRenderer.send('ntrip:gga', id, sentence),
+    close: (id: string) => ipcRenderer.invoke('ntrip:close', id),
+    onData: (id: string, listener: (data: Uint8Array) => void) => onFor('ntrip:data', id, listener),
+    onClosed: (id: string, listener: (reason: string) => void) => onFor('ntrip:closed', id, listener),
+  },
   serial: {
     list: () => ipcRenderer.invoke('serial:list'),
     onChoosePort: (listener: Listener<[unknown]>) => on('serial:choose-port', listener),
