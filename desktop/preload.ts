@@ -39,7 +39,7 @@ contextBridge.exposeInMainWorld('glareshieldDesktop', {
     onClosed: (id: string, listener: (reason: string) => void) => onFor('link:closed', id, listener),
   },
   ntrip: {
-    open: (request: unknown) => ipcRenderer.invoke('ntrip:open', request),
+    open: (id: string, request: unknown) => ipcRenderer.invoke('ntrip:open', id, request),
     sendGga: (id: string, sentence: string) => ipcRenderer.send('ntrip:gga', id, sentence),
     close: (id: string) => ipcRenderer.invoke('ntrip:close', id),
     onData: (id: string, listener: (data: Uint8Array) => void) => onFor('ntrip:data', id, listener),

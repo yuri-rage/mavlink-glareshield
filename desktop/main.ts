@@ -18,7 +18,7 @@ import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, net as electronNet, ipcMain, protocol, session, shell } from 'electron';
 import type { AppUpdater, ProgressInfo, UpdateInfo } from 'electron-updater';
 
-import { checkNtripRequest, connectNtrip, type NtripSession } from './ntripClient';
+import { NtripStreams } from './ntripStreams';
 import { hasVehicleHeartbeat, UDP_VEHICLE_TIMEOUT_MS } from './udpVehicles';
 
 const SCHEME = 'app';
@@ -285,52 +285,29 @@ function openLink(win: BrowserWindow, config: any): Promise<string> {
 /** Close every link and caster stream (the page reloaded, crashed or closed: none of them are wanted any more). */
 function closeAllLinks(): Promise<void> {
   linkGeneration++;
-  const closing = [...links.values(), ...ntripSessions.values()].map((l) => l.close());
+  const closing = [...links.values()].map((l) => l.close());
   links.clear();
-  ntripSessions.clear();
-  return Promise.all(closing).then(() => {});
+  return Promise.all([...closing, ntripStreams?.closeAll()]).then(() => {});
 }
 
 // ---- NTRIP (the caster reached from here, no bridge) -------------------------------------------------------------
 
-const ntripSessions = new Map<string, NtripSession>();
-let nextNtripId = 1;
+let ntripStreams: NtripStreams | null = null;
 
 function setupNtrip(win: BrowserWindow) {
   const fromWin = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) => e.sender === win.webContents;
-  ipcMain.handle('ntrip:open', async (e, request: unknown) => {
+  const streams = (ntripStreams = new NtripStreams((channel, id, value) => {
+    if (!win.isDestroyed()) win.webContents.send(channel, id, value);
+  }));
+  // The page names the stream and listens on it first (the caster's first RTCM can come with its "200 OK").
+  ipcMain.handle('ntrip:open', (e, id: unknown, request: unknown) => {
     if (!fromWin(e)) throw new Error('Not this window');
-    const r = checkNtripRequest(request as never);
-    if (typeof r === 'string') throw new Error(r);
-    const id = `ntrip-${nextNtripId++}`;
-    const generation = linkGeneration;
-    const session = await connectNtrip(r, {
-      onData: (data) => {
-        if (ntripSessions.has(id) && !win.isDestroyed()) win.webContents.send('ntrip:data', id, data);
-      },
-      onClosed: (reason) => {
-        if (!ntripSessions.delete(id)) return;
-        if (!win.isDestroyed()) win.webContents.send('ntrip:closed', id, reason);
-      },
-    });
-    // The page reloaded while the caster was answering: nobody holds this ID.
-    if (generation !== linkGeneration || win.isDestroyed()) {
-      await session.close();
-      throw new Error('The page reloaded before the caster answered');
-    }
-    ntripSessions.set(id, session);
-    return id;
+    return streams.open(id, request);
   });
   ipcMain.on('ntrip:gga', (e, id: unknown, sentence: unknown) => {
-    if (!fromWin(e) || typeof id !== 'string' || typeof sentence !== 'string') return;
-    ntripSessions.get(id)?.sendGga(sentence);
+    if (fromWin(e)) streams.sendGga(id, sentence);
   });
-  ipcMain.handle('ntrip:close', async (e, id: unknown) => {
-    if (!fromWin(e) || typeof id !== 'string') return;
-    const s = ntripSessions.get(id);
-    ntripSessions.delete(id);
-    await s?.close();
-  });
+  ipcMain.handle('ntrip:close', (e, id: unknown) => (fromWin(e) ? streams.close(id) : undefined));
 }
 
 function setupLinks(win: BrowserWindow) {
