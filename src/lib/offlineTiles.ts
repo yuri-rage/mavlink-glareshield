@@ -214,7 +214,7 @@ export async function listAreas(): Promise<OfflineArea[]> {
   return all.sort((a, b) => b.created - a.created);
 }
 
-export async function saveArea(area: OfflineArea, urls?: string[]): Promise<void> {
+async function saveArea(area: OfflineArea, urls?: string[]): Promise<void> {
   await tx([AREAS, AREA_TILES], 'readwrite', (t) => {
     t.objectStore(AREAS).put(area);
     if (urls) t.objectStore(AREA_TILES).put(urls, area.id);
