@@ -9,6 +9,8 @@ directly, which a browser can't do:
 - **USB serial:** a telemetry radio or a flight controller's USB port, chosen from a list of the computer's serial
   ports.
 - **WebSocket:** the Docker bridge or Mission Planner, as in the web app.
+- **NTRIP:** the RTK widget's caster (HTTP Streaming) is reached by the app itself, on any link, so RTK corrections
+  don't need the bridge either. It sends the vehicle's position to the caster every 10 s when **Send NMEA GGA VRS Feedback** is on (VRS casters).
 
 You don't need the bridge, Docker, certificates or browser settings. Use the bridge when phones and tablets should
 connect too.

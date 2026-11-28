@@ -21,6 +21,27 @@ export interface DesktopLinkApi {
   onClosed(id: string, listener: (reason: string) => void): Unsubscribe;
 }
 
+/** A caster and mountpoint (NTRIP), reached by the desktop itself: RTK corrections without the bridge. */
+export interface DesktopNtripRequest {
+  host: string;
+  port: number;
+  mountpoint: string;
+  username?: string;
+  password?: string;
+}
+
+export interface DesktopNtripApi {
+  /** Connects and logs in; resolves with the stream's ID once the caster accepts, or rejects with why not. */
+  open(request: DesktopNtripRequest): Promise<string>;
+  /** The vehicle's position for the caster (one NMEA GGA sentence). */
+  sendGga(id: string, sentence: string): void;
+  close(id: string): Promise<void>;
+  /** RTCM from the caster. */
+  onData(id: string, listener: (data: Uint8Array) => void): Unsubscribe;
+  /** The stream ended on its own (the caster closed it, the network dropped): why. */
+  onClosed(id: string, listener: (reason: string) => void): Unsubscribe;
+}
+
 export interface SerialPortChoice {
   portId: string;
   /** What to show: the port name and, when known, the device. */
@@ -68,6 +89,7 @@ export interface DesktopApi {
   version: string;
   platform: 'linux' | 'win32' | 'darwin' | string;
   link: DesktopLinkApi;
+  ntrip: DesktopNtripApi;
   serial: DesktopSerialApi;
   update: DesktopUpdateApi;
 }

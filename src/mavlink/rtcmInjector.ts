@@ -319,6 +319,8 @@ export class RtcmInjector {
   private unsubBridgeStatus: (() => void) | null = null;
   /** The caster the bridge was told to reach, to ask again once a dropped link is back. Null: not via the bridge. */
   private bridgeConfig: NtripConfig | null = null;
+  /** The desktop app's caster stream (its ID), and the listeners on it. */
+  private desktopNtrip: { id: string; unsubscribe: () => void } | null = null;
   /** Which connection is current: each disconnect moves it on, so a stream that ends late can't tear down a newer one. */
   private generation = 0;
 
@@ -616,6 +618,9 @@ export class RtcmInjector {
         socket.onclose = () => {
           void this.streamEnded(gen, this.state.status === 'error' ? this.state.error : null);
         };
+      } else if (desktopApi()) {
+        // The desktop app reaches the caster itself (desktop/ntripClient.ts): no bridge, no proxy, any link.
+        await this.connectViaDesktop(config, gen);
       } else {
         // HTTP streaming mode:
         // In the dev server, try its proxy endpoint first (/api/ntrip-stream), which connects directly to the caster
@@ -655,11 +660,6 @@ export class RtcmInjector {
         if (!response || !response.ok) {
           // Through the bridge only when the link is the bridge's WebSocket (its text channel carries NTRIP).
           const viaWs = mavlinkConnection.getLink().kind === 'websocket';
-          if (mavlinkConnection.getStatus() === 'connected' && !viaWs && desktopApi()) {
-            throw new Error(
-              'NTRIP needs the bridge for now: connect over WebSocket to it, or use a USB RTK base station (Serial). The desktop app reaching the caster directly is planned.'
-            );
-          }
           if (mavlinkConnection.getStatus() === 'connected' && viaWs) {
             console.log('[NTRIP] Local Vite proxy unavailable, connecting to caster via MAVLink bridge proxy...');
             await this.connectViaBridge(config);
@@ -737,6 +737,41 @@ export class RtcmInjector {
       });
       throw err;
     }
+  }
+
+  /** The desktop app connects to the caster and streams its RTCM here; GGA goes back the same way. */
+  private async connectViaDesktop(config: NtripConfig, gen: number) {
+    const desk = desktopApi()!;
+    let id: string;
+    try {
+      id = await desk.ntrip.open({
+        host: config.host.trim(),
+        port: config.port || 2101,
+        mountpoint: config.mountpoint.trim().replace(/^\//, ''),
+        username: config.username,
+        password: config.password,
+      });
+    } catch (err: any) {
+      // Electron wraps the main process's error: "Error invoking remote method 'ntrip:open': Error: <why>".
+      throw new Error(String(err?.message ?? err).replace(/^Error invoking remote method '[^']*': (Error: )?/, ''));
+    }
+    // Disconnected (or connected again) while the caster was answering: this stream isn't wanted.
+    if (gen !== this.generation) {
+      void desk.ntrip.close(id);
+      return;
+    }
+    const offData = desk.ntrip.onData(id, (data) => this.processRawStream(data));
+    const offClosed = desk.ntrip.onClosed(id, (reason) => void this.streamEnded(gen, reason));
+    this.desktopNtrip = {
+      id,
+      unsubscribe: () => {
+        offData();
+        offClosed();
+      },
+    };
+    // The caster has accepted: it streams from here.
+    this.updateState({ status: 'streaming', source: 'ntrip', error: null });
+    if (config.sendGga) this.startGgaLoop((gga) => desk.ntrip.sendGga(id, gga));
   }
 
   public async connectViaBridge(config: NtripConfig) {
@@ -885,6 +920,15 @@ export class RtcmInjector {
     if (this.ntripAbortController) {
       this.ntripAbortController.abort();
       this.ntripAbortController = null;
+    }
+
+    if (this.desktopNtrip) {
+      const { id, unsubscribe } = this.desktopNtrip;
+      this.desktopNtrip = null;
+      unsubscribe();
+      await desktopApi()
+        ?.ntrip.close(id)
+        .catch(() => {});
     }
 
     if (this.unsubBridgeText) {
