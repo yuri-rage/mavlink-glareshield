@@ -147,6 +147,10 @@ export const CameraWidget: React.FC = () => {
     zooming.current = null;
     mavlinkConnection.send(packet(cameraCommands.zoom(0)));
   };
+  // Held while the widget goes away (its tab switched, its pane closed): the camera would keep zooming.
+  const zoomStopRef = useRef(zoomStop);
+  zoomStopRef.current = zoomStop;
+  useEffect(() => () => zoomStopRef.current(), []);
 
   const badge = (key: string) => feedbackBadge(commandFeedback, key, nowMs, 'h-3.5 w-3.5');
   const ring = (key: string) => feedbackRing(commandFeedback, key, nowMs);
