@@ -319,6 +319,8 @@ export class RtcmInjector {
   private unsubBridgeStatus: (() => void) | null = null;
   /** The caster the bridge was told to reach, to ask again once a dropped link is back. Null: not via the bridge. */
   private bridgeConfig: NtripConfig | null = null;
+  /** Which connection is current: each disconnect moves it on, so a stream that ends late can't tear down a newer one. */
+  private generation = 0;
 
   constructor() {
     this.startRateMeter();
@@ -495,6 +497,7 @@ export class RtcmInjector {
     }
 
     await this.disconnect();
+    const gen = this.generation;
     this.updateState({ status: 'connecting', source: 'serial', error: null });
 
     try {
@@ -506,12 +509,13 @@ export class RtcmInjector {
       this.isSerialReading = true;
       this.updateState({ status: 'connected', source: 'serial' });
 
-      // Start reader loop
+      // Start reader loop. A non-fatal read error (framing, parity, an overrun) gives the port a new readable and the
+      // loop carries on; a fatal one (unplugged) leaves none, and the stream has ended.
       (async () => {
         while (port.readable && this.isSerialReading) {
+          const reader = port.readable.getReader();
+          this.serialReader = reader;
           try {
-            const reader = port.readable.getReader();
-            this.serialReader = reader;
             while (this.isSerialReading) {
               const { value, done } = await reader.read();
               if (done) break;
@@ -519,14 +523,16 @@ export class RtcmInjector {
                 this.processRawStream(value);
               }
             }
-            reader.releaseLock();
           } catch (err: any) {
             if (this.isSerialReading) {
               console.error('[RTCM] Web Serial read error:', err);
             }
-            break;
+          } finally {
+            reader.releaseLock();
+            if (this.serialReader === reader) this.serialReader = null;
           }
         }
+        if (this.isSerialReading) void this.streamEnded(gen, 'The base station stopped sending (unplugged?)');
       })();
     } catch (err: any) {
       this.updateState({
@@ -542,6 +548,7 @@ export class RtcmInjector {
    */
   public async connectNtrip(config: NtripConfig) {
     await this.disconnect();
+    const gen = this.generation;
     this.updateState({ status: 'connecting', source: 'ntrip', error: null });
 
     const host = config.host.trim();
@@ -600,10 +607,9 @@ export class RtcmInjector {
           this.updateState({ status: 'error', error: 'WebSocket connection failed' });
         };
 
+        // Closed by the caster (or after an error): the GGA loop stops too. An error already shown stays shown.
         socket.onclose = () => {
-          if (this.state.status === 'connected' || this.state.status === 'streaming') {
-            this.updateState({ status: 'disconnected', source: 'none' });
-          }
+          void this.streamEnded(gen, this.state.status === 'error' ? this.state.error : null);
         };
       } else {
         // HTTP streaming mode:
@@ -701,6 +707,8 @@ export class RtcmInjector {
           });
         }
 
+        // The caster ending the stream, or the stream failing, ends the connection (and its GGA loop). Disconnect
+        // aborts the fetch: that's a newer generation, so streamEnded leaves it alone.
         (async () => {
           try {
             while (true) {
@@ -710,11 +718,10 @@ export class RtcmInjector {
                 this.processRawStream(value);
               }
             }
+            void this.streamEnded(gen, 'The caster closed the stream');
           } catch (err: any) {
-            if (err?.name !== 'AbortError') {
-              console.error('[NTRIP] Fetch stream error:', err);
-              this.updateState({ status: 'error', error: err?.message || 'Stream interrupted' });
-            }
+            if (err?.name !== 'AbortError') console.error('[NTRIP] Fetch stream error:', err);
+            void this.streamEnded(gen, err?.message || 'Stream interrupted');
           }
         })();
       }
@@ -846,9 +853,20 @@ export class RtcmInjector {
   }
 
   /**
+   * A stream that ended on its own (a caster closing, a base station unplugged): tear it down as Disconnect would,
+   * then say why. Nothing if that connection was already replaced or disconnected.
+   */
+  private async streamEnded(gen: number, error: string | null) {
+    if (gen !== this.generation) return;
+    await this.disconnect();
+    if (error) this.updateState({ status: 'error', error });
+  }
+
+  /**
    * Disconnects active serial or NTRIP stream.
    */
   public async disconnect() {
+    this.generation++;
     if (this.ggaIntervalTimer) {
       clearInterval(this.ggaIntervalTimer);
       this.ggaIntervalTimer = null;
