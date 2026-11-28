@@ -1,7 +1,8 @@
 // Draws the mission draft on the map while planning and handles editing it there:
 // - numbered amber pins and the route, above the vehicle's mission; clicking a pin selects it;
-// - the selected pin (never home) can be dragged; the route follows live and the move is committed on release,
-//   as one undo step. Only the selected pin drags, so a finger panning the map from a pin can't move it;
+// - a pin (never home) can be dragged; the route follows live and the move is committed on release, as one undo step
+//   (and the pin is then selected). With a mouse any pin drags at once; on a touch screen only the selected one, so a
+//   finger panning the map from a pin can't move it;
 // - around each waypoint, its radius as a thin dashed circle: yellow for the item's own radius, white for the
 //   vehicle's default (waypointRadius.ts says which the vehicle flies);
 // - a "+" handle in the middle of each leg inserts a waypoint there (shown when the leg is long enough to tap);
@@ -39,12 +40,18 @@ const DRAFT_MARKERS_PANE = 'draftMarkersPane';
 /** Legs shorter than this on screen get no "+" handle: it would sit on top of the pins. */
 const MIN_HANDLE_LEG_PX = 56;
 
-function pinIcon(label: string, selected: boolean, isHome: boolean): L.DivIcon {
+/**
+ * Pins drag without being selected first unless a touch screen is the main input (a coarse pointer), where a finger
+ * panning the map from a pin mustn't move it.
+ */
+const dragAnyPin = () => typeof window !== 'undefined' && !window.matchMedia?.('(pointer: coarse)').matches;
+
+function pinIcon(label: string, selected: boolean, isHome: boolean, draggable = selected): L.DivIcon {
   const fill = selected ? '#0ea5e9' : isHome ? '#b45309' : '#f59e0b';
   const text = selected ? '#075985' : '#92400e';
   const { html, w, h } = wpPinHtml({ label, fill, text, scale: selected ? 1.2 : 1, stroke: selected ? 1.8 : 1.2 });
   return L.divIcon({
-    className: `wp-marker${selected && !isHome ? ' gs-draft-draggable' : ''}`,
+    className: `wp-marker${draggable && !isHome ? ' gs-draft-draggable' : ''}`,
     html,
     iconSize: [w, h],
     iconAnchor: [w / 2, h - 1],
@@ -59,13 +66,13 @@ const handleIcon = L.divIcon({
 });
 
 /** A rally point flag: magenta (the vehicle's rally color), "R1"…; the selected one blue and larger. */
-function rallyIcon(label: string, selected: boolean, dim: boolean): L.DivIcon {
+function rallyIcon(label: string, selected: boolean, dim: boolean, draggable = selected): L.DivIcon {
   const fill = selected ? '#0ea5e9' : '#d946ef';
   const scale = selected ? 1.2 : 1;
   const w = Math.round(28 * scale);
   const h = Math.round(34 * scale);
   return L.divIcon({
-    className: `rally-marker${selected ? ' gs-draft-draggable' : ''}`,
+    className: `rally-marker${draggable ? ' gs-draft-draggable' : ''}`,
     html: `
       <div style="opacity:${dim ? 0.45 : 1}; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.85)); width: ${w}px; height: ${h}px;">
         <svg width="${w}" height="${h}" viewBox="0 0 28 34" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -231,9 +238,9 @@ export function useDraftLayer(
     points.forEach((r) => {
       const isHome = r.index === 0;
       const isSel = editing && selected === r.index;
-      const draggable = isSel && !isHome;
+      const draggable = editing && !isHome && (isSel || dragAnyPin());
       const marker = L.marker([r.lat, r.lon], {
-        icon: pinIcon(isHome ? 'H' : String(r.index), isSel, isHome),
+        icon: pinIcon(isHome ? 'H' : String(r.index), isSel, isHome, draggable),
         pane: DRAFT_MARKERS_PANE,
         zIndexOffset: isSel ? 1000 : isHome ? 200 : 100,
         keyboard: false,
@@ -296,15 +303,17 @@ export function useDraftLayer(
     rally.points.forEach((p, i) => {
       if (!(Math.abs(p.lat) <= 90 && Math.abs(p.lon) <= 180) || (p.lat === 0 && p.lon === 0)) return;
       const isSel = editing && rallySelected === i;
+      // As waypoints: any flag with a mouse, the selected one on a touch screen.
+      const draggable = editing && (isSel || dragAnyPin());
       const marker = L.marker([p.lat, p.lon], {
-        icon: rallyIcon(`R${i + 1}`, isSel, !editing),
+        icon: rallyIcon(`R${i + 1}`, isSel, !editing, draggable),
         pane: DRAFT_MARKERS_PANE,
         zIndexOffset: isSel ? 1100 : editing ? 300 : 50,
         keyboard: false,
-        draggable: isSel,
-        autoPan: isSel,
+        draggable,
+        autoPan: draggable,
         interactive: editing,
-        title: isSel ? `R${i + 1}: drag to move` : `Rally point R${i + 1}`,
+        title: draggable ? `R${i + 1}: drag to move` : `Rally point R${i + 1}`,
       })
         .on('click', () => useMissionPlanStore.getState().rallySelect(i))
         .on('contextmenu', (e: L.LeafletMouseEvent) => {
@@ -313,7 +322,7 @@ export function useDraftLayer(
           useMissionPlanStore.getState().rallySelect(i);
           onItemMenuRef.current?.('rally', i, e.containerPoint.x, e.containerPoint.y);
         });
-      if (isSel) {
+      if (draggable) {
         marker.on('dragend', () => {
           const q = marker.getLatLng();
           if (q.lat === p.lat && q.lng === p.lon) return; // pressed and released without moving
