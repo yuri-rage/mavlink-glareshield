@@ -178,7 +178,8 @@ export class MavlinkConnection {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
       this.connect();
-    } else if (this.status === 'connected' && now - this.lastRxAt > 3000) {
+    } else if (this.status === 'connected' && this.link.kind !== 'udp' && now - this.lastRxAt > 3000) {
+      // (A UDP listener has no connection to go stale; reopening it would only drop and rebind the port.)
       this.handleLinkLoss('Link silent after network change; reconnecting');
     }
   }

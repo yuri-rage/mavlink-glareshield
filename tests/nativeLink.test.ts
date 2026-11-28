@@ -147,10 +147,19 @@ check(
   for (let n = 0; n < 50 && udp.getStatus() !== 'connected'; n++) await new Promise((r) => setTimeout(r, 10));
   udp.checkLinkSilence(Date.now() + LINK_SILENCE_TIMEOUT_MS * 3);
   check('UDP: a silent listener is left open', udp.getStatus() === 'connected' && f.log.closedIds.length === 0);
+  // The network coming back, or the page shown again: a quiet UDP listener isn't torn down and rebound either.
+  udp.checkLinkNow(Date.now() + 10_000);
+  check(
+    'UDP: checkLinkNow leaves a quiet listener open',
+    udp.getStatus() === 'connected' && f.log.closedIds.length === 0
+  );
   udp.disconnect();
   const tcp = new MavlinkConnection('ws://x:1', { reconnectDelayMs: 20 });
   tcp.setLink({ kind: 'tcp', host: '127.0.0.1', port: 5760 });
   tcp.connect();
+  for (let n = 0; n < 50 && tcp.getStatus() !== 'connected'; n++) await new Promise((r) => setTimeout(r, 10));
+  tcp.checkLinkNow(Date.now() + 10_000);
+  check('TCP: checkLinkNow still reopens a quiet link', tcp.getStatus() !== 'connected');
   for (let n = 0; n < 50 && tcp.getStatus() !== 'connected'; n++) await new Promise((r) => setTimeout(r, 10));
   tcp.checkLinkSilence(Date.now() + LINK_SILENCE_TIMEOUT_MS * 3);
   check('TCP: a silent link is still reopened', tcp.getStatus() !== 'connected');
