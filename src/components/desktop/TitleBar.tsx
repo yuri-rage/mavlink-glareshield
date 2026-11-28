@@ -5,7 +5,9 @@
 //
 // The bar is a drag region (-webkit-app-region: drag), and the page gets no pointer events over a drag region: so the
 // pointer is followed on the window (pointermove), not with :hover on the bar. While the pointer is over the bar
-// nothing arrives, and the bar stays.
+// nothing arrives, and the bar stays. Reaching the top edge is also reported by the main process (onPointerAtTop),
+// from the cursor's screen position: on Windows the system keeps a resize border just inside a frameless window's
+// top edge, and the page gets no events there at all.
 
 import React, { useEffect, useRef, useState } from 'react';
 
@@ -14,7 +16,7 @@ import { Copy, Minus, Square, X } from 'lucide-react';
 import { desktopApi } from '../../desktop/api';
 
 /** How close to the top edge (px) the pointer brings the bar down. */
-const REVEAL_PX = 4;
+const REVEAL_PX = 8;
 const BAR_PX = 32;
 /** How far below the bar (px) the pointer may stray before it goes, and after how long (ms). */
 const SLACK_PX = 12;
@@ -63,11 +65,16 @@ export const TitleBar: React.FC = () => {
     hideSoon(STARTUP_MS);
     void win.isMaximized().then(setMaximized);
     const off = win.onMaximized(setMaximized);
+    const offTop = win.onPointerAtTop(() => {
+      cancelHide();
+      setShown(true);
+    });
     return () => {
       cancelHide();
       window.removeEventListener('pointermove', onMove);
       document.documentElement.removeEventListener('pointerleave', onLeave);
       off();
+      offTop();
     };
   }, [win]);
 

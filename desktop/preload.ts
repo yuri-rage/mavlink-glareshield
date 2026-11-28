@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('glareshieldDesktop', {
     close: () => ipcRenderer.send('window:close'),
     isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
     onMaximized: (listener: Listener<[boolean]>) => on('window:maximized', listener),
+    onPointerAtTop: (listener: Listener<[]>) => on('window:pointer-at-top', listener),
   },
   bridge: {
     status: () => ipcRenderer.invoke('bridge:status'),
