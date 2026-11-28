@@ -142,6 +142,21 @@ await rtcmInjector.disconnect();
 await tick();
 check('serial: Disconnect: plain "disconnected"', st().status === 'disconnected' && !st().error, `${st().error}`);
 
+// The stream ends cleanly (done) while the port still has a readable: the connection ends, rather than taking a new
+// reader on the closed stream over and over (each read done at once: a busy loop).
+let readers = 0;
+port.readable = {
+  getReader: () => {
+    readers++;
+    return { read: async () => ({ done: true, value: undefined }), releaseLock: () => {}, cancel: async () => {} };
+  },
+};
+await rtcmInjector.connectSerial();
+await tick();
+await tick();
+check('serial: a clean end: one reader, not a loop of them', readers === 1, `${readers} readers`);
+check('…and the connection ends, saying so', st().status === 'error', `${st().status}: ${st().error}`);
+
 console.log(
   failures.length ? `\n${failures.length} RTCM teardown check(s) FAILED` : '\nAll RTCM teardown checks PASSED'
 );
