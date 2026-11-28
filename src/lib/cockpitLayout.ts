@@ -136,7 +136,7 @@ export function appendPane(layout: CockpitLayout, instanceId: string): CockpitLa
 }
 
 /** The node at `path` (child indexes from the root), or null. */
-export function nodeAt(root: CockpitNode | null, path: number[]): CockpitNode | null {
+function nodeAt(root: CockpitNode | null, path: number[]): CockpitNode | null {
   let n = root;
   for (const i of path) {
     if (!n || isPane(n)) return null;
