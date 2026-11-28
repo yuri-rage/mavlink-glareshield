@@ -1082,6 +1082,13 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
       center: [initialLat, initialLon],
       zoom: initialZoom(),
       maxZoom: MAP_MAX_ZOOM,
+      // Half levels, as Mission Planner's zoom box steps (0.5): a wheel notch, a pinch's end, +/- and a double-click
+      // move half a level, so the right view is easier to land on. Tiles between two levels are scaled from the
+      // nearer one. A wheel notch is about 100 px of scroll (Chrome on Linux; half that on Windows): at Leaflet's
+      // default 60 px per level that was 1.5 to 2 levels after rounding up; at 140 it's under half, rounded up to 0.5.
+      zoomSnap: 0.5,
+      zoomDelta: 0.5,
+      wheelPxPerZoomLevel: 140,
       zoomControl: false,
       scrollWheelZoom: following ? 'center' : true,
       touchZoom: following ? 'center' : true,
