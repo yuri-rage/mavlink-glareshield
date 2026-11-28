@@ -11,6 +11,7 @@ import { desktopApi, isDesktop, type SerialPortListing } from '../../desktop/api
 import { useAudioAlertsStore, type VoiceEngine } from '../../lib/audioAlerts';
 import { DOC_LINKS, REPO_URL, repoFile } from '../../lib/links';
 import { maskToken, pairingAppUrl, pairingUrl } from '../../lib/pairing';
+import { LATEST_RELEASE_URL, releaseUrl, useReleaseNewsStore } from '../../lib/releaseNews';
 import { BUILD, buildLabel, checkForUpdate, useUpdateStore } from '../../lib/updateCheck';
 import { getWssHost, isLoopbackWs, mavlinkConnection, SERIAL_BAUD_RATES } from '../../mavlink/connection';
 import type { BandwidthProfile } from '../../mavlink/rateManager';
@@ -65,6 +66,8 @@ const AboutPanel: React.FC = () => {
   const available = useUpdateStore((s) => s.available);
   const desktopUpdate = useUpdateStore((s) => s.desktop);
   const desk = desktopApi();
+  const newsOn = useReleaseNewsStore((s) => s.enabled);
+  const setNewsOn = useReleaseNewsStore((s) => s.setEnabled);
   const [checking, setChecking] = useState(false);
   const [checked, setChecked] = useState(false);
   const check = async () => {
@@ -140,7 +143,28 @@ const AboutPanel: React.FC = () => {
         ) : (
           checked && <p className="text-[11px] text-emerald-300">This is the latest build.</p>
         )}
+        {/* The desktop app is a tagged version: its own notes. The web app deploys untagged: the latest release. */}
+        <a
+          href={desk ? releaseUrl(desk.version) : LATEST_RELEASE_URL}
+          target="_blank"
+          rel="noreferrer"
+          className={link}
+        >
+          {desk ? `What's new in ${desk.version}` : "What's new (latest release)"}
+          <ExternalLink className="h-3 w-3" />
+        </a>
       </div>
+      {desk && (
+        <Segmented<boolean>
+          label="What's new after an update"
+          value={newsOn}
+          onChange={setNewsOn}
+          options={[
+            { value: true, label: 'Show', hint: "Once per new version: a short banner with the release's changes." },
+            { value: false, label: 'Off' },
+          ]}
+        />
+      )}
       <div className="space-y-1.5">
         <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Documentation</div>
         <ul className="space-y-1 text-xs">

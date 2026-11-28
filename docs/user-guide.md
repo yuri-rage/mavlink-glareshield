@@ -403,7 +403,7 @@ fields), **RTK / NTRIP** (corrections to the vehicle), and **Gimbal** controls o
 | Alerts | Chimes, voice callouts (a neural voice, or the device's own), waypoint announcements. The neural voice downloads once (about 80 MB with its runtime) and then works offline |
 | Traffic & terrain | ADS-B display, warnings and limits; terrain data and planning clearance |
 | Data | Telemetry log recording; replay a .tlog file; Restore defaults |
-| About | This build, **Check for updates**, links to these guides, the source and its issues. The logo opens it too |
+| About | This build, **Check for updates**, **What's new** (the latest release's notes), links to these guides, the source and its issues. The logo opens it too. In the desktop app, also whether to show what's new after an update |
 
 **Pairing with the bridge.** The Docker bridge only accepts devices that carry its pairing token. A device opened from
 the bridge's pairing QR code asks **Connect to this bridge?** and then keeps the link, token included. Once one device

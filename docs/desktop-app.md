@@ -56,6 +56,10 @@ The app checks for a newer release when it starts and downloads it in the backgr
 button appears in the top bar. Click it to restart into the new version. While the vehicle is armed the button waits,
 because a restart drops the link for a few seconds.
 
+After an update, a short banner says what's new in that version (the release's changes, from GitHub) and closes on its
+own after half a minute. It shows once per version, never on a first install. **Don't show these** turns it off;
+Settings → About turns it back on, and links to the version's release notes either way.
+
 ## Building it yourself
 
 ```bash
