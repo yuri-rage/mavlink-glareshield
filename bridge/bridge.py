@@ -31,6 +31,7 @@ import re
 import socket
 import ssl
 import struct
+import threading
 import time
 import urllib.parse
 from typing import Any, cast
@@ -302,6 +303,8 @@ class BridgeServer:
         self.serial_conn = None
         self.serial_writer = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="serial-write")
         self.serial_pending = 0
+        # Counted up on the event loop, down on the writer thread: `x -= 1` isn't atomic, so both under a lock.
+        self.serial_pending_lock = threading.Lock()
         self.udp_target = None
         # UDP vehicle endpoints (address -> last time a packet arrived from it). An address is
         # added when it sends an autopilot HEARTBEAT (see is_vehicle_heartbeat) and dropped after
@@ -612,16 +615,20 @@ class BridgeServer:
         elif self.mode == "serial" and self.serial_conn:
             # A blocking write (a radio's flow control) would stall the event loop: on the writer thread instead,
             # with a bound on what waits for it (a port that never drains drops new packets rather than piling up).
-            if self.serial_pending >= SERIAL_QUEUE_MAX:
+            with self.serial_pending_lock:
+                full = self.serial_pending >= SERIAL_QUEUE_MAX
+                if not full:
+                    self.serial_pending += 1
+            if full:
                 self.note_write_error("Serial", OSError("write queue full: the port isn't draining"))
                 return
-            self.serial_pending += 1
             future = self.serial_writer.submit(self.serial_write, self.serial_conn, data)
             future.add_done_callback(self._serial_done)
 
     def _serial_done(self, _future: Any) -> None:
-        # On the writer thread: a plain counter decrement (the GIL makes it safe enough for a bound).
-        self.serial_pending -= 1
+        # On the writer thread.
+        with self.serial_pending_lock:
+            self.serial_pending -= 1
 
     def note_write_error(self, kind: str, e: OSError):
         """A failed write to the vehicle: logged once per kind of error, not once per packet."""
