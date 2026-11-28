@@ -38,6 +38,12 @@ contextBridge.exposeInMainWorld('glareshieldDesktop', {
     isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
     onMaximized: (listener: Listener<[boolean]>) => on('window:maximized', listener),
   },
+  bridge: {
+    status: () => ipcRenderer.invoke('bridge:status'),
+    set: (patch: unknown) => ipcRenderer.invoke('bridge:set', patch),
+    newToken: () => ipcRenderer.invoke('bridge:new-token'),
+    onStatus: (listener: Listener<[unknown]>) => on('bridge:status', listener),
+  },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     setFrameless: (on: boolean) => ipcRenderer.invoke('settings:set-frameless', on),

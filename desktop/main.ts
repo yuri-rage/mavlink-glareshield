@@ -18,6 +18,8 @@ import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, net as electronNet, ipcMain, protocol, session, shell } from 'electron';
 import type { AppUpdater, ProgressInfo, UpdateInfo } from 'electron-updater';
 
+import { ensureCert, lanAddresses } from './bridgeCert';
+import { BridgeServer, newToken } from './bridgeServer';
 import { NtripStreams } from './ntripStreams';
 import { SettingsFile } from './settings';
 import { hasVehicleHeartbeat, UDP_VEHICLE_TIMEOUT_MS } from './udpVehicles';
@@ -122,6 +124,8 @@ function openLink(win: BrowserWindow, config: any): Promise<string> {
   const generation = linkGeneration;
   const emitData = (data: Uint8Array) => {
     if (!win.isDestroyed()) win.webContents.send('link:data', id, data);
+    // Devices paired with this computer's bridge hear the vehicle too.
+    bridge?.broadcast(data);
   };
   const emitClosed = (reason: string) => {
     if (!links.has(id)) return;
@@ -289,6 +293,94 @@ function closeAllLinks(): Promise<void> {
   const closing = [...links.values()].map((l) => l.close());
   links.clear();
   return Promise.all([...closing, ntripStreams?.closeAll()]).then(() => {});
+}
+
+// ---- Bridge (phones and tablets share this computer's link; desktop/bridgeServer.ts) ---------------------------
+
+let bridge: BridgeServer | null = null;
+
+interface BridgeStatus {
+  enabled: boolean;
+  port: number;
+  listening: boolean;
+  error: string | null;
+  clients: number;
+  /** This computer's LAN addresses, for the pairing link. */
+  addresses: string[];
+  token: string;
+  /** The page's links this process opened (UDP, TCP, serial): what the bridge relays. */
+  links: number;
+}
+
+function setupBridge(win: BrowserWindow) {
+  const fromWin = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) => e.sender === win.webContents;
+  let error: string | null = null;
+  const server = (bridge = new BridgeServer({
+    // A device's MAVLink goes out on this computer's links (normally the one the page has open).
+    toVehicle: (data) => {
+      for (const l of links.values()) l.send(data);
+    },
+    onClients: () => sendStatus(),
+    log: (line) => console.log(line),
+  }));
+  const status = (): BridgeStatus => {
+    const b = settings().get().bridge;
+    return {
+      enabled: b.enabled,
+      port: b.port,
+      listening: server.listening,
+      error,
+      clients: server.clientCount,
+      addresses: lanAddresses(),
+      token: b.token,
+      links: links.size,
+    };
+  };
+  const sendStatus = () => !win.isDestroyed() && win.webContents.send('bridge:status', status());
+  // Listening when it's on, with a token (made the first time), a certificate (made or reused) and the chosen port.
+  const apply = async () => {
+    let b = settings().get().bridge;
+    error = null;
+    if (!b.enabled) {
+      await server.stop();
+      sendStatus();
+      return;
+    }
+    if (!b.token) b = settings().set({ bridge: { ...b, token: newToken() } }).bridge;
+    try {
+      const tls = await ensureCert(app.getPath('userData'));
+      await server.start(b.port, b.token, tls);
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+    sendStatus();
+  };
+  let applying = Promise.resolve();
+  const reapply = () => (applying = applying.then(apply, apply));
+  ipcMain.handle('bridge:status', (e) => (fromWin(e) ? status() : null));
+  ipcMain.handle('bridge:set', async (e, patch: unknown) => {
+    if (!fromWin(e) || !patch || typeof patch !== 'object') return null;
+    const p = patch as { enabled?: unknown; port?: unknown };
+    const b = settings().get().bridge;
+    settings().set({
+      bridge: {
+        ...b,
+        ...(typeof p.enabled === 'boolean' ? { enabled: p.enabled } : {}),
+        ...(typeof p.port === 'number' ? { port: p.port } : {}),
+      },
+    });
+    await reapply();
+    return status();
+  });
+  // A new token: every paired device must pair again (one that shouldn't have it is shut out).
+  ipcMain.handle('bridge:new-token', async (e) => {
+    if (!fromWin(e)) return null;
+    settings().set({ bridge: { ...settings().get().bridge, token: newToken() } });
+    await reapply();
+    return status();
+  });
+  void reapply();
+  app.on('before-quit', () => void server.stop());
 }
 
 // ---- NTRIP (the caster reached from here, no bridge) -------------------------------------------------------------
@@ -594,6 +686,7 @@ function createWindow() {
   setupWindow(win);
   setupLinks(win);
   setupNtrip(win);
+  setupBridge(win);
   setupSerial(win);
   setupUpdates(win);
   // The page reloading (Restore defaults, Ctrl+R), crashing or closing: its links and any open prompt go with it

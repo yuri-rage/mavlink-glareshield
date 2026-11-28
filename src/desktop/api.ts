@@ -97,6 +97,30 @@ export interface DesktopWindowApi {
   onMaximized(listener: (maximized: boolean) => void): Unsubscribe;
 }
 
+/** The desktop app as a bridge for phones and tablets (desktop/bridgeServer.ts). */
+export interface DesktopBridgeStatus {
+  enabled: boolean;
+  port: number;
+  listening: boolean;
+  /** Why it isn't listening (the port in use), or null. */
+  error: string | null;
+  clients: number;
+  /** This computer's LAN addresses, for the pairing link. */
+  addresses: string[];
+  token: string;
+  /** Links this computer opened itself (UDP, TCP, serial): what the bridge relays. */
+  links: number;
+}
+
+export interface DesktopBridgeApi {
+  status(): Promise<DesktopBridgeStatus | null>;
+  /** Turn it on or off, or change its port; resolves with the new status. */
+  set(patch: { enabled?: boolean; port?: number }): Promise<DesktopBridgeStatus | null>;
+  /** A new pairing token: every device has to pair again. */
+  newToken(): Promise<DesktopBridgeStatus | null>;
+  onStatus(listener: (status: DesktopBridgeStatus) => void): Unsubscribe;
+}
+
 /** The desktop app's own settings (kept by the main process: some apply before the page exists). */
 export interface DesktopSettings {
   frameless: boolean;
@@ -115,6 +139,7 @@ export interface DesktopApi {
   version: string;
   window: DesktopWindowApi;
   settings: DesktopSettingsApi;
+  bridge: DesktopBridgeApi;
   platform: 'linux' | 'win32' | 'darwin' | string;
   link: DesktopLinkApi;
   ntrip: DesktopNtripApi;
