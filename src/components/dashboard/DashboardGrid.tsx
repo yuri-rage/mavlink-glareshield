@@ -356,6 +356,7 @@ export const DashboardGrid: React.FC<DashboardGridProps> = ({ onEditCustomWidget
       'built-in-inspector': 'MAVLink Inspector',
       'built-in-ntrip': 'NTRIP RTK Base Stream',
       'built-in-waypoints': 'Waypoint Control',
+      'built-in-camera': 'Camera',
     };
     if (BUILTIN_TITLES[widgetId]) return BUILTIN_TITLES[widgetId];
     const custom = profile.customWidgets.find((w) => w.id === widgetId);

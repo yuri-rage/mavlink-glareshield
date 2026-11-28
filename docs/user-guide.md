@@ -339,6 +339,12 @@ The HUD can show a camera feed behind its symbology. Open the HUD's settings (th
 **Aspect Ratio Fit** (cover or letterbox) and **Video Opacity** set how the feed sits behind the HUD. A stalled feed
 reconnects by itself. To serve a camera over `https` from your own domain, see [Reverse Proxy Setup](reverse-proxy.md).
 
+The **Camera** widget (Add Widget → Control) works the vehicle's camera through ArduPilot (`CAM1_TYPE`): **Photo**,
+photos **Every** so many seconds (**Start** / **Stop**), **Record** / **Stop** with the recording time, and **Zoom**
+while a button is held. Each button shows the vehicle's answer: a camera that can't do something (a servo-triggered
+camera can't record) answers that it failed. The header counts the photos taken. With `CAM1_TYPE` at 0 it says
+no camera is set up.
+
 ---
 
 ## Parameters and logs

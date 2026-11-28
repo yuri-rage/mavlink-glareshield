@@ -687,6 +687,7 @@ A panel can also hold one of the dashboard's built-in widgets: set `displayType`
 | `built-in-all-modes` | All Flight Modes | Controls: flight modes |
 | `built-in-set-speed` | Set Speed Controller | Controls: speed |
 | `built-in-waypoints` | Waypoint Navigation | Controls: waypoint changes, mission restart |
+| `built-in-camera` | Camera | Controls: photo, video and zoom commands |
 | `built-in-map` | Navigation Map | Large. Controls: waypoint changes, mission restart. Uses its full-width layout when the panel is at least 900 px wide. |
 | `built-in-parameters` | Parameter Manager | Large, at least 480 px tall. Controls: parameter writes |
 | `built-in-ntrip` | RTK / NTRIP Injector | Large. Controls: RTCM injection |

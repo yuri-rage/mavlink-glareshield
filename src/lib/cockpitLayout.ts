@@ -301,6 +301,9 @@ export function widgetMinSize(
       return { w: 300, h: 180 };
     case 'built-in-link':
       return { w: 260, h: 220 };
+    // Photo and Record, the interval row and the zoom row.
+    case 'built-in-camera':
+      return { w: 260, h: 200 };
     case 'built-in-statustext-mini':
       return { w: 260, h: 110 };
     case 'built-in-glareshield':

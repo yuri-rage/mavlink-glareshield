@@ -15,7 +15,7 @@ import { VfrHudWidget } from './VfrHudWidget';
 import { WaypointControlWidget } from './WaypointControlWidget';
 
 // Loaded on first use: each pulls in code the rest of the app doesn't need at startup (Leaflet and mission
-// parsing, the charts, PID tuning, onboard logs, parameter metadata, RTCM handling).
+// parsing, the charts, PID tuning, onboard logs, parameter metadata, RTCM handling, the camera).
 const MapWidget = lazy(() => import('../map/MapWidget').then((m) => ({ default: m.MapWidget })));
 const TelemetryChartsWidget = lazy(() =>
   import('./TelemetryChartsWidget').then((m) => ({ default: m.TelemetryChartsWidget }))
@@ -25,6 +25,7 @@ const LogsWidget = lazy(() => import('./LogsWidget').then((m) => ({ default: m.L
 const InspectorWidget = lazy(() => import('./InspectorWidget').then((m) => ({ default: m.InspectorWidget })));
 const PidTuningWidget = lazy(() => import('./PidTuningWidget').then((m) => ({ default: m.PidTuningWidget })));
 const NtripWidget = lazy(() => import('./NtripWidget').then((m) => ({ default: m.NtripWidget })));
+const CameraWidget = lazy(() => import('./CameraWidget').then((m) => ({ default: m.CameraWidget })));
 
 /** Placeholder while a lazily loaded widget arrives. */
 const WidgetLoading: React.FC = () => (
@@ -79,6 +80,8 @@ export function renderBuiltinWidget(widgetId: string, colSpan: number): React.Re
       return lazyWidget(<NtripWidget />);
     case 'built-in-waypoints':
       return <WaypointControlWidget />;
+    case 'built-in-camera':
+      return lazyWidget(<CameraWidget />);
     default:
       return null;
   }
