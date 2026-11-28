@@ -251,6 +251,29 @@ export default defineConfig(({ command }) => ({
   worker: {
     format: 'es',
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Libraries that change only on an upgrade get chunks of their own: the app's chunks are rehashed on every
+        // deploy, and the service worker precaches each deploy's files, so whatever shares a chunk with app code is
+        // downloaded again each time. Split out, an unchanged library keeps its hash and comes from the HTTP cache
+        // (assets are immutable). Leaflet loads with the map, as before. Libraries only some lazy part uses (uqr,
+        // sql.js, the neural voice) and lucide-react (its icons follow the code that uses them) stay where Rollup
+        // puts them.
+        manualChunks(id: string) {
+          if (!id.includes('/node_modules/')) return undefined;
+          if (/\/node_modules\/leaflet\//.test(id)) return 'leaflet';
+          if (
+            /\/node_modules\/(react|react-dom|scheduler|use-sync-external-store|zustand|react-resizable-panels|tailwind-merge|clsx)\//.test(
+              id
+            )
+          )
+            return 'vendor';
+          return undefined;
+        },
+      },
+    },
+  },
   optimizeDeps: {
     exclude: ['@diffusionstudio/vits-web', 'onnxruntime-web'],
   },
