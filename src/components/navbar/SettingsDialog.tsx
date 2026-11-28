@@ -85,7 +85,9 @@ const AboutPanel: React.FC = () => {
         <img src="/logo-64.png" alt="" className="h-10 w-10 shrink-0 object-contain" />
         <div className="min-w-0">
           <div className="text-sm font-bold tracking-tight text-zinc-100">Glareshield</div>
-          <div className="text-[11px] text-zinc-400">A web ground control station for ArduPilot</div>
+          <div className="text-[11px] text-zinc-400">
+            {desk ? 'A ground control station for ArduPilot' : 'A web ground control station for ArduPilot'}
+          </div>
         </div>
       </div>
       <div className="space-y-1.5 rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5 text-xs">
@@ -126,7 +128,7 @@ const AboutPanel: React.FC = () => {
         {desk ? (
           desktopUpdateText(desktopUpdate) && (
             <p
-              className={`text-[11px] ${desktopUpdate?.kind === 'error' ? 'text-red-300' : desktopUpdate?.kind === 'none' ? 'text-emerald-300' : 'text-amber-300'}`}
+              className={`text-[11px] ${desktopUpdate?.kind === 'error' ? 'text-red-300' : desktopUpdate?.kind === 'none' ? 'text-emerald-300' : desktopUpdate?.kind === 'unavailable' ? 'text-zinc-400' : 'text-amber-300'}`}
             >
               {desktopUpdateText(desktopUpdate)}
             </p>
@@ -322,12 +324,24 @@ export const SettingsDialog: React.FC<Props> = ({
   // The chosen port's path (/dev/ttyACM0, COM5); applied by Connect.
   const [serialPortName, setSerialPortName] = useState<string>(serialPath);
   const refreshSerialPorts = () => {
-    void desktopApi()
-      ?.serial.list()
+    const desk = desktopApi();
+    if (!desk) return;
+    desk.serial
+      .list()
       .then((ports) => {
         setSerialPorts(ports);
         // Nothing chosen yet, or the chosen port is gone: the first one listed (a USB device before built-in UARTs).
         setSerialPortName((cur) => (ports.some((p) => p.path === cur) ? cur : (ports[0]?.path ?? '')));
+      })
+      .catch((e: unknown) => {
+        // The ports couldn't be listed (the serial module didn't load, or the system's listing failed): say so,
+        // rather than "Listing…" for ever.
+        setSerialPorts([]);
+        const msg = (e instanceof Error ? e.message : String(e)).replace(
+          /^Error invoking remote method '[^']+': (Error: )?/,
+          ''
+        );
+        setSerialPickerNotice(`Couldn't list the serial ports: ${msg}`);
       });
   };
   useEffect(() => {
@@ -417,7 +431,11 @@ export const SettingsDialog: React.FC<Props> = ({
       isOpen={open}
       onClose={onClose}
       title="Settings"
-      description="Link, display, alerts, traffic and terrain, and data kept in this browser."
+      description={
+        desktop
+          ? 'Link, display, alerts, traffic and terrain, and data kept by this app.'
+          : 'Link, display, alerts, traffic and terrain, and data kept in this browser.'
+      }
       anchor="top"
     >
       <form onSubmit={handleConnect} className="space-y-4">
@@ -456,7 +474,7 @@ export const SettingsDialog: React.FC<Props> = ({
               }}
               options={[
                 { value: 'websocket', label: 'WebSocket' },
-                { value: 'serial', label: serialApi === 'web-usb-serial' ? 'USB (WebUSB)' : 'USB serial' },
+                { value: 'serial', label: !desktop && serialApi === 'web-usb-serial' ? 'USB (WebUSB)' : 'USB serial' },
                 // A browser can't open these; the desktop app can.
                 ...(desktop
                   ? [
@@ -481,7 +499,7 @@ export const SettingsDialog: React.FC<Props> = ({
             />
 
             {inputLinkKind === 'serial' &&
-              (serialApi === null ? (
+              (!desktop && serialApi === null ? (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-950/25 p-2.5 text-[11px] leading-relaxed text-amber-200">
                   This browser cannot open USB serial devices. Use Chrome or Edge on a desktop, or Chrome on Android, or
                   connect through the companion bridge over WebSocket.
@@ -522,7 +540,7 @@ export const SettingsDialog: React.FC<Props> = ({
                       </span>
                     </label>
                   )}
-                  {serialApi === 'web-serial' && (
+                  {(desktop || serialApi === 'web-serial') && (
                     <label className="flex items-center justify-between gap-2 text-xs font-medium text-zinc-300">
                       Baud rate
                       <select
@@ -540,7 +558,7 @@ export const SettingsDialog: React.FC<Props> = ({
                     </label>
                   )}
                   <p className="text-[11px] leading-relaxed text-zinc-500">
-                    {serialApi === 'web-serial' ? (
+                    {desktop || serialApi === 'web-serial' ? (
                       <>
                         Telemetry radios (SiK) usually run at <code className="text-sky-400">57600</code>; a flight
                         controller&apos;s own USB port ignores the baud rate.{' '}
@@ -871,7 +889,7 @@ export const SettingsDialog: React.FC<Props> = ({
                 onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (connectPressedRef.current = true)}
                 variant="default"
                 size="sm"
-                disabled={inputLinkKind === 'serial' && serialApi === null}
+                disabled={inputLinkKind === 'serial' && !desktop && serialApi === null}
                 className="bg-sky-500 text-white hover:bg-sky-600"
               >
                 Connect

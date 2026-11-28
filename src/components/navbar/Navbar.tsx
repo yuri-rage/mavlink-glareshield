@@ -471,7 +471,7 @@ export const Navbar: React.FC = () => {
     // vehicle is heard: an open link (a bridge, a UDP port) with no vehicle on it is not a connection to one.
     const linkName =
       linkKind === 'serial'
-        ? `serial @ ${serialBaud} baud`
+        ? `serial${useConnectionStore.getState().serialPath ? ` ${useConnectionStore.getState().serialPath}` : ''} @ ${serialBaud} baud`
         : linkKind === 'udp'
           ? `UDP port ${useConnectionStore.getState().udpPort}`
           : linkKind === 'tcp'
