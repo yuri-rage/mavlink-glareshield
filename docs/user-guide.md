@@ -255,7 +255,7 @@ Open the map's **Mission** menu:
 
 In the planner, a **Mission / Fence / Rally** switch picks what you're editing:
 
-- **Mission**: click the map to add waypoints, drag them to move them, and edit each item's command, altitude and frame
+- **Mission**: click the map to add waypoints, drag them to move them (with a mouse, any pin; on a touch screen, select it first, so panning the map from a pin doesn't move it), and edit each item's command, altitude and frame
   in the list. An item's parameters can be shown in your units or raw. Waypoints show their acceptance radius (the
   item's own in yellow, the vehicle's default in white).
 - **Fence**: draw inclusion and exclusion polygons and circles with **Place**, drag their vertices (each listed to edit
