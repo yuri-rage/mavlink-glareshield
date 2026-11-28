@@ -2588,7 +2588,9 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
   return (
     <Card
-      className={`flex w-full flex-col overflow-hidden border-zinc-800 bg-zinc-950/90 shadow-lg ${
+      // isolate: Leaflet's panes and the map's own overlays (z-index 400-1000, to sit above those panes) stack inside
+      // the card, not against the page: without it they showed over a dialog's backdrop (z-50).
+      className={`isolate flex w-full flex-col overflow-hidden border-zinc-800 bg-zinc-950/90 shadow-lg ${
         // Maximized: fills the window below the navbar, under it (z-40) so its menus open over the map, and above
         // the dashboard. Dialogs (z-50) stay on top.
         maximized ? 'fixed inset-x-0 bottom-0 z-[39] rounded-none' : aspectClass
