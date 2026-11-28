@@ -34,5 +34,13 @@ check(
 check('junk and a truncated frame: no throw, not a vehicle', !hasVehicleHeartbeat(new Uint8Array([0x12, 0xfd, 9, 0])));
 check('empty: not a vehicle', !hasVehicleHeartbeat(new Uint8Array(0)));
 
+// A datagram cut short (its length says more than it holds) is not read past its end: not a vehicle.
+const whole = v2(0, hb(2));
+check('a heartbeat cut short: not a vehicle', !hasVehicleHeartbeat(whole.slice(0, 12)));
+// A component that isn't an autopilot (MAV_AUTOPILOT_INVALID, 8), even of a vehicle-looking type: not a vehicle.
+const peripheral = new Uint8Array([0, 0, 0, 0, 0, 8, 0, 4, 3]); // type 0 (generic), autopilot 8
+check('MAV_AUTOPILOT_INVALID: not a vehicle', !hasVehicleHeartbeat(v2(0, peripheral)));
+check('MAV_AUTOPILOT_INVALID (MAVLink 1): not a vehicle', !hasVehicleHeartbeat(v1(0, peripheral)));
+
 console.log(failures.length ? `\n${failures.length} UDP vehicle check(s) FAILED` : '\nAll UDP vehicle checks PASSED');
 process.exit(failures.length ? 1 : 0);
