@@ -19,6 +19,7 @@ import { app, BrowserWindow, net as electronNet, ipcMain, protocol, session, she
 import type { AppUpdater, ProgressInfo, UpdateInfo } from 'electron-updater';
 
 import { NtripStreams } from './ntripStreams';
+import { SettingsFile } from './settings';
 import { hasVehicleHeartbeat, UDP_VEHICLE_TIMEOUT_MS } from './udpVehicles';
 
 const SCHEME = 'app';
@@ -521,8 +522,43 @@ function integrateAppImage() {
 
 // ---- Window ------------------------------------------------------------------------------------------------------
 
+/** The desktop app's own settings (desktop/settings.ts), read before the window is made. */
+let settingsFile: SettingsFile | null = null;
+const settings = () => (settingsFile ??= new SettingsFile(path.join(app.getPath('userData'), 'desktop-settings.json')));
+
+/**
+ * The window's controls for a frameless window (the page draws its own auto-hiding title bar), and the settings the
+ * page changes. The frame can't change on a live window: a change applies when the app restarts (Restart now).
+ */
+function setupWindow(win: BrowserWindow) {
+  const fromWin = (e: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) => e.sender === win.webContents;
+  ipcMain.on('window:minimize', (e) => fromWin(e) && win.minimize());
+  ipcMain.on('window:toggle-maximize', (e) => {
+    if (!fromWin(e)) return;
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  });
+  ipcMain.on('window:close', (e) => fromWin(e) && win.close());
+  ipcMain.handle('window:is-maximized', (e) => fromWin(e) && win.isMaximized());
+  const maximized = () => !win.isDestroyed() && win.webContents.send('window:maximized', win.isMaximized());
+  win.on('maximize', maximized);
+  win.on('unmaximize', maximized);
+  ipcMain.handle('settings:get', (e) => (fromWin(e) ? settings().get() : null));
+  ipcMain.handle('settings:set-frameless', (e, on: unknown) => {
+    if (fromWin(e) && typeof on === 'boolean') settings().set({ frameless: on });
+  });
+  ipcMain.on('app:relaunch', (e) => {
+    if (!fromWin(e)) return;
+    app.relaunch();
+    app.quit();
+  });
+}
+
 function createWindow() {
+  const frameless = settings().get().frameless;
   const win = new BrowserWindow({
+    // Frameless: the page's own title bar slides over its top edge when the pointer reaches it (TitleBar.tsx).
+    frame: !frameless,
     width: 1440,
     height: 900,
     minWidth: 360,
@@ -536,7 +572,10 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      additionalArguments: [`--glareshield-version=${app.getVersion()}`],
+      additionalArguments: [
+        `--glareshield-version=${app.getVersion()}`,
+        `--glareshield-frameless=${frameless ? 1 : 0}`,
+      ],
     },
   });
   // The window is "Glareshield", not the page's title (written for a browser tab).
@@ -552,6 +591,7 @@ function createWindow() {
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     }
   });
+  setupWindow(win);
   setupLinks(win);
   setupNtrip(win);
   setupSerial(win);
