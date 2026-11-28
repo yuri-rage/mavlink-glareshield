@@ -46,6 +46,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Modal } from '../ui/modal';
 import { HeaderTabs } from './HeaderTabs';
+import { ReleaseNewsBanner } from './ReleaseNewsBanner';
 import { ReplayBar } from './ReplayBar';
 import { SettingsDialog, type SettingsTab } from './SettingsDialog';
 import { TlogIndicator } from './TlogSettings';
@@ -958,6 +959,9 @@ export const Navbar: React.FC = () => {
 
         {/* The commanded vehicle is silent and another is on the link: offered, not taken */}
         <TakeoverBanner />
+
+        {/* The desktop app just updated: what's new (once, closes on its own, can be turned off) */}
+        <ReleaseNewsBanner />
 
         {/* Persistent Global Telemetry Status Strip (Health First, Battery, GPS, Alt/Spd, Home, Flight Time) */}
         {/* No sideways scrolling: as the strip narrows (its own width, a container query), the readouts drop in order

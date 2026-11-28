@@ -18,6 +18,7 @@ import './mavlink/terrainBoot';
 // Remembers the last vehicle's type and waypoint radii, for planning offline.
 import './store/lastVehicleStore';
 
+import { startReleaseNews } from './lib/releaseNews';
 import { BUILD, buildLabel, checkForUpdate, startUpdateChecks, useUpdateStore } from './lib/updateCheck';
 import { useTelemetryStore } from './store/telemetryStore';
 
@@ -68,3 +69,5 @@ if (import.meta.env.PROD && typeof navigator !== 'undefined' && 'serviceWorker' 
 
 // Notice a newer deploy (production only), so the navbar can offer a reload.
 startUpdateChecks();
+// The desktop app, just updated: what's new in this version (once).
+void startReleaseNews();
