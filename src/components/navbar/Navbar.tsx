@@ -46,8 +46,6 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Modal } from '../ui/modal';
 import { HeaderTabs } from './HeaderTabs';
-// Loaded with the app, not on demand: Settings holds the link controls, so it must open offline or after a redeploy
-// (when a lazily fetched chunk can fail to load), and it's small (~7 kB gzipped).
 import { ReplayBar } from './ReplayBar';
 import { SettingsDialog, type SettingsTab } from './SettingsDialog';
 import { TlogIndicator } from './TlogSettings';
@@ -1094,7 +1092,9 @@ export const Navbar: React.FC = () => {
       </header>
 
       {/* Settings: mounted only while open, so its store subscriptions (the connection stats tick every second)
-          don't re-render it while closed. */}
+          don't re-render it while closed. Loaded with the app, not on demand: it holds the link controls, so it must
+          open offline or after a redeploy (when a lazily fetched chunk can fail to load), and it's small (~7 kB
+          gzipped). */}
       {isConnectModalOpen && (
         <SettingsDialog
           open
