@@ -1,7 +1,9 @@
 # The desktop app (desktop/, electron-builder.yml): a Linux AppImage and a Windows installer (NSIS).
 #
 # - Push a version tag (v0.2.0): both are built and published to that tag's GitHub Release, where the installed apps
-#   look for updates. The tag sets the version (package.json's is only the default).
+#   look for updates. The tag sets the version (package.json's is only the default). Then the notes job writes the
+#   release notes (scripts/release-notes.sh): the pull requests merged since the previous release, and the SmartScreen
+#   hint while Windows builds are unsigned.
 # - Run it by hand (Actions → Desktop release → Run workflow), or a pull request that touches the desktop app: both
 #   are built and kept as workflow artifacts, nothing is published. For trying a build before tagging.
 #
@@ -101,20 +103,6 @@ jobs:
           npm run desktop:compile
           npx electron-builder "${args[@]}"
 
-      - name: SmartScreen note on the release page (unsigned Windows builds)
-        if: startsWith(github.ref, 'refs/tags/v') && matrix.platform == 'windows'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SIGNED: ${{ secrets.AZURE_CLIENT_SECRET != '' && vars.AZURE_SIGN_ENDPOINT != '' }}
-        run: |
-          [ "$SIGNED" = true ] && exit 0
-          note='**Windows:** the installer is not code-signed yet, so SmartScreen may stop it. Choose **More info → Run anyway**.'
-          body=$(gh release view "$GITHUB_REF_NAME" --json body -q .body)
-          case "$body" in *"More info → Run anyway"*) exit 0 ;; esac
-          if [ -n "$body" ]; then notes="$note"$'\n\n'"$body"; else notes="$note"; fi
-          gh release edit "$GITHUB_REF_NAME" --notes "$notes"
-
       - name: Keep the build
         if: "!startsWith(github.ref, 'refs/tags/v')"
         uses: actions/upload-artifact@v4
@@ -134,3 +122,21 @@ jobs:
     permissions:
       contents: write
     steps: *steps
+
+  # After both builds have published: the release notes (the PRs since the previous release; the SmartScreen hint
+  # while unsigned). One job, so the two builds never race to edit the release body.
+  notes:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SIGNED: ${{ secrets.AZURE_CLIENT_SECRET != '' && vars.AZURE_SIGN_ENDPOINT != '' }}
+        run: scripts/release-notes.sh "$GITHUB_REF_NAME" --apply
