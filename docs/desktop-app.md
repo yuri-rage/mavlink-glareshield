@@ -66,7 +66,11 @@ npm run desktop:dist     # build the installer for this platform into release/
 
 Pushing a version tag (`git tag v0.2.0 && git push --tags`) builds the AppImage and the Windows installer on GitHub
 Actions (`.github/workflows/desktop-release.yml`) and publishes them to that tag's release, where installed apps find
-the update. Running the workflow by hand builds both without publishing and keeps them as workflow artifacts.
+the update. A last job writes the release notes with `scripts/release-notes.sh`: the pull requests merged since the
+previous release (GitHub's note generator, as `- Title (#N)`), and the SmartScreen hint while Windows builds are
+unsigned. Text you add to the notes by hand, outside the generated block, is kept when the script runs again; run it
+yourself (`scripts/release-notes.sh v0.2.1` to print, `--apply` to write) to backfill or refresh a release. Running
+the workflow by hand builds both without publishing and keeps them as workflow artifacts.
 
 How it fits together:
 
