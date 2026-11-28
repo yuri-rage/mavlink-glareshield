@@ -872,6 +872,7 @@ check(
       'built-in-all-modes',
       'built-in-set-speed',
       'built-in-waypoints',
+      'built-in-camera',
       'built-in-map',
       'built-in-parameters',
       'built-in-ntrip',

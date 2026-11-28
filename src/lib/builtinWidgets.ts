@@ -22,6 +22,7 @@ export const BUILTIN_PANELS: Record<string, BuiltinPanelInfo> = {
   'built-in-all-modes': { name: 'All Flight Modes', controls: 'flight mode changes' },
   'built-in-set-speed': { name: 'Set Speed Controller', controls: 'speed changes' },
   'built-in-waypoints': { name: 'Waypoint Navigation', controls: 'waypoint changes and mission restart' },
+  'built-in-camera': { name: 'Camera', controls: 'photo, video and zoom commands' },
   'built-in-hud': { name: 'Heads-Up Display (HUD)', minHeightPx: 300 },
   'built-in-charts': { name: 'Telemetry Charts', minHeightPx: 300 },
   'built-in-logs': { name: 'Logs', minHeightPx: 220, controls: 'log download and erase' },

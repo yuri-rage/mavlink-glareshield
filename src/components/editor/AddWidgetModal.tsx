@@ -4,6 +4,7 @@ import {
   Activity,
   AlertTriangle,
   Battery,
+  Camera,
   Check,
   Compass,
   FileText,
@@ -103,6 +104,15 @@ const BUILT_IN_CATALOG = [
     description: 'Command vehicle target cruising or navigation speed with live speed indicator.',
     icon: Gauge,
     defaultSpan: 6,
+  },
+  {
+    id: 'built-in-camera',
+    name: 'Camera',
+    category: 'control',
+    description:
+      "The vehicle's camera (CAM1_TYPE): take a photo, photos at an interval, record video, zoom (hold). Each button shows the vehicle's answer; photos taken and recording time read back.",
+    icon: Camera,
+    defaultSpan: 4,
   },
   {
     id: 'built-in-hud',
