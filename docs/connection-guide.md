@@ -16,6 +16,8 @@ Alternatively, if you are not using Mission Planner, you can start the included 
 
 To use Glareshield on other devices within the same local network (connecting to a LAN IP instead of localhost), continue reading below.
 
+With the [desktop app](desktop-app.md) on the computer that has the vehicle link, you don't need the bridge for this: turn on Settings → Link → **Bridge for other devices** and pair phones and tablets from its QR code ([details](desktop-app.md#bridge-for-phones-and-tablets)).
+
 ---
 
 ## Architecture

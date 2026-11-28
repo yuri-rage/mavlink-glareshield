@@ -12,8 +12,8 @@ directly, which a browser can't do:
 - **NTRIP:** the RTK widget's caster (HTTP Streaming) is reached by the app itself, on any link, so RTK corrections
   don't need the bridge either. It sends the vehicle's position to the caster every 10 s when **Send NMEA GGA VRS Feedback** is on (VRS casters).
 
-You don't need the bridge, Docker, certificates or browser settings. Use the bridge when phones and tablets should
-connect too.
+You don't need the bridge, Docker, certificates or browser settings. For phones and tablets, the desktop app can be
+the bridge itself (below).
 
 macOS isn't built, because running without warnings there needs a paid Apple Developer ID. On a Mac, use the web app.
 
@@ -51,6 +51,24 @@ Open **Settings → Link** and choose the **Link type**:
 
 Over UDP, Glareshield replies to whatever address last sent to it, as Mission Planner does. Only one copy of the app
 runs at a time: opening it again brings the open window forward, so two copies never compete for the UDP port.
+
+## Bridge for phones and tablets
+
+Settings → Link → **Bridge for other devices**: **Off** (the default: nothing listens on the network) or **On**. On,
+phones and tablets on the same network connect to this computer as they would to the Docker bridge, and share its
+UDP, TCP or serial link to the vehicle: everyone hears the vehicle, and the vehicle hears everyone. (A WebSocket link
+isn't relayed: connect the desktop to the vehicle directly.)
+
+- **Pair a device**: **Pair another device…** shows a QR code. Scan it with the phone's camera: it opens this
+  computer's address first, where the phone accepts the bridge's certificate once, then Glareshield, connected. Chrome
+  may ask to let Glareshield reach devices on your local network: allow it.
+- **Port**: 56781 by default, as the Docker bridge (change it if both run on this computer).
+- **New pairing token…**: shuts out every device paired so far (a lost phone, a QR code shared by mistake); pair the
+  ones you want again.
+- Paired devices can use **RTK / NTRIP** through it, as with the Docker bridge (to caster ports 2101 to 2105).
+
+The certificate is made for this computer's name and network addresses and kept, so a device accepts it once; a new
+address (another network) makes a new one, which devices accept again.
 
 ## Title bar
 

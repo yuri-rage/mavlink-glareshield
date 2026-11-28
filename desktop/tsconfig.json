@@ -11,5 +11,14 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["main.ts", "preload.ts", "udpVehicles.ts", "ntripClient.ts", "ntripStreams.ts", "settings.ts"]
+  "include": [
+    "main.ts",
+    "preload.ts",
+    "udpVehicles.ts",
+    "ntripClient.ts",
+    "ntripStreams.ts",
+    "settings.ts",
+    "bridgeCert.ts",
+    "bridgeServer.ts"
+  ]
 }

@@ -7,7 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 
 import { AlertTriangle, Check, Copy, ExternalLink, RefreshCw, Share2, Shield, Smartphone } from 'lucide-react';
 
-import { desktopApi, isDesktop, type SerialPortListing } from '../../desktop/api';
+import { desktopApi, isDesktop, type DesktopBridgeStatus, type SerialPortListing } from '../../desktop/api';
 import { useAudioAlertsStore, type VoiceEngine } from '../../lib/audioAlerts';
 import { DOC_LINKS, REPO_URL, repoFile } from '../../lib/links';
 import { maskToken, pairingAppUrl, pairingUrl } from '../../lib/pairing';
@@ -333,6 +333,167 @@ const PairAnotherDevice: React.FC<{ url: string }> = ({ url }) => {
           </Button>
         )}
       </div>
+    </div>
+  );
+};
+
+/**
+ * Desktop only: this computer as a bridge for phones and tablets (desktop/bridgeServer.ts), off unless turned on. On,
+ * devices pair with the QR code (as with the Docker bridge) and share this computer's UDP, TCP or serial link.
+ */
+const DesktopBridgeSetting: React.FC = () => {
+  const desk = desktopApi();
+  const [st, setSt] = useState<DesktopBridgeStatus | null>(null);
+  const [portText, setPortText] = useState('');
+  const [address, setAddress] = useState<string | null>(null);
+  const [confirmNewToken, setConfirmNewToken] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!desk) return;
+    const take = (s: DesktopBridgeStatus | null) => {
+      if (!s) return;
+      setSt(s);
+      setPortText((t) => (t === '' ? String(s.port) : t));
+    };
+    void desk.bridge.status().then(take);
+    const off = desk.bridge.onStatus(take);
+    // Links and addresses change without a push: looked at again while this is open.
+    const t = setInterval(() => void desk.bridge.status().then(take), 2000);
+    return () => {
+      off();
+      clearInterval(t);
+    };
+  }, [desk]);
+  if (!desk || !st) return null;
+  const apply = async (patch: { enabled?: boolean; port?: number }) => {
+    setBusy(true);
+    const s = await desk.bridge.set(patch);
+    setBusy(false);
+    if (s) {
+      setSt(s);
+      setPortText(String(s.port));
+    }
+  };
+  const port = Number(portText);
+  const portValid = Number.isInteger(port) && port >= 1024 && port < 65536;
+  const addr = address && st.addresses.includes(address) ? address : (st.addresses[0] ?? null);
+  return (
+    <div className="space-y-2 border-t border-zinc-800 pt-3">
+      <Segmented<boolean>
+        label="Bridge for other devices"
+        value={st.enabled}
+        onChange={(on) => void apply({ enabled: on })}
+        options={[
+          { value: false, label: 'Off', hint: 'Nothing listens on the network.' },
+          {
+            value: true,
+            label: 'On',
+            hint: "Phones and tablets on this network pair with a QR code (as with the Docker bridge) and share this computer's link to the vehicle.",
+          },
+        ]}
+      />
+      {st.enabled && (
+        <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-900/60 p-2.5 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+              Port
+              <Input
+                value={portText}
+                inputMode="numeric"
+                onChange={(e) => setPortText(e.target.value)}
+                onBlur={() => portValid && port !== st.port && void apply({ port })}
+                onKeyDown={(e) => e.key === 'Enter' && portValid && port !== st.port && void apply({ port })}
+                className="h-7 w-20 font-mono text-xs"
+                aria-label="Bridge port"
+              />
+            </label>
+            <span
+              className={`text-[11px] ${st.error ? 'text-red-300' : st.listening ? 'text-emerald-300' : 'text-zinc-400'}`}
+            >
+              {busy
+                ? 'Starting…'
+                : st.error
+                  ? st.error
+                  : st.listening
+                    ? `Listening (wss) · ${st.clients} device${st.clients === 1 ? '' : 's'} connected`
+                    : 'Not listening'}
+            </span>
+          </div>
+          {!portValid && <p className="text-[11px] text-amber-300">A port from 1024 to 65535.</p>}
+          {st.listening && st.links === 0 && (
+            <p className="text-[11px] text-amber-200">
+              Nothing to share yet: the bridge relays this computer&apos;s UDP, TCP or serial link. Connect one (a
+              WebSocket link isn&apos;t relayed).
+            </p>
+          )}
+          {st.listening && addr && (
+            <>
+              {st.addresses.length > 1 && (
+                <label className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+                  Devices reach this computer at
+                  <select
+                    value={addr}
+                    onChange={(e) => setAddress(e.target.value)}
+                    className="rounded border border-zinc-700 bg-zinc-950 px-1.5 py-0.5 font-mono text-[11px] text-zinc-100"
+                  >
+                    {st.addresses.map((a) => (
+                      <option key={a} value={a}>
+                        {a}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <PairAnotherDevice url={`wss://${addr}:${st.port}/?token=${encodeURIComponent(st.token)}`} />
+            </>
+          )}
+          {st.listening && !addr && (
+            <p className="text-[11px] text-amber-200">This computer has no network address for devices to reach.</p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {confirmNewToken ? (
+              <>
+                <span className="text-[11px] text-amber-200">Every paired device will have to pair again.</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-[11px]"
+                  onClick={async () => {
+                    setConfirmNewToken(false);
+                    setBusy(true);
+                    const s = await desk.bridge.newToken();
+                    setBusy(false);
+                    if (s) setSt(s);
+                  }}
+                >
+                  New token
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[11px]"
+                  onClick={() => setConfirmNewToken(false)}
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-1.5 text-[11px] text-zinc-400"
+                onClick={() => setConfirmNewToken(true)}
+                title="Shut out every device paired so far (a lost phone, a shared QR code)"
+              >
+                New pairing token…
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -802,6 +963,8 @@ export const SettingsDialog: React.FC<Props> = ({
                 { value: 'high', label: 'High', hint: 'For a fast link (Wi-Fi, USB): everything, at high rates.' },
               ]}
             />
+
+            {isDesktop() && <DesktopBridgeSetting />}
           </div>
         )}
 
