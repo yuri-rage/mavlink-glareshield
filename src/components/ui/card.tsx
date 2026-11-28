@@ -8,7 +8,7 @@ import { cn } from '../../lib/utils';
  */
 export const CardEmbedContext = React.createContext(false);
 
-const EMBED_CARD = 'border-0 ring-0 rounded-none bg-transparent shadow-none backdrop-blur-none';
+const EMBED_CARD = 'border-0 ring-0 rounded-none bg-transparent shadow-none';
 const EMBED_HEADER = 'bg-transparent px-0 pt-0 pb-1.5 sm:px-0';
 const EMBED_CONTENT = 'px-0 sm:px-0 pb-0 sm:pb-0';
 
@@ -19,7 +19,7 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
       <div
         ref={ref}
         className={cn(
-          'rounded-xl border border-zinc-800 bg-zinc-950/80 text-zinc-100 shadow-md backdrop-blur-sm transition-all',
+          'rounded-xl border border-zinc-800 bg-zinc-950/80 text-zinc-100 shadow-md transition-all',
           className,
           embedded && EMBED_CARD
         )}

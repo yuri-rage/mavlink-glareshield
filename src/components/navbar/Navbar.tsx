@@ -492,7 +492,7 @@ export const Navbar: React.FC = () => {
       if (isHeartbeatActive)
         return pill({
           tone: 'ok',
-          icon: <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-400" />,
+          icon: <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />,
           label: 'Connected',
           title: `Connected to vehicle ${heartbeat.systemId} over ${linkName}`,
         });
@@ -571,7 +571,7 @@ export const Navbar: React.FC = () => {
 
   return (
     <>
-      <header id="app-navbar" className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md">
+      <header id="app-navbar" className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/95">
         {/* Top Row: Brand, Arm/Mode Flyouts, Link Rate, Settings Gear & Connection Pill */}
         {/* Wraps rather than overlapping if a long mode name or label ever outgrows the row. */}
         <div className="flex max-w-full flex-wrap items-center justify-between gap-x-2 gap-y-2 px-2.5 py-2 sm:gap-x-3 sm:px-6">
@@ -744,7 +744,7 @@ export const Navbar: React.FC = () => {
                         <div className="mb-2 flex items-center gap-2 border-b border-zinc-800 pb-2">
                           <span
                             className={`h-2.5 w-2.5 rounded-full ${
-                              heartbeat.isArmed ? 'animate-pulse bg-red-500' : 'bg-zinc-500'
+                              heartbeat.isArmed ? 'gs-blink bg-red-500' : 'bg-zinc-500'
                             }`}
                           />
                           <div className="text-xs font-semibold text-zinc-200">

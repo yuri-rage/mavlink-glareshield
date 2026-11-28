@@ -374,3 +374,22 @@ body.leaflet-dragging .leaflet-container.gs-map.leaflet-grab {
 .leaflet-container.gs-map .gs-draft-draggable {
   cursor: move;
 }
+
+/*
+ * A blink for indicators that stay on for a long time (recording, armed): two changes a second. A smooth pulse
+ * (animate-pulse) makes the browser draw a frame every vsync for as long as it shows, and redraw any blurred layer
+ * around it; that is kept for alerts, which are brief.
+ */
+@keyframes gs-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+.gs-blink {
+  animation: gs-blink 2s steps(1, end) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gs-blink {
+    animation: none;
+  }
+}

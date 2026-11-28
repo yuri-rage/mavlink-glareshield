@@ -591,7 +591,7 @@ export const ParametersWidget: React.FC = () => {
                 <col />
                 {hasAnyDefaults && <col className={compact ? 'w-[4.75rem]' : 'w-[6.5rem]'} />}
               </colgroup>
-              <thead className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900/95 text-left text-zinc-400 backdrop-blur-sm">
+              <thead className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900 text-left text-zinc-400">
                 <tr>
                   <th className={`py-1.5 ${cellX}`}>Parameter</th>
                   <th className={`py-1.5 ${cellX}`}>Value</th>

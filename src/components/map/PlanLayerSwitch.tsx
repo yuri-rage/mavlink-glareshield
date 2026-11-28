@@ -55,7 +55,7 @@ export const PlanLayerSwitch: React.FC<{ className?: string; style?: React.CSSPr
       role="tablist"
       aria-label="Draft being edited"
       style={style}
-      className={`flex rounded-lg border border-zinc-700 bg-zinc-950/90 p-0.5 shadow-md backdrop-blur-md ${className ?? ''}`}
+      className={`flex rounded-lg border border-zinc-700 bg-zinc-950/95 p-0.5 shadow-md ${className ?? ''}`}
     >
       {tabs.map((t) => {
         // A vehicle that answered "unsupported" can't take rally points; the tab stays reachable only while open.

@@ -300,9 +300,9 @@ const KeepingChip: React.FC = () => {
       type="button"
       onClick={() => void stop()}
       title="Tiles the map loads are being kept for offline use. Click to stop and save."
-      className="pointer-events-auto flex items-center gap-1.5 rounded-md border border-emerald-600/70 bg-zinc-950/85 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-300 shadow-md backdrop-blur-md"
+      className="pointer-events-auto flex items-center gap-1.5 rounded-md border border-emerald-600/70 bg-zinc-950/90 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-300 shadow-md"
     >
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+      <span className="gs-blink h-1.5 w-1.5 rounded-full bg-emerald-400" />
       KEEPING {keeping.name.toUpperCase()}: {keeping.tiles} · STOP
     </button>
   );
@@ -2838,7 +2838,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
           }}
         >
           <div
-            className={`pointer-events-none flex items-center gap-2.5 rounded-lg border border-zinc-800/80 bg-zinc-950/85 px-2.5 py-1 font-mono text-[11px] text-zinc-300 shadow-md backdrop-blur-md sm:text-xs ${
+            className={`pointer-events-none flex items-center gap-2.5 rounded-lg border border-zinc-800/80 bg-zinc-950/90 px-2.5 py-1 font-mono text-[11px] text-zinc-300 shadow-md sm:text-xs ${
               planning && planLayout === 'sheet'
                 ? 'max-w-full flex-nowrap overflow-hidden whitespace-nowrap'
                 : 'flex-wrap'
@@ -2966,7 +2966,7 @@ export const MapWidget: React.FC<MapWidgetProps> = ({ colSpan = 6 }) => {
 
         {/* Fly-To prompt (mission progress moved to the footer below the map) */}
         {canCommand && (flyToMode || locating || locateError) && !pendingFlyTo && (
-          <div className="absolute bottom-2 left-2 right-2 z-[400] flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/85 px-2.5 py-1 font-mono text-[11px] shadow-md backdrop-blur-md sm:right-auto">
+          <div className="absolute bottom-2 left-2 right-2 z-[400] flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800/80 bg-zinc-950/90 px-2.5 py-1 font-mono text-[11px] shadow-md sm:right-auto">
             {locateError ? (
               <span className="text-amber-400">{locateError}</span>
             ) : locating ? (
